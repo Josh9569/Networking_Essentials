@@ -551,9 +551,9 @@ function buildMagicTool(){
     c1.addEventListener('click',()=>selectMnCol(i));
     r1.appendChild(c1);
 
-    // Build Row 2 (Networks)
+    // Build Row 2 (Networks) — content set by updateMnRow2() on init
     const c2=document.createElement('div');
-    c2.className='mn-c2'; c2.textContent=BV2[i]; c2.id='mn-r2-'+i;
+    c2.className='mn-c2'; c2.innerHTML=`2<sup>${i+1}</sup>`; c2.id='mn-r2-'+i;
     r2.appendChild(c2);
   });
 }
@@ -580,13 +580,26 @@ function applyMnOctetConstraints() {
     mnOctet = fallback;
     document.getElementById('mno-'+mnOctet).classList.add('on');
   }
+  updateMnRow2();
+}
+
+/* Recompute Row 2 exponents whenever class or octet changes so they
+   always reflect the true total borrowed bits, not just the octet count. */
+function updateMnRow2() {
+  const defaultCidr    = { A:8, B:16, C:24 }[mnClass];
+  const extraFullOctets = Math.max(0, (mnOctet - 1) - (defaultCidr / 8));
+  BV.forEach((_, i) => {
+    const exp  = extraFullOctets * 8 + i + 1;
+    const cell = document.getElementById('mn-r2-' + i);
+    cell.innerHTML = `2<sup>${exp}</sup>`;
+  });
 }
 
 function setMnClass(c, btn) {
   mnClass = c;
   document.querySelectorAll('[id^="mnc-"]').forEach(b => b.classList.remove('on'));
   btn.classList.add('on');
-  applyMnOctetConstraints();
+  applyMnOctetConstraints();   // also calls updateMnRow2
   redrawMagic();
 }
 
@@ -594,6 +607,7 @@ function setMnOctet(o, btn) {
   mnOctet = o;
   document.querySelectorAll('[id^="mno-"]').forEach(b => b.classList.remove('on'));
   btn.classList.add('on');
+  updateMnRow2();
   redrawMagic();
 }
 
@@ -626,19 +640,21 @@ function selectMnCol(i){
     document.getElementById('mn-r2-'+idx).classList.toggle('sel',idx===i);
   });
   
-  const inc = BV[i];
-  const nets = BV2[i];
+  const inc    = BV[i];
   const octSum = BV.slice(0, i+1).reduce((a,b) => a+b, 0);
 
   // Build mask and CIDR from selected class + octet
-  const mask = buildMnMask(mnOctet, octSum);
-  const defaultCidr = { A:8, B:16, C:24 }[mnClass];
-  const extraFullOctets = Math.max(0, (mnOctet - 1) - (defaultCidr / 8));
-  const cidr = defaultCidr + extraFullOctets * 8 + (i + 1);
-  const ordinals = ['','1st','2nd','3rd','4th'];
+  const mask             = buildMnMask(mnOctet, octSum);
+  const defaultCidr      = { A:8, B:16, C:24 }[mnClass];
+  const extraFullOctets  = Math.max(0, (mnOctet - 1) - (defaultCidr / 8));
+  const cidr             = defaultCidr + extraFullOctets * 8 + (i + 1);
+  const totalBorrowed    = cidr - defaultCidr;
+  const totalNets        = Math.pow(2, totalBorrowed);
+  const ordinals         = ['','1st','2nd','3rd','4th'];
 
-  document.getElementById('mn-inc').textContent = inc;
-  document.getElementById('mn-nets').textContent = nets;
+  document.getElementById('mn-inc').textContent  = inc;
+  document.getElementById('mn-nets').textContent = totalNets >= 1000
+    ? totalNets.toLocaleString() : totalNets;
   document.getElementById('mn-oct').textContent = octSum;
   document.getElementById('mn-sum').textContent = octSum;
   document.getElementById('mn-mask-label').textContent = `Class ${mnClass} · ${ordinals[mnOctet]} octet`;
