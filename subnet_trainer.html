@@ -35,6 +35,8 @@
 .mn-row-wrap  { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
 .mn-row-label { font-size: 12px; color: var(--text-s); font-family: var(--mono); width: 46px; flex-shrink: 0; text-align: right; }
 .mn-cells     { display: flex; gap: 5px; flex-wrap: wrap; }
+.mn-c0        { width: 56px; height: 36px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-family: var(--mono); font-weight: 500; color: var(--text-t); border: 1px solid transparent; border-radius: var(--r); transition: all .18s; }
+.mn-c0.active { color: var(--info-text); font-weight: 600; background: var(--info-bg); border-color: var(--info-bdr); }
 .mn-c1        { width: 56px; height: 50px; border-radius: var(--r); display: flex; align-items: center; justify-content: center; font-size: 16px; font-family: var(--mono); font-weight: 500; border: 1px solid var(--border-m); background: var(--surface-s); color: var(--text); cursor: pointer; transition: all .18s; user-select: none; }
 .mn-c1:hover  { border-color: var(--info-bdr); background: var(--info-bg); color: var(--info-text); }
 .mn-c1.sel    { border: 2.5px solid var(--info-text); background: var(--info-bg); color: var(--info-text); border-radius: 50%; transform: scale(1.08); }
@@ -52,11 +54,9 @@
 
 </style>
 </head>
-</head>
 <body>
 <div class="wrap">
 
-  <!-- HEADER -->
   <a href="index.html" class="home-link">&#8592; All Tools</a>
   <div class="hdr">
     <div>
@@ -70,7 +70,6 @@
     </div>
   </div>
 
-  <!-- CLASS SELECTOR -->
   <div class="cls-row">
     <span>IP Class:</span>
     <button class="cbtn on" onclick="setCls('random',this)">Random</button>
@@ -79,27 +78,22 @@
     <button class="cbtn" onclick="setCls('C',this)">Class C</button>
   </div>
 
-  <!-- QUESTION CARD -->
   <div class="qcard">
     <div class="qlbl">Subnet this address</div>
     <div class="ipdisp" id="ipd">Loading…</div>
     <div class="clsinfo" id="clsi"></div>
   </div>
 
-  <!-- FEEDBACK BANNER -->
   <div class="fbanner" id="fb"></div>
 
-  <!-- ANSWER GRID -->
   <div class="agrid" id="agrid"></div>
 
-  <!-- ACTION ROW -->
   <div class="actrow">
     <button class="btn btn-p" id="chkbtn" onclick="checkAll()">Check Answers</button>
     <button class="btn btn-s" id="revbtn" onclick="revealAll()">Reveal All</button>
     <button class="btn btn-s" id="nxtbtn" onclick="nextQ()" style="display:none">Next Question →</button>
     <button class="btn btn-d" onclick="resetGame()">Reset</button>
 
-    <!-- Options -->
     <div class="opt-wrap">
       <button class="opt-btn" id="opt-btn" onclick="toggleOpts()">
         Options
@@ -119,10 +113,8 @@
     </div>
   </div>
 
-  <!-- TOOLS AREA -->
   <div class="toolsec" id="toolsec">
 
-    <!-- CIDR Visual -->
     <div class="tool-block" id="t-cidr">
       <div class="tool-block-title">CIDR Visual</div>
       <div style="font-size:13px;color:var(--text-s);margin-bottom:.75rem">
@@ -133,11 +125,14 @@
       <div style="margin-top:1rem;font-size:13px;font-family:var(--mono);color:var(--text-s);line-height:2.1" id="cidrstats"></div>
     </div>
 
-    <!-- Magic Number -->
     <div class="tool-block" id="t-magic">
       <div class="tool-block-title">Magic Number</div>
-      <p class="tool-note">Click a value in Row 1 to circle it. That value = the increment (block size). Row 2 is the doubled table — the circled value there = networks. The sum of Row 1 up to your selection = the subnet mask octet.</p>
+      <p class="tool-note">Click a column to calculate. Row 0 shows the borrowed bits (1s). Row 1 shows bit values—your selection is the increment. Row 2 shows total networks created (2<sup>n</sup>).</p>
 
+      <div class="mn-row-wrap">
+        <div class="mn-row-label">Row 0</div>
+        <div class="mn-cells" id="mn-r0"></div>
+      </div>
       <div class="mn-row-wrap">
         <div class="mn-row-label">Row 1</div>
         <div class="mn-cells" id="mn-r1"></div>
@@ -162,14 +157,10 @@
       </div>
     </div>
 
-  </div><!-- /toolsec -->
-
-</div><!-- /wrap -->
-
-<script>
+  </div></div><script>
 /* ─── Constants ─────────────────────── */
 const BV  = [128,64,32,16,8,4,2,1];
-const BV2 = [256,128,64,32,16,8,4,2];
+const BV2 = [2,4,8,16,32,64,128,256]; /* Corrected to Left-to-Right Networks (2^n) */
 
 /* ─── State ─────────────────────────── */
 let Q=null, cls='random', score=0, rnd=1, streak=0, done=false;
@@ -403,13 +394,22 @@ function updateCidrVis(){
 
 /* ─── Magic Number Tool ──────────────── */
 function buildMagicTool(){
+  const r0=document.getElementById('mn-r0');
   const r1=document.getElementById('mn-r1');
   const r2=document.getElementById('mn-r2');
   BV.forEach((v,i)=>{
+    // Build Row 0 (Binary)
+    const c0=document.createElement('div');
+    c0.className='mn-c0'; c0.textContent='0'; c0.id='mn-r0-'+i;
+    r0.appendChild(c0);
+
+    // Build Row 1 (Increment)
     const c1=document.createElement('div');
     c1.className='mn-c1'; c1.textContent=v;
     c1.addEventListener('click',()=>selectMnCol(i));
     r1.appendChild(c1);
+
+    // Build Row 2 (Networks)
     const c2=document.createElement('div');
     c2.className='mn-c2'; c2.textContent=BV2[i]; c2.id='mn-r2-'+i;
     r2.appendChild(c2);
@@ -417,10 +417,25 @@ function buildMagicTool(){
 }
 
 function selectMnCol(i){
-  document.querySelectorAll('.mn-c1').forEach((c,idx)=>c.classList.toggle('sel',idx===i));
-  BV.forEach((_,idx)=>document.getElementById('mn-r2-'+idx).classList.toggle('sel',idx===i));
+  BV.forEach((_,idx)=>{
+    // Update Row 0 (Binary 1s and 0s)
+    const c0 = document.getElementById('mn-r0-'+idx);
+    if(idx <= i) {
+       c0.textContent = '1';
+       c0.classList.add('active');
+    } else {
+       c0.textContent = '0';
+       c0.classList.remove('active');
+    }
+    
+    // Update active state for Rows 1 and 2
+    document.querySelectorAll('.mn-c1')[idx].classList.toggle('sel',idx===i);
+    document.getElementById('mn-r2-'+idx).classList.toggle('sel',idx===i);
+  });
+  
   const inc=BV[i], nets=BV2[i];
   const octSum=BV.slice(0,i+1).reduce((a,b)=>a+b,0);
+  
   document.getElementById('mn-inc').textContent=inc;
   document.getElementById('mn-nets').textContent=nets;
   document.getElementById('mn-oct').textContent=octSum;
