@@ -355,13 +355,16 @@ let score=0, rnd=1, streak=0;
 
 function setModel(m,btn){
   model=m;
-  document.querySelectorAll('.sel-row:first-of-type .cbtn').forEach(b=>b.classList.remove('on'));
+  // Look only within the parent row of the clicked button
+  btn.parentElement.querySelectorAll('.cbtn').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
   if(!answered) nextQ();
 }
+
 function setQType(t,btn){
   qtype=t;
-  document.querySelectorAll('.sel-row:last-of-type .cbtn').forEach(b=>b.classList.remove('on'));
+  // Look only within the parent row of the clicked button
+  btn.parentElement.querySelectorAll('.cbtn').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
   if(!answered) nextQ();
 }
