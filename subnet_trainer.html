@@ -61,6 +61,10 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); min-
 .wrap { max-width: 840px; margin: 0 auto; }
 sup { font-size: .65em; vertical-align: super; }
 
+/* ── Nav ─────────────────────────────── */
+.home-link{font-size:12px;color:var(--text-t);text-decoration:none;display:inline-block;margin-bottom:.5rem;transition:color .15s;}
+.home-link:hover{color:var(--text-s);}
+
 /* ── Header ────────────────────────────── */
 .hdr { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; }
 .hdr-title { font-size: 22px; font-weight: 600; }
@@ -235,6 +239,7 @@ sup { font-size: .65em; vertical-align: super; }
 <div class="wrap">
 
   <!-- HEADER -->
+  <a href="index.html" class="home-link">&#8592; All Tools</a>
   <div class="hdr">
     <div>
       <div class="hdr-title">Subnet Trainer</div>
