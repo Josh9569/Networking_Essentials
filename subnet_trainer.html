@@ -23,9 +23,29 @@
 
 /* ── Answer grid ──── */
 .agrid             { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 1rem; }
+.afield            { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); padding: 10px 12px; position: relative; transition: all 0.2s; }
+.afield label      { display: block; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-t); margin-bottom: 5px; }
+.afield input      { width: 100%; font-family: var(--mono); font-size: 14px; background: transparent; border: none; outline: none; color: var(--text); }
+.afield input::placeholder { color: var(--text-t); }
+.afield.ok         { border-color: var(--ok-bdr);   background: var(--ok-bg); }
+.afield.bad        { border-color: var(--err-bdr);  background: var(--err-bg); }
+.afield.show       { border-color: var(--warn-bdr); background: var(--warn-bg); }
+.ahint             { font-size: 12px; margin-top: 5px; font-family: var(--mono); min-height: 15px; display: flex; justify-content: space-between; align-items: center; }
+.afield.ok   .ahint { color: var(--ok-text); }
+.afield.bad  .ahint { color: var(--err-text); }
+.afield.show .ahint { color: var(--warn-text); }
+
 .afield.class-q    { border: 1.5px solid var(--info-bdr); background: var(--info-bg); grid-column: 1 / -1; }
 .afield.class-q label { color: var(--info-text); }
 .afield.class-q input { color: var(--info-text); font-size: 16px; font-weight: 500; }
+
+/* ── Explanations ──── */
+.expl-btn          { background: transparent; border: 1px solid currentColor; border-radius: 4px; padding: 2px 6px; font-size: 10px; cursor: pointer; opacity: 0.8; font-family: var(--font); text-transform: uppercase; letter-spacing: .05em; transition: opacity .15s; }
+.expl-btn:hover    { opacity: 1; }
+.expl-box          { display: none; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border-m); font-size: 13px; font-family: var(--font); color: var(--text); line-height: 1.5; }
+.expl-box code     { font-family: var(--mono); background: var(--surface); padding: 2px 4px; border-radius: 4px; border: 1px solid var(--border); font-size: 12px; }
+.expl-box.open     { display: block; animation: slideIn .2s ease-out; }
+@keyframes slideIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
 
 /* ── CIDR Visual ──── */
 .bgrp { display: flex; flex-direction: column; align-items: center; gap: 4px; }
@@ -184,6 +204,52 @@ function cidr2mask(cidr){
   }).join('.');
 }
 
+/* ─── Explanation Generator ──────────── */
+function getExplanation(key, q, ans) {
+  const defs = {A:8, B:16, C:24};
+  const hb = 32 - q.cidr;
+  const borrow = q.cidr - defs[q.cls];
+  const firstOctet = q.ip.split('.')[0];
+  const intOctetIndex = Math.floor(q.cidr / 8);
+  const activeBits = q.cidr % 8;
+  const block = activeBits === 0 ? 1 : Math.pow(2, 8 - activeBits);
+
+  switch(key) {
+    case 'cls':
+      return `The first octet of the IP is <strong>${firstOctet}</strong>.<br>• 1 to 126 = Class A<br>• 128 to 191 = Class B<br>• 192 to 223 = Class C<br>Therefore, this is a <strong>Class ${q.cls}</strong> address.`;
+    case 'mask':
+      const maskParts = ans.mask.split('.');
+      let maskMath = "";
+      if (activeBits > 0) {
+        maskMath = `<br>In the interesting octet, you borrowed ${activeBits} bits. Adding their values (${BV.slice(0, activeBits).join(' + ')}) gives <strong>${maskParts[intOctetIndex]}</strong>.`;
+      } else {
+        maskMath = `<br>The bits divide perfectly into full octets (255).`;
+      }
+      return `A <strong>/${q.cidr}</strong> means there are ${q.cidr} network bits (1s) turned on. ${maskMath}<br>Combined, the mask is <strong>${ans.mask}</strong>.`;
+    case 'wild':
+      return `The wildcard mask is the exact inverse of the subnet mask. Subtract your subnet mask from 255.255.255.255:<br><code>&nbsp;255.255.255.255<br>-&nbsp;${ans.mask.replace(/\./g, '. ')}<br>&nbsp;---------------<br>&nbsp;&nbsp;<strong>${ans.wild.replace(/\./g, '. ')}</strong></code>`;
+    case 'net':
+      return `Your increment (block size) is <strong>${block}</strong>.<br>The network address is the starting boundary of the subnet that contains the IP <code>${q.ip}</code>.<br>The closest multiple of ${block} below the IP's value in the interesting octet is the network address: <strong>${ans.net}</strong>.`;
+    case 'bc':
+      return `The broadcast address is always the very last IP address before the *next* subnet begins.<br>If your network is <code>${ans.net}</code> and the block size is ${block}, the subnet block ends exactly at <strong>${ans.bc}</strong>.`;
+    case 'fh':
+      return `The first usable host is simply the Network Address plus 1.<br>Network: <code>${ans.net}</code><br>First Host: <strong>${ans.fh}</strong>`;
+    case 'lh':
+      return `The last usable host is simply the Broadcast Address minus 1.<br>Broadcast: <code>${ans.bc}</code><br>Last Host: <strong>${ans.lh}</strong>`;
+    case 'hosts':
+      return `Formula: <strong>2<sup>h</sup> - 2</strong> (where <em>h</em> is host bits).<br>With a /${q.cidr}, you have 32 - ${q.cidr} = <strong>${hb}</strong> host bits.<br>2<sup>${hb}</sup> = ${Math.pow(2, hb)}. Minus the network and broadcast addresses (2) = <strong>${ans.hosts}</strong> usable hosts.`;
+    case 'subs':
+      return `Formula: <strong>2<sup>n</sup></strong> (where <em>n</em> is borrowed network bits).<br>The default for Class ${q.cls} is /${defs[q.cls]}. You are using /${q.cidr}, so you borrowed <strong>${Math.max(0, borrow)}</strong> bits.<br>2<sup>${Math.max(0, borrow)}</sup> = <strong>${ans.subs}</strong> subnets.`;
+    default:
+      return "Explanation available after checking.";
+  }
+}
+
+function toggleExpl(id) {
+  const box = document.getElementById('expl-' + id);
+  box.classList.toggle('open');
+}
+
 /* ─── Field definitions ──────────────── */
 function getFields(){
   const f=[];
@@ -226,7 +292,7 @@ function calcAnswers(q){
     net:int2ip(ni), bc:int2ip(bi),
     fh:int2ip(ni+1), lh:int2ip(bi-1),
     hosts:String(Math.pow(2,hb)-2),
-    subs:String(Math.pow(2,q.cidr-def))
+    subs:String(Math.pow(2,Math.max(0,q.cidr-def)))
   };
 }
 
@@ -238,7 +304,12 @@ function renderGrid(){
     const div=document.createElement('div');
     div.className='afield'+(f.isClass?' class-q':'');
     div.id='f-'+f.id;
-    div.innerHTML=`<label>${f.label}</label><input id="a-${f.id}" placeholder="${f.placeholder}" autocomplete="off"><div class="ahint" id="h-${f.id}"></div>`;
+    div.innerHTML=`
+      <label>${f.label}</label>
+      <input id="a-${f.id}" placeholder="${f.placeholder}" autocomplete="off">
+      <div class="ahint" id="h-${f.id}"></div>
+      <div class="expl-box" id="expl-${f.id}"></div>
+    `;
     grid.appendChild(div);
   });
 }
@@ -304,7 +375,6 @@ function loadQ(){
     document.getElementById('fb').style.display='none';
     document.getElementById('c-ip').focus();
     
-    // Allow 'Enter' key to trigger startCustom
     document.getElementById('c-ip').addEventListener('keypress', function(e) { if(e.key === 'Enter') document.getElementById('c-cidr').focus(); });
     document.getElementById('c-cidr').addEventListener('keypress', function(e) { if(e.key === 'Enter') startCustom(); });
     return;
@@ -343,12 +413,23 @@ function checkAll(){
     const inp=document.getElementById('a-'+id);
     const fld=document.getElementById('f-'+id);
     const hnt=document.getElementById('h-'+id);
+    const explBox=document.getElementById('expl-'+id);
     const uv=inp.value.trim().toUpperCase();
     const cv=ans[key].toUpperCase();
+    
     inp.disabled=true;
-    if(uv===cv){fld.classList.add('ok');hnt.textContent='✓ Correct';correct++;}
-    else if(uv===''){fld.classList.add('show');inp.value=ans[key];hnt.textContent='Not answered';}
-    else{fld.classList.add('bad');hnt.textContent='Correct: '+ans[key];}
+    explBox.innerHTML = getExplanation(key, Q, ans);
+
+    if(uv===cv){
+      fld.classList.add('ok');
+      hnt.innerHTML = `<span>✓ Correct</span>`;
+      correct++;
+    } else {
+      let statusText = uv === '' ? 'Not answered' : 'Correct: ' + ans[key];
+      fld.classList.add(uv === '' ? 'show' : 'bad');
+      if (uv === '') inp.value = ans[key];
+      hnt.innerHTML = `<span>${statusText}</span><button class="expl-btn" onclick="toggleExpl('${id}')">💡 Explain</button>`;
+    }
   });
   done=true;
   const total=fields.length;
@@ -379,10 +460,21 @@ function revealAll(){
     const inp=document.getElementById('a-'+id);
     const fld=document.getElementById('f-'+id);
     const hnt=document.getElementById('h-'+id);
+    const explBox=document.getElementById('expl-'+id);
     const uv=inp.value.trim().toUpperCase();
+    
     inp.disabled=true;
-    if(uv===ans[key].toUpperCase()){fld.classList.add('ok');hnt.textContent='✓ Correct';}
-    else{fld.classList.add('show');inp.value=ans[key];hnt.textContent=uv?'Was: '+uv:'Revealed';}
+    explBox.innerHTML = getExplanation(key, Q, ans);
+
+    if(uv===ans[key].toUpperCase()){
+      fld.classList.add('ok');
+      hnt.innerHTML = `<span>✓ Correct</span>`;
+    } else {
+      fld.classList.add('show');
+      inp.value=ans[key];
+      let statusText = uv ? 'Was: ' + uv : 'Revealed';
+      hnt.innerHTML = `<span>${statusText}</span><button class="expl-btn" onclick="toggleExpl('${id}')">💡 Explain</button>`;
+    }
   });
   streak=0; rnd++;
   document.getElementById('str').textContent=streak;
@@ -429,7 +521,7 @@ function applyTools(){
 /* close menu when clicking outside */
 document.addEventListener('click',e=>{
   const wrap=document.getElementById('opt-btn').closest('.opt-wrap');
-  if(!wrap.contains(e.target)){
+  if(wrap && !wrap.contains(e.target)){
     document.getElementById('opt-menu').classList.remove('open');
     document.getElementById('opt-btn').classList.remove('open');
   }
@@ -521,7 +613,6 @@ function selectMnCol(i){
 
 /* ─── Keyboard ───────────────────────── */
 document.addEventListener('keydown',e=>{
-  // Ignore global enter key check if we are typing inside the custom IP inputs
   if(e.key==='Enter' && document.activeElement.tagName !== 'INPUT' && !document.activeElement.classList.contains('cust-in-c')) { 
     if(!done && cls !== 'custom') checkAll(); 
     else if (done) nextQ(); 
