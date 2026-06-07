@@ -184,10 +184,16 @@ sup  { font-size: .65em; vertical-align: super; }
 .mn-c2.sel    { border: 2.5px solid var(--info-text); background: var(--info-bg); color: var(--info-text); border-radius: 50%; }
 .mn-eq        { font-size: 14px; color: var(--text-s); font-family: var(--mono); display: flex; align-items: center; gap: 6px; }
 .mn-eq .mval  { font-weight: 500; color: var(--text); font-size: 16px; }
-.mn-stats     { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin: .85rem 0; }
-.mn-stat      { background: var(--surface-s); border: 1px solid var(--border); border-radius: var(--r); padding: 9px 13px; }
-.mn-slbl      { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-t); margin-bottom: 4px; }
-.mn-sval      { font-family: var(--mono); font-size: 20px; font-weight: 500; color: var(--text); }
+.mn-stats      { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin-bottom: .85rem; }
+.mn-stat       { background: var(--surface-s); border: 1px solid var(--border); border-radius: var(--r); padding: 9px 13px; }
+.mn-slbl       { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-t); margin-bottom: 4px; }
+.mn-sval       { font-family: var(--mono); font-size: 20px; font-weight: 500; color: var(--text); }
+
+/* ── Magic Number stats toggle ──────────────────────────────────────────────── */
+.mn-stats-hdr    { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; margin-top: 4px; }
+.mn-stats-title  { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--text-t); }
+.mn-stats-toggle { background: transparent; border: 1px solid var(--border); border-radius: var(--r); padding: 2px 10px; font-size: 12px; font-family: var(--font); color: var(--text-s); cursor: pointer; transition: all .15s; }
+.mn-stats-toggle:hover { background: var(--surface-s); color: var(--text); }
 .mn-mask-row  { display: flex; align-items: center; gap: 10px; padding: 7px 11px; background: var(--surface-s); border: 1px solid var(--border); border-radius: var(--r); margin-bottom: 6px; }
 .mn-cls-badge { font-size: 12px; font-weight: 500; background: var(--surface); padding: 2px 9px; border-radius: 4px; border: 1px solid var(--border-m); color: var(--text-s); white-space: nowrap; }
 .mn-mask-val  { font-family: var(--mono); font-size: 15px; font-weight: 500; color: var(--text); }
