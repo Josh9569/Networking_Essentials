@@ -1,0 +1,625 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Subnet Trainer</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:       #f2f2ef;
+  --surface:  #ffffff;
+  --surface-s:#f0f0ec;
+  --text:     #1a1a18;
+  --text-s:   #68685f;
+  --text-t:   #aaa;
+  --border:   rgba(0,0,0,.09);
+  --border-m: rgba(0,0,0,.16);
+  --info-bg:  #e5eefc;
+  --info-text:#174da8;
+  --info-bdr: #a8c8f4;
+  --ok-bg:    #e5f5da;
+  --ok-text:  #2a6508;
+  --ok-bdr:   #9fd472;
+  --warn-bg:  #fdf2d0;
+  --warn-text:#8a5200;
+  --warn-bdr: #f0c660;
+  --err-bg:   #fce8e8;
+  --err-text: #b22020;
+  --err-bdr:  #f0a0a0;
+  --r:  8px;
+  --rl: 12px;
+  --font: 'Outfit', system-ui, sans-serif;
+  --mono: 'JetBrains Mono', 'Fira Code', monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg:       #141412;
+    --surface:  #1e1e1c;
+    --surface-s:#272725;
+    --text:     #f0f0ec;
+    --text-s:   #999;
+    --text-t:   #555;
+    --border:   rgba(255,255,255,.09);
+    --border-m: rgba(255,255,255,.16);
+    --info-bg:  #0a1e40;
+    --info-text:#7aabf0;
+    --info-bdr: #1a4fa5;
+    --ok-bg:    #0a200a;
+    --ok-text:  #7ec050;
+    --ok-bdr:   #2a6508;
+    --warn-bg:  #201200;
+    --warn-text:#f0c660;
+    --warn-bdr: #8a5200;
+    --err-bg:   #200808;
+    --err-text: #f09090;
+    --err-bdr:  #b22020;
+  }
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; padding: 2rem 1rem; line-height: 1.6; }
+.wrap { max-width: 840px; margin: 0 auto; }
+sup { font-size: .65em; vertical-align: super; }
+
+/* ── Header ────────────────────────────── */
+.hdr { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; }
+.hdr-title { font-size: 22px; font-weight: 600; }
+.hdr-sub { font-size: 13px; color: var(--text-s); margin-top: 2px; }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip { background: var(--surface); border: 1px solid var(--border-m); border-radius: var(--r); padding: 5px 14px; font-size: 13px; color: var(--text-s); }
+.chip b { color: var(--text); font-weight: 500; font-family: var(--mono); }
+
+/* ── Class selector ───────────────────── */
+.cls-row { display: flex; align-items: center; gap: 8px; margin-bottom: 1rem; flex-wrap: wrap; }
+.cls-row > span { font-size: 13px; color: var(--text-s); }
+.cbtn { padding: 5px 14px; border-radius: var(--r); border: 1px solid var(--border-m); background: transparent; cursor: pointer; font-size: 13px; font-family: var(--font); color: var(--text-s); transition: all .15s; }
+.cbtn:hover { background: var(--surface-s); color: var(--text); }
+.cbtn.on { background: var(--info-bg); border-color: var(--info-bdr); color: var(--info-text); font-weight: 500; }
+
+/* ── Question card ────────────────────── */
+.qcard { background: var(--surface); border: 1px solid var(--border); border-radius: var(--rl); padding: 1.25rem 1.5rem; margin-bottom: 1rem; }
+.qlbl { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-t); margin-bottom: .4rem; }
+.ipdisp { font-family: var(--mono); font-size: 26px; font-weight: 500; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
+.cidrbadge { font-size: 16px; padding: 2px 12px; border-radius: var(--r); background: var(--info-bg); color: var(--info-text); border: 1px solid var(--info-bdr); }
+.clsinfo { font-size: 13px; color: var(--text-s); }
+.clsinfo strong { color: var(--text); font-weight: 500; }
+
+/* ── Answer grid ──────────────────────── */
+.agrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 1rem; }
+.afield { background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); padding: 10px 12px; }
+.afield label { display: block; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-t); margin-bottom: 5px; }
+.afield input { width: 100%; font-family: var(--mono); font-size: 14px; background: transparent; border: none; outline: none; color: var(--text); }
+.afield input::placeholder { color: var(--text-t); }
+.afield.class-q { border: 1.5px solid var(--info-bdr); background: var(--info-bg); grid-column: 1 / -1; }
+.afield.class-q label { color: var(--info-text); }
+.afield.class-q input { color: var(--info-text); font-size: 16px; font-weight: 500; }
+.afield.ok   { border-color: var(--ok-bdr);   background: var(--ok-bg); }
+.afield.bad  { border-color: var(--err-bdr);  background: var(--err-bg); }
+.afield.show { border-color: var(--warn-bdr); background: var(--warn-bg); }
+.ahint { font-size: 12px; margin-top: 5px; font-family: var(--mono); min-height: 15px; }
+.afield.ok   .ahint { color: var(--ok-text); }
+.afield.bad  .ahint { color: var(--err-text); }
+.afield.show .ahint { color: var(--warn-text); }
+
+/* ── Action row ───────────────────────── */
+.actrow { display: flex; gap: 8px; margin-bottom: 1.25rem; flex-wrap: wrap; align-items: center; }
+.btn { padding: 8px 20px; border-radius: var(--r); border: 1px solid var(--border-m); font-family: var(--font); font-size: 14px; cursor: pointer; transition: all .15s; }
+.btn-p { background: var(--text); color: var(--surface); font-weight: 500; border-color: transparent; }
+.btn-p:hover { opacity: .83; }
+.btn-s { background: transparent; color: var(--text); }
+.btn-s:hover { background: var(--surface-s); }
+.btn-d { background: transparent; color: var(--err-text); border-color: var(--err-bdr); }
+.btn-d:hover { background: var(--err-bg); }
+
+/* ── Options dropdown ─────────────────── */
+.opt-wrap { position: relative; margin-left: auto; }
+.opt-btn  { background: transparent; color: var(--text-s); border: 1px solid var(--border-m); font-size: 14px; padding: 8px 18px; border-radius: var(--r); font-family: var(--font); cursor: pointer; transition: all .15s; display: flex; align-items: center; gap: 6px; }
+.opt-btn:hover { background: var(--surface-s); color: var(--text); }
+.opt-btn.open  { background: var(--surface); color: var(--text); border-color: var(--border-m); }
+.opt-btn svg   { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; transition: transform .2s; }
+.opt-btn.open svg { transform: rotate(180deg); }
+
+.opt-menu {
+  display: none;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  width: 220px;
+  background: var(--surface);
+  border: 1px solid var(--border-m);
+  border-radius: var(--rl);
+  padding: 6px;
+  z-index: 100;
+  box-shadow: 0 4px 16px rgba(0,0,0,.10);
+}
+.opt-menu.open { display: block; }
+.opt-section-label {
+  font-size: 11px;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--text-t);
+  padding: 6px 10px 4px;
+}
+.opt-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: var(--r);
+  transition: background .12s;
+  cursor: pointer;
+}
+.opt-row:hover { background: var(--surface-s); }
+.opt-row-label { font-size: 14px; color: var(--text); user-select: none; }
+
+/* Toggle switch */
+.tog { position: relative; width: 38px; height: 22px; flex-shrink: 0; }
+.tog input { opacity: 0; width: 0; height: 0; position: absolute; }
+.tog-track {
+  position: absolute; inset: 0;
+  background: var(--border-m);
+  border-radius: 11px;
+  transition: background .2s;
+  cursor: pointer;
+}
+.tog-track::before {
+  content: '';
+  position: absolute;
+  width: 16px; height: 16px;
+  left: 3px; top: 3px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform .2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,.2);
+}
+.tog input:checked + .tog-track { background: var(--info-text); }
+.tog input:checked + .tog-track::before { transform: translateX(16px); }
+
+/* ── Feedback ─────────────────────────── */
+.fbanner { padding: 10px 14px; border-radius: var(--r); font-size: 14px; margin-bottom: 1rem; border: 1px solid; display: none; }
+.fbanner.ok   { background: var(--ok-bg);   border-color: var(--ok-bdr);   color: var(--ok-text); }
+.fbanner.warn { background: var(--warn-bg); border-color: var(--warn-bdr); color: var(--warn-text); }
+.fbanner.err  { background: var(--err-bg);  border-color: var(--err-bdr);  color: var(--err-text); }
+
+/* ── Tools area ───────────────────────── */
+.toolsec { margin-top: .25rem; }
+.tool-block { background: var(--surface); border: 1px solid var(--border); border-radius: var(--rl); padding: 1.1rem 1.25rem; margin-bottom: .75rem; }
+.tool-block-title { font-size: 12px; font-weight: 500; letter-spacing: .07em; text-transform: uppercase; color: var(--text-t); margin-bottom: .85rem; }
+.tool-note { font-size: 12px; color: var(--text-s); margin-bottom: .6rem; line-height: 1.5; }
+
+/* ── CIDR Visual ──────────────────────── */
+.bgrp { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.blbl { font-size: 10px; color: var(--text-t); font-family: var(--mono); }
+.brow { display: flex; gap: 2px; }
+.bbox { width: 25px; height: 25px; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-family: var(--mono); font-weight: 500; border: 1px solid var(--border); }
+.bbox.nb { background: var(--info-bg); color: var(--info-text); border-color: var(--info-bdr); }
+.bbox.hb { background: var(--surface-s); color: var(--text-s); }
+.bdge { display: inline-block; padding: 1px 8px; border-radius: 4px; font-size: 12px; border: 1px solid; }
+.bdge-i { background: var(--info-bg); color: var(--info-text); border-color: var(--info-bdr); }
+.bdge-s { background: var(--surface-s); color: var(--text-s); border-color: var(--border); }
+
+/* ── Magic Number Tool ────────────────── */
+.mn-row-wrap   { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.mn-row-label  { font-size: 12px; color: var(--text-s); font-family: var(--mono); width: 46px; flex-shrink: 0; text-align: right; }
+.mn-cells      { display: flex; gap: 5px; flex-wrap: wrap; }
+.mn-c1 {
+  width: 56px; height: 50px; border-radius: var(--r);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; font-family: var(--mono); font-weight: 500;
+  border: 1px solid var(--border-m); background: var(--surface-s);
+  color: var(--text); cursor: pointer; transition: all .18s;
+  user-select: none;
+}
+.mn-c1:hover { border-color: var(--info-bdr); background: var(--info-bg); color: var(--info-text); }
+.mn-c1.sel    { border: 2.5px solid var(--info-text); background: var(--info-bg); color: var(--info-text); border-radius: 50%; transform: scale(1.08); }
+.mn-c2 {
+  width: 56px; height: 50px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px; font-family: var(--mono); font-weight: 500;
+  color: var(--text-s); border: 1px solid transparent; border-radius: var(--r);
+  transition: all .18s;
+}
+.mn-c2.sel    { border: 2.5px solid var(--info-text); background: var(--info-bg); color: var(--info-text); border-radius: 50%; }
+.mn-eq        { font-size: 14px; color: var(--text-s); font-family: var(--mono); display: flex; align-items: center; gap: 6px; }
+.mn-eq .mval  { font-weight: 500; color: var(--text); font-size: 16px; }
+.mn-stats     { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin: .85rem 0; }
+.mn-stat      { background: var(--surface-s); border: 1px solid var(--border); border-radius: var(--r); padding: 9px 13px; }
+.mn-slbl      { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-t); margin-bottom: 4px; }
+.mn-sval      { font-family: var(--mono); font-size: 20px; font-weight: 500; color: var(--text); }
+.mn-mask-row  { display: flex; align-items: center; gap: 10px; padding: 7px 11px; background: var(--surface-s); border: 1px solid var(--border); border-radius: var(--r); margin-bottom: 6px; }
+.mn-cls-badge { font-size: 12px; font-weight: 500; background: var(--surface); padding: 2px 9px; border-radius: 4px; border: 1px solid var(--border-m); color: var(--text-s); white-space: nowrap; }
+.mn-mask-val  { font-family: var(--mono); font-size: 15px; font-weight: 500; color: var(--text); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- HEADER -->
+  <div class="hdr">
+    <div>
+      <div class="hdr-title">Subnet Trainer</div>
+      <div class="hdr-sub">CIDR subnetting practice · press Enter to check answers</div>
+    </div>
+    <div class="chips">
+      <div class="chip">Score <b id="sc">0</b></div>
+      <div class="chip">Round <b id="rnd">1</b></div>
+      <div class="chip">Streak <b id="str">0</b></div>
+    </div>
+  </div>
+
+  <!-- CLASS SELECTOR -->
+  <div class="cls-row">
+    <span>IP Class:</span>
+    <button class="cbtn on" onclick="setCls('random',this)">Random</button>
+    <button class="cbtn" onclick="setCls('A',this)">Class A</button>
+    <button class="cbtn" onclick="setCls('B',this)">Class B</button>
+    <button class="cbtn" onclick="setCls('C',this)">Class C</button>
+  </div>
+
+  <!-- QUESTION CARD -->
+  <div class="qcard">
+    <div class="qlbl">Subnet this address</div>
+    <div class="ipdisp" id="ipd">Loading…</div>
+    <div class="clsinfo" id="clsi"></div>
+  </div>
+
+  <!-- FEEDBACK BANNER -->
+  <div class="fbanner" id="fb"></div>
+
+  <!-- ANSWER GRID -->
+  <div class="agrid" id="agrid"></div>
+
+  <!-- ACTION ROW -->
+  <div class="actrow">
+    <button class="btn btn-p" id="chkbtn" onclick="checkAll()">Check Answers</button>
+    <button class="btn btn-s" id="revbtn" onclick="revealAll()">Reveal All</button>
+    <button class="btn btn-s" id="nxtbtn" onclick="nextQ()" style="display:none">Next Question →</button>
+    <button class="btn btn-d" onclick="resetGame()">Reset</button>
+
+    <!-- Options -->
+    <div class="opt-wrap">
+      <button class="opt-btn" id="opt-btn" onclick="toggleOpts()">
+        Options
+        <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="opt-menu" id="opt-menu">
+        <div class="opt-section-label">Reference Tools</div>
+        <label class="opt-row" onclick="toggleTool('cidr')">
+          <span class="opt-row-label">CIDR Visual</span>
+          <div class="tog"><input type="checkbox" id="tog-cidr" checked><span class="tog-track"></span></div>
+        </label>
+        <label class="opt-row" onclick="toggleTool('magic')">
+          <span class="opt-row-label">Magic Number</span>
+          <div class="tog"><input type="checkbox" id="tog-magic" checked><span class="tog-track"></span></div>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOOLS AREA -->
+  <div class="toolsec" id="toolsec">
+
+    <!-- CIDR Visual -->
+    <div class="tool-block" id="t-cidr">
+      <div class="tool-block-title">CIDR Visual</div>
+      <div style="font-size:13px;color:var(--text-s);margin-bottom:.75rem">
+        Bit layout for current <strong id="cidrlbl">/—</strong> &nbsp;
+        <span class="bdge bdge-i">network</span> &nbsp;/&nbsp; <span class="bdge bdge-s">host</span>
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap" id="cidrvis"></div>
+      <div style="margin-top:1rem;font-size:13px;font-family:var(--mono);color:var(--text-s);line-height:2.1" id="cidrstats"></div>
+    </div>
+
+    <!-- Magic Number -->
+    <div class="tool-block" id="t-magic">
+      <div class="tool-block-title">Magic Number</div>
+      <p class="tool-note">Click a value in Row 1 to circle it. That value = the increment (block size). Row 2 is the doubled table — the circled value there = networks. The sum of Row 1 up to your selection = the subnet mask octet.</p>
+
+      <div class="mn-row-wrap">
+        <div class="mn-row-label">Row 1</div>
+        <div class="mn-cells" id="mn-r1"></div>
+        <div class="mn-eq">= <span class="mval" id="mn-sum">—</span></div>
+      </div>
+      <div class="mn-row-wrap">
+        <div class="mn-row-label">Row 2</div>
+        <div class="mn-cells" id="mn-r2"></div>
+      </div>
+
+      <div class="mn-stats">
+        <div class="mn-stat"><div class="mn-slbl">Increment</div><div class="mn-sval" id="mn-inc">—</div></div>
+        <div class="mn-stat"><div class="mn-slbl">Networks</div><div class="mn-sval" id="mn-nets">—</div></div>
+        <div class="mn-stat"><div class="mn-slbl">Mask octet</div><div class="mn-sval" id="mn-oct">—</div></div>
+      </div>
+
+      <div id="mn-masks" style="display:none">
+        <p class="tool-note" style="margin-bottom:.55rem">Subnet mask by class (interesting octet shown):</p>
+        <div class="mn-mask-row"><span class="mn-cls-badge">Class A</span><span class="mn-mask-val" id="mn-ma">—</span></div>
+        <div class="mn-mask-row"><span class="mn-cls-badge">Class B</span><span class="mn-mask-val" id="mn-mb">—</span></div>
+        <div class="mn-mask-row"><span class="mn-cls-badge">Class C</span><span class="mn-mask-val" id="mn-mc">—</span></div>
+      </div>
+    </div>
+
+  </div><!-- /toolsec -->
+
+</div><!-- /wrap -->
+
+<script>
+/* ─── Constants ─────────────────────── */
+const BV  = [128,64,32,16,8,4,2,1];
+const BV2 = [256,128,64,32,16,8,4,2];
+
+/* ─── State ─────────────────────────── */
+let Q=null, cls='random', score=0, rnd=1, streak=0, done=false;
+
+/* ─── Helpers ────────────────────────── */
+function ri(a,b){ return Math.floor(Math.random()*(b-a+1))+a; }
+function ip2int(ip){ const p=ip.split('.').map(Number); return((p[0]<<24)|(p[1]<<16)|(p[2]<<8)|p[3])>>>0; }
+function int2ip(n){ return[(n>>>24)&255,(n>>>16)&255,(n>>>8)&255,n&255].join('.'); }
+function cidr2mask(cidr){
+  return[0,1,2,3].map(i=>{
+    const b=Math.min(8,Math.max(0,cidr-i*8));
+    return b===0?0:b===8?255:256-Math.pow(2,8-b);
+  }).join('.');
+}
+
+/* ─── Field definitions ──────────────── */
+function getFields(){
+  const f=[];
+  if(cls==='random') f.push({id:'cls',key:'cls',label:'What class is this IP?',placeholder:'Enter A, B, or C',isClass:true});
+  f.push(
+    {id:'mask', key:'mask', label:'Subnet Mask',              placeholder:'e.g. 255.255.255.224'},
+    {id:'wild', key:'wild', label:'Wildcard Mask',            placeholder:'e.g. 0.0.0.31'},
+    {id:'net',  key:'net',  label:'Network Address',          placeholder:'e.g. 192.168.1.96'},
+    {id:'bc',   key:'bc',   label:'Broadcast Address',        placeholder:'e.g. 192.168.1.127'},
+    {id:'fh',   key:'fh',   label:'First Usable Host',        placeholder:'e.g. 192.168.1.97'},
+    {id:'lh',   key:'lh',   label:'Last Usable Host',         placeholder:'e.g. 192.168.1.126'},
+    {id:'hosts',key:'hosts',label:'Usable Hosts / Subnet',    placeholder:'e.g. 30'},
+    {id:'subs', key:'subs', label:'Subnets (from class default)',placeholder:'e.g. 8'}
+  );
+  return f;
+}
+
+/* ─── Generate question ──────────────── */
+function genQ(){
+  const c=cls==='random'?['A','B','C'][ri(0,2)]:cls;
+  let f,cidr;
+  if(c==='A'){f=ri(1,126);cidr=ri(9,30);}
+  else if(c==='B'){f=ri(128,191);cidr=ri(17,30);}
+  else{f=ri(192,223);cidr=ri(25,30);}
+  return{ip:`${f}.${ri(0,255)}.${ri(0,255)}.${ri(1,254)}`,cidr,cls:c};
+}
+
+/* ─── Compute answers ────────────────── */
+function calcAnswers(q){
+  const mask=cidr2mask(q.cidr);
+  const mi=q.cidr===0?0:(0xFFFFFFFF<<(32-q.cidr))>>>0;
+  const ii=ip2int(q.ip);
+  const ni=(ii&mi)>>>0;
+  const bi=(ni|(~mi>>>0))>>>0;
+  const hb=32-q.cidr;
+  const def={A:8,B:16,C:24}[q.cls];
+  const wild=mask.split('.').map(o=>255-parseInt(o)).join('.');
+  return{
+    cls:q.cls, mask, wild,
+    net:int2ip(ni), bc:int2ip(bi),
+    fh:int2ip(ni+1), lh:int2ip(bi-1),
+    hosts:String(Math.pow(2,hb)-2),
+    subs:String(Math.pow(2,q.cidr-def))
+  };
+}
+
+/* ─── Render grid ────────────────────── */
+function renderGrid(){
+  const grid=document.getElementById('agrid');
+  grid.innerHTML='';
+  getFields().forEach(f=>{
+    const div=document.createElement('div');
+    div.className='afield'+(f.isClass?' class-q':'');
+    div.id='f-'+f.id;
+    div.innerHTML=`<label>${f.label}</label><input id="a-${f.id}" placeholder="${f.placeholder}" autocomplete="off"><div class="ahint" id="h-${f.id}"></div>`;
+    grid.appendChild(div);
+  });
+}
+
+/* ─── Load question ──────────────────── */
+function loadQ(){
+  Q=genQ(); done=false;
+  document.getElementById('ipd').innerHTML=`${Q.ip}<span class="cidrbadge">/${Q.cidr}</span>`;
+  const defs={A:'255.0.0.0 (/8)',B:'255.255.0.0 (/16)',C:'255.255.255.0 (/24)'};
+  if(cls==='random'){
+    document.getElementById('clsi').textContent='Identify the class from the first octet, then work out the subnet.';
+  } else {
+    const borrow=Q.cidr-{A:8,B:16,C:24}[Q.cls];
+    document.getElementById('clsi').innerHTML=`Class ${Q.cls} — Default: <strong>${defs[Q.cls]}</strong> — Borrowed bits: ${borrow}`;
+  }
+  renderGrid();
+  const fb=document.getElementById('fb');
+  fb.className='fbanner'; fb.style.display='none';
+  document.getElementById('chkbtn').style.display='';
+  document.getElementById('revbtn').style.display='';
+  document.getElementById('nxtbtn').style.display='none';
+  document.getElementById('sc').textContent=score;
+  document.getElementById('rnd').textContent=rnd;
+  document.getElementById('str').textContent=streak;
+  updateCidrVis();
+  const first=cls==='random'?'cls':'mask';
+  document.getElementById('a-'+first).focus();
+}
+
+/* ─── Check answers ──────────────────── */
+function checkAll(){
+  if(done) return;
+  const ans=calcAnswers(Q);
+  const fields=getFields();
+  let correct=0;
+  fields.forEach(({id,key})=>{
+    const inp=document.getElementById('a-'+id);
+    const fld=document.getElementById('f-'+id);
+    const hnt=document.getElementById('h-'+id);
+    const uv=inp.value.trim().toUpperCase();
+    const cv=ans[key].toUpperCase();
+    inp.disabled=true;
+    if(uv===cv){fld.classList.add('ok');hnt.textContent='✓ Correct';correct++;}
+    else if(uv===''){fld.classList.add('show');inp.value=ans[key];hnt.textContent='Not answered';}
+    else{fld.classList.add('bad');hnt.textContent='Correct: '+ans[key];}
+  });
+  done=true;
+  const total=fields.length;
+  const bonus=correct===total?2:0;
+  const pts=correct+bonus;
+  score+=pts;
+  if(correct===total) streak++; else streak=0;
+  rnd++;
+  const fb=document.getElementById('fb');
+  fb.style.display='block';
+  if(correct===total){fb.className='fbanner ok';fb.textContent=`Perfect! All ${total} correct. +${pts} pts (+2 bonus). Streak: ${streak}`;}
+  else if(correct>=Math.ceil(total*.6)){fb.className='fbanner warn';fb.textContent=`${correct}/${total} correct. +${pts} pt${pts!==1?'s':''}.`;}
+  else{fb.className='fbanner err';fb.textContent=`${correct}/${total} correct. +${pts} pt${pts!==1?'s':''}. Review the red fields.`;}
+  document.getElementById('sc').textContent=score;
+  document.getElementById('str').textContent=streak;
+  document.getElementById('rnd').textContent=rnd;
+  document.getElementById('nxtbtn').style.display='';
+  document.getElementById('chkbtn').style.display='none';
+  document.getElementById('revbtn').style.display='none';
+}
+
+/* ─── Reveal answers ─────────────────── */
+function revealAll(){
+  if(done) return;
+  done=true;
+  const ans=calcAnswers(Q);
+  getFields().forEach(({id,key})=>{
+    const inp=document.getElementById('a-'+id);
+    const fld=document.getElementById('f-'+id);
+    const hnt=document.getElementById('h-'+id);
+    const uv=inp.value.trim().toUpperCase();
+    inp.disabled=true;
+    if(uv===ans[key].toUpperCase()){fld.classList.add('ok');hnt.textContent='✓ Correct';}
+    else{fld.classList.add('show');inp.value=ans[key];hnt.textContent=uv?'Was: '+uv:'Revealed';}
+  });
+  streak=0; rnd++;
+  document.getElementById('str').textContent=streak;
+  document.getElementById('rnd').textContent=rnd;
+  const fb=document.getElementById('fb');
+  fb.style.display='block'; fb.className='fbanner warn';
+  fb.textContent='Answers revealed. No points awarded this round.';
+  document.getElementById('nxtbtn').style.display='';
+  document.getElementById('chkbtn').style.display='none';
+  document.getElementById('revbtn').style.display='none';
+}
+
+function nextQ(){ loadQ(); }
+function resetGame(){ score=0; rnd=1; streak=0; loadQ(); }
+function setCls(c,btn){
+  cls=c;
+  document.querySelectorAll('.cbtn').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  nextQ();
+}
+
+/* ─── Options menu ───────────────────── */
+function toggleOpts(){
+  const menu=document.getElementById('opt-menu');
+  const btn=document.getElementById('opt-btn');
+  const open=menu.classList.toggle('open');
+  btn.classList.toggle('open',open);
+}
+
+function toggleTool(id){
+  const cb=document.getElementById('tog-'+id);
+  cb.checked=!cb.checked;
+  applyTools();
+}
+
+function applyTools(){
+  const showCidr=document.getElementById('tog-cidr').checked;
+  const showMagic=document.getElementById('tog-magic').checked;
+  document.getElementById('t-cidr').style.display=showCidr?'':'none';
+  document.getElementById('t-magic').style.display=showMagic?'':'none';
+  document.getElementById('toolsec').style.display=(showCidr||showMagic)?'':'none';
+}
+
+/* close menu when clicking outside */
+document.addEventListener('click',e=>{
+  const wrap=document.getElementById('opt-btn').closest('.opt-wrap');
+  if(!wrap.contains(e.target)){
+    document.getElementById('opt-menu').classList.remove('open');
+    document.getElementById('opt-btn').classList.remove('open');
+  }
+});
+
+/* ─── CIDR Visual ────────────────────── */
+function updateCidrVis(){
+  if(!Q) return;
+  document.getElementById('cidrlbl').textContent='/'+Q.cidr;
+  const vis=document.getElementById('cidrvis');
+  vis.innerHTML='';
+  for(let o=0;o<4;o++){
+    const g=document.createElement('div'); g.className='bgrp';
+    const lbl=document.createElement('div'); lbl.className='blbl';
+    lbl.textContent='Octet '+(o+1); g.appendChild(lbl);
+    const row=document.createElement('div'); row.className='brow';
+    for(let b=0;b<8;b++){
+      const pos=o*8+b;
+      const box=document.createElement('div');
+      box.className='bbox '+(pos<Q.cidr?'nb':'hb');
+      box.textContent=pos<Q.cidr?'1':'0';
+      row.appendChild(box);
+    }
+    g.appendChild(row); vis.appendChild(g);
+  }
+  const hb=32-Q.cidr;
+  const def={A:8,B:16,C:24}[Q.cls];
+  const sb=Q.cidr-def;
+  document.getElementById('cidrstats').innerHTML=
+    `Network bits: ${Q.cidr} &nbsp;|&nbsp; Host bits: ${hb}<br>`+
+    `Block size: 2<sup>${hb}</sup> = ${Math.pow(2,hb)}<br>`+
+    `Usable hosts: 2<sup>${hb}</sup> &minus; 2 = ${Math.pow(2,hb)-2}<br>`+
+    `Subnet bits borrowed (from Class ${Q.cls}): ${sb} &nbsp;&rarr;&nbsp; 2<sup>${sb}</sup> = ${Math.pow(2,sb)} subnets`;
+}
+
+/* ─── Magic Number Tool ──────────────── */
+function buildMagicTool(){
+  const r1=document.getElementById('mn-r1');
+  const r2=document.getElementById('mn-r2');
+  BV.forEach((v,i)=>{
+    const c1=document.createElement('div');
+    c1.className='mn-c1'; c1.textContent=v;
+    c1.addEventListener('click',()=>selectMnCol(i));
+    r1.appendChild(c1);
+    const c2=document.createElement('div');
+    c2.className='mn-c2'; c2.textContent=BV2[i]; c2.id='mn-r2-'+i;
+    r2.appendChild(c2);
+  });
+}
+
+function selectMnCol(i){
+  document.querySelectorAll('.mn-c1').forEach((c,idx)=>c.classList.toggle('sel',idx===i));
+  BV.forEach((_,idx)=>document.getElementById('mn-r2-'+idx).classList.toggle('sel',idx===i));
+  const inc=BV[i], nets=BV2[i];
+  const octSum=BV.slice(0,i+1).reduce((a,b)=>a+b,0);
+  document.getElementById('mn-inc').textContent=inc;
+  document.getElementById('mn-nets').textContent=nets;
+  document.getElementById('mn-oct').textContent=octSum;
+  document.getElementById('mn-sum').textContent=octSum;
+  document.getElementById('mn-ma').textContent=`255.${octSum}.0.0`;
+  document.getElementById('mn-mb').textContent=`255.255.${octSum}.0`;
+  document.getElementById('mn-mc').textContent=`255.255.255.${octSum}`;
+  document.getElementById('mn-masks').style.display='';
+}
+
+/* ─── Keyboard ───────────────────────── */
+document.addEventListener('keydown',e=>{
+  if(e.key==='Enter'){ if(!done) checkAll(); else nextQ(); }
+  if(e.key==='Escape'){
+    document.getElementById('opt-menu').classList.remove('open');
+    document.getElementById('opt-btn').classList.remove('open');
+  }
+});
+
+/* ─── Init ───────────────────────────── */
+buildMagicTool();
+loadQ();
+</script>
+</body>
+</html>
