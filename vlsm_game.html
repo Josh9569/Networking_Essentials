@@ -13,6 +13,7 @@
 /* ── Parent network display ───────────────────────── */
 .parent-disp { font-family: var(--mono); font-size: 26px; font-weight: 500; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
 .parent-badge { font-size: 16px; padding: 2px 12px; border-radius: var(--r); background: var(--info-bg); color: var(--info-text); border: 1px solid var(--info-bdr); }
+.cls-badge-disp { font-size: 14px; padding: 2px 11px; border-radius: var(--r); background: var(--ok-bg); color: var(--ok-text); border: 1px solid var(--ok-bdr); font-family: var(--font); font-weight: 500; }
 .req-row  { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
 .req-chip { font-size: 13px; font-family: var(--mono); background: var(--surface-s); border: 1px solid var(--border-m); border-radius: var(--r); padding: 3px 10px; color: var(--text-s); }
 .req-chip strong { color: var(--text); font-weight: 500; }
@@ -66,6 +67,14 @@
       <div class="chip">Round <b id="rnd">1</b></div>
       <div class="chip">Streak <b id="str">0</b></div>
     </div>
+  </div>
+
+  <div class="cls-row">
+    <span>IP Class:</span>
+    <button class="cbtn on" onclick="setCls('random',this)">Random</button>
+    <button class="cbtn" onclick="setCls('A',this)">Class A</button>
+    <button class="cbtn" onclick="setCls('B',this)">Class B</button>
+    <button class="cbtn" onclick="setCls('C',this)">Class C</button>
   </div>
 
   <div class="diff-row">
@@ -134,30 +143,46 @@ function int2ip(n){return[(n>>>24)&255,(n>>>16)&255,(n>>>8)&255,n&255].join('.')
 function cidr2mask(c){return[0,1,2,3].map(i=>{const b=Math.min(8,Math.max(0,c-i*8));return b===0?0:b===8?255:256-Math.pow(2,8-b);}).join('.');}
 
 /* ── State ──────────────────────────────────────── */
-let Q=null,diff='random',score=0,rnd=1,streak=0,done=false;
+let Q=null, diff='random', cls='random', score=0, rnd=1, streak=0, done=false;
 
-function setDiff(d,btn){
+function setDiff(d, btn){
   diff=d;
-  document.querySelectorAll('.cbtn').forEach(b=>b.classList.remove('on'));
+  document.querySelectorAll('.diff-row .cbtn').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  nextQ();
+}
+
+function setCls(c, btn){
+  cls=c;
+  document.querySelectorAll('.cls-row .cbtn').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
   nextQ();
 }
 
 /* ── VLSM generation ────────────────────────────── */
 function genVLSM(){
-  const d=diff==='random'?['easy','medium','hard'][ri(0,2)]:diff;
-  const numSubs=d==='easy'?3:4;
+  const d = diff==='random' ? ['easy','medium','hard'][ri(0,2)] : diff;
+  const c = cls==='random'  ? ['A','B','C'][ri(0,2)]           : cls;
+  const numSubs = d==='easy' ? 3 : 4;
 
-  let parentIPNum,parentCidr,parentBits;
+  /* First-octet ranges per class — loopback (127) is never generated */
+  function firstOctet(ipCls){
+    if(ipCls==='A') return ri(1,126);
+    if(ipCls==='B') return ri(128,191);
+    return ri(192,223);
+  }
+
+  let parentIPNum, parentCidr, parentBits;
   if(d==='hard'){
-    /* /22 parent: 1024 addresses, third octet aligned to multiple of 4 */
-    const a=ri(10,172),b=ri(0,255),c=ri(0,63)*4;
-    parentIPNum=ip2int(`${a}.${b}.${c}.0`);
+    /* /22 parent: 1024 addresses. Third octet must be a multiple of 4
+       so the network address lies on a /22 boundary.                  */
+    const a=firstOctet(c), b=ri(0,255), oc3=ri(0,63)*4;
+    parentIPNum=ip2int(`${a}.${b}.${oc3}.0`);
     parentCidr=22; parentBits=10;
   } else {
     /* /24 parent: 256 addresses */
-    const a=ri(192,223),b=ri(0,255),c=ri(0,255);
-    parentIPNum=ip2int(`${a}.${b}.${c}.0`);
+    const a=firstOctet(c), b=ri(0,255), oc3=ri(0,255);
+    parentIPNum=ip2int(`${a}.${b}.${oc3}.0`);
     parentCidr=24; parentBits=8;
   }
 
@@ -208,14 +233,15 @@ function genVLSM(){
     };
   });
 
-  return{d,parentIP:int2ip(parentIPNum),parentCidr,subnets};
+  return{d, ipCls:c, parentIP:int2ip(parentIPNum),parentCidr,subnets};
 }
 
 /* ── Render ─────────────────────────────────────── */
 function renderQ(){
   /* Parent network card */
+  const clsLabel = {A:'Class A', B:'Class B', C:'Class C'}[Q.ipCls];
   document.getElementById('parent-disp').innerHTML=
-    `${Q.parentIP}<span class="parent-badge">/${Q.parentCidr}</span>`;
+    `${Q.parentIP}<span class="parent-badge">/${Q.parentCidr}</span><span class="cls-badge-disp">${clsLabel}</span>`;
 
   const reqRow=document.getElementById('req-row');
   reqRow.innerHTML='';
