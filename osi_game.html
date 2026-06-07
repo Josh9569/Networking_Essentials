@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OSI / TCP-IP Trainer</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+/* ── Selector rows ─────────────────────────────────────── */
+.sel-row        { display:flex;align-items:center;gap:8px;margin-bottom:.65rem;flex-wrap:wrap; }
+.sel-row > span { font-size:13px;color:var(--text-s);min-width:50px; }
+
+/* ── Question card internals ───────────────────────────── */
+.q-type-tag { font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-t);margin-bottom:.4rem; }
+.q-subject   { font-family:var(--mono);font-size:26px;font-weight:500;color:var(--text);margin-bottom:6px;line-height:1.3; }
+.q-prompt    { font-size:18px;font-weight:500;color:var(--text);line-height:1.4;margin-bottom:6px; }
+.q-sub       { font-size:13px;color:var(--text-s); }
+
+/* ── Layer buttons (name→layer mode) ──────────────────── */
+.layers-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-bottom:1rem; }
+.layer-btn {
+  padding:12px 14px;border-radius:var(--r);border:1px solid var(--border-m);
+  background:var(--surface);cursor:pointer;text-align:left;
+  font-family:var(--font);transition:all .15s;
+}
+.layer-btn:not(:disabled):hover { background:var(--info-bg);border-color:var(--info-bdr); }
+.layer-btn .ln  { font-size:11px;color:var(--text-t);font-family:var(--mono);margin-bottom:3px; }
+.layer-btn .lname { font-size:14px;font-weight:500;color:var(--text); }
+.layer-btn.correct { background:var(--ok-bg)!important;border-color:var(--ok-bdr)!important; }
+.layer-btn.correct .ln,.layer-btn.correct .lname { color:var(--ok-text); }
+.layer-btn.wrong   { background:var(--err-bg)!important;border-color:var(--err-bdr)!important; }
+.layer-btn.wrong .ln,.layer-btn.wrong .lname { color:var(--err-text); }
+.layer-btn:disabled { cursor:default;opacity:.7; }
+
+/* ── Protocol option buttons (description→name mode) ──── */
+.opts-grid { display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:1rem; }
+.opt-card {
+  padding:16px 14px;border-radius:var(--r);border:1px solid var(--border-m);
+  background:var(--surface);cursor:pointer;text-align:center;
+  font-family:var(--mono);font-size:15px;font-weight:500;color:var(--text);
+  transition:all .15s;line-height:1.3;
+}
+.opt-card:not(:disabled):hover { background:var(--info-bg);border-color:var(--info-bdr);color:var(--info-text); }
+.opt-card.correct { background:var(--ok-bg)!important;border-color:var(--ok-bdr)!important;color:var(--ok-text)!important; }
+.opt-card.wrong   { background:var(--err-bg)!important;border-color:var(--err-bdr)!important;color:var(--err-text)!important; }
+.opt-card:disabled { cursor:default;opacity:.7; }
+
+/* ── Explanation box ────────────────────────────────────── */
+.explain {
+  background:var(--surface-s);border:1px solid var(--border);border-radius:var(--r);
+  padding:12px 14px;font-size:14px;color:var(--text-s);margin-bottom:1rem;
+  line-height:1.65;display:none;
+}
+.explain .ex-name  { font-weight:500;color:var(--text);font-size:15px;margin-bottom:3px; }
+.explain .ex-layer { font-family:var(--mono);font-size:12px;color:var(--info-text);margin-bottom:8px; }
+.explain.visible   { display:block; }
+
+/* ── Reference panel ────────────────────────────────────── */
+.ref-search-wrap { position:relative;margin-bottom:.75rem; }
+.ref-search-icon { position:absolute;left:10px;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--text-t); }
+.ref-search-icon svg { width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round; }
+.ref-search {
+  width:100%;padding:8px 12px 8px 34px;border-radius:var(--r);
+  border:1px solid var(--border-m);background:var(--surface);
+  font-family:var(--font);font-size:14px;color:var(--text);outline:none;
+}
+.ref-search:focus { border-color:var(--info-bdr); }
+.ref-section-hdr { font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--text-t);margin:1rem 0 .5rem; }
+.ref-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px;margin-bottom:.75rem; }
+.ref-card { background:var(--surface-s);border:1px solid var(--border);border-radius:var(--r);padding:11px 13px; }
+.ref-card.hidden { display:none; }
+.ref-card-top { display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px;flex-wrap:wrap; }
+.ref-card-name { font-size:14px;font-weight:500;color:var(--text); }
+.ref-badges { display:flex;gap:4px;flex-wrap:wrap; }
+.rbadge { font-size:10px;font-family:var(--mono);padding:1px 7px;border-radius:4px;border:1px solid;white-space:nowrap; }
+.rb-osi  { background:var(--info-bg);color:var(--info-text);border-color:var(--info-bdr); }
+.rb-tcp  { background:var(--ok-bg);color:var(--ok-text);border-color:var(--ok-bdr); }
+.rb-port { background:var(--surface);color:var(--text-s);border-color:var(--border-m); }
+.ref-card-desc { font-size:12px;color:var(--text-s);line-height:1.55; }
+.ref-empty { font-size:14px;color:var(--text-t);text-align:center;padding:2rem 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a href="index.html" class="home-link">&#8592; All Tools</a>
+
+  <div class="hdr">
+    <div>
+      <div class="hdr-title">OSI / TCP-IP Trainer</div>
+      <div class="hdr-sub">Match protocols to layers, or identify protocols from descriptions &middot; Enter to advance</div>
+    </div>
+    <div class="chips">
+      <div class="chip">Score <b id="sc">0</b></div>
+      <div class="chip">Round <b id="rnd">1</b></div>
+      <div class="chip">Streak <b id="str">0</b></div>
+    </div>
+  </div>
+
+  <div class="sel-row">
+    <span>Model:</span>
+    <button class="cbtn on" onclick="setModel('osi',this)">OSI (7 layers)</button>
+    <button class="cbtn" onclick="setModel('tcpip',this)">TCP/IP (4 layers)</button>
+  </div>
+  <div class="sel-row">
+    <span>Mode:</span>
+    <button class="cbtn on" onclick="setQType('random',this)">Random</button>
+    <button class="cbtn" onclick="setQType('layer',this)">Name &rarr; Layer</button>
+    <button class="cbtn" onclick="setQType('protocol',this)">Description &rarr; Name</button>
+  </div>
+
+  <div class="qcard" id="qcard">
+    <div class="q-type-tag" id="q-type-tag">Loading…</div>
+    <div id="q-main"></div>
+    <div class="q-sub" id="q-sub"></div>
+  </div>
+
+  <div class="explain" id="explain">
+    <div class="ex-name" id="ex-name"></div>
+    <div class="ex-layer" id="ex-layer"></div>
+    <div id="ex-desc"></div>
+  </div>
+
+  <div id="answer-area"></div>
+
+  <div class="actrow">
+    <button class="btn btn-s" id="skipbtn" onclick="skipQ()">Skip</button>
+    <button class="btn btn-p" id="nxtbtn" onclick="nextQ()" style="display:none">Next &rarr;</button>
+    <button class="btn btn-d" onclick="resetGame()">Reset</button>
+    <div class="opt-wrap">
+      <button class="opt-btn" id="opt-btn" onclick="toggleOpts()">
+        Options
+        <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="opt-menu" id="opt-menu">
+        <div class="opt-section-label">Reference Tools</div>
+        <label class="opt-row" onclick="toggleTool('ref')">
+          <span class="opt-row-label">Protocol Reference</span>
+          <div class="tog"><input type="checkbox" id="tog-ref" checked><span class="tog-track"></span></div>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div class="toolsec" id="toolsec">
+    <div class="tool-block" id="t-ref">
+      <div class="tool-block-title">Protocol Reference</div>
+      <div class="ref-search-wrap">
+        <span class="ref-search-icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
+        <input class="ref-search" type="text" placeholder="Search protocols, layers, ports…" oninput="filterRef(this.value)" id="ref-input">
+      </div>
+      <div id="ref-content"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════════════
+   DATA
+═══════════════════════════════════════════════════════ */
+const OSI = [
+  { num:1, name:'Physical',     tcpip:'Network Access',
+    desc:'Transmits raw bits over a physical medium. Defines electrical signals, cable types, connectors, and hardware specs. No addressing — just ones and zeros.',
+    examples:'Hubs, repeaters, cables, fiber optic, DSL, Wi-Fi radio signals' },
+  { num:2, name:'Data Link',    tcpip:'Network Access',
+    desc:'Transfers frames between adjacent nodes on the same network. Uses MAC addresses for local delivery. Divided into LLC and MAC sublayers.',
+    examples:'Ethernet (MAC), ARP, switches, PPP, VLAN, STP' },
+  { num:3, name:'Network',      tcpip:'Internet',
+    desc:'Routes packets between different networks using logical (IP) addresses. Handles path determination, forwarding, and logical addressing.',
+    examples:'IP, ICMP, routers, BGP, OSPF, RIP, NAT' },
+  { num:4, name:'Transport',    tcpip:'Transport',
+    desc:'Provides end-to-end communication between applications. Handles segmentation, flow control, error recovery, and port-based addressing.',
+    examples:'TCP, UDP, port numbers, SCTP' },
+  { num:5, name:'Session',      tcpip:'Application',
+    desc:'Establishes, manages, and terminates sessions (dialogues) between applications. Provides synchronisation and checkpointing.',
+    examples:'NetBIOS, RPC, PPTP, SIP' },
+  { num:6, name:'Presentation', tcpip:'Application',
+    desc:'Translates data formats so different systems can communicate. Handles encryption, compression, and character encoding.',
+    examples:'SSL/TLS, JPEG, MPEG, ASCII, Unicode, encryption' },
+  { num:7, name:'Application',  tcpip:'Application',
+    desc:'The layer closest to the end user. Provides network services to applications and handles high-level protocols.',
+    examples:'HTTP, DNS, FTP, SMTP, SSH, DHCP, SNMP' },
+];
+
+const TCPIP = [
+  { num:1, name:'Network Access', osi:'1 & 2',
+    desc:'Combines OSI Physical and Data Link. Governs how data is physically transmitted over the network medium, including MAC addressing and framing.',
+    examples:'Ethernet, ARP, Wi-Fi, switches, hubs, PPP' },
+  { num:2, name:'Internet',       osi:'3',
+    desc:'Equivalent to OSI Network layer. Handles logical (IP) addressing and routing of packets across interconnected networks.',
+    examples:'IP, ICMP, BGP, OSPF, RIP, routers, NAT' },
+  { num:3, name:'Transport',      osi:'4',
+    desc:'Provides end-to-end communication between hosts. Handles segmentation, reliability (TCP), and connectionless delivery (UDP).',
+    examples:'TCP, UDP, port numbers, SCTP' },
+  { num:4, name:'Application',    osi:'5, 6 & 7',
+    desc:'Covers OSI Session, Presentation, and Application layers. All high-level application protocols live here.',
+    examples:'HTTP, DNS, FTP, SMTP, SSH, TLS, DHCP, SNMP' },
+];
+
+const ITEMS = [
+  /* ── Physical (OSI 1) ── */
+  { id:'hub',      name:'Hub',           osi:1, tcpip:'Network Access', port:null, cat:'Device',
+    desc:'A basic network device that receives data on one port and broadcasts it to ALL other ports. Has no intelligence — every device sees every frame, causing collisions.',
+    qd:'Broadcasts all incoming data to every connected port with no filtering or intelligence' },
+  { id:'repeater', name:'Repeater',      osi:1, tcpip:'Network Access', port:null, cat:'Device',
+    desc:'Amplifies or regenerates a signal to extend network range. Operates purely at the bit level — no addressing or framing awareness.',
+    qd:'Amplifies or regenerates physical signals to extend the reach of a network cable' },
+  { id:'dsl',      name:'DSL',           osi:1, tcpip:'Network Access', port:null, cat:'Technology',
+    desc:'Digital Subscriber Line — uses existing telephone copper wire to carry high-speed digital data alongside voice traffic.',
+    qd:'Carries high-speed digital data over existing copper telephone lines' },
+  { id:'fiber',    name:'Fiber Optic',   osi:1, tcpip:'Network Access', port:null, cat:'Medium',
+    desc:'Transmits data as pulses of light through glass or plastic strands. Offers very high bandwidth and is immune to electromagnetic interference.',
+    qd:'Transmits data as pulses of light through glass or plastic strands for very high bandwidth' },
+  { id:'nics',     name:'NIC',           osi:1, tcpip:'Network Access', port:null, cat:'Device',
+    desc:'Network Interface Card — the physical hardware that connects a computer to a network. Operates at both Layer 1 (physical signals) and Layer 2 (MAC address).',
+    qd:'The physical hardware card inside a computer that connects it to a network' },
+
+  /* ── Data Link (OSI 2) ── */
+  { id:'switch',   name:'Switch',        osi:2, tcpip:'Network Access', port:null, cat:'Device',
+    desc:'Learns MAC addresses and forwards frames only to the correct port. More efficient than a hub — devices only see frames destined for them.',
+    qd:'Forwards frames only to the correct port using a learned MAC address table' },
+  { id:'arp',      name:'ARP',           osi:2, tcpip:'Network Access', port:null, cat:'Protocol',
+    desc:'Address Resolution Protocol — broadcasts a request to find the MAC address corresponding to a known IP address on the local network.',
+    qd:'Resolves an IP address to a MAC address on a local network segment' },
+  { id:'mac',      name:'MAC Address',   osi:2, tcpip:'Network Access', port:null, cat:'Address',
+    desc:'Media Access Control address — a 48-bit hardware identifier (e.g. 00:1A:2B:3C:4D:5E) permanently assigned to a network interface card.',
+    qd:'A unique 48-bit hardware identifier permanently assigned to a network interface card' },
+  { id:'ppp',      name:'PPP',           osi:2, tcpip:'Network Access', port:null, cat:'Protocol',
+    desc:'Point-to-Point Protocol — a data link protocol for direct serial connections between two nodes. Used in dial-up and DSL broadband connections.',
+    qd:'A data link protocol for direct point-to-point serial connections between two nodes' },
+  { id:'stp',      name:'STP',           osi:2, tcpip:'Network Access', port:null, cat:'Protocol',
+    desc:'Spanning Tree Protocol — detects and prevents bridging loops by blocking redundant switch paths, creating a single loop-free logical topology.',
+    qd:'Prevents bridging loops in switched networks by blocking redundant paths' },
+  { id:'vlan',     name:'VLAN',          osi:2, tcpip:'Network Access', port:null, cat:'Technology',
+    desc:'Virtual LAN — logically segments a physical switch network into isolated broadcast domains, improving security and reducing congestion.',
+    qd:'Logically segments a physical switch network into isolated broadcast domains' },
+
+  /* ── Network (OSI 3) ── */
+  { id:'ip',       name:'IP',            osi:3, tcpip:'Internet', port:null, cat:'Protocol',
+    desc:'Internet Protocol — provides logical addressing and best-effort packet delivery between networks. IPv4 uses 32-bit addresses; IPv6 uses 128-bit.',
+    qd:'Provides logical addressing and routes packets between different networks' },
+  { id:'icmp',     name:'ICMP',          osi:3, tcpip:'Internet', port:null, cat:'Protocol',
+    desc:'Internet Control Message Protocol — carries error messages (Destination Unreachable) and operational info. The ping and traceroute utilities use ICMP.',
+    qd:'Carries network error messages and diagnostic info; used by ping and traceroute' },
+  { id:'ospf',     name:'OSPF',          osi:3, tcpip:'Internet', port:null, cat:'Protocol',
+    desc:'Open Shortest Path First — a link-state routing protocol. Routers share full topology info and use Dijkstra\'s algorithm to compute the shortest path.',
+    qd:'A link-state routing protocol that calculates shortest paths across a network' },
+  { id:'bgp',      name:'BGP',           osi:3, tcpip:'Internet', port:null, cat:'Protocol',
+    desc:'Border Gateway Protocol — the routing protocol of the internet. Exchanges routing prefixes between autonomous systems (ISPs and large organisations).',
+    qd:'The routing protocol that exchanges routes between autonomous systems across the internet' },
+  { id:'router',   name:'Router',        osi:3, tcpip:'Internet', port:null, cat:'Device',
+    desc:'A device that examines IP destination addresses and forwards packets toward their destination using routing tables and protocols.',
+    qd:'Forwards IP packets between networks using routing tables' },
+  { id:'nat',      name:'NAT',           osi:3, tcpip:'Internet', port:null, cat:'Technology',
+    desc:'Network Address Translation — translates private IP addresses (e.g. 192.168.x.x) to a public IP address, allowing multiple devices to share one public IP.',
+    qd:'Translates private IP addresses to a public IP address for internet access' },
+  { id:'ipv6',     name:'IPv6',          osi:3, tcpip:'Internet', port:null, cat:'Protocol',
+    desc:'Internet Protocol version 6 — uses 128-bit hexadecimal addresses (e.g. 2001:db8::1) to solve the IPv4 address exhaustion problem.',
+    qd:'The successor to IPv4, using 128-bit hexadecimal addresses' },
+
+  /* ── Transport (OSI 4) ── */
+  { id:'tcp',      name:'TCP',           osi:4, tcpip:'Transport', port:null, cat:'Protocol',
+    desc:'Transmission Control Protocol — connection-oriented. Uses a three-way handshake (SYN, SYN-ACK, ACK), sequencing, and acknowledgements to guarantee ordered, reliable delivery.',
+    qd:'Provides reliable, ordered, connection-oriented data delivery using a three-way handshake' },
+  { id:'udp',      name:'UDP',           osi:4, tcpip:'Transport', port:null, cat:'Protocol',
+    desc:'User Datagram Protocol — connectionless and unreliable. Lower overhead than TCP, suitable for real-time apps like video streaming, VoIP, and DNS queries.',
+    qd:'A fast, connectionless protocol with no delivery guarantees, used for streaming and DNS' },
+  { id:'port',     name:'Port Numbers',  osi:4, tcpip:'Transport', port:null, cat:'Concept',
+    desc:'16-bit numbers (0–65535) used by TCP and UDP to direct traffic to the correct application process. Well-known ports: 0–1023. Registered: 1024–49151.',
+    qd:'16-bit numbers used by TCP and UDP to identify which application should receive traffic' },
+  { id:'sctp',     name:'SCTP',          osi:4, tcpip:'Transport', port:null, cat:'Protocol',
+    desc:'Stream Control Transmission Protocol — combines TCP reliability with UDP multi-streaming. Supports multi-homing (multiple IP addresses per endpoint).',
+    qd:'A transport protocol that combines TCP reliability with multiple simultaneous streams' },
+
+  /* ── Session (OSI 5) ── */
+  { id:'netbios',  name:'NetBIOS',       osi:5, tcpip:'Application', port:'137-139', cat:'Protocol',
+    desc:'Network Basic Input/Output System — provides session establishment and name services for applications on a LAN. Largely superseded by DNS and modern alternatives.',
+    qd:'Provides name resolution and session services for applications on a local area network' },
+  { id:'rpc',      name:'RPC',           osi:5, tcpip:'Application', port:null, cat:'Protocol',
+    desc:'Remote Procedure Call — allows a program to call a subroutine on a remote server as if it were a local function call. Used extensively in distributed systems.',
+    qd:'Allows a program to call and execute a procedure on a remote server as if it were local' },
+  { id:'sip',      name:'SIP',           osi:5, tcpip:'Application', port:'5060', cat:'Protocol',
+    desc:'Session Initiation Protocol — establishes, modifies, and terminates multimedia communication sessions such as VoIP calls and video conferencing.',
+    qd:'Establishes, manages, and terminates VoIP calls and video conferencing sessions' },
+
+  /* ── Presentation (OSI 6) ── */
+  { id:'ssl',      name:'SSL / TLS',     osi:6, tcpip:'Application', port:null, cat:'Protocol',
+    desc:'Secure Sockets Layer / Transport Layer Security — provides encryption, authentication, and integrity for data in transit. TLS is the current standard; SSL is deprecated.',
+    qd:'Encrypts data in transit and authenticates the server to secure network communications' },
+  { id:'jpeg',     name:'JPEG',          osi:6, tcpip:'Application', port:null, cat:'Format',
+    desc:'Joint Photographic Experts Group — a lossy image compression format. The presentation layer is responsible for such data format translations.',
+    qd:'A lossy compression format for digital photographs and images' },
+  { id:'ascii',    name:'ASCII',         osi:6, tcpip:'Application', port:null, cat:'Standard',
+    desc:'American Standard Code for Information Interchange — a 7-bit character encoding mapping letters, numbers, and symbols to numeric codes (e.g. A = 65).',
+    qd:'A character encoding standard mapping text characters such as letters to numeric codes' },
+  { id:'mpeg',     name:'MPEG',          osi:6, tcpip:'Application', port:null, cat:'Format',
+    desc:'Moving Picture Experts Group — a family of standards for compressing and encoding video and audio (e.g. MP3, MP4, H.264).',
+    qd:'A family of standards for compressing and encoding video and audio data' },
+
+  /* ── Application (OSI 7) ── */
+  { id:'http',     name:'HTTP',          osi:7, tcpip:'Application', port:'80',      cat:'Protocol',
+    desc:'HyperText Transfer Protocol — the foundation of web communication. Clients send requests (GET, POST) and servers respond with resources. Stateless and unencrypted.',
+    qd:'Transfers web pages between browsers and web servers using methods like GET and POST' },
+  { id:'https',    name:'HTTPS',         osi:7, tcpip:'Application', port:'443',     cat:'Protocol',
+    desc:'HTTP over TLS — encrypts all traffic between browser and server. The padlock icon in your browser indicates HTTPS is active.',
+    qd:'Secure, encrypted version of HTTP used for sensitive web traffic' },
+  { id:'dns',      name:'DNS',           osi:7, tcpip:'Application', port:'53',      cat:'Protocol',
+    desc:'Domain Name System — translates human-readable domain names (e.g. cisco.com) into IP addresses. Uses a distributed hierarchical database of name servers.',
+    qd:'Translates domain names such as cisco.com into IP addresses' },
+  { id:'dhcp',     name:'DHCP',          osi:7, tcpip:'Application', port:'67/68',   cat:'Protocol',
+    desc:'Dynamic Host Configuration Protocol — automatically assigns IP addresses, subnet masks, gateways, and DNS servers to network devices via DORA (Discover, Offer, Request, Acknowledge).',
+    qd:'Automatically assigns IP addresses and network configuration to devices on a network' },
+  { id:'ftp',      name:'FTP',           osi:7, tcpip:'Application', port:'20/21',   cat:'Protocol',
+    desc:'File Transfer Protocol — transfers files between client and server. Uses two channels: port 21 for control (commands) and port 20 for data. No encryption.',
+    qd:'Transfers files between a client and server using separate control and data channels' },
+  { id:'sftp',     name:'SFTP',          osi:7, tcpip:'Application', port:'22',      cat:'Protocol',
+    desc:'SSH File Transfer Protocol — a secure file transfer protocol that runs over SSH. Encrypts both commands and data, replacing FTP in most modern environments.',
+    qd:'A secure file transfer protocol that encrypts all transfers by running over SSH' },
+  { id:'smtp',     name:'SMTP',          osi:7, tcpip:'Application', port:'25/587',  cat:'Protocol',
+    desc:'Simple Mail Transfer Protocol — sends email from a mail client to a mail server, and between mail servers. Port 587 is used for client submission with authentication.',
+    qd:'Sends outgoing email from clients to mail servers and between mail servers' },
+  { id:'pop3',     name:'POP3',          osi:7, tcpip:'Application', port:'110',     cat:'Protocol',
+    desc:'Post Office Protocol 3 — downloads email from a server to a local device and typically deletes it from the server. Simple but does not sync across devices.',
+    qd:'Downloads email from a mail server to a local device, usually removing it from the server' },
+  { id:'imap',     name:'IMAP',          osi:7, tcpip:'Application', port:'143',     cat:'Protocol',
+    desc:'Internet Message Access Protocol — accesses and manages email stored on a mail server. Email stays on the server and syncs across multiple devices.',
+    qd:'Accesses email stored on a mail server and syncs it across multiple devices' },
+  { id:'ssh',      name:'SSH',           osi:7, tcpip:'Application', port:'22',      cat:'Protocol',
+    desc:'Secure Shell — provides an encrypted channel for remote command-line access, file transfers (SFTP/SCP), and port forwarding. Replaced Telnet.',
+    qd:'Provides encrypted remote command-line access to servers and network devices' },
+  { id:'telnet',   name:'Telnet',        osi:7, tcpip:'Application', port:'23',      cat:'Protocol',
+    desc:'An older remote access protocol that transmits all data, including passwords, in plain text. Largely replaced by SSH due to its lack of encryption.',
+    qd:'Provides unencrypted remote command-line access; passwords are sent in plain text' },
+  { id:'snmp',     name:'SNMP',          osi:7, tcpip:'Application', port:'161/162', cat:'Protocol',
+    desc:'Simple Network Management Protocol — monitors and manages network devices. Agents on devices respond to queries from a central manager. Traps alert managers to events.',
+    qd:'Monitors and manages network devices like routers and switches from a central location' },
+  { id:'ntp',      name:'NTP',           osi:7, tcpip:'Application', port:'123',     cat:'Protocol',
+    desc:'Network Time Protocol — synchronises the clocks of networked computers to a reference time source (stratum). Critical for logging, certificates, and Kerberos authentication.',
+    qd:'Synchronises the clocks of all networked devices to a common time reference' },
+  { id:'tftp',     name:'TFTP',          osi:7, tcpip:'Application', port:'69',      cat:'Protocol',
+    desc:'Trivial File Transfer Protocol — a simplified, unauthenticated file transfer protocol using UDP. Used to boot diskless devices and upload IOS images to Cisco routers.',
+    qd:'A simplified, unauthenticated file transfer protocol used for booting network devices' },
+  { id:'ldap',     name:'LDAP',          osi:7, tcpip:'Application', port:'389',     cat:'Protocol',
+    desc:'Lightweight Directory Access Protocol — queries and modifies directory services such as Microsoft Active Directory. Used for centralised authentication and user management.',
+    qd:'Queries and manages directory services such as Active Directory for authentication' },
+  { id:'rdp',      name:'RDP',           osi:7, tcpip:'Application', port:'3389',    cat:'Protocol',
+    desc:'Remote Desktop Protocol — provides encrypted graphical remote access to Windows desktops and servers. Transmits screen updates and keyboard/mouse input.',
+    qd:'Provides graphical remote desktop access to Windows computers over a network' },
+];
+
+/* ═══════════════════════════════════════════════════════
+   STATE
+═══════════════════════════════════════════════════════ */
+let model='osi', qtype='random', Q=null, answered=false;
+let score=0, rnd=1, streak=0;
+
+function setModel(m,btn){
+  model=m;
+  document.querySelectorAll('.sel-row:first-of-type .cbtn').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  if(!answered) nextQ();
+}
+function setQType(t,btn){
+  qtype=t;
+  document.querySelectorAll('.sel-row:last-of-type .cbtn').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  if(!answered) nextQ();
+}
+
+/* ═══════════════════════════════════════════════════════
+   QUESTION GENERATION
+═══════════════════════════════════════════════════════ */
+function ri(a,b){return Math.floor(Math.random()*(b-a+1))+a;}
+function shuffle(a){const r=[...a];for(let i=r.length-1;i>0;i--){const j=ri(0,i);[r[i],r[j]]=[r[j],r[i]];}return r;}
+
+function pickWrong(correct, n) {
+  const pool = ITEMS.filter(it => it.id !== correct.id);
+  const shuffled = shuffle(pool);
+  /* Try to include at least one from same OSI layer for difficulty */
+  const same = shuffled.filter(it=>it.osi===correct.osi);
+  const diff = shuffled.filter(it=>it.osi!==correct.osi);
+  const result = [];
+  if(same.length>0) result.push(same[0]);
+  for(const it of diff){ if(result.length>=n) break; result.push(it); }
+  return shuffle(result).slice(0,n);
+}
+
+function genQ(){
+  const t = qtype==='random' ? (Math.random()<.5?'layer':'protocol') : qtype;
+  const item = ITEMS[ri(0,ITEMS.length-1)];
+  if(t==='layer'){
+    return { type:'layer', item };
+  } else {
+    const wrong = pickWrong(item, 3);
+    return { type:'protocol', item, options: shuffle([item,...wrong]) };
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   RENDER
+═══════════════════════════════════════════════════════ */
+function osiLayerName(n){ return `Layer ${n}: ${OSI[n-1].name}`; }
+function tcpLayerName(n){ return `Layer ${n}: ${TCPIP[n-1].name}`; }
+function tcpNum(tcpipName){ return TCPIP.findIndex(l=>l.name===tcpipName)+1; }
+
+function renderQ(){
+  answered=false;
+  document.getElementById('explain').classList.remove('visible');
+  document.getElementById('nxtbtn').style.display='none';
+  document.getElementById('skipbtn').style.display='';
+
+  const tag = document.getElementById('q-type-tag');
+  const main = document.getElementById('q-main');
+  const sub  = document.getElementById('q-sub');
+  const area = document.getElementById('answer-area');
+
+  if(Q.type==='layer'){
+    const mLabel = model==='osi'?'OSI':'TCP/IP';
+    tag.textContent = `Name → Layer Match (${mLabel})`;
+    main.innerHTML = `<div class="q-subject">${Q.item.name}</div>`;
+    sub.textContent = `Which ${mLabel} layer does ${Q.item.name} operate at?`;
+
+    const layers = model==='osi' ? OSI : TCPIP;
+    area.innerHTML = `<div class="layers-grid">${
+      layers.map(l=>`<button class="layer-btn" id="lb${l.num}" onclick="handleLayerClick(${l.num})">
+        <div class="ln">Layer ${l.num}</div>
+        <div class="lname">${l.name}</div>
+      </button>`).join('')
+    }</div>`;
+
+  } else {
+    tag.textContent = 'Description → Protocol Match';
+    main.innerHTML = `<div class="q-prompt">${Q.item.qd}</div>`;
+    sub.textContent = 'Which protocol or technology matches this description?';
+
+    area.innerHTML = `<div class="opts-grid">${
+      Q.options.map(opt=>`<button class="opt-card" id="ob${opt.id}" onclick="handleProtocolClick('${opt.id}')">
+        ${opt.name}
+      </button>`).join('')
+    }</div>`;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════
+   ANSWER HANDLING
+═══════════════════════════════════════════════════════ */
+function showExplain(item, wasCorrect){
+  const osi_l = OSI[item.osi-1];
+  const tcp_l = TCPIP.findIndex(l=>l.name===item.tcpip)+1;
+  document.getElementById('ex-name').textContent = item.name + (item.port ? ` — Port ${item.port}` : '');
+  document.getElementById('ex-layer').textContent =
+    `OSI Layer ${item.osi}: ${osi_l.name}  |  TCP/IP Layer ${tcp_l}: ${item.tcpip}`;
+  document.getElementById('ex-desc').textContent = item.desc;
+  document.getElementById('explain').classList.add('visible');
+}
+
+function finishRound(correct){
+  answered=true;
+  if(correct){ score++;streak++; }else{ streak=0; }
+  rnd++;
+  document.getElementById('sc').textContent=score;
+  document.getElementById('str').textContent=streak;
+  document.getElementById('rnd').textContent=rnd;
+  document.getElementById('nxtbtn').style.display='';
+  document.getElementById('skipbtn').style.display='none';
+  showExplain(Q.item, correct);
+}
+
+function handleLayerClick(num){
+  if(answered) return;
+  const correctNum = model==='osi' ? Q.item.osi : tcpNum(Q.item.tcpip);
+  /* Disable all buttons */
+  document.querySelectorAll('.layer-btn').forEach(b=>b.disabled=true);
+  document.getElementById('lb'+num).classList.add(num===correctNum?'correct':'wrong');
+  if(num!==correctNum) document.getElementById('lb'+correctNum).classList.add('correct');
+  finishRound(num===correctNum);
+}
+
+function handleProtocolClick(id){
+  if(answered) return;
+  document.querySelectorAll('.opt-card').forEach(b=>b.disabled=true);
+  document.getElementById('ob'+id).classList.add(id===Q.item.id?'correct':'wrong');
+  if(id!==Q.item.id) document.getElementById('ob'+Q.item.id).classList.add('correct');
+  finishRound(id===Q.item.id);
+}
+
+function skipQ(){
+  if(answered) return;
+  /* Reveal the correct answer without scoring */
+  answered=true; streak=0; rnd++;
+  document.getElementById('str').textContent=streak;
+  document.getElementById('rnd').textContent=rnd;
+  if(Q.type==='layer'){
+    document.querySelectorAll('.layer-btn').forEach(b=>b.disabled=true);
+    const cn = model==='osi'?Q.item.osi:tcpNum(Q.item.tcpip);
+    document.getElementById('lb'+cn).classList.add('correct');
+  } else {
+    document.querySelectorAll('.opt-card').forEach(b=>b.disabled=true);
+    document.getElementById('ob'+Q.item.id).classList.add('correct');
+  }
+  showExplain(Q.item, false);
+  document.getElementById('nxtbtn').style.display='';
+  document.getElementById('skipbtn').style.display='none';
+}
+
+function nextQ(){ Q=genQ(); renderQ(); }
+function resetGame(){ score=0;rnd=1;streak=0; nextQ(); }
+
+/* ═══════════════════════════════════════════════════════
+   OPTIONS
+═══════════════════════════════════════════════════════ */
+function toggleOpts(){
+  const m=document.getElementById('opt-menu');
+  const b=document.getElementById('opt-btn');
+  const o=m.classList.toggle('open');b.classList.toggle('open',o);
+}
+function toggleTool(id){
+  const cb=document.getElementById('tog-'+id);cb.checked=!cb.checked;applyTools();
+}
+function applyTools(){
+  const s=document.getElementById('tog-ref').checked;
+  document.getElementById('t-ref').style.display=s?'':'none';
+  document.getElementById('toolsec').style.display=s?'':'none';
+}
+document.addEventListener('click',e=>{
+  const w=document.getElementById('opt-btn').closest('.opt-wrap');
+  if(!w.contains(e.target)){
+    document.getElementById('opt-menu').classList.remove('open');
+    document.getElementById('opt-btn').classList.remove('open');
+  }
+});
+
+/* ═══════════════════════════════════════════════════════
+   REFERENCE PANEL
+═══════════════════════════════════════════════════════ */
+function buildRef(){
+  const el=document.getElementById('ref-content');
+  let html='';
+
+  /* OSI Layers section */
+  html+='<div class="ref-section-hdr">OSI Model — 7 Layers</div><div class="ref-grid" id="rg-osi">';
+  OSI.forEach(l=>{
+    const tcp_n=TCPIP.findIndex(t=>t.name===l.tcpip)+1;
+    html+=`<div class="ref-card" data-search="layer ${l.num} ${l.name.toLowerCase()} ${l.tcpip.toLowerCase()} ${l.examples.toLowerCase()}">
+      <div class="ref-card-top">
+        <div class="ref-card-name">Layer ${l.num}: ${l.name}</div>
+        <div class="ref-badges"><span class="rbadge rb-tcp">TCP/IP L${tcp_n}</span></div>
+      </div>
+      <div class="ref-card-desc">${l.desc}<br><em style="color:var(--text-t)">e.g. ${l.examples}</em></div>
+    </div>`;
+  });
+  html+='</div>';
+
+  /* TCP/IP Layers section */
+  html+='<div class="ref-section-hdr">TCP/IP Model — 4 Layers</div><div class="ref-grid" id="rg-tcp">';
+  TCPIP.forEach(l=>{
+    html+=`<div class="ref-card" data-search="tcp ip layer ${l.num} ${l.name.toLowerCase()} ${l.osi.toLowerCase()} ${l.examples.toLowerCase()}">
+      <div class="ref-card-top">
+        <div class="ref-card-name">Layer ${l.num}: ${l.name}</div>
+        <div class="ref-badges"><span class="rbadge rb-osi">OSI ${l.osi}</span></div>
+      </div>
+      <div class="ref-card-desc">${l.desc}<br><em style="color:var(--text-t)">e.g. ${l.examples}</em></div>
+    </div>`;
+  });
+  html+='</div>';
+
+  /* Protocols section */
+  html+='<div class="ref-section-hdr">Protocols &amp; Technologies</div><div class="ref-grid" id="rg-items">';
+  const byLayer=[...ITEMS].sort((a,b)=>a.osi-b.osi);
+  byLayer.forEach(it=>{
+    const tcp_n=TCPIP.findIndex(t=>t.name===it.tcpip)+1;
+    html+=`<div class="ref-card" data-search="${it.name.toLowerCase()} ${it.cat.toLowerCase()} ${it.desc.toLowerCase()} ${it.qd.toLowerCase()} ${it.port||''} osi ${it.osi} ${OSI[it.osi-1].name.toLowerCase()} ${it.tcpip.toLowerCase()}">
+      <div class="ref-card-top">
+        <div class="ref-card-name">${it.name}</div>
+        <div class="ref-badges">
+          <span class="rbadge rb-osi">OSI L${it.osi}</span>
+          <span class="rbadge rb-tcp">TCP/IP L${tcp_n}</span>
+          ${it.port?`<span class="rbadge rb-port">:${it.port}</span>`:''}
+        </div>
+      </div>
+      <div class="ref-card-desc">${it.desc}</div>
+    </div>`;
+  });
+  html+='</div><div class="ref-empty" id="ref-empty" style="display:none">No results found</div>';
+
+  el.innerHTML=html;
+}
+
+function filterRef(q){
+  const term=q.toLowerCase().trim();
+  const cards=document.querySelectorAll('#ref-content .ref-card');
+  let visible=0;
+  cards.forEach(c=>{
+    const match=!term||c.dataset.search.includes(term);
+    c.classList.toggle('hidden',!match);
+    if(match)visible++;
+  });
+  /* Show/hide section headers based on children */
+  ['rg-osi','rg-tcp','rg-items'].forEach(id=>{
+    const grid=document.getElementById(id);
+    if(!grid)return;
+    const anyVisible=[...grid.querySelectorAll('.ref-card')].some(c=>!c.classList.contains('hidden'));
+    grid.style.display=anyVisible?'':'none';
+    const hdr=grid.previousElementSibling;
+    if(hdr&&hdr.classList.contains('ref-section-hdr')) hdr.style.display=anyVisible?'':'none';
+  });
+  document.getElementById('ref-empty').style.display=visible===0?'block':'none';
+}
+
+/* ═══════════════════════════════════════════════════════
+   KEYBOARD
+═══════════════════════════════════════════════════════ */
+document.addEventListener('keydown',e=>{
+  if(e.key==='Enter'){if(answered)nextQ();}
+  if(e.key==='Escape'){
+    document.getElementById('opt-menu').classList.remove('open');
+    document.getElementById('opt-btn').classList.remove('open');
+  }
+});
+
+/* ═══════════════════════════════════════════════════════
+   INIT
+═══════════════════════════════════════════════════════ */
+buildRef();
+nextQ();
+</script>
+</body>
+</html>
