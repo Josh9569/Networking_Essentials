@@ -113,7 +113,21 @@
 
     <div class="tool-block" id="t-magic">
       <div class="tool-block-title">Magic Number</div>
-      <p class="tool-note">Click a column to calculate. Row 0 shows the borrowed bits (1s). Row 1 shows bit values—your selection is the increment. Row 2 shows total networks created (2<sup>n</sup>).</p>
+      <p class="tool-note">Click a column to calculate. Row 0 shows the borrowed bits (1s). Row 1 shows bit values — your selection is the increment. Row 2 shows total networks created (2<sup>n</sup>).</p>
+
+      <div class="mn-sel-row">
+        <span class="mn-sel-label">Class:</span>
+        <button class="mn-sel-btn" id="mnc-A" onclick="setMnClass('A',this)">A</button>
+        <button class="mn-sel-btn" id="mnc-B" onclick="setMnClass('B',this)">B</button>
+        <button class="mn-sel-btn on" id="mnc-C" onclick="setMnClass('C',this)">C</button>
+      </div>
+      <div class="mn-sel-row" style="margin-bottom:1rem">
+        <span class="mn-sel-label">Octet:</span>
+        <button class="mn-sel-btn" id="mno-1" onclick="setMnOctet(1,this)">1st</button>
+        <button class="mn-sel-btn" id="mno-2" onclick="setMnOctet(2,this)">2nd</button>
+        <button class="mn-sel-btn" id="mno-3" onclick="setMnOctet(3,this)">3rd</button>
+        <button class="mn-sel-btn on" id="mno-4" onclick="setMnOctet(4,this)">4th</button>
+      </div>
 
       <div class="mn-row-wrap">
         <div class="mn-row-label">Row 0</div>
@@ -136,10 +150,12 @@
       </div>
 
       <div id="mn-masks" style="display:none">
-        <p class="tool-note" style="margin-bottom:.55rem">Subnet mask by class (interesting octet shown):</p>
-        <div class="mn-mask-row"><span class="mn-cls-badge">Class A</span><span class="mn-mask-val" id="mn-ma">—</span></div>
-        <div class="mn-mask-row"><span class="mn-cls-badge">Class B</span><span class="mn-mask-val" id="mn-mb">—</span></div>
-        <div class="mn-mask-row"><span class="mn-cls-badge">Class C</span><span class="mn-mask-val" id="mn-mc">—</span></div>
+        <p class="tool-note" style="margin-bottom:.55rem">Resulting subnet mask:</p>
+        <div class="mn-mask-row">
+          <span class="mn-cls-badge" id="mn-mask-label">Class C · 4th octet</span>
+          <span class="mn-mask-val" id="mn-mask-val">—</span>
+          <span style="font-family:var(--mono);font-size:13px;color:var(--info-text);margin-left:2px;" id="mn-cidr-val"></span>
+        </div>
       </div>
     </div>
 
@@ -150,6 +166,7 @@ const BV2 = [2,4,8,16,32,64,128,256];
 
 /* ─── State ─────────────────────────── */
 let Q=null, cls='random', score=0, rnd=1, streak=0, done=false;
+let mnClass='C', mnOctet=4;
 
 /* ─── Helpers ────────────────────────── */
 function ri(a,b){ return Math.floor(Math.random()*(b-a+1))+a; }
@@ -541,6 +558,57 @@ function buildMagicTool(){
   });
 }
 
+/* Valid host octets per class — octets already consumed by the default
+   prefix cannot be borrowed from, so they are disabled.
+   Class A (/8)  → octets 2, 3, 4 available
+   Class B (/16) → octets 3, 4 available
+   Class C (/24) → octet 4 only                                        */
+const MN_VALID_OCTETS  = { A:[2,3,4], B:[3,4], C:[4] };
+const MN_DEFAULT_OCTET = { A:2, B:3, C:4 };
+
+function applyMnOctetConstraints() {
+  const valid    = MN_VALID_OCTETS[mnClass];
+  const fallback = MN_DEFAULT_OCTET[mnClass];
+  [1,2,3,4].forEach(o => {
+    const b = document.getElementById('mno-'+o);
+    const ok = valid.includes(o);
+    b.disabled = !ok;
+    if (!ok) b.classList.remove('on');
+  });
+  // If the currently selected octet is now invalid, switch to the fallback.
+  if (!valid.includes(mnOctet)) {
+    mnOctet = fallback;
+    document.getElementById('mno-'+mnOctet).classList.add('on');
+  }
+}
+
+function setMnClass(c, btn) {
+  mnClass = c;
+  document.querySelectorAll('[id^="mnc-"]').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  applyMnOctetConstraints();
+  redrawMagic();
+}
+
+function setMnOctet(o, btn) {
+  mnOctet = o;
+  document.querySelectorAll('[id^="mno-"]').forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+  redrawMagic();
+}
+
+function redrawMagic() {
+  const selIdx = [...document.querySelectorAll('.mn-c1')].findIndex(c => c.classList.contains('sel'));
+  if (selIdx >= 0) selectMnCol(selIdx);
+}
+
+function buildMnMask(octet, octSum) {
+  const parts = [0, 0, 0, 0];
+  for (let j = 0; j < octet - 1; j++) parts[j] = 255;
+  parts[octet - 1] = octSum;
+  return parts.join('.');
+}
+
 function selectMnCol(i){
   BV.forEach((_,idx)=>{
     // Update Row 0 (Binary 1s and 0s)
@@ -558,17 +626,25 @@ function selectMnCol(i){
     document.getElementById('mn-r2-'+idx).classList.toggle('sel',idx===i);
   });
   
-  const inc=BV[i], nets=BV2[i];
-  const octSum=BV.slice(0,i+1).reduce((a,b)=>a+b,0);
-  
-  document.getElementById('mn-inc').textContent=inc;
-  document.getElementById('mn-nets').textContent=nets;
-  document.getElementById('mn-oct').textContent=octSum;
-  document.getElementById('mn-sum').textContent=octSum;
-  document.getElementById('mn-ma').textContent=`255.${octSum}.0.0`;
-  document.getElementById('mn-mb').textContent=`255.255.${octSum}.0`;
-  document.getElementById('mn-mc').textContent=`255.255.255.${octSum}`;
-  document.getElementById('mn-masks').style.display='';
+  const inc = BV[i];
+  const nets = BV2[i];
+  const octSum = BV.slice(0, i+1).reduce((a,b) => a+b, 0);
+
+  // Build mask and CIDR from selected class + octet
+  const mask = buildMnMask(mnOctet, octSum);
+  const defaultCidr = { A:8, B:16, C:24 }[mnClass];
+  const extraFullOctets = Math.max(0, (mnOctet - 1) - (defaultCidr / 8));
+  const cidr = defaultCidr + extraFullOctets * 8 + (i + 1);
+  const ordinals = ['','1st','2nd','3rd','4th'];
+
+  document.getElementById('mn-inc').textContent = inc;
+  document.getElementById('mn-nets').textContent = nets;
+  document.getElementById('mn-oct').textContent = octSum;
+  document.getElementById('mn-sum').textContent = octSum;
+  document.getElementById('mn-mask-label').textContent = `Class ${mnClass} · ${ordinals[mnOctet]} octet`;
+  document.getElementById('mn-mask-val').textContent = mask;
+  document.getElementById('mn-cidr-val').textContent = `/${cidr}`;
+  document.getElementById('mn-masks').style.display = '';
 }
 
 /* ─── Keyboard ───────────────────────── */
@@ -585,6 +661,7 @@ document.addEventListener('keydown',e=>{
 
 /* ─── Init ───────────────────────────── */
 buildMagicTool();
+applyMnOctetConstraints();  // disable octets invalid for default Class C
 loadQ();
 </script>
 </body>
