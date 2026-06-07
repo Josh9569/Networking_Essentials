@@ -110,8 +110,8 @@ sup  { font-size: .65em; vertical-align: super; }
 .afield.class-q input { color: var(--info-text); font-size: 16px; font-weight: 500; }
 
 /* ── Explanations ───────────────────────────────────────────────────────────── */
-.expl-btn          { background: transparent; border: 1px solid currentColor; border-radius: 4px; padding: 2px 6px; font-size: 10px; cursor: pointer; opacity: 0.8; font-family: var(--font); text-transform: uppercase; letter-spacing: .05em; transition: opacity .15s; }
-.expl-btn:hover    { opacity: 1; }
+.expl-btn          { background: transparent; border: 1px solid var(--border-m); color: var(--text-s); border-radius: 4px; padding: 2px 6px; font-size: 10px; cursor: pointer; opacity: 0.8; font-family: var(--font); text-transform: uppercase; letter-spacing: .05em; transition: opacity .15s; }
+.expl-btn:hover    { border-color: var(--text-s); color: var(--text);}
 .expl-box          { display: none; margin-top: 10px; padding-top: 10px; border-top: 1px dashed var(--border-m); font-size: 13px; font-family: var(--font); color: var(--text); line-height: 1.5; }
 .expl-box code     { font-family: var(--mono); background: var(--surface); padding: 2px 4px; border-radius: 4px; border: 1px solid var(--border); font-size: 12px; }
 .expl-box.open     { display: block; animation: slideIn .2s ease-out; }
