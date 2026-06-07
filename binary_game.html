@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Binary Trainer</title>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#f2f2ef;--surface:#ffffff;--surface-s:#f0f0ec;--text:#1a1a18;--text-s:#68685f;--text-t:#aaa;
+  --border:rgba(0,0,0,.09);--border-m:rgba(0,0,0,.16);
+  --info-bg:#e5eefc;--info-text:#174da8;--info-bdr:#a8c8f4;
+  --ok-bg:#e5f5da;--ok-text:#2a6508;--ok-bdr:#9fd472;
+  --warn-bg:#fdf2d0;--warn-text:#8a5200;--warn-bdr:#f0c660;
+  --err-bg:#fce8e8;--err-text:#b22020;--err-bdr:#f0a0a0;
+  --r:8px;--rl:12px;--font:'Outfit',system-ui,sans-serif;--mono:'JetBrains Mono','Fira Code',monospace;
+}
+@media(prefers-color-scheme:dark){:root{
+  --bg:#141412;--surface:#1e1e1c;--surface-s:#272725;--text:#f0f0ec;--text-s:#999;--text-t:#555;
+  --border:rgba(255,255,255,.09);--border-m:rgba(255,255,255,.16);
+  --info-bg:#0a1e40;--info-text:#7aabf0;--info-bdr:#1a4fa5;
+  --ok-bg:#0a200a;--ok-text:#7ec050;--ok-bdr:#2a6508;
+  --warn-bg:#201200;--warn-text:#f0c660;--warn-bdr:#8a5200;
+  --err-bg:#200808;--err-text:#f09090;--err-bdr:#b22020;
+}}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100vh;padding:2rem 1rem;line-height:1.6;}
+.wrap{max-width:840px;margin:0 auto;}
+sup{font-size:.65em;vertical-align:super;}
+
+/* ── Nav ─────────────────────────────── */
+.home-link{font-size:12px;color:var(--text-t);text-decoration:none;display:inline-block;margin-bottom:.5rem;transition:color .15s;}
+.home-link:hover{color:var(--text-s);}
+
+/* ── Header ──────────────────────────── */
+.hdr{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem;}
+.hdr-title{font-size:22px;font-weight:600;}
+.hdr-sub{font-size:13px;color:var(--text-s);margin-top:2px;}
+.chips{display:flex;gap:8px;flex-wrap:wrap;}
+.chip{background:var(--surface);border:1px solid var(--border-m);border-radius:var(--r);padding:5px 14px;font-size:13px;color:var(--text-s);}
+.chip b{color:var(--text);font-weight:500;font-family:var(--mono);}
+
+/* ── Mode selector ───────────────────── */
+.mode-row{display:flex;align-items:center;gap:8px;margin-bottom:1rem;flex-wrap:wrap;}
+.mode-row>span{font-size:13px;color:var(--text-s);}
+.cbtn{padding:5px 14px;border-radius:var(--r);border:1px solid var(--border-m);background:transparent;cursor:pointer;font-size:13px;font-family:var(--font);color:var(--text-s);transition:all .15s;}
+.cbtn:hover{background:var(--surface-s);color:var(--text);}
+.cbtn.on{background:var(--info-bg);border-color:var(--info-bdr);color:var(--info-text);font-weight:500;}
+
+/* ── Question card ───────────────────── */
+.qcard{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:1.25rem 1.5rem;margin-bottom:1rem;}
+.qlbl{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-t);margin-bottom:.5rem;}
+.q-val{font-family:var(--mono);font-size:38px;font-weight:500;color:var(--text);letter-spacing:.04em;margin-bottom:8px;}
+.q-val.bin{letter-spacing:.18em;font-size:30px;}
+.q-hint{font-size:13px;color:var(--text-s);}
+
+/* ── Answer field ────────────────────── */
+.afield{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;margin-bottom:1rem;}
+.afield label{display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-t);margin-bottom:6px;}
+.afield input{width:100%;font-family:var(--mono);font-size:24px;font-weight:500;background:transparent;border:none;outline:none;color:var(--text);letter-spacing:.05em;}
+.afield input::placeholder{color:var(--text-t);font-weight:400;}
+.afield.ok{border-color:var(--ok-bdr);background:var(--ok-bg);}
+.afield.bad{border-color:var(--err-bdr);background:var(--err-bg);}
+.afield.show{border-color:var(--warn-bdr);background:var(--warn-bg);}
+.ahint{font-size:13px;margin-top:6px;font-family:var(--mono);min-height:16px;}
+.afield.ok .ahint{color:var(--ok-text);}
+.afield.bad .ahint{color:var(--err-text);}
+.afield.show .ahint{color:var(--warn-text);}
+
+/* ── Action row ──────────────────────── */
+.actrow{display:flex;gap:8px;margin-bottom:1.25rem;flex-wrap:wrap;align-items:center;}
+.btn{padding:8px 20px;border-radius:var(--r);border:1px solid var(--border-m);font-family:var(--font);font-size:14px;cursor:pointer;transition:all .15s;}
+.btn-p{background:var(--text);color:var(--surface);font-weight:500;border-color:transparent;}
+.btn-p:hover{opacity:.83;}
+.btn-s{background:transparent;color:var(--text);}
+.btn-s:hover{background:var(--surface-s);}
+.btn-d{background:transparent;color:var(--err-text);border-color:var(--err-bdr);}
+.btn-d:hover{background:var(--err-bg);}
+
+/* ── Options ─────────────────────────── */
+.opt-wrap{position:relative;margin-left:auto;}
+.opt-btn{background:transparent;color:var(--text-s);border:1px solid var(--border-m);font-size:14px;padding:8px 18px;border-radius:var(--r);font-family:var(--font);cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:6px;}
+.opt-btn:hover{background:var(--surface-s);color:var(--text);}
+.opt-btn.open{background:var(--surface);color:var(--text);}
+.opt-btn svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;transition:transform .2s;}
+.opt-btn.open svg{transform:rotate(180deg);}
+.opt-menu{display:none;position:absolute;right:0;top:calc(100% + 6px);width:220px;background:var(--surface);border:1px solid var(--border-m);border-radius:var(--rl);padding:6px;z-index:100;box-shadow:0 4px 16px rgba(0,0,0,.10);}
+.opt-menu.open{display:block;}
+.opt-section-label{font-size:11px;letter-spacing:.07em;text-transform:uppercase;color:var(--text-t);padding:6px 10px 4px;}
+.opt-row{display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-radius:var(--r);transition:background .12s;cursor:pointer;}
+.opt-row:hover{background:var(--surface-s);}
+.opt-row-label{font-size:14px;color:var(--text);user-select:none;}
+.tog{position:relative;width:38px;height:22px;flex-shrink:0;}
+.tog input{opacity:0;width:0;height:0;position:absolute;}
+.tog-track{position:absolute;inset:0;background:var(--border-m);border-radius:11px;transition:background .2s;cursor:pointer;}
+.tog-track::before{content:'';position:absolute;width:16px;height:16px;left:3px;top:3px;background:#fff;border-radius:50%;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.2);}
+.tog input:checked+.tog-track{background:var(--info-text);}
+.tog input:checked+.tog-track::before{transform:translateX(16px);}
+
+/* ── Feedback ────────────────────────── */
+.fbanner{padding:10px 14px;border-radius:var(--r);font-size:14px;margin-bottom:1rem;border:1px solid;display:none;}
+.fbanner.ok{background:var(--ok-bg);border-color:var(--ok-bdr);color:var(--ok-text);}
+.fbanner.warn{background:var(--warn-bg);border-color:var(--warn-bdr);color:var(--warn-text);}
+.fbanner.err{background:var(--err-bg);border-color:var(--err-bdr);color:var(--err-text);}
+
+/* ── Tools ───────────────────────────── */
+.toolsec{margin-top:.25rem;}
+.tool-block{background:var(--surface);border:1px solid var(--border);border-radius:var(--rl);padding:1.1rem 1.25rem;margin-bottom:.75rem;}
+.tool-block-title{font-size:12px;font-weight:500;letter-spacing:.07em;text-transform:uppercase;color:var(--text-t);margin-bottom:.85rem;}
+.tool-note{font-size:12px;color:var(--text-s);margin-bottom:.6rem;line-height:1.5;}
+
+/* ── Interactive Bit Table ───────────── */
+.bit-cells{display:flex;gap:5px;flex-wrap:wrap;margin-bottom:.85rem;}
+.bit-cell{width:72px;height:66px;border-radius:var(--r);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;border:1px solid var(--border-m);background:var(--surface-s);cursor:pointer;transition:all .15s;user-select:none;}
+.bit-cell:hover{border-color:var(--info-bdr);}
+.bit-cell.on{background:var(--info-bg);border-color:var(--info-bdr);}
+.bit-weight{font-size:11px;color:var(--text-t);font-family:var(--mono);}
+.bit-digit{font-size:22px;font-weight:600;font-family:var(--mono);color:var(--text-s);}
+.bit-cell.on .bit-digit{color:var(--info-text);}
+.bt-readout{display:flex;align-items:center;gap:20px;font-size:13px;color:var(--text-s);margin-bottom:.6rem;flex-wrap:wrap;}
+.bt-readout .bt-lbl{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-t);}
+.bt-readout .bt-val{font-family:var(--mono);font-size:20px;font-weight:500;color:var(--text);}
+.bt-readout .bt-bin-val{font-family:var(--mono);font-size:16px;font-weight:500;color:var(--text);letter-spacing:.12em;}
+
+/* ── Powers of 2 ─────────────────────── */
+.pow-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:6px;}
+.pow-cell{background:var(--surface-s);border:1px solid var(--border);border-radius:var(--r);padding:9px 4px;text-align:center;font-family:var(--mono);}
+.pow-cell .ex{font-size:10px;color:var(--text-t);}
+.pow-cell .vl{font-size:14px;font-weight:500;color:var(--text);margin:3px 0;}
+.pow-cell .bt{font-size:10px;color:var(--text-s);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <a href="index.html" class="home-link">&#8592; All Tools</a>
+
+  <div class="hdr">
+    <div>
+      <div class="hdr-title">Binary Trainer</div>
+      <div class="hdr-sub">Decimal &harr; binary conversion practice &middot; press Enter to check</div>
+    </div>
+    <div class="chips">
+      <div class="chip">Score <b id="sc">0</b></div>
+      <div class="chip">Round <b id="rnd">1</b></div>
+      <div class="chip">Streak <b id="str">0</b></div>
+    </div>
+  </div>
+
+  <div class="mode-row">
+    <span>Mode:</span>
+    <button class="cbtn on" onclick="setMode('random',this)">Random</button>
+    <button class="cbtn" onclick="setMode('dtob',this)">Dec &rarr; Bin</button>
+    <button class="cbtn" onclick="setMode('btod',this)">Bin &rarr; Dec</button>
+  </div>
+
+  <div class="qcard">
+    <div class="qlbl" id="q-lbl">Convert to 8-bit binary</div>
+    <div class="q-val" id="q-val">—</div>
+    <div class="q-hint" id="q-hint"></div>
+  </div>
+
+  <div class="fbanner" id="fb"></div>
+
+  <div class="afield" id="f-ans">
+    <label>Your answer</label>
+    <input id="a-ans" placeholder="..." autocomplete="off" spellcheck="false">
+    <div class="ahint" id="h-ans"></div>
+  </div>
+
+  <div class="actrow">
+    <button class="btn btn-p" id="chkbtn" onclick="checkAnswer()">Check Answer</button>
+    <button class="btn btn-s" id="revbtn" onclick="revealAnswer()">Reveal</button>
+    <button class="btn btn-s" id="nxtbtn" onclick="nextQ()" style="display:none">Next &rarr;</button>
+    <button class="btn btn-d" onclick="resetGame()">Reset</button>
+    <div class="opt-wrap">
+      <button class="opt-btn" id="opt-btn" onclick="toggleOpts()">
+        Options
+        <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="opt-menu" id="opt-menu">
+        <div class="opt-section-label">Reference Tools</div>
+        <label class="opt-row" onclick="toggleTool('bits')">
+          <span class="opt-row-label">Bit Table</span>
+          <div class="tog"><input type="checkbox" id="tog-bits" checked><span class="tog-track"></span></div>
+        </label>
+        <label class="opt-row" onclick="toggleTool('powers')">
+          <span class="opt-row-label">Powers of 2</span>
+          <div class="tog"><input type="checkbox" id="tog-powers" checked><span class="tog-track"></span></div>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div class="toolsec" id="toolsec">
+
+    <div class="tool-block" id="t-bits">
+      <div class="tool-block-title">Interactive Bit Table</div>
+      <p class="tool-note">Click bits to toggle them on (1) or off (0). Use this to work out conversions — the decimal and binary values update live.</p>
+      <div class="bit-cells" id="bt-cells"></div>
+      <div class="bt-readout">
+        <div><div class="bt-lbl">Decimal</div><div class="bt-val" id="bt-dec">0</div></div>
+        <div><div class="bt-lbl">Binary</div><div class="bt-bin-val" id="bt-bin">0000 0000</div></div>
+      </div>
+      <button class="btn btn-s" style="font-size:13px;padding:5px 14px;" onclick="clearBits()">Clear</button>
+    </div>
+
+    <div class="tool-block" id="t-powers">
+      <div class="tool-block-title">Powers of 2 — Bit Weights</div>
+      <p class="tool-note">Each bit position and its decimal value. Bit 7 is the most significant (leftmost).</p>
+      <div class="pow-grid" id="pow-grid"></div>
+    </div>
+
+  </div>
+
+</div>
+<script>
+const BV=[128,64,32,16,8,4,2,1];
+let Q=null,mode='random',score=0,rnd=1,streak=0,done=false;
+let bits=new Array(8).fill(0);
+
+function ri(a,b){return Math.floor(Math.random()*(b-a+1))+a;}
+function fmtBin(b){return b.slice(0,4)+' '+b.slice(4);}
+
+function setMode(m,btn){
+  mode=m;
+  document.querySelectorAll('.cbtn').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  nextQ();
+}
+
+function genQ(){
+  const t=mode==='random'?(Math.random()<.5?'dtob':'btod'):mode;
+  const val=ri(0,255);
+  const bin=val.toString(2).padStart(8,'0');
+  return{type:t,val,bin};
+}
+
+function correctAnswer(q){return q.type==='dtob'?q.bin:String(q.val);}
+
+function normInput(q,s){
+  if(q.type==='dtob'){
+    const c=s.replace(/\s+/g,'');
+    if(!/^[01]+$/.test(c))return null;
+    return c.padStart(8,'0');
+  }
+  const n=parseInt(s,10);
+  return isNaN(n)?null:String(n);
+}
+
+function loadQ(){
+  Q=genQ();done=false;
+  const lbl=document.getElementById('q-lbl');
+  const val=document.getElementById('q-val');
+  const hint=document.getElementById('q-hint');
+  const inp=document.getElementById('a-ans');
+  if(Q.type==='dtob'){
+    lbl.textContent='Convert to 8-bit binary';
+    val.textContent=Q.val;
+    val.className='q-val';
+    hint.textContent='Enter 8 bits \u00b7 spaces are ok (e.g. 1100 0000)';
+    inp.placeholder='e.g. 11000000';
+  } else {
+    lbl.textContent='Convert to decimal';
+    val.textContent=fmtBin(Q.bin);
+    val.className='q-val bin';
+    hint.textContent='Enter the decimal value (0\u2013255)';
+    inp.placeholder='e.g. 192';
+  }
+  inp.value='';inp.disabled=false;
+  const fld=document.getElementById('f-ans');
+  fld.className='afield';
+  document.getElementById('h-ans').textContent='';
+  const fb=document.getElementById('fb');
+  fb.className='fbanner';fb.style.display='none';
+  document.getElementById('chkbtn').style.display='';
+  document.getElementById('revbtn').style.display='';
+  document.getElementById('nxtbtn').style.display='none';
+  document.getElementById('sc').textContent=score;
+  document.getElementById('rnd').textContent=rnd;
+  document.getElementById('str').textContent=streak;
+  inp.focus();
+}
+
+function checkAnswer(){
+  if(done)return;
+  const inp=document.getElementById('a-ans');
+  const fld=document.getElementById('f-ans');
+  const hnt=document.getElementById('h-ans');
+  const uv=inp.value.trim();
+  const norm=normInput(Q,uv);
+  const correct=correctAnswer(Q);
+  inp.disabled=true;done=true;
+  const isOk=norm===correct;
+  fld.classList.add(isOk?'ok':'bad');
+  if(isOk){
+    hnt.textContent='\u2713 Correct';
+    score+=2;streak++;
+    showFb('Correct! +2 pts. Streak: '+streak,'ok');
+  } else {
+    const disp=Q.type==='dtob'?fmtBin(correct):correct;
+    hnt.textContent=(norm===null?'Invalid input. ':'')+'Correct: '+disp;
+    streak=0;
+    showFb('Incorrect. Streak reset.','err');
+  }
+  rnd++;
+  document.getElementById('sc').textContent=score;
+  document.getElementById('str').textContent=streak;
+  document.getElementById('rnd').textContent=rnd;
+  document.getElementById('nxtbtn').style.display='';
+  document.getElementById('chkbtn').style.display='none';
+  document.getElementById('revbtn').style.display='none';
+}
+
+function revealAnswer(){
+  if(done)return;
+  done=true;
+  const inp=document.getElementById('a-ans');
+  const fld=document.getElementById('f-ans');
+  const hnt=document.getElementById('h-ans');
+  const correct=correctAnswer(Q);
+  inp.disabled=true;fld.classList.add('show');
+  inp.value=Q.type==='dtob'?fmtBin(correct):correct;
+  hnt.textContent='Revealed';
+  streak=0;rnd++;
+  document.getElementById('str').textContent=streak;
+  document.getElementById('rnd').textContent=rnd;
+  showFb('Answer revealed. No points awarded.','warn');
+  document.getElementById('nxtbtn').style.display='';
+  document.getElementById('chkbtn').style.display='none';
+  document.getElementById('revbtn').style.display='none';
+}
+
+function showFb(msg,type){
+  const fb=document.getElementById('fb');
+  fb.style.display='block';fb.className='fbanner '+type;fb.textContent=msg;
+}
+
+function nextQ(){loadQ();}
+function resetGame(){score=0;rnd=1;streak=0;loadQ();}
+
+/* Options */
+function toggleOpts(){
+  const m=document.getElementById('opt-menu');
+  const b=document.getElementById('opt-btn');
+  const o=m.classList.toggle('open');
+  b.classList.toggle('open',o);
+}
+function toggleTool(id){
+  const cb=document.getElementById('tog-'+id);
+  cb.checked=!cb.checked;
+  applyTools();
+}
+function applyTools(){
+  const sb=document.getElementById('tog-bits').checked;
+  const sp=document.getElementById('tog-powers').checked;
+  document.getElementById('t-bits').style.display=sb?'':'none';
+  document.getElementById('t-powers').style.display=sp?'':'none';
+  document.getElementById('toolsec').style.display=(sb||sp)?'':'none';
+}
+document.addEventListener('click',e=>{
+  const w=document.getElementById('opt-btn').closest('.opt-wrap');
+  if(!w.contains(e.target)){
+    document.getElementById('opt-menu').classList.remove('open');
+    document.getElementById('opt-btn').classList.remove('open');
+  }
+});
+
+/* Bit table */
+function buildBitTable(){
+  const c=document.getElementById('bt-cells');
+  BV.forEach((v,i)=>{
+    const cell=document.createElement('div');
+    cell.className='bit-cell';cell.id='bt-c-'+i;
+    cell.innerHTML='<div class="bit-weight">'+v+'</div><div class="bit-digit" id="bt-d-'+i+'">0</div>';
+    cell.addEventListener('click',()=>toggleBit(i));
+    c.appendChild(cell);
+  });
+}
+function toggleBit(i){bits[i]=bits[i]?0:1;renderBits();}
+function renderBits(){
+  const dec=BV.reduce((s,v,i)=>s+v*bits[i],0);
+  const bin=bits.join('');
+  document.getElementById('bt-dec').textContent=dec;
+  document.getElementById('bt-bin').textContent=fmtBin(bin);
+  BV.forEach((_,i)=>{
+    document.getElementById('bt-c-'+i).classList.toggle('on',bits[i]===1);
+    document.getElementById('bt-d-'+i).textContent=bits[i];
+  });
+}
+function clearBits(){bits=new Array(8).fill(0);renderBits();}
+
+/* Powers of 2 */
+function buildPowers(){
+  const g=document.getElementById('pow-grid');
+  for(let i=7;i>=0;i--){
+    const v=Math.pow(2,i);
+    const d=document.createElement('div');d.className='pow-cell';
+    d.innerHTML='<div class="ex">2<sup>'+i+'</sup></div><div class="vl">'+v+'</div><div class="bt">Bit '+i+'</div>';
+    g.appendChild(d);
+  }
+}
+
+/* Keyboard */
+document.addEventListener('keydown',e=>{
+  if(e.key==='Enter'){if(!done)checkAnswer();else nextQ();}
+  if(e.key==='Escape'){
+    document.getElementById('opt-menu').classList.remove('open');
+    document.getElementById('opt-btn').classList.remove('open');
+  }
+});
+
+buildBitTable();
+buildPowers();
+loadQ();
+</script>
+</body>
+</html>
