@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VLSM Trainer</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+/* ── Difficulty row ───────────────────────────────── */
+.diff-row        { display: flex; align-items: center; gap: 8px; margin-bottom: 1rem; flex-wrap: wrap; }
+.diff-row > span { font-size: 13px; color: var(--text-s); }
+
+/* ── Parent network display ───────────────────────── */
+.parent-disp { font-family: var(--mono); font-size: 26px; font-weight: 500; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.parent-badge { font-size: 16px; padding: 2px 12px; border-radius: var(--r); background: var(--info-bg); color: var(--info-text); border: 1px solid var(--info-bdr); }
+.req-row  { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
+.req-chip { font-size: 13px; font-family: var(--mono); background: var(--surface-s); border: 1px solid var(--border-m); border-radius: var(--r); padding: 3px 10px; color: var(--text-s); }
+.req-chip strong { color: var(--text); font-weight: 500; }
+.req-note { font-size: 12px; color: var(--text-t); margin-top: 8px; }
+
+/* ── Subnet panels ────────────────────────────────── */
+.subnets    { display: flex; flex-direction: column; gap: 10px; margin-bottom: 1rem; }
+.sub-panel  { background: var(--surface); border: 1px solid var(--border); border-radius: var(--rl); overflow: hidden; }
+.sub-hdr    { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--surface-s); border-bottom: 1px solid var(--border); }
+.sub-ltr    { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; flex-shrink: 0; }
+.sub-ltr.a  { background: var(--info-bg);  color: var(--info-text);  border: 1px solid var(--info-bdr); }
+.sub-ltr.b  { background: var(--ok-bg);    color: var(--ok-text);    border: 1px solid var(--ok-bdr); }
+.sub-ltr.c  { background: var(--warn-bg);  color: var(--warn-text);  border: 1px solid var(--warn-bdr); }
+.sub-ltr.d  { background: var(--err-bg);   color: var(--err-text);   border: 1px solid var(--err-bdr); }
+.sub-ltr.e  { background: var(--surface-s);color: var(--text-s);     border: 1px solid var(--border-m); }
+.sub-need   { font-size: 14px; color: var(--text-s); }
+.sub-need strong { color: var(--text); font-weight: 500; }
+.sub-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+.sub-fields .afield { border: none; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); border-radius: 0; }
+.sub-fields .afield:nth-child(even) { border-right: none; }
+.sub-fields .afield:nth-last-child(-n+2) { border-bottom: none; }
+
+/* ── CIDR field wrapper ───────────────────────────── */
+.cidr-wrap       { display: flex; align-items: center; }
+.cidr-slash      { font-family: var(--mono); font-size: 16px; color: var(--text-s); margin-right: 2px; line-height: 1; }
+.cidr-wrap input { flex: 1; width: auto; }
+
+/* ── CIDR reference table ────────────────────────── */
+.ref-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 13px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
+.ref-table th { background: var(--surface-s); padding: 7px 10px; text-align: left; font-weight: 500; border-bottom: 1px solid var(--border); color: var(--text-s); font-size: 11px; font-family: var(--font); }
+.ref-table td { padding: 7px 10px; border-bottom: 1px solid var(--border); color: var(--text); }
+.ref-table tr:last-child td { border-bottom: none; }
+.ref-table tr:hover td { background: var(--surface-s); }
+.ref-table .cidr-col { color: var(--info-text); font-weight: 500; }
+.ref-table .hi { background: var(--info-bg); }
+.ref-table .hi td { color: var(--info-text); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <a href="index.html" class="home-link">&#8592; All Tools</a>
+
+  <div class="hdr">
+    <div>
+      <div class="hdr-title">VLSM Trainer</div>
+      <div class="hdr-sub">Variable Length Subnet Masking &middot; allocate largest to smallest &middot; Enter to check</div>
+    </div>
+    <div class="chips">
+      <div class="chip">Score <b id="sc">0</b></div>
+      <div class="chip">Round <b id="rnd">1</b></div>
+      <div class="chip">Streak <b id="str">0</b></div>
+    </div>
+  </div>
+
+  <div class="diff-row">
+    <span>Difficulty:</span>
+    <button class="cbtn on" onclick="setDiff('random',this)">Random</button>
+    <button class="cbtn" onclick="setDiff('easy',this)">Easy</button>
+    <button class="cbtn" onclick="setDiff('medium',this)">Medium</button>
+    <button class="cbtn" onclick="setDiff('hard',this)">Hard</button>
+  </div>
+
+  <div class="qcard">
+    <div class="qlbl">VLSM Problem &mdash; Parent Network</div>
+    <div class="parent-disp" id="parent-disp">—</div>
+    <div class="req-row" id="req-row"></div>
+    <div class="req-note">Subnets are labelled A&rarr;last in allocation order (largest requirement first). Fill in all fields for each subnet.</div>
+  </div>
+
+  <div class="fbanner" id="fb"></div>
+
+  <div class="subnets" id="subnets"></div>
+
+  <div class="actrow">
+    <button class="btn btn-p" id="chkbtn" onclick="checkAll()">Check Answers</button>
+    <button class="btn btn-s" id="revbtn" onclick="revealAll()">Reveal All</button>
+    <button class="btn btn-s" id="nxtbtn" onclick="nextQ()" style="display:none">Next Question &rarr;</button>
+    <button class="btn btn-d" onclick="resetGame()">Reset</button>
+    <div class="opt-wrap">
+      <button class="opt-btn" id="opt-btn" onclick="toggleOpts()">
+        Options
+        <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="opt-menu" id="opt-menu">
+        <div class="opt-section-label">Reference Tools</div>
+        <label class="opt-row" onclick="toggleTool('ref')">
+          <span class="opt-row-label">CIDR Reference</span>
+          <div class="tog"><input type="checkbox" id="tog-ref" checked><span class="tog-track"></span></div>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div class="toolsec" id="toolsec">
+    <div class="tool-block" id="t-ref">
+      <div class="tool-block-title">CIDR Quick Reference</div>
+      <p class="tool-note">Find the smallest CIDR that satisfies the host requirement. Usable = total &minus; 2 (network + broadcast). Hover rows to highlight.</p>
+      <table class="ref-table">
+        <thead>
+          <tr>
+            <th>CIDR</th>
+            <th>Subnet Mask</th>
+            <th>Block Size</th>
+            <th>Usable Hosts</th>
+          </tr>
+        </thead>
+        <tbody id="ref-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+<script>
+/* ── Helpers ────────────────────────────────────── */
+function ri(a,b){return Math.floor(Math.random()*(b-a+1))+a;}
+function ip2int(ip){const p=ip.split('.').map(Number);return((p[0]<<24)|(p[1]<<16)|(p[2]<<8)|p[3])>>>0;}
+function int2ip(n){return[(n>>>24)&255,(n>>>16)&255,(n>>>8)&255,n&255].join('.');}
+function cidr2mask(c){return[0,1,2,3].map(i=>{const b=Math.min(8,Math.max(0,c-i*8));return b===0?0:b===8?255:256-Math.pow(2,8-b);}).join('.');}
+
+/* ── State ──────────────────────────────────────── */
+let Q=null,diff='random',score=0,rnd=1,streak=0,done=false;
+
+function setDiff(d,btn){
+  diff=d;
+  document.querySelectorAll('.cbtn').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  nextQ();
+}
+
+/* ── VLSM generation ────────────────────────────── */
+function genVLSM(){
+  const d=diff==='random'?['easy','medium','hard'][ri(0,2)]:diff;
+  const numSubs=d==='easy'?3:4;
+
+  let parentIPNum,parentCidr,parentBits;
+  if(d==='hard'){
+    /* /22 parent: 1024 addresses, third octet aligned to multiple of 4 */
+    const a=ri(10,172),b=ri(0,255),c=ri(0,63)*4;
+    parentIPNum=ip2int(`${a}.${b}.${c}.0`);
+    parentCidr=22; parentBits=10;
+  } else {
+    /* /24 parent: 256 addresses */
+    const a=ri(192,223),b=ri(0,255),c=ri(0,255);
+    parentIPNum=ip2int(`${a}.${b}.${c}.0`);
+    parentCidr=24; parentBits=8;
+  }
+
+  const totalAddr=Math.pow(2,parentBits);
+
+  /* Build list of usable block sizes (powers of 2, min 4 = /30) */
+  const avail=[];
+  for(let e=2;e<parentBits;e++) avail.push(Math.pow(2,e));
+
+  /* Pick numSubs distinct blocks that fit within totalAddr */
+  let chosen=null;
+  for(let attempt=0;attempt<300;attempt++){
+    const shuf=[...avail].sort(()=>Math.random()-.5);
+    const sel=[];let used=0;
+    for(const blk of shuf){
+      if(sel.length>=numSubs) break;
+      const slotsLeft=numSubs-sel.length;
+      if(blk<=totalAddr-used-(slotsLeft-1)*4){
+        sel.push(blk); used+=blk;
+      }
+    }
+    if(sel.length===numSubs){chosen=sel;break;}
+  }
+  if(!chosen) chosen=[4,8,16,32].slice(0,numSubs);
+
+  /* Sort largest → smallest (canonical VLSM allocation order) */
+  chosen.sort((a,b)=>b-a);
+
+  /* Assign sequential addresses and generate required host counts */
+  let cur=parentIPNum;
+  const subnets=chosen.map((blk,i)=>{
+    const cidr=32-Math.round(Math.log2(blk));
+    const maxH=blk-2;
+    const minH=Math.max(1,Math.ceil(blk/2)-1);
+    const hostsNeeded=ri(minH,maxH);
+    const netN=cur, bcN=cur+blk-1;
+    cur+=blk;
+    return{
+      label:String.fromCharCode(65+i),
+      cls:['a','b','c','d','e'][i],
+      hostsNeeded, cidr,
+      mask:cidr2mask(cidr),
+      network:int2ip(netN),
+      broadcast:int2ip(bcN),
+      first:int2ip(netN+1),
+      last:int2ip(bcN-1),
+      usable:maxH
+    };
+  });
+
+  return{d,parentIP:int2ip(parentIPNum),parentCidr,subnets};
+}
+
+/* ── Render ─────────────────────────────────────── */
+function renderQ(){
+  /* Parent network card */
+  document.getElementById('parent-disp').innerHTML=
+    `${Q.parentIP}<span class="parent-badge">/${Q.parentCidr}</span>`;
+
+  const reqRow=document.getElementById('req-row');
+  reqRow.innerHTML='';
+  Q.subnets.forEach(s=>{
+    const chip=document.createElement('div');
+    chip.className='req-chip';
+    chip.innerHTML=`<strong>${s.label}</strong> &mdash; ${s.hostsNeeded} hosts`;
+    reqRow.appendChild(chip);
+  });
+
+  /* Subnet panels */
+  const container=document.getElementById('subnets');
+  container.innerHTML='';
+  Q.subnets.forEach((s,i)=>{
+    const panel=document.createElement('div');
+    panel.className='sub-panel'; panel.id='panel-'+i;
+    panel.innerHTML=`
+      <div class="sub-hdr">
+        <div class="sub-ltr ${s.cls}">${s.label}</div>
+        <div class="sub-need">Subnet ${s.label} &mdash; needs <strong>${s.hostsNeeded}</strong> hosts</div>
+      </div>
+      <div class="sub-fields">
+        <div class="afield" id="f${i}cidr">
+          <label>CIDR Prefix</label>
+          <div class="cidr-wrap">
+            <span class="cidr-slash">/</span>
+            <input id="a${i}cidr" placeholder="e.g. ${s.cidr}" autocomplete="off">
+          </div>
+          <div class="ahint" id="h${i}cidr"></div>
+        </div>
+        <div class="afield" id="f${i}mask">
+          <label>Subnet Mask</label>
+          <input id="a${i}mask" placeholder="e.g. ${s.mask}" autocomplete="off">
+          <div class="ahint" id="h${i}mask"></div>
+        </div>
+        <div class="afield" id="f${i}net">
+          <label>Network Address</label>
+          <input id="a${i}net" placeholder="e.g. ${s.network}" autocomplete="off">
+          <div class="ahint" id="h${i}net"></div>
+        </div>
+        <div class="afield" id="f${i}bc">
+          <label>Broadcast Address</label>
+          <input id="a${i}bc" placeholder="e.g. ${s.broadcast}" autocomplete="off">
+          <div class="ahint" id="h${i}bc"></div>
+        </div>
+        <div class="afield" id="f${i}fh">
+          <label>First Usable Host</label>
+          <input id="a${i}fh" placeholder="e.g. ${s.first}" autocomplete="off">
+          <div class="ahint" id="h${i}fh"></div>
+        </div>
+        <div class="afield" id="f${i}lh">
+          <label>Last Usable Host</label>
+          <input id="a${i}lh" placeholder="e.g. ${s.last}" autocomplete="off">
+          <div class="ahint" id="h${i}lh"></div>
+        </div>
+      </div>`;
+    container.appendChild(panel);
+  });
+}
+
+function loadQ(){
+  Q=genVLSM(); done=false;
+  renderQ();
+  const fb=document.getElementById('fb');
+  fb.className='fbanner'; fb.style.display='none';
+  document.getElementById('chkbtn').style.display='';
+  document.getElementById('revbtn').style.display='';
+  document.getElementById('nxtbtn').style.display='none';
+  document.getElementById('sc').textContent=score;
+  document.getElementById('rnd').textContent=rnd;
+  document.getElementById('str').textContent=streak;
+  /* Focus first input */
+  document.getElementById('a0cidr').focus();
+}
+
+/* ── Check ──────────────────────────────────────── */
+const SUBFIELDS=[
+  {key:'cidr',  suffix:'cidr', label:'CIDR',      getVal:s=>String(s.cidr),    norm:v=>v.replace('/','').trim()},
+  {key:'mask',  suffix:'mask', label:'Mask',       getVal:s=>s.mask},
+  {key:'net',   suffix:'net',  label:'Network',    getVal:s=>s.network},
+  {key:'bc',    suffix:'bc',   label:'Broadcast',  getVal:s=>s.broadcast},
+  {key:'fh',    suffix:'fh',   label:'First host', getVal:s=>s.first},
+  {key:'lh',    suffix:'lh',   label:'Last host',  getVal:s=>s.last},
+];
+
+function evalFields(reveal){
+  let correct=0,total=0;
+  Q.subnets.forEach((s,i)=>{
+    SUBFIELDS.forEach(({suffix,getVal,norm})=>{
+      const inp=document.getElementById(`a${i}${suffix}`);
+      const fld=document.getElementById(`f${i}${suffix}`);
+      const hnt=document.getElementById(`h${i}${suffix}`);
+      const cv=getVal(s);
+      const raw=inp.value.trim();
+      const uv=norm?norm(raw):raw;
+      total++;inp.disabled=true;
+      if(uv===cv){
+        fld.classList.add('ok');hnt.textContent='\u2713 Correct';correct++;
+      } else if(reveal||raw===''){
+        fld.classList.add('show');
+        inp.value=suffix==='cidr'?'/'+cv:cv;
+        hnt.textContent=raw&&!reveal?'Not answered':'';
+      } else {
+        fld.classList.add('bad');
+        hnt.textContent='Correct: '+(suffix==='cidr'?'/'+cv:cv);
+      }
+    });
+  });
+  return{correct,total};
+}
+
+function checkAll(){
+  if(done)return;
+  done=true;
+  const{correct,total}=evalFields(false);
+  const bonus=correct===total?3:0;
+  const pts=correct+bonus;
+  score+=pts; rnd++;
+  if(correct===total)streak++;else streak=0;
+  const fb=document.getElementById('fb');
+  fb.style.display='block';
+  if(correct===total){
+    fb.className='fbanner ok';
+    fb.textContent=`Perfect! All ${total} fields correct. +${pts} pts (+3 bonus). Streak: ${streak}`;
+  } else if(correct>=Math.ceil(total*.6)){
+    fb.className='fbanner warn';
+    fb.textContent=`${correct}/${total} correct. +${pts} pt${pts!==1?'s':''}.`;
+  } else {
+    fb.className='fbanner err';
+    fb.textContent=`${correct}/${total} correct. +${pts} pt${pts!==1?'s':''}. Review the red fields.`;
+  }
+  document.getElementById('sc').textContent=score;
+  document.getElementById('str').textContent=streak;
+  document.getElementById('rnd').textContent=rnd;
+  document.getElementById('nxtbtn').style.display='';
+  document.getElementById('chkbtn').style.display='none';
+  document.getElementById('revbtn').style.display='none';
+}
+
+function revealAll(){
+  if(done)return;
+  done=true; streak=0; rnd++;
+  evalFields(true);
+  document.getElementById('str').textContent=streak;
+  document.getElementById('rnd').textContent=rnd;
+  const fb=document.getElementById('fb');
+  fb.style.display='block'; fb.className='fbanner warn';
+  fb.textContent='Answers revealed. No points awarded.';
+  document.getElementById('nxtbtn').style.display='';
+  document.getElementById('chkbtn').style.display='none';
+  document.getElementById('revbtn').style.display='none';
+}
+
+function nextQ(){loadQ();}
+function resetGame(){score=0;rnd=1;streak=0;loadQ();}
+
+/* ── Options ────────────────────────────────────── */
+function toggleOpts(){
+  const m=document.getElementById('opt-menu');
+  const b=document.getElementById('opt-btn');
+  const o=m.classList.toggle('open');
+  b.classList.toggle('open',o);
+}
+function toggleTool(id){
+  const cb=document.getElementById('tog-'+id);
+  cb.checked=!cb.checked; applyTools();
+}
+function applyTools(){
+  const s=document.getElementById('tog-ref').checked;
+  document.getElementById('t-ref').style.display=s?'':'none';
+  document.getElementById('toolsec').style.display=s?'':'none';
+}
+document.addEventListener('click',e=>{
+  const w=document.getElementById('opt-btn').closest('.opt-wrap');
+  if(!w.contains(e.target)){
+    document.getElementById('opt-menu').classList.remove('open');
+    document.getElementById('opt-btn').classList.remove('open');
+  }
+});
+
+/* ── CIDR reference table ───────────────────────── */
+function buildRefTable(){
+  const tb=document.getElementById('ref-tbody');
+  const rows=[];
+  for(let c=20;c<=30;c++){
+    const blk=Math.pow(2,32-c);
+    const usable=blk-2;
+    const mask=cidr2mask(c);
+    rows.push(`<tr>
+      <td class="cidr-col">/${c}</td>
+      <td>${mask}</td>
+      <td>${blk>=1024?(blk/1024).toFixed(blk%1024?1:0)+'K':blk}</td>
+      <td>${usable>=1000?(usable/1000).toFixed(usable%1000?1:0)+'K':usable}</td>
+    </tr>`);
+  }
+  tb.innerHTML=rows.join('');
+}
+
+/* ── Keyboard ───────────────────────────────────── */
+document.addEventListener('keydown',e=>{
+  if(e.key==='Enter'){if(!done)checkAll();else nextQ();}
+  if(e.key==='Escape'){
+    document.getElementById('opt-menu').classList.remove('open');
+    document.getElementById('opt-btn').classList.remove('open');
+  }
+});
+
+buildRefTable();
+loadQ();
+</script>
+</body>
+</html>
