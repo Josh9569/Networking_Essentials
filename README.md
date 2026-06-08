@@ -1,4 +1,4 @@
-# Networking Fundamentals: Subnetting & Beyond
+# Networking Essentials Trainer/Games
 
 I made this for myself to practice for my own exams, so I figured this might be useful for anyone else studying their CCNA or networking-related course so I made it a live page. If there are any issues or feature requests feel free to do a PR, start an issue or whatever I should see it.
 
