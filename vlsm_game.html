@@ -45,6 +45,37 @@
   <div class="custom-card" id="custom-card" style="display:none">
     <div class="custom-card-title">Configure your VLSM challenge</div>
 
+    <!-- Parent network -->
+    <div class="custom-parent-sec">
+      <div class="custom-sec-lbl">Parent Network</div>
+      <div class="custom-src-btns">
+        <button class="custom-src-btn on" id="csrc-auto"   onclick="setCustomSource('auto')">Auto</button>
+        <button class="custom-src-btn"    id="csrc-manual" onclick="setCustomSource('manual')">Manual IP</button>
+      </div>
+      <div id="custom-auto-opts">
+        <div class="custom-cls-row">
+          <span class="custom-cls-lbl">Class:</span>
+          <button class="custom-cls-btn on" onclick="setCustomCls('random',this)">Random</button>
+          <button class="custom-cls-btn"    onclick="setCustomCls('A',this)">Class A</button>
+          <button class="custom-cls-btn"    onclick="setCustomCls('B',this)">Class B</button>
+          <button class="custom-cls-btn"    onclick="setCustomCls('C',this)">Class C</button>
+        </div>
+      </div>
+      <div id="custom-manual-opts" style="display:none">
+        <div class="custom-manual-wrap">
+          <input class="custom-ip-inp" id="c-manual-ip" type="text"
+                 placeholder="e.g. 192.168.1.0"
+                 oninput="updateNetPreview()" autocomplete="off" spellcheck="false">
+          <span style="font-family:var(--mono);font-size:16px;color:var(--text-s)">/</span>
+          <input class="custom-cidr-inp" id="c-manual-cidr" type="number"
+                 min="1" max="30" value="24" oninput="updateNetPreview()">
+        </div>
+        <div class="custom-net-preview" id="net-preview" style="display:none">
+          Network: <span class="np-val" id="np-val"></span>
+        </div>
+      </div>
+    </div>
+
     <div class="custom-count-row">
       <span class="custom-count-lbl">Number of subnets</span>
       <input class="custom-num-inp" type="number" id="c-count" min="2" max="8" value="4" oninput="renderCustomHosts()">
@@ -52,6 +83,8 @@
     </div>
 
     <div class="custom-hosts" id="c-hosts"></div>
+
+    <div id="custom-msg" style="display:none" class="custom-msg"></div>
 
     <div class="custom-actions">
       <button class="btn btn-p" onclick="startCustom()">Generate Challenge</button>
@@ -120,6 +153,8 @@ function cidr2mask(c){return[0,1,2,3].map(i=>{const b=Math.min(8,Math.max(0,c-i*
 /* ── State ──────────────────────────────────────── */
 let Q=null, diff='random', cls='random', score=0, rnd=1, streak=0, done=false;
 let customHosts=[60,28,12,2];   // host requirements for custom mode
+let customIPSource='auto', customCls='random';
+let _customManualIPNum=null, _customManualCidr=null, _pruneWarning=null;
 
 function setDiff(d, btn){
   diff=d;
@@ -153,18 +188,29 @@ function genVLSM(){
     return ri(192,223);
   }
 
-  /* ── Custom mode: build directly from user-supplied host counts ── */
+  /* ── Custom mode ── */
   if(d==='custom'){
     const sorted=[...customHosts].sort((a,b)=>b-a);
     const blocks=sorted.map(hostsToBlock);
-    const total=blocks.reduce((s,v)=>s+v,0);
-    /* smallest parent that fits */
-    let pb=3; while(Math.pow(2,pb)<total) pb++;
-    const parentCidr=32-pb;
-    const a=firstOctet(c), bOct=ri(0,255);
-    let parentIPNum;
-    if(pb<=8){ parentIPNum=ip2int(`${a}.${bOct}.${ri(0,255)}.0`); }
-    else{ const align=Math.pow(2,pb-8); const oc3=ri(0,Math.floor(256/align)-1)*align; parentIPNum=ip2int(`${a}.${bOct}.${oc3}.0`); }
+    let parentCidr, parentIPNum, ipCls;
+
+    if(_customManualIPNum!==null && _customManualCidr!==null){
+      /* Manual IP supplied by user */
+      parentCidr=_customManualCidr;
+      parentIPNum=_customManualIPNum;
+      ipCls=detectIPClass(parentIPNum);
+    } else {
+      /* Auto: pick class + auto-size parent */
+      const cc=(_customCls||'random')==='random'?['A','B','C'][ri(0,2)]:(_customCls||'random');
+      ipCls=cc;
+      const total=blocks.reduce((s,v)=>s+v,0);
+      let pb=3; while(Math.pow(2,pb)<total) pb++;
+      parentCidr=32-pb;
+      const a=firstOctet(cc), bOct=ri(0,255);
+      if(pb<=8){ parentIPNum=ip2int(`${a}.${bOct}.${ri(0,255)}.0`); }
+      else{ const align=Math.pow(2,pb-8); const oc3=ri(0,Math.floor(256/align)-1)*align; parentIPNum=ip2int(`${a}.${bOct}.${oc3}.0`); }
+    }
+
     let cur=parentIPNum;
     const CLRS=['a','b','c','d','e','f','g','h'];
     const subnets=blocks.map((blk,i)=>{
@@ -174,7 +220,7 @@ function genVLSM(){
         cidr, mask:cidr2mask(cidr), network:int2ip(netN), broadcast:int2ip(bcN),
         first:int2ip(netN+1), last:int2ip(bcN-1), usable:blk-2 };
     });
-    return{ d, ipCls:c, parentIP:int2ip(parentIPNum), parentCidr, subnets };
+    return{ d, ipCls, parentIP:int2ip(parentIPNum), parentCidr, subnets };
   }
 
   /* ── Preset difficulties ── */
@@ -308,13 +354,117 @@ function randAllHosts(){
   for(let i=0;i<count;i++) randHost(i);
 }
 
+/* ── Custom parent network helpers ─────────────────── */
+function isValidIP(ip){
+  const p=ip.split('.');
+  return p.length===4&&p.every(s=>/^\d+$/.test(s)&&+s>=0&&+s<=255);
+}
+function getNetworkAddress(ip,cidr){
+  const mi=cidr===0?0:(0xFFFFFFFF<<(32-cidr))>>>0;
+  return int2ip((ip2int(ip)&mi)>>>0);
+}
+function detectIPClass(ipInt){
+  const f=(ipInt>>>24)&0xFF;
+  return f<=126?'A':f<=191?'B':'C';
+}
+function setCustomSource(src){
+  customIPSource=src;
+  document.querySelectorAll('.custom-src-btn').forEach(b=>b.classList.remove('on'));
+  document.getElementById('csrc-'+src).classList.add('on');
+  document.getElementById('custom-auto-opts').style.display=src==='auto'?'':'none';
+  document.getElementById('custom-manual-opts').style.display=src==='manual'?'':'none';
+  clearCustomMsg();
+}
+function setCustomCls(c,btn){
+  customCls=c;
+  document.querySelectorAll('.custom-cls-btn').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+}
+function updateNetPreview(){
+  const ip=document.getElementById('c-manual-ip').value.trim();
+  const cidr=parseInt(document.getElementById('c-manual-cidr').value);
+  const prev=document.getElementById('net-preview');
+  if(!isValidIP(ip)||isNaN(cidr)||cidr<1||cidr>30){prev.style.display='none';return;}
+  const net=getNetworkAddress(ip,cidr);
+  const total=Math.pow(2,32-cidr);
+  document.getElementById('np-val').textContent=`${net}/${cidr} — ${total.toLocaleString()} addresses`;
+  prev.style.display='';
+  clearCustomMsg();
+}
+function clearCustomMsg(){
+  document.getElementById('custom-msg').style.display='none';
+}
+function showCustomMsg(txt,type){
+  const m=document.getElementById('custom-msg');
+  m.className='custom-msg '+type; m.textContent=txt; m.style.display='';
+}
+
 function startCustom(){
-  const count=Math.min(8, Math.max(2, parseInt(document.getElementById('c-count').value)||4));
-  customHosts=[];
+  clearCustomMsg();
+
+  /* Validate manual IP ──────────────────────────────────── */
+  let manualIPNum=null, manualCidr=null;
+  if(customIPSource==='manual'){
+    const ipStr=document.getElementById('c-manual-ip').value.trim();
+    const cidrVal=parseInt(document.getElementById('c-manual-cidr').value);
+    if(!isValidIP(ipStr)){
+      showCustomMsg('Invalid IP address — enter a valid IPv4 address (e.g. 192.168.1.0).','err');
+      return;
+    }
+    if(isNaN(cidrVal)||cidrVal<1||cidrVal>30){
+      showCustomMsg('CIDR prefix must be between /1 and /30.','err');
+      return;
+    }
+    manualCidr=cidrVal;
+    manualIPNum=ip2int(getNetworkAddress(ipStr,cidrVal));
+  }
+
+  /* Collect host counts ─────────────────────────────────── */
+  const count=Math.min(8,Math.max(2,parseInt(document.getElementById('c-count').value)||4));
+  let hosts=[];
   for(let i=0;i<count;i++){
     const v=parseInt(document.getElementById('ch-'+i)?.value)||1;
-    customHosts.push(Math.max(1, Math.min(1022, v)));
+    hosts.push(Math.max(1,Math.min(1022,v)));
   }
+  hosts.sort((a,b)=>b-a);
+
+  /* Validate capacity and prune if needed ──────────────── */
+  if(manualIPNum!==null){
+    const totalAddr=Math.pow(2,32-manualCidr);
+    const bigBlk=hostsToBlock(hosts[0]);
+    if(bigBlk>totalAddr){
+      showCustomMsg(
+        `The largest requirement (${hosts[0]} hosts → needs /${32-Math.log2(bigBlk)} subnet, `+
+        `${bigBlk} addresses) exceeds the /${manualCidr} parent (${totalAddr.toLocaleString()} addresses). `+
+        `Reduce host counts or choose a larger parent.`,
+        'err'
+      );
+      return;
+    }
+    const orig=hosts.length;
+    while(hosts.length>1&&hosts.map(hostsToBlock).reduce((a,b)=>a+b,0)>totalAddr) hosts.pop();
+    const pruned=orig-hosts.length;
+    if(pruned>0){
+      /* Update the form so the user sees what will actually be generated */
+      document.getElementById('c-count').value=hosts.length;
+      customHosts=[...hosts]; renderCustomHosts();
+      for(let i=0;i<hosts.length;i++) document.getElementById('ch-'+i).value=hosts[i];
+      showCustomMsg(
+        `⚠ ${pruned} subnet${pruned>1?'s':''} removed — host requirements exceeded the `+
+        `/${manualCidr} parent (${totalAddr.toLocaleString()} addresses). `+
+        `${hosts.length} subnet${hosts.length>1?'s':''} remain. Click Generate Challenge to continue.`,
+        'warn'
+      );
+      _pruneWarning=document.getElementById('custom-msg').textContent;
+      return; /* Let user review then click Generate again */
+    }
+  }
+
+  /* Commit and generate ─────────────────────────────────── */
+  customHosts=hosts;
+  _customManualIPNum=manualIPNum;
+  _customManualCidr=manualCidr;
+  _pruneWarning=null;
   hideCustomConfig();
   nextQ();
 }
