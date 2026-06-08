@@ -7,5 +7,6 @@ Live page: [Networking Essentials](https://josh9569.github.io/Networking_Essenti
 **Games included to practice:**
 *   **Subnet:** This is the core focus where you practice calculating subnet masks, network boundaries, and host availability using CIDR notation for efficient IP address allocation.
 *   **Binary:** Understanding binary is fundamental because all IP addressing and subnet calculations are fundamentally based on manipulating bit positions (masking) to determine network versus host bits.
-*   **OSI Model:** This provides the structural context for networking by defining layers; subnetting specifically operates within Layer 3 (the Network Layer).
+*   **OSI / TCP-IP Model:** This provides the structural context for networking by defining layers; subnetting specifically operates within Layer 3 (the Network Layer). Practice matching protocols and technologies to their correct OSI layer or TCP/IP layer, and identify protocols from plain-English descriptions. Includes a searchable reference covering all major protocols.
 *   **VLSM (Variable Length Subnet Mask):** This is an advanced technique used to efficiently allocate IP address space by allowing networks to have different, customized subnet sizes rather than using fixed-size blocks.
+*   **IPv6:** Covers the basics of IPv6 addressing including expanding compressed addresses to their full 128-bit form, compressing full addresses using RFC 5952 rules, and identifying address types such as global unicast, link-local, multicast, loopback, unique local, and unspecified.

@@ -1,0 +1,544 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IPv6 Trainer</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+/* ── Mode selector ─────────────────────────────────────── */
+.mode-row        { display:flex;align-items:center;gap:8px;margin-bottom:1rem;flex-wrap:wrap; }
+.mode-row > span { font-size:13px;color:var(--text-s); }
+
+/* ── Question card ─────────────────────────────────────── */
+.q-type-tag  { font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-t);margin-bottom:.4rem; }
+.ipv6-disp   { font-family:var(--mono);font-size:22px;font-weight:500;color:var(--text);letter-spacing:.04em;margin-bottom:8px;word-break:break-all;line-height:1.4; }
+.q-sub       { font-size:13px;color:var(--text-s); }
+
+/* ── Typed answer field ────────────────────────────────── */
+.ans-field             { background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;margin-bottom:1rem; }
+.ans-field label       { display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-t);margin-bottom:6px; }
+.ans-field input       { width:100%;font-family:var(--mono);font-size:16px;background:transparent;border:none;outline:none;color:var(--text); }
+.ans-field input::placeholder { color:var(--text-t); }
+.ans-field.ok          { border-color:var(--ok-bdr);background:var(--ok-bg); }
+.ans-field.bad         { border-color:var(--err-bdr);background:var(--err-bg); }
+.ans-field.show        { border-color:var(--warn-bdr);background:var(--warn-bg); }
+.ans-hint              { font-size:12px;margin-top:5px;font-family:var(--mono);min-height:15px; }
+.ans-field.ok   .ans-hint { color:var(--ok-text); }
+.ans-field.bad  .ans-hint { color:var(--err-text); }
+.ans-field.show .ans-hint { color:var(--warn-text); }
+
+/* ── Identify mode type buttons ────────────────────────── */
+.type-grid   { display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-bottom:1rem; }
+.type-btn    { padding:12px 10px;border-radius:var(--r);border:1px solid var(--border-m);background:var(--surface);cursor:pointer;text-align:center;font-family:var(--font);font-size:14px;font-weight:500;color:var(--text);transition:all .15s; }
+.type-btn:not(:disabled):hover { background:var(--info-bg);border-color:var(--info-bdr);color:var(--info-text); }
+.type-btn.correct { background:var(--ok-bg)!important;border-color:var(--ok-bdr)!important;color:var(--ok-text)!important; }
+.type-btn.wrong   { background:var(--err-bg)!important;border-color:var(--err-bdr)!important;color:var(--err-text)!important; }
+.type-btn:disabled { cursor:default;opacity:.7; }
+
+/* ── Explanation box ───────────────────────────────────── */
+.explain         { background:var(--surface-s);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px;font-size:13px;color:var(--text-s);margin-bottom:1rem;line-height:1.65; }
+.explain .ex-name   { font-weight:500;color:var(--text);font-size:15px;margin-bottom:3px; }
+.explain .ex-prefix { font-family:var(--mono);font-size:12px;color:var(--info-text);background:var(--info-bg);border:1px solid var(--info-bdr);padding:1px 8px;border-radius:4px;display:inline-block;margin-bottom:8px; }
+
+/* ── Tool: Compression rules ───────────────────────────── */
+.rules-list { list-style:none;padding:0; }
+.rule-item  { display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);align-items:flex-start; }
+.rule-item:last-child { border-bottom:none; }
+.rule-num   { font-size:12px;font-weight:600;color:var(--info-text);background:var(--info-bg);border:1px solid var(--info-bdr);border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;flex-shrink:0; }
+.rule-body  { font-size:13px;color:var(--text-s);line-height:1.55; }
+.rule-body strong { color:var(--text); }
+.rule-ex    { font-family:var(--mono);font-size:12px;margin-top:5px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:4px 8px;display:inline-block;color:var(--text);word-break:break-all; }
+
+/* ── Tool: Address types table ─────────────────────────── */
+.type-ref-table    { width:100%;border-collapse:collapse;font-size:13px; }
+.type-ref-table th { background:var(--surface-s);padding:7px 10px;text-align:left;font-weight:500;border-bottom:1px solid var(--border);color:var(--text-s);font-size:11px;letter-spacing:.05em;text-transform:uppercase; }
+.type-ref-table td { padding:9px 10px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:top; }
+.type-ref-table tr:last-child td { border-bottom:none; }
+.type-ref-table tr:hover td { background:var(--surface-s); }
+.prefix-badge { font-family:var(--mono);font-size:12px;background:var(--info-bg);color:var(--info-text);border:1px solid var(--info-bdr);padding:1px 7px;border-radius:4px;white-space:nowrap; }
+
+/* ── Tool: IPv6 Analyzer ───────────────────────────────── */
+.az-row    { display:flex;gap:8px;margin-bottom:.75rem; }
+.az-input  { font-family:var(--mono);font-size:14px;background:var(--surface);border:1px solid var(--border-m);border-radius:var(--r);padding:7px 10px;flex:1;color:var(--text);outline:none; }
+.az-input:focus { border-color:var(--info-bdr); }
+.az-result { background:var(--surface-s);border:1px solid var(--border);border-radius:var(--r);padding:11px 13px;font-size:13px; }
+.az-field  { display:flex;gap:10px;margin-bottom:6px;align-items:baseline; }
+.az-field:last-child { margin-bottom:0; }
+.az-lbl    { font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-t);width:80px;flex-shrink:0;font-family:var(--font); }
+.az-val    { font-family:var(--mono);color:var(--text);word-break:break-all; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <a href="index.html" class="home-link">&#8592; All Tools</a>
+
+  <div class="hdr">
+    <div>
+      <div class="hdr-title">IPv6 Trainer</div>
+      <div class="hdr-sub">Expand, compress and identify IPv6 addresses &middot; Enter to check</div>
+    </div>
+    <div class="chips">
+      <div class="chip">Score <b id="sc">0</b></div>
+      <div class="chip">Round <b id="rnd">1</b></div>
+      <div class="chip">Streak <b id="str">0</b></div>
+    </div>
+  </div>
+
+  <div class="mode-row">
+    <span>Mode:</span>
+    <button class="cbtn on" onclick="setMode('random',this)">Random</button>
+    <button class="cbtn" onclick="setMode('expand',this)">Expand</button>
+    <button class="cbtn" onclick="setMode('compress',this)">Compress</button>
+    <button class="cbtn" onclick="setMode('identify',this)">Identify</button>
+  </div>
+
+  <div class="qcard">
+    <div class="q-type-tag" id="q-tag">Loading&hellip;</div>
+    <div id="q-main"></div>
+    <div class="q-sub" id="q-sub"></div>
+  </div>
+
+  <div class="fbanner" id="fb"></div>
+  <div id="answer-area"></div>
+
+  <div class="explain" id="explain" style="display:none">
+    <div class="ex-name" id="expl-name"></div>
+    <div class="ex-prefix" id="expl-prefix"></div>
+    <div id="expl-desc"></div>
+  </div>
+
+  <div class="actrow">
+    <button class="btn btn-p" id="chkbtn" onclick="checkAnswer()">Check Answer</button>
+    <button class="btn btn-s" id="skipbtn" onclick="skipQ()">Skip</button>
+    <button class="btn btn-s" id="nxtbtn" onclick="nextQ()" style="display:none">Next &rarr;</button>
+    <button class="btn btn-d" onclick="resetGame()">Reset</button>
+
+    <div class="opt-wrap">
+      <button class="opt-btn" id="opt-btn" onclick="toggleOpts()">
+        Options
+        <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="opt-menu" id="opt-menu">
+        <div class="opt-section-label">Reference Tools</div>
+        <label class="opt-row" onclick="toggleTool('rules')">
+          <span class="opt-row-label">Compression Rules</span>
+          <div class="tog"><input type="checkbox" id="tog-rules" checked><span class="tog-track"></span></div>
+        </label>
+        <label class="opt-row" onclick="toggleTool('types')">
+          <span class="opt-row-label">Address Types</span>
+          <div class="tog"><input type="checkbox" id="tog-types" checked><span class="tog-track"></span></div>
+        </label>
+        <label class="opt-row" onclick="toggleTool('analyzer')">
+          <span class="opt-row-label">IPv6 Analyzer</span>
+          <div class="tog"><input type="checkbox" id="tog-analyzer"><span class="tog-track"></span></div>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div class="toolsec" id="toolsec">
+
+    <!-- Tool 1: Compression Rules (enabled) -->
+    <div class="tool-block" id="t-rules">
+      <div class="tool-block-title">Compression &amp; Expansion Rules</div>
+      <ul class="rules-list">
+        <li class="rule-item">
+          <div class="rule-num">1</div>
+          <div class="rule-body">
+            <strong>Remove leading zeros</strong> from each 16-bit group.
+            <code>0000</code>&rarr;<code>0</code>, <code>0db8</code>&rarr;<code>db8</code>, <code>0001</code>&rarr;<code>1</code>.
+            At least one digit must remain per group.
+          </div>
+        </li>
+        <li class="rule-item">
+          <div class="rule-num">2</div>
+          <div class="rule-body">
+            <strong>Replace the longest run of consecutive all-zero groups</strong> with <code>::</code>.
+            The run must be <strong>2 or more</strong> consecutive <code>0000</code> groups.
+            <code>::</code> can only appear <strong>once</strong> in an address.
+          </div>
+        </li>
+        <li class="rule-item">
+          <div class="rule-num">3</div>
+          <div class="rule-body">
+            If two zero-runs are <strong>equal length</strong>, replace the <strong>first</strong> one (RFC&nbsp;5952).
+            A single isolated zero group <strong>must not</strong> be shortened to <code>::</code>.
+          </div>
+        </li>
+        <li class="rule-item">
+          <div class="rule-num">4</div>
+          <div class="rule-body">
+            <strong>To expand:</strong> pad every group to 4 hex digits; replace <code>::</code> with enough
+            <code>0000</code> groups so that the total reaches 8.
+            <div class="rule-ex">2001:db8::1 &rarr; 2001:0db8:0000:0000:0000:0000:0000:0001</div>
+            <div class="rule-ex">fe80::a1b2:1 &rarr; fe80:0000:0000:0000:0000:0000:a1b2:0001</div>
+          </div>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Tool 2: Address Types (enabled) -->
+    <div class="tool-block" id="t-types">
+      <div class="tool-block-title">Address Types Reference</div>
+      <table class="type-ref-table">
+        <thead><tr><th>Type</th><th>Prefix</th><th>Description</th></tr></thead>
+        <tbody id="type-ref-body"></tbody>
+      </table>
+    </div>
+
+    <!-- Tool 3: Analyzer (disabled by default — gives direct answers) -->
+    <div class="tool-block" id="t-analyzer" style="display:none">
+      <div class="tool-block-title">IPv6 Analyzer</div>
+      <p class="tool-note">Enter any IPv6 address (compressed or full) to see all forms and the address type.</p>
+      <div class="az-row">
+        <input class="az-input" id="az-inp" placeholder="e.g. 2001:db8::1" oninput="runAnalyzer()" spellcheck="false" autocomplete="off">
+      </div>
+      <div class="az-result" id="az-result" style="display:none">
+        <div class="az-field"><span class="az-lbl">Expanded</span><span class="az-val" id="az-exp">—</span></div>
+        <div class="az-field"><span class="az-lbl">Compressed</span><span class="az-val" id="az-comp">—</span></div>
+        <div class="az-field"><span class="az-lbl">Type</span><span class="az-val" id="az-type">—</span></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+/* ═══ Data ════════════════════════════════════════════════════════════════ */
+
+function rg(){ return Math.floor(Math.random()*0x10000).toString(16).padStart(4,'0'); }
+function rh(n){ let s='';for(let i=0;i<n;i++)s+=Math.floor(Math.random()*16).toString(16);return s; }
+function ri(a,b){ return Math.floor(Math.random()*(b-a+1))+a; }
+
+const TYPES=[
+  { id:'global-unicast', name:'Global Unicast', prefix:'2000::/3',
+    desc:'Globally routable addresses — the IPv6 equivalent of public IPv4 addresses. The first three bits are 001, so the first hex digit is always 2 or 3. The 2001:db8::/32 range is reserved for documentation and examples.',
+    gen(){ return['2001','0db8',rg(),rg(),'0000','0000','0000',(ri(1,0xfffe)).toString(16).padStart(4,'0')]; }
+  },
+  { id:'link-local', name:'Link-Local', prefix:'fe80::/10',
+    desc:'Automatically assigned to every IPv6 interface during startup. Only valid on a single network link — routers will not forward them. Used for Neighbour Discovery (NDP) and router discovery. Always begins with fe80.',
+    gen(){ return['fe80','0000','0000','0000',rg(),rg(),rg(),rg()]; }
+  },
+  { id:'unique-local', name:'Unique Local (ULA)', prefix:'fc00::/7',
+    desc:'Private addresses for internal networks — the IPv6 equivalent of RFC 1918 (10.x, 172.16.x, 192.168.x). Begin with fc or fd. Not globally routable. The fd prefix indicates a locally assigned ULA.',
+    gen(){ return[('fd'+rh(2)),rg(),rg(),'0000','0000','0000','0000',(ri(1,0xfffe)).toString(16).padStart(4,'0')]; }
+  },
+  { id:'multicast', name:'Multicast', prefix:'ff00::/8',
+    desc:'One-to-many addressing — a single packet is delivered to all nodes that have joined the multicast group. Replaces IPv4 broadcast. Always starts with ff. Common examples: ff02::1 (all nodes), ff02::2 (all routers).',
+    gen(){
+      const s=['01','02','05','0e'][ri(0,3)];
+      return[`ff${s}`,'0000','0000','0000','0000','0000','0000',(ri(1,0xfe)).toString(16).padStart(4,'0')];
+    }
+  },
+  { id:'loopback', name:'Loopback', prefix:'::1/128',
+    desc:'Equivalent to 127.0.0.1 in IPv4. A packet sent to ::1 loops back to the sending host without entering the network. There is exactly one IPv6 loopback address — all 128 bits are zero except the last bit.',
+    gen(){ return['0000','0000','0000','0000','0000','0000','0000','0001']; }
+  },
+  { id:'unspecified', name:'Unspecified', prefix:'::/128',
+    desc:'The all-zeros address. Used as the source address in packets sent by a host that does not yet have an address — for example, during Stateless Address Autoconfiguration (SLAAC) or DHCPv6 before an address is assigned.',
+    gen(){ return['0000','0000','0000','0000','0000','0000','0000','0000']; }
+  },
+];
+
+/* ═══ IPv6 functions ══════════════════════════════════════════════════════ */
+
+function toFull(groups){ return groups.join(':'); }
+
+function toCompressed(groups){
+  const p=groups.map(g=>parseInt(g,16).toString(16));
+  /* Find first, longest run of ≥2 zero groups */
+  let bS=-1,bL=0,i=0;
+  while(i<8){
+    if(p[i]==='0'){
+      const s=i; while(i<8&&p[i]==='0')i++;
+      const l=i-s; if(l>bL){bS=s;bL=l;}
+    } else i++;
+  }
+  if(bL>=2){
+    const before=p.slice(0,bS).join(':');
+    const after=p.slice(bS+bL).join(':');
+    if(before&&after) return`${before}::${after}`;
+    if(before) return`${before}::`;
+    if(after) return`::${after}`;
+    return'::';
+  }
+  return p.join(':');
+}
+
+function parseToGroups(addr){
+  addr=addr.toLowerCase().trim();
+  if(addr==='::') return Array(8).fill('0000');
+  let parts;
+  if(addr.includes('::')){
+    const sides=addr.split('::');
+    if(sides.length!==2) return null;
+    const L=sides[0]?sides[0].split(':'):[];
+    const R=sides[1]?sides[1].split(':'):[];
+    const z=8-L.length-R.length;
+    if(z<0) return null;
+    parts=[...L,...Array(z).fill('0'),...R];
+  } else {
+    parts=addr.split(':');
+  }
+  if(parts.length!==8) return null;
+  if(!parts.every(p=>/^[0-9a-f]{1,4}$/.test(p))) return null;
+  return parts.map(p=>p.padStart(4,'0'));
+}
+
+function identify(groups){
+  const g0=parseInt(groups[0],16);
+  if(groups.every((g,i)=>g===(i<7?'0000':'0001'))) return 'loopback';
+  if(groups.every(g=>g==='0000')) return 'unspecified';
+  if((g0&0xff00)===0xff00) return 'multicast';
+  if((g0&0xffc0)===0xfe80) return 'link-local';
+  if((g0&0xfe00)===0xfc00) return 'unique-local';
+  if((g0&0xe000)===0x2000) return 'global-unicast';
+  return 'unknown';
+}
+
+/* ═══ State ═══════════════════════════════════════════════════════════════ */
+
+let Q=null, qmode='random', score=0, rnd=1, streak=0, answered=false;
+
+function setMode(m,btn){
+  qmode=m;
+  document.querySelectorAll('.mode-row .cbtn').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  nextQ();
+}
+
+/* ═══ Question generation ═════════════════════════════════════════════════ */
+
+function genQ(){
+  const t=TYPES[ri(0,TYPES.length-1)];
+  const groups=t.gen();
+  const full=toFull(groups);
+  const compressed=toCompressed(groups);
+  let qt;
+  if(qmode==='random') qt=['expand','compress','identify'][ri(0,2)];
+  else qt=qmode;
+  return{qt, t, groups, full, compressed};
+}
+
+/* ═══ Load / render ═══════════════════════════════════════════════════════ */
+
+function loadQ(){
+  Q=genQ(); answered=false;
+  const tag=document.getElementById('q-tag');
+  const main=document.getElementById('q-main');
+  const sub=document.getElementById('q-sub');
+  const area=document.getElementById('answer-area');
+  const fb=document.getElementById('fb');
+  fb.className='fbanner'; fb.style.display='none';
+  document.getElementById('explain').style.display='none';
+  document.getElementById('nxtbtn').style.display='none';
+  document.getElementById('chkbtn').style.display='';
+  document.getElementById('skipbtn').style.display='';
+  document.getElementById('sc').textContent=score;
+  document.getElementById('rnd').textContent=rnd;
+  document.getElementById('str').textContent=streak;
+
+  if(Q.qt==='expand'){
+    tag.textContent='Expand the address';
+    main.innerHTML=`<div class="ipv6-disp">${Q.compressed}</div>`;
+    sub.textContent='Write the full 128-bit form — all 8 groups of 4 hex digits, no shortcuts.';
+    area.innerHTML=`
+      <div class="ans-field" id="ans-wrap">
+        <label>Full expanded form</label>
+        <input id="ans-inp" placeholder="e.g. 0000:0000:0000:0000:0000:0000:0000:0001" autocomplete="off" spellcheck="false">
+        <div class="ans-hint" id="ans-hint"></div>
+      </div>`;
+    document.getElementById('chkbtn').style.display='';
+
+  } else if(Q.qt==='compress'){
+    tag.textContent='Compress the address';
+    main.innerHTML=`<div class="ipv6-disp">${Q.full}</div>`;
+    sub.textContent='Write the shortest valid form — omit leading zeros and use :: for the longest zero run.';
+    area.innerHTML=`
+      <div class="ans-field" id="ans-wrap">
+        <label>Compressed form</label>
+        <input id="ans-inp" placeholder="e.g. 2001:db8::1" autocomplete="off" spellcheck="false">
+        <div class="ans-hint" id="ans-hint"></div>
+      </div>`;
+    document.getElementById('chkbtn').style.display='';
+
+  } else {
+    tag.textContent='Identify the address type';
+    main.innerHTML=`<div class="ipv6-disp">${Q.compressed}</div>`;
+    sub.textContent='What type of IPv6 address is this?';
+    const btns=TYPES.map(t=>`<button class="type-btn" id="tb-${t.id}" onclick="handleTypeClick('${t.id}')">${t.name}</button>`).join('');
+    area.innerHTML=`<div class="type-grid">${btns}</div>`;
+    document.getElementById('chkbtn').style.display='none';
+  }
+
+  const inp=document.getElementById('ans-inp');
+  if(inp) setTimeout(()=>inp.focus(),50);
+}
+
+/* ═══ Answering ═══════════════════════════════════════════════════════════ */
+
+function showFb(msg,type){ const fb=document.getElementById('fb');fb.style.display='block';fb.className='fbanner '+type;fb.textContent=msg; }
+
+function showExplain(){
+  const box=document.getElementById('explain');
+  document.getElementById('expl-name').textContent=Q.t.name;
+  document.getElementById('expl-prefix').textContent=Q.t.prefix;
+  document.getElementById('expl-desc').textContent=Q.t.desc;
+  box.style.display='';
+}
+
+function finishRound(ok){
+  answered=true;
+  if(ok){score+=2;streak++;}else{streak=0;}
+  rnd++;
+  document.getElementById('sc').textContent=score;
+  document.getElementById('str').textContent=streak;
+  document.getElementById('rnd').textContent=rnd;
+  document.getElementById('nxtbtn').style.display='';
+  document.getElementById('chkbtn').style.display='none';
+  document.getElementById('skipbtn').style.display='none';
+  showExplain();
+}
+
+function checkAnswer(){
+  if(answered) return;
+  const inp=document.getElementById('ans-inp');
+  if(!inp) return;
+  const raw=inp.value.trim().toLowerCase();
+  const correct=(Q.qt==='expand'?Q.full:Q.compressed).toLowerCase();
+  const wrap=document.getElementById('ans-wrap');
+  const hint=document.getElementById('ans-hint');
+  inp.disabled=true;
+
+  if(raw===correct){
+    wrap.classList.add('ok'); hint.textContent='\u2713 Correct';
+    showFb('Correct! +2 pts. Streak: '+(streak+1),'ok');
+    finishRound(true);
+  } else if(raw===''){
+    wrap.classList.add('show'); inp.value=correct; hint.textContent='Not answered';
+    showFb('Not answered.','warn');
+    finishRound(false);
+  } else {
+    wrap.classList.add('bad'); hint.textContent='Correct: '+correct;
+    showFb('Incorrect.','err');
+    finishRound(false);
+  }
+}
+
+function handleTypeClick(id){
+  if(answered) return;
+  document.querySelectorAll('.type-btn').forEach(b=>b.disabled=true);
+  const ok=(id===Q.t.id);
+  document.getElementById('tb-'+id).classList.add(ok?'correct':'wrong');
+  if(!ok) document.getElementById('tb-'+Q.t.id).classList.add('correct');
+  showFb(ok?`Correct — ${Q.t.name}! +2 pts. Streak: ${streak+1}`:`Incorrect — that was ${Q.t.name}.`, ok?'ok':'err');
+  finishRound(ok);
+}
+
+function skipQ(){
+  if(answered) return;
+  const inp=document.getElementById('ans-inp');
+  if(inp){
+    const correct=(Q.qt==='expand'?Q.full:Q.compressed).toLowerCase();
+    inp.disabled=true;
+    inp.value=correct;
+    document.getElementById('ans-wrap').classList.add('show');
+    document.getElementById('ans-hint').textContent='Revealed';
+  } else {
+    document.querySelectorAll('.type-btn').forEach(b=>b.disabled=true);
+    document.getElementById('tb-'+Q.t.id).classList.add('correct');
+  }
+  showFb('Answer revealed. No points awarded.','warn');
+  finishRound(false);
+}
+
+function nextQ(){ loadQ(); }
+function resetGame(){ score=0;rnd=1;streak=0;loadQ(); }
+
+/* ═══ Options ═════════════════════════════════════════════════════════════ */
+
+function toggleOpts(){
+  const m=document.getElementById('opt-menu');
+  const b=document.getElementById('opt-btn');
+  m.classList.toggle('open');
+  b.classList.toggle('open',m.classList.contains('open'));
+}
+function toggleTool(id){
+  const cb=document.getElementById('tog-'+id);
+  cb.checked=!cb.checked;
+  applyTools();
+}
+function applyTools(){
+  const tools=['rules','types','analyzer'];
+  let any=false;
+  tools.forEach(t=>{
+    const on=document.getElementById('tog-'+t).checked;
+    document.getElementById('t-'+t).style.display=on?'':'none';
+    if(on) any=true;
+  });
+  document.getElementById('toolsec').style.display=any?'':'none';
+}
+document.addEventListener('click',e=>{
+  const w=document.getElementById('opt-btn').closest('.opt-wrap');
+  if(!w.contains(e.target)){
+    document.getElementById('opt-menu').classList.remove('open');
+    document.getElementById('opt-btn').classList.remove('open');
+  }
+});
+
+/* ═══ Analyzer tool ═══════════════════════════════════════════════════════ */
+
+function runAnalyzer(){
+  const raw=document.getElementById('az-inp').value.trim().toLowerCase();
+  const result=document.getElementById('az-result');
+  if(!raw){ result.style.display='none'; return; }
+  const groups=parseToGroups(raw);
+  if(!groups){
+    document.getElementById('az-exp').textContent='Invalid address';
+    document.getElementById('az-comp').textContent='—';
+    document.getElementById('az-type').textContent='—';
+    result.style.display='';
+    return;
+  }
+  const typeId=identify(groups);
+  const typeName=TYPES.find(t=>t.id===typeId)?.name??'Unknown';
+  document.getElementById('az-exp').textContent=toFull(groups);
+  document.getElementById('az-comp').textContent=toCompressed(groups);
+  document.getElementById('az-type').textContent=typeName;
+  result.style.display='';
+}
+
+/* ═══ Build reference table ═══════════════════════════════════════════════ */
+
+function buildTypeTable(){
+  const tb=document.getElementById('type-ref-body');
+  tb.innerHTML=TYPES.map(t=>`
+    <tr>
+      <td style="font-weight:500;white-space:nowrap">${t.name}</td>
+      <td><span class="prefix-badge">${t.prefix}</span></td>
+      <td style="color:var(--text-s)">${t.desc}</td>
+    </tr>`).join('');
+}
+
+/* ═══ Keyboard ════════════════════════════════════════════════════════════ */
+
+document.addEventListener('keydown',e=>{
+  if(e.key==='Enter'){
+    if(!answered){
+      if(Q&&Q.qt!=='identify') checkAnswer();
+    } else nextQ();
+  }
+  if(e.key==='Escape'){
+    document.getElementById('opt-menu').classList.remove('open');
+    document.getElementById('opt-btn').classList.remove('open');
+  }
+});
+
+/* ═══ Init ════════════════════════════════════════════════════════════════ */
+buildTypeTable();
+loadQ();
+</script>
+</body>
+</html>
