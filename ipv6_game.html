@@ -148,25 +148,42 @@
 function rg(){ return Math.floor(Math.random()*0x10000).toString(16).padStart(4,'0'); }
 function rh(n){ let s='';for(let i=0;i<n;i++)s+=Math.floor(Math.random()*16).toString(16);return s; }
 function ri(a,b){ return Math.floor(Math.random()*(b-a+1))+a; }
+/* Non-zero group — guarantees at least one significant bit so an address part
+   cannot accidentally collapse into an all-zeros run in the wrong place.     */
+function rgnz(){ return ri(1,0xffff).toString(16).padStart(4,'0'); }
 
 const TYPES=[
   { id:'global-unicast', name:'Global Unicast', prefix:'2000::/3',
     desc:'Globally routable addresses — the IPv6 equivalent of public IPv4 addresses. The first three bits are 001, so the first hex digit is always 2 or 3. The 2001:db8::/32 range is reserved for documentation and examples.',
-    gen(){ return['2001','0db8',rg(),rg(),'0000','0000','0000',(ri(1,0xfffe)).toString(16).padStart(4,'0')]; }
+    gen(){
+      /* Vary the routing prefix so questions feel different each time */
+      const pfx=[['2001','0db8'],['2400',rg()],['2600',rg()],['2a00',rg()],['2800',rg()]][ri(0,4)];
+      /* Host part (last group) is always non-zero — a real host address */
+      return[pfx[0],pfx[1],rg(),rg(),'0000','0000','0000',rgnz()];
+    }
   },
   { id:'link-local', name:'Link-Local', prefix:'fe80::/10',
     desc:'Automatically assigned to every IPv6 interface during startup. Only valid on a single network link — routers will not forward them. Used for Neighbour Discovery (NDP) and router discovery. Always begins with fe80.',
-    gen(){ return['fe80','0000','0000','0000',rg(),rg(),rg(),rg()]; }
+    gen(){
+      /* Interface identifier (last 64 bits). In practice this is derived from
+         a MAC address (EUI-64) or generated randomly — never all zeros.      */
+      return['fe80','0000','0000','0000',rg(),rg(),rg(),rgnz()];
+    }
   },
   { id:'unique-local', name:'Unique Local (ULA)', prefix:'fc00::/7',
     desc:'Private addresses for internal networks — the IPv6 equivalent of RFC 1918 (10.x, 172.16.x, 192.168.x). Begin with fc or fd. Not globally routable. The fd prefix indicates a locally assigned ULA.',
-    gen(){ return[('fd'+rh(2)),rg(),rg(),'0000','0000','0000','0000',(ri(1,0xfffe)).toString(16).padStart(4,'0')]; }
+    gen(){
+      /* Global ID (rgnz) ensures the ULA prefix is actually assigned;
+         host part (rgnz) is a real interface address.                        */
+      return[('fd'+rh(2)),rgnz(),rg(),'0000','0000','0000','0000',rgnz()];
+    }
   },
   { id:'multicast', name:'Multicast', prefix:'ff00::/8',
     desc:'One-to-many addressing — a single packet is delivered to all nodes that have joined the multicast group. Replaces IPv4 broadcast. Always starts with ff. Common examples: ff02::1 (all nodes), ff02::2 (all routers).',
     gen(){
       const s=['01','02','05','0e'][ri(0,3)];
-      return[`ff${s}`,'0000','0000','0000','0000','0000','0000',(ri(1,0xfe)).toString(16).padStart(4,'0')];
+      /* Group ID must be non-zero — a zero group ID is reserved/invalid */
+      return[`ff${s}`,'0000','0000','0000','0000','0000','0000',ri(1,0xfe).toString(16).padStart(4,'0')];
     }
   },
   { id:'loopback', name:'Loopback', prefix:'::1/128',
@@ -249,13 +266,32 @@ function setMode(m,btn){
 /* ═══ Question generation ═════════════════════════════════════════════════ */
 
 function genQ(){
-  const t=TYPES[ri(0,TYPES.length-1)];
-  const groups=t.gen();
-  const full=toFull(groups);
-  const compressed=toCompressed(groups);
+  /* Decide question type first — it drives which address types are valid */
   let qt;
   if(qmode==='random') qt=['expand','compress','identify'][ri(0,2)];
   else qt=qmode;
+
+  /* Unspecified (::) is all-zeros: it is a real type worth identifying but is
+     not a practical address anyone would encounter on a live network, and it
+     compresses to the trivial "::" making expand/compress questions too easy.
+     Loopback (::1) is always identical so also excluded from expand/compress
+     to avoid repetitive questions — it still appears in Identify mode.       */
+  const pool = (qt==='identify')
+    ? TYPES
+    : TYPES.filter(t => t.id !== 'unspecified' && t.id !== 'loopback');
+
+  /* Safety retry: re-generate if the compressed form is "::" (shouldn't
+     happen with the fixed generators, but guards against edge cases).        */
+  let t, groups, full, compressed;
+  let attempts=0;
+  do {
+    t = pool[ri(0, pool.length-1)];
+    groups = t.gen();
+    full = toFull(groups);
+    compressed = toCompressed(groups);
+    attempts++;
+  } while(compressed==='::'&&attempts<10);
+
   return{qt, t, groups, full, compressed};
 }
 
