@@ -5,43 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Binary Trainer</title>
 <link rel="stylesheet" href="styles.css">
-<style>
-/* ── Mode row ──── */
-.mode-row        { display: flex; align-items: center; gap: 8px; margin-bottom: 1rem; flex-wrap: wrap; }
-.mode-row > span { font-size: 13px; color: var(--text-s); }
-
-/* ── Question value display ──── */
-.q-val      { font-family: var(--mono); font-size: 38px; font-weight: 500; color: var(--text); letter-spacing: .04em; margin-bottom: 8px; }
-.q-val.bin  { letter-spacing: .18em; font-size: 30px; }
-.q-hint     { font-size: 13px; color: var(--text-s); }
-
-/* ── Answer field overrides (larger for single-answer layout) ──── */
-.afield          { padding: 14px 16px; margin-bottom: 1rem; }
-.afield input    { font-size: 24px; font-weight: 500; letter-spacing: .05em; }
-.afield input::placeholder { font-weight: 400; }
-.ahint           { font-size: 13px; margin-top: 6px; min-height: 16px; }
-
-/* ── Interactive Bit Table ──── */
-.bit-cells           { display: flex; gap: 5px; flex-wrap: wrap; margin-bottom: .85rem; }
-.bit-cell            { width: 72px; height: 66px; border-radius: var(--r); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; border: 1px solid var(--border-m); background: var(--surface-s); cursor: pointer; transition: all .15s; user-select: none; }
-.bit-cell:hover      { border-color: var(--info-bdr); }
-.bit-cell.on         { background: var(--info-bg); border-color: var(--info-bdr); }
-.bit-weight          { font-size: 11px; color: var(--text-t); font-family: var(--mono); }
-.bit-digit           { font-size: 22px; font-weight: 600; font-family: var(--mono); color: var(--text-s); }
-.bit-cell.on .bit-digit { color: var(--info-text); }
-.bt-readout          { display: flex; align-items: center; gap: 20px; font-size: 13px; color: var(--text-s); margin-bottom: .6rem; flex-wrap: wrap; }
-.bt-readout .bt-lbl  { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-t); }
-.bt-readout .bt-val  { font-family: var(--mono); font-size: 20px; font-weight: 500; color: var(--text); }
-.bt-readout .bt-bin-val { font-family: var(--mono); font-size: 16px; font-weight: 500; color: var(--text); letter-spacing: .12em; }
-
-/* ── Powers of 2 ──── */
-.pow-grid        { display: grid; grid-template-columns: repeat(8, 1fr); gap: 6px; }
-.pow-cell        { background: var(--surface-s); border: 1px solid var(--border); border-radius: var(--r); padding: 9px 4px; text-align: center; font-family: var(--mono); }
-.pow-cell .ex    { font-size: 10px; color: var(--text-t); }
-.pow-cell .vl    { font-size: 14px; font-weight: 500; color: var(--text); margin: 3px 0; }
-.pow-cell .bt    { font-size: 10px; color: var(--text-s); }
-
-</style>
 </head>
 </head>
 <body>

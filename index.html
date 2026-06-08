@@ -5,41 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Network Study Tools</title>
 <link rel="stylesheet" href="styles.css">
-<style>
-/* ── Index body override ──── */
-body { padding: 3rem 1.5rem; }
-
-/* ── Site header ──── */
-.site-header { margin-bottom: 3rem; }
-.site-title  { font-size: 28px; font-weight: 600; letter-spacing: -.01em; margin-bottom: .35rem; }
-.site-sub    { font-size: 15px; color: var(--text-s); max-width: 420px; }
-
-/* ── Card grid ──── */
-.card-grid  { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; }
-.game-card  { display: block; text-decoration: none; color: inherit; background: var(--surface); border: 1px solid var(--border); border-radius: var(--rl); overflow: hidden; transition: transform .18s, box-shadow .18s; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
-.game-card:hover { transform: translateY(-3px); box-shadow: 0 6px 20px rgba(0,0,0,.10); }
-
-/* ── Card internals ──── */
-.card-accent       { height: 5px; }
-.card-accent.blue  { background: var(--info-text); }
-.card-accent.green { background: var(--ok-text); }
-.card-body         { padding: 1.5rem 1.5rem 1.25rem; }
-.card-icon         { width: 44px; height: 44px; border-radius: var(--r); display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 13px; font-weight: 500; margin-bottom: 1rem; }
-.card-icon.blue    { background: var(--info-bg); color: var(--info-text); border: 1px solid var(--info-bdr); }
-.card-icon.green   { background: var(--ok-bg);   color: var(--ok-text);   border: 1px solid var(--ok-bdr); }
-.card-title        { font-size: 18px; font-weight: 600; margin-bottom: .4rem; }
-.card-desc         { font-size: 14px; color: var(--text-s); line-height: 1.6; margin-bottom: 1rem; }
-.card-tags         { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 1rem; }
-.tag               { font-size: 11px; font-family: var(--mono); background: var(--surface-s); border: 1px solid var(--border); border-radius: 4px; padding: 2px 8px; color: var(--text-s); }
-.card-footer       { display: flex; align-items: center; justify-content: space-between; padding: .9rem 1.5rem; background: var(--surface-s); border-top: 1px solid var(--border); }
-.play-label        { font-size: 14px; font-weight: 500; color: var(--text-s); }
-.play-arrow        { font-size: 18px; color: var(--text-t); transition: transform .15s; }
-.game-card:hover .play-arrow { transform: translateX(4px); color: var(--text-s); }
-
-</style>
 </head>
 </head>
-<body>
+<body class="index-page">
 <div class="wrap">
 
   <div class="site-header">

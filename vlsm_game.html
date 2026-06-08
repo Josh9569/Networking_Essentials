@@ -5,52 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>VLSM Trainer</title>
 <link rel="stylesheet" href="styles.css">
-<style>
-/* ── Difficulty row ───────────────────────────────── */
-.diff-row        { display: flex; align-items: center; gap: 8px; margin-bottom: 1rem; flex-wrap: wrap; }
-.diff-row > span { font-size: 13px; color: var(--text-s); }
-
-/* ── Parent network display ───────────────────────── */
-.parent-disp { font-family: var(--mono); font-size: 26px; font-weight: 500; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
-.parent-badge { font-size: 16px; padding: 2px 12px; border-radius: var(--r); background: var(--info-bg); color: var(--info-text); border: 1px solid var(--info-bdr); }
-.cls-badge-disp { font-size: 14px; padding: 2px 11px; border-radius: var(--r); background: var(--ok-bg); color: var(--ok-text); border: 1px solid var(--ok-bdr); font-family: var(--font); font-weight: 500; }
-.req-row  { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 2px; }
-.req-chip { font-size: 13px; font-family: var(--mono); background: var(--surface-s); border: 1px solid var(--border-m); border-radius: var(--r); padding: 3px 10px; color: var(--text-s); }
-.req-chip strong { color: var(--text); font-weight: 500; }
-.req-note { font-size: 12px; color: var(--text-t); margin-top: 8px; }
-
-/* ── Subnet panels ────────────────────────────────── */
-.subnets    { display: flex; flex-direction: column; gap: 10px; margin-bottom: 1rem; }
-.sub-panel  { background: var(--surface); border: 1px solid var(--border); border-radius: var(--rl); overflow: hidden; }
-.sub-hdr    { display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: var(--surface-s); border-bottom: 1px solid var(--border); }
-.sub-ltr    { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; flex-shrink: 0; }
-.sub-ltr.a  { background: var(--info-bg);  color: var(--info-text);  border: 1px solid var(--info-bdr); }
-.sub-ltr.b  { background: var(--ok-bg);    color: var(--ok-text);    border: 1px solid var(--ok-bdr); }
-.sub-ltr.c  { background: var(--warn-bg);  color: var(--warn-text);  border: 1px solid var(--warn-bdr); }
-.sub-ltr.d  { background: var(--err-bg);   color: var(--err-text);   border: 1px solid var(--err-bdr); }
-.sub-ltr.e  { background: var(--surface-s);color: var(--text-s);     border: 1px solid var(--border-m); }
-.sub-need   { font-size: 14px; color: var(--text-s); }
-.sub-need strong { color: var(--text); font-weight: 500; }
-.sub-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
-.sub-fields .afield { border: none; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); border-radius: 0; }
-.sub-fields .afield:nth-child(even) { border-right: none; }
-.sub-fields .afield:nth-last-child(-n+2) { border-bottom: none; }
-
-/* ── CIDR field wrapper ───────────────────────────── */
-.cidr-wrap       { display: flex; align-items: center; }
-.cidr-slash      { font-family: var(--mono); font-size: 16px; color: var(--text-s); margin-right: 2px; line-height: 1; }
-.cidr-wrap input { flex: 1; width: auto; }
-
-/* ── CIDR reference table ────────────────────────── */
-.ref-table { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 13px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
-.ref-table th { background: var(--surface-s); padding: 7px 10px; text-align: left; font-weight: 500; border-bottom: 1px solid var(--border); color: var(--text-s); font-size: 11px; font-family: var(--font); }
-.ref-table td { padding: 7px 10px; border-bottom: 1px solid var(--border); color: var(--text); }
-.ref-table tr:last-child td { border-bottom: none; }
-.ref-table tr:hover td { background: var(--surface-s); }
-.ref-table .cidr-col { color: var(--info-text); font-weight: 500; }
-.ref-table .hi { background: var(--info-bg); }
-.ref-table .hi td { color: var(--info-text); }
-</style>
 </head>
 <body>
 <div class="wrap">
@@ -83,9 +37,29 @@
     <button class="cbtn" onclick="setDiff('easy',this)">Easy</button>
     <button class="cbtn" onclick="setDiff('medium',this)">Medium</button>
     <button class="cbtn" onclick="setDiff('hard',this)">Hard</button>
+    <button class="cbtn" onclick="setDiff('extreme',this)">Extreme</button>
+    <button class="cbtn" onclick="setDiff('custom',this)">Custom</button>
   </div>
 
-  <div class="qcard">
+  <!-- Custom config card (shown only when diff=custom) -->
+  <div class="custom-card" id="custom-card" style="display:none">
+    <div class="custom-card-title">Configure your VLSM challenge</div>
+
+    <div class="custom-count-row">
+      <span class="custom-count-lbl">Number of subnets</span>
+      <input class="custom-num-inp" type="number" id="c-count" min="2" max="8" value="4" oninput="renderCustomHosts()">
+      <button class="rand-btn" onclick="randCount()" title="Randomise">&#9654; Random</button>
+    </div>
+
+    <div class="custom-hosts" id="c-hosts"></div>
+
+    <div class="custom-actions">
+      <button class="btn btn-p" onclick="startCustom()">Generate Challenge</button>
+      <button class="btn btn-s" onclick="randAllHosts()">&#9654; Randomise All Hosts</button>
+    </div>
+  </div>
+
+  <div class="qcard" id="qcard">
     <div class="qlbl">VLSM Problem &mdash; Parent Network</div>
     <div class="parent-disp" id="parent-disp">—</div>
     <div class="req-row" id="req-row"></div>
@@ -101,6 +75,7 @@
     <button class="btn btn-s" id="revbtn" onclick="revealAll()">Reveal All</button>
     <button class="btn btn-s" id="nxtbtn" onclick="nextQ()" style="display:none">Next Question &rarr;</button>
     <button class="btn btn-d" onclick="resetGame()">Reset</button>
+    <button class="btn btn-s" id="setupbtn" onclick="showCustomConfig()" style="display:none">&#9998; Change Setup</button>
     <div class="opt-wrap">
       <button class="opt-btn" id="opt-btn" onclick="toggleOpts()">
         Options
@@ -144,96 +119,204 @@ function cidr2mask(c){return[0,1,2,3].map(i=>{const b=Math.min(8,Math.max(0,c-i*
 
 /* ── State ──────────────────────────────────────── */
 let Q=null, diff='random', cls='random', score=0, rnd=1, streak=0, done=false;
+let customHosts=[60,28,12,2];   // host requirements for custom mode
 
 function setDiff(d, btn){
   diff=d;
   document.querySelectorAll('.diff-row .cbtn').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
-  nextQ();
+  if(d==='custom'){
+    showCustomConfig();
+  } else {
+    hideCustomConfig();
+    nextQ();
+  }
 }
 
 function setCls(c, btn){
   cls=c;
   document.querySelectorAll('.cls-row .cbtn').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
-  nextQ();
+  if(diff!=='custom') nextQ();
 }
 
 /* ── VLSM generation ────────────────────────────── */
-function genVLSM(){
-  const d = diff==='random' ? ['easy','medium','hard'][ri(0,2)] : diff;
-  const c = cls==='random'  ? ['A','B','C'][ri(0,2)]           : cls;
-  const numSubs = d==='easy' ? 3 : 4;
+function hostsToBlock(h){ let b=2; while(Math.pow(2,b)-2<h) b++; return Math.pow(2,b); }
 
-  /* First-octet ranges per class — loopback (127) is never generated */
+function genVLSM(){
+  const d = diff==='random' ? ['easy','medium','hard','extreme'][ri(0,3)] : diff;
+  const c = cls==='random'  ? ['A','B','C'][ri(0,2)] : cls;
+
   function firstOctet(ipCls){
     if(ipCls==='A') return ri(1,126);
     if(ipCls==='B') return ri(128,191);
     return ri(192,223);
   }
 
-  let parentIPNum, parentCidr, parentBits;
-  if(d==='hard'){
-    /* /22 parent: 1024 addresses. Third octet must be a multiple of 4
-       so the network address lies on a /22 boundary.                  */
-    const a=firstOctet(c), b=ri(0,255), oc3=ri(0,63)*4;
-    parentIPNum=ip2int(`${a}.${b}.${oc3}.0`);
-    parentCidr=22; parentBits=10;
+  /* ── Custom mode: build directly from user-supplied host counts ── */
+  if(d==='custom'){
+    const sorted=[...customHosts].sort((a,b)=>b-a);
+    const blocks=sorted.map(hostsToBlock);
+    const total=blocks.reduce((s,v)=>s+v,0);
+    /* smallest parent that fits */
+    let pb=3; while(Math.pow(2,pb)<total) pb++;
+    const parentCidr=32-pb;
+    const a=firstOctet(c), bOct=ri(0,255);
+    let parentIPNum;
+    if(pb<=8){ parentIPNum=ip2int(`${a}.${bOct}.${ri(0,255)}.0`); }
+    else{ const align=Math.pow(2,pb-8); const oc3=ri(0,Math.floor(256/align)-1)*align; parentIPNum=ip2int(`${a}.${bOct}.${oc3}.0`); }
+    let cur=parentIPNum;
+    const CLRS=['a','b','c','d','e','f','g','h'];
+    const subnets=blocks.map((blk,i)=>{
+      const cidr=32-Math.round(Math.log2(blk));
+      const netN=cur, bcN=cur+blk-1; cur+=blk;
+      return{ label:String.fromCharCode(65+i), cls:CLRS[i], hostsNeeded:sorted[i],
+        cidr, mask:cidr2mask(cidr), network:int2ip(netN), broadcast:int2ip(bcN),
+        first:int2ip(netN+1), last:int2ip(bcN-1), usable:blk-2 };
+    });
+    return{ d, ipCls:c, parentIP:int2ip(parentIPNum), parentCidr, subnets };
+  }
+
+  /* ── Preset difficulties ── */
+  let numSubs, parentCidr, parentBits, parentIPNum;
+  const a=firstOctet(c), bOct=ri(0,255);
+
+  if(d==='easy'){
+    numSubs=3; parentCidr=24; parentBits=8;
+    parentIPNum=ip2int(`${a}.${bOct}.${ri(0,255)}.0`);
+  } else if(d==='medium'){
+    numSubs=4; parentCidr=24; parentBits=8;
+    parentIPNum=ip2int(`${a}.${bOct}.${ri(0,255)}.0`);
+  } else if(d==='hard'){
+    /* /22 parent: 1024 addresses, third octet must be a multiple of 4 */
+    numSubs=4; parentCidr=22; parentBits=10;
+    parentIPNum=ip2int(`${a}.${bOct}.${ri(0,63)*4}.0`);
   } else {
-    /* /24 parent: 256 addresses */
-    const a=firstOctet(c), b=ri(0,255), oc3=ri(0,255);
-    parentIPNum=ip2int(`${a}.${b}.${oc3}.0`);
-    parentCidr=24; parentBits=8;
+    /* extreme — /21 parent (2048 addresses), 5–6 subnets.
+       Includes a /30 (4-address) subnet to create tight broadcast boundaries. */
+    numSubs=ri(5,6); parentCidr=21; parentBits=11;
+    parentIPNum=ip2int(`${a}.${bOct}.${ri(0,31)*8}.0`);
   }
 
   const totalAddr=Math.pow(2,parentBits);
+  const avail=[]; for(let e=2;e<parentBits;e++) avail.push(Math.pow(2,e));
 
-  /* Build list of usable block sizes (powers of 2, min 4 = /30) */
-  const avail=[];
-  for(let e=2;e<parentBits;e++) avail.push(Math.pow(2,e));
-
-  /* Pick numSubs distinct blocks that fit within totalAddr */
+  /* For extreme, force at least one /30 block (4 addresses) */
   let chosen=null;
   for(let attempt=0;attempt<300;attempt++){
     const shuf=[...avail].sort(()=>Math.random()-.5);
-    const sel=[];let used=0;
+    const sel=[]; let used=0;
     for(const blk of shuf){
       if(sel.length>=numSubs) break;
       const slotsLeft=numSubs-sel.length;
-      if(blk<=totalAddr-used-(slotsLeft-1)*4){
-        sel.push(blk); used+=blk;
-      }
+      if(blk<=totalAddr-used-(slotsLeft-1)*4){ sel.push(blk); used+=blk; }
     }
-    if(sel.length===numSubs){chosen=sel;break;}
+    /* extreme: require at least one block of 4 (/30) */
+    if(sel.length===numSubs && (d!=='extreme' || sel.includes(4))){ chosen=sel; break; }
   }
-  if(!chosen) chosen=[4,8,16,32].slice(0,numSubs);
+  if(!chosen){
+    /* fallback: guaranteed set */
+    if(d==='extreme') chosen=[256,128,64,32,4,4].slice(0,numSubs);
+    else chosen=[4,8,16,32].slice(0,numSubs);
+  }
 
-  /* Sort largest → smallest (canonical VLSM allocation order) */
   chosen.sort((a,b)=>b-a);
 
-  /* Assign sequential addresses and generate required host counts */
   let cur=parentIPNum;
+  const CLRS=['a','b','c','d','e','f','g','h'];
   const subnets=chosen.map((blk,i)=>{
     const cidr=32-Math.round(Math.log2(blk));
     const maxH=blk-2;
     const minH=Math.max(1,Math.ceil(blk/2)-1);
     const hostsNeeded=ri(minH,maxH);
-    const netN=cur, bcN=cur+blk-1;
-    cur+=blk;
-    return{
-      label:String.fromCharCode(65+i),
-      cls:['a','b','c','d','e'][i],
-      hostsNeeded, cidr,
-      mask:cidr2mask(cidr),
-      network:int2ip(netN),
-      broadcast:int2ip(bcN),
-      first:int2ip(netN+1),
-      last:int2ip(bcN-1),
-      usable:maxH
-    };
+    const netN=cur, bcN=cur+blk-1; cur+=blk;
+    return{ label:String.fromCharCode(65+i), cls:CLRS[i], hostsNeeded, cidr,
+      mask:cidr2mask(cidr), network:int2ip(netN), broadcast:int2ip(bcN),
+      first:int2ip(netN+1), last:int2ip(bcN-1), usable:maxH };
   });
 
-  return{d, ipCls:c, parentIP:int2ip(parentIPNum),parentCidr,subnets};
+  return{ d, ipCls:c, parentIP:int2ip(parentIPNum), parentCidr, subnets };
+}
+
+/* ── Custom config ──────────────────────────────── */
+const CLRS_CSS=['a','b','c','d','e','f','g','h'];
+
+function showCustomConfig(){
+  document.getElementById('custom-card').style.display='';
+  document.getElementById('qcard').style.display='none';
+  document.getElementById('subnets').innerHTML='';
+  document.getElementById('fb').style.display='none';
+  document.getElementById('chkbtn').style.display='none';
+  document.getElementById('revbtn').style.display='none';
+  document.getElementById('nxtbtn').style.display='none';
+  renderCustomHosts();
+}
+
+function hideCustomConfig(){
+  document.getElementById('custom-card').style.display='none';
+  document.getElementById('qcard').style.display='';
+  document.getElementById('chkbtn').style.display='';
+  document.getElementById('revbtn').style.display='';
+}
+
+function renderCustomHosts(){
+  const count=Math.min(8, Math.max(2, parseInt(document.getElementById('c-count').value)||4));
+  /* Pad or trim customHosts to match count */
+  while(customHosts.length<count) customHosts.push(randHostVal());
+  customHosts=customHosts.slice(0,count);
+
+  const container=document.getElementById('c-hosts');
+  container.innerHTML='';
+  for(let i=0;i<count;i++){
+    const row=document.createElement('div');
+    row.className='custom-host-row';
+    const cls=CLRS_CSS[i];
+    row.innerHTML=`
+      <div class="chr-badge sub-ltr ${cls}">${String.fromCharCode(65+i)}</div>
+      <span class="chr-lbl">Subnet ${String.fromCharCode(65+i)}</span>
+      <input class="custom-num-inp" type="number" id="ch-${i}" min="1" max="1022" value="${customHosts[i]}">
+      <span class="chr-unit">hosts</span>
+      <button class="rand-btn" onclick="randHost(${i})" title="Randomise">&#9654;</button>`;
+    container.appendChild(row);
+  }
+}
+
+function randHostVal(){
+  /* Pick a host count that maps to a distinct common CIDR (/30 to /25) */
+  const cidrs=[30,30,29,28,28,27,27,26,26,25];
+  const cidr=cidrs[ri(0,cidrs.length-1)];
+  const bits=32-cidr;
+  const maxH=Math.pow(2,bits)-2;
+  const minH=Math.max(1,Math.ceil(maxH/2)-1);
+  return ri(minH,maxH);
+}
+
+function randCount(){
+  const n=ri(2,8);
+  document.getElementById('c-count').value=n;
+  renderCustomHosts();
+}
+
+function randHost(i){
+  customHosts[i]=randHostVal();
+  document.getElementById('ch-'+i).value=customHosts[i];
+}
+
+function randAllHosts(){
+  randCount();
+  const count=parseInt(document.getElementById('c-count').value)||4;
+  for(let i=0;i<count;i++) randHost(i);
+}
+
+function startCustom(){
+  const count=Math.min(8, Math.max(2, parseInt(document.getElementById('c-count').value)||4));
+  customHosts=[];
+  for(let i=0;i<count;i++){
+    const v=parseInt(document.getElementById('ch-'+i)?.value)||1;
+    customHosts.push(Math.max(1, Math.min(1022, v)));
+  }
+  hideCustomConfig();
+  nextQ();
 }
 
 /* ── Render ─────────────────────────────────────── */
@@ -304,6 +387,8 @@ function renderQ(){
 
 function loadQ(){
   Q=genVLSM(); done=false;
+  document.getElementById('qcard').style.display='';
+  document.getElementById('setupbtn').style.display = (diff==='custom') ? '' : 'none';
   renderQ();
   const fb=document.getElementById('fb');
   fb.className='fbanner'; fb.style.display='none';

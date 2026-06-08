@@ -5,80 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>OSI / TCP-IP Trainer</title>
 <link rel="stylesheet" href="styles.css">
-<style>
-/* ── Selector rows ─────────────────────────────────────── */
-.sel-row        { display:flex;align-items:center;gap:8px;margin-bottom:.65rem;flex-wrap:wrap; }
-.sel-row > span { font-size:13px;color:var(--text-s);min-width:50px; }
-
-/* ── Question card internals ───────────────────────────── */
-.q-type-tag { font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-t);margin-bottom:.4rem; }
-.q-subject   { font-family:var(--mono);font-size:26px;font-weight:500;color:var(--text);margin-bottom:6px;line-height:1.3; }
-.q-prompt    { font-size:18px;font-weight:500;color:var(--text);line-height:1.4;margin-bottom:6px; }
-.q-sub       { font-size:13px;color:var(--text-s); }
-
-/* ── Layer buttons (name→layer mode) ──────────────────── */
-.layers-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-bottom:1rem; }
-.layer-btn {
-  padding:12px 14px;border-radius:var(--r);border:1px solid var(--border-m);
-  background:var(--surface);cursor:pointer;text-align:left;
-  font-family:var(--font);transition:all .15s;
-}
-.layer-btn:not(:disabled):hover { background:var(--info-bg);border-color:var(--info-bdr); }
-.layer-btn .ln  { font-size:11px;color:var(--text-t);font-family:var(--mono);margin-bottom:3px; }
-.layer-btn .lname { font-size:14px;font-weight:500;color:var(--text); }
-.layer-btn.correct { background:var(--ok-bg)!important;border-color:var(--ok-bdr)!important; }
-.layer-btn.correct .ln,.layer-btn.correct .lname { color:var(--ok-text); }
-.layer-btn.wrong   { background:var(--err-bg)!important;border-color:var(--err-bdr)!important; }
-.layer-btn.wrong .ln,.layer-btn.wrong .lname { color:var(--err-text); }
-.layer-btn:disabled { cursor:default;opacity:.7; }
-
-/* ── Protocol option buttons (description→name mode) ──── */
-.opts-grid { display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:1rem; }
-.opt-card {
-  padding:16px 14px;border-radius:var(--r);border:1px solid var(--border-m);
-  background:var(--surface);cursor:pointer;text-align:center;
-  font-family:var(--mono);font-size:15px;font-weight:500;color:var(--text);
-  transition:all .15s;line-height:1.3;
-}
-.opt-card:not(:disabled):hover { background:var(--info-bg);border-color:var(--info-bdr);color:var(--info-text); }
-.opt-card.correct { background:var(--ok-bg)!important;border-color:var(--ok-bdr)!important;color:var(--ok-text)!important; }
-.opt-card.wrong   { background:var(--err-bg)!important;border-color:var(--err-bdr)!important;color:var(--err-text)!important; }
-.opt-card:disabled { cursor:default;opacity:.7; }
-
-/* ── Explanation box ────────────────────────────────────── */
-.explain {
-  background:var(--surface-s);border:1px solid var(--border);border-radius:var(--r);
-  padding:12px 14px;font-size:14px;color:var(--text-s);margin-bottom:1rem;
-  line-height:1.65;display:none;
-}
-.explain .ex-name  { font-weight:500;color:var(--text);font-size:15px;margin-bottom:3px; }
-.explain .ex-layer { font-family:var(--mono);font-size:12px;color:var(--info-text);margin-bottom:8px; }
-.explain.visible   { display:block; }
-
-/* ── Reference panel ────────────────────────────────────── */
-.ref-search-wrap { position:relative;margin-bottom:.75rem; }
-.ref-search-icon { position:absolute;left:10px;top:50%;transform:translateY(-50%);pointer-events:none;color:var(--text-t); }
-.ref-search-icon svg { width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round; }
-.ref-search {
-  width:100%;padding:8px 12px 8px 34px;border-radius:var(--r);
-  border:1px solid var(--border-m);background:var(--surface);
-  font-family:var(--font);font-size:14px;color:var(--text);outline:none;
-}
-.ref-search:focus { border-color:var(--info-bdr); }
-.ref-section-hdr { font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--text-t);margin:1rem 0 .5rem; }
-.ref-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:8px;margin-bottom:.75rem; }
-.ref-card { background:var(--surface-s);border:1px solid var(--border);border-radius:var(--r);padding:11px 13px; }
-.ref-card.hidden { display:none; }
-.ref-card-top { display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:6px;flex-wrap:wrap; }
-.ref-card-name { font-size:14px;font-weight:500;color:var(--text); }
-.ref-badges { display:flex;gap:4px;flex-wrap:wrap; }
-.rbadge { font-size:10px;font-family:var(--mono);padding:1px 7px;border-radius:4px;border:1px solid;white-space:nowrap; }
-.rb-osi  { background:var(--info-bg);color:var(--info-text);border-color:var(--info-bdr); }
-.rb-tcp  { background:var(--ok-bg);color:var(--ok-text);border-color:var(--ok-bdr); }
-.rb-port { background:var(--surface);color:var(--text-s);border-color:var(--border-m); }
-.ref-card-desc { font-size:12px;color:var(--text-s);line-height:1.55; }
-.ref-empty { font-size:14px;color:var(--text-t);text-align:center;padding:2rem 0; }
-</style>
 </head>
 <body>
 <div class="wrap">
@@ -355,16 +281,13 @@ let score=0, rnd=1, streak=0;
 
 function setModel(m,btn){
   model=m;
-  // Look only within the parent row of the clicked button
-  btn.parentElement.querySelectorAll('.cbtn').forEach(b=>b.classList.remove('on'));
+  document.querySelectorAll('.sel-row:first-of-type .cbtn').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
   if(!answered) nextQ();
 }
-
 function setQType(t,btn){
   qtype=t;
-  // Look only within the parent row of the clicked button
-  btn.parentElement.querySelectorAll('.cbtn').forEach(b=>b.classList.remove('on'));
+  document.querySelectorAll('.sel-row:last-of-type .cbtn').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
   if(!answered) nextQ();
 }

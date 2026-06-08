@@ -5,69 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>IPv6 Trainer</title>
 <link rel="stylesheet" href="styles.css">
-<style>
-/* ── Mode selector ─────────────────────────────────────── */
-.mode-row        { display:flex;align-items:center;gap:8px;margin-bottom:1rem;flex-wrap:wrap; }
-.mode-row > span { font-size:13px;color:var(--text-s); }
-
-/* ── Question card ─────────────────────────────────────── */
-.q-type-tag  { font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--text-t);margin-bottom:.4rem; }
-.ipv6-disp   { font-family:var(--mono);font-size:22px;font-weight:500;color:var(--text);letter-spacing:.04em;margin-bottom:8px;word-break:break-all;line-height:1.4; }
-.q-sub       { font-size:13px;color:var(--text-s); }
-
-/* ── Typed answer field ────────────────────────────────── */
-.ans-field             { background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:14px 16px;margin-bottom:1rem; }
-.ans-field label       { display:block;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--text-t);margin-bottom:6px; }
-.ans-field input       { width:100%;font-family:var(--mono);font-size:16px;background:transparent;border:none;outline:none;color:var(--text); }
-.ans-field input::placeholder { color:var(--text-t); }
-.ans-field.ok          { border-color:var(--ok-bdr);background:var(--ok-bg); }
-.ans-field.bad         { border-color:var(--err-bdr);background:var(--err-bg); }
-.ans-field.show        { border-color:var(--warn-bdr);background:var(--warn-bg); }
-.ans-hint              { font-size:12px;margin-top:5px;font-family:var(--mono);min-height:15px; }
-.ans-field.ok   .ans-hint { color:var(--ok-text); }
-.ans-field.bad  .ans-hint { color:var(--err-text); }
-.ans-field.show .ans-hint { color:var(--warn-text); }
-
-/* ── Identify mode type buttons ────────────────────────── */
-.type-grid   { display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-bottom:1rem; }
-.type-btn    { padding:12px 10px;border-radius:var(--r);border:1px solid var(--border-m);background:var(--surface);cursor:pointer;text-align:center;font-family:var(--font);font-size:14px;font-weight:500;color:var(--text);transition:all .15s; }
-.type-btn:not(:disabled):hover { background:var(--info-bg);border-color:var(--info-bdr);color:var(--info-text); }
-.type-btn.correct { background:var(--ok-bg)!important;border-color:var(--ok-bdr)!important;color:var(--ok-text)!important; }
-.type-btn.wrong   { background:var(--err-bg)!important;border-color:var(--err-bdr)!important;color:var(--err-text)!important; }
-.type-btn:disabled { cursor:default;opacity:.7; }
-
-/* ── Explanation box ───────────────────────────────────── */
-.explain         { background:var(--surface-s);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px;font-size:13px;color:var(--text-s);margin-bottom:1rem;line-height:1.65; }
-.explain .ex-name   { font-weight:500;color:var(--text);font-size:15px;margin-bottom:3px; }
-.explain .ex-prefix { font-family:var(--mono);font-size:12px;color:var(--info-text);background:var(--info-bg);border:1px solid var(--info-bdr);padding:1px 8px;border-radius:4px;display:inline-block;margin-bottom:8px; }
-
-/* ── Tool: Compression rules ───────────────────────────── */
-.rules-list { list-style:none;padding:0; }
-.rule-item  { display:flex;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);align-items:flex-start; }
-.rule-item:last-child { border-bottom:none; }
-.rule-num   { font-size:12px;font-weight:600;color:var(--info-text);background:var(--info-bg);border:1px solid var(--info-bdr);border-radius:50%;width:24px;height:24px;display:flex;align-items:center;justify-content:center;flex-shrink:0; }
-.rule-body  { font-size:13px;color:var(--text-s);line-height:1.55; }
-.rule-body strong { color:var(--text); }
-.rule-ex    { font-family:var(--mono);font-size:12px;margin-top:5px;background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:4px 8px;display:inline-block;color:var(--text);word-break:break-all; }
-
-/* ── Tool: Address types table ─────────────────────────── */
-.type-ref-table    { width:100%;border-collapse:collapse;font-size:13px; }
-.type-ref-table th { background:var(--surface-s);padding:7px 10px;text-align:left;font-weight:500;border-bottom:1px solid var(--border);color:var(--text-s);font-size:11px;letter-spacing:.05em;text-transform:uppercase; }
-.type-ref-table td { padding:9px 10px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:top; }
-.type-ref-table tr:last-child td { border-bottom:none; }
-.type-ref-table tr:hover td { background:var(--surface-s); }
-.prefix-badge { font-family:var(--mono);font-size:12px;background:var(--info-bg);color:var(--info-text);border:1px solid var(--info-bdr);padding:1px 7px;border-radius:4px;white-space:nowrap; }
-
-/* ── Tool: IPv6 Analyzer ───────────────────────────────── */
-.az-row    { display:flex;gap:8px;margin-bottom:.75rem; }
-.az-input  { font-family:var(--mono);font-size:14px;background:var(--surface);border:1px solid var(--border-m);border-radius:var(--r);padding:7px 10px;flex:1;color:var(--text);outline:none; }
-.az-input:focus { border-color:var(--info-bdr); }
-.az-result { background:var(--surface-s);border:1px solid var(--border);border-radius:var(--r);padding:11px 13px;font-size:13px; }
-.az-field  { display:flex;gap:10px;margin-bottom:6px;align-items:baseline; }
-.az-field:last-child { margin-bottom:0; }
-.az-lbl    { font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-t);width:80px;flex-shrink:0;font-family:var(--font); }
-.az-val    { font-family:var(--mono);color:var(--text);word-break:break-all; }
-</style>
 </head>
 <body>
 <div class="wrap">
