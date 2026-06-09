@@ -483,3 +483,42 @@ sup  { font-size: .65em; vertical-align: super; }
 .custom-msg          { border-radius: var(--r); padding: 9px 13px; font-size: 13px; margin-bottom: .75rem; border: 1px solid; line-height: 1.5; }
 .custom-msg.warn     { background: var(--warn-bg); border-color: var(--warn-bdr); color: var(--warn-text); }
 .custom-msg.err      { background: var(--err-bg);  border-color: var(--err-bdr);  color: var(--err-text); }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   HEX CONVERSION TRAINER
+══════════════════════════════════════════════════════════════════════════════ */
+
+/* selector rows */
+.conv-row        { display: flex; align-items: center; gap: 8px; margin-bottom: .65rem; flex-wrap: wrap; }
+.conv-row > span { font-size: 13px; color: var(--text-s); min-width: 44px; }
+
+/* hex value display — blue tint to distinguish from plain decimal */
+.q-val.hex  { color: var(--info-text); letter-spacing: .1em; }
+
+/* hex reference table */
+.hex-ref-table    { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 13px; }
+.hex-ref-table th { background: var(--surface-s); padding: 6px 10px; text-align: center; font-weight: 500; border-bottom: 1px solid var(--border); color: var(--text-s); font-size: 11px; font-family: var(--font); text-transform: uppercase; letter-spacing: .05em; }
+.hex-ref-table td { padding: 5px 10px; border-bottom: 1px solid var(--border); text-align: center; color: var(--text); }
+.hex-ref-table tr:last-child td { border-bottom: none; }
+.hex-ref-table tr:hover td { background: var(--surface-s); }
+.hex-ref-table .hx  { color: var(--info-text); font-weight: 600; font-size: 15px; }
+.hex-ref-table .dc  { color: var(--text-s); }
+.hex-ref-table .bn  { letter-spacing: .08em; font-size: 12px; }
+.hex-ref-table .sep { width: 14px; border: none !important; background: none !important; }
+
+/* bit place values */
+.place-val-grid { display: flex; gap: 5px; flex-wrap: wrap; }
+.pv-cell        { display: flex; flex-direction: column; align-items: center; gap: 3px; background: var(--surface-s); border: 1px solid var(--border); border-radius: var(--r); padding: 7px 6px; min-width: 42px; }
+.pv-pos         { font-size: 10px; color: var(--text-t); font-family: var(--mono); }
+.pv-val         { font-size: 13px; font-weight: 500; color: var(--text); font-family: var(--mono); }
+.pv-hex         { font-size: 10px; color: var(--info-text); font-family: var(--mono); }
+
+/* converter tool */
+.conv-tool-row          { display: flex; gap: 8px; margin-bottom: .75rem; }
+.conv-tool-inp          { font-family: var(--mono); font-size: 14px; background: var(--surface); border: 1px solid var(--border-m); border-radius: var(--r); padding: 7px 10px; flex: 1; color: var(--text); outline: none; }
+.conv-tool-inp:focus    { border-color: var(--info-bdr); }
+.conv-tool-result       { background: var(--surface-s); border: 1px solid var(--border); border-radius: var(--r); padding: 11px 13px; }
+.conv-tool-field        { display: flex; gap: 10px; margin-bottom: 6px; align-items: baseline; }
+.conv-tool-field:last-child { margin-bottom: 0; }
+.conv-tool-lbl          { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-t); width: 60px; flex-shrink: 0; font-family: var(--font); }
+.conv-tool-val          { font-family: var(--mono); color: var(--text); word-break: break-all; }

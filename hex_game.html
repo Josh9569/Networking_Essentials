@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hex Conversion Trainer</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="wrap">
+
+  <a href="index.html" class="home-link">&#8592; All Tools</a>
+
+  <div class="hdr">
+    <div>
+      <div class="hdr-title">Hex Conversion Trainer</div>
+      <div class="hdr-sub">Convert between hexadecimal, decimal and binary &middot; Enter to check</div>
+    </div>
+    <div class="chips">
+      <div class="chip">Score <b id="sc">0</b></div>
+      <div class="chip">Round <b id="rnd">1</b></div>
+      <div class="chip">Streak <b id="str">0</b></div>
+    </div>
+  </div>
+
+  <div class="conv-row" id="sz-row">
+    <span>Size:</span>
+    <button class="cbtn" onclick="setSz('nibble',this)">Nibble (4-bit)</button>
+    <button class="cbtn on" onclick="setSz('byte',this)">Byte (8-bit)</button>
+    <button class="cbtn" onclick="setSz('word',this)">Word (16-bit)</button>
+  </div>
+
+  <div class="conv-row" id="mode-row">
+    <span>Mode:</span>
+    <button class="cbtn on" onclick="setMode('random',this)">Random</button>
+    <button class="cbtn" onclick="setMode('hex-dec',this)">Hex &rarr; Dec</button>
+    <button class="cbtn" onclick="setMode('dec-hex',this)">Dec &rarr; Hex</button>
+    <button class="cbtn" onclick="setMode('hex-bin',this)">Hex &rarr; Bin</button>
+    <button class="cbtn" onclick="setMode('bin-hex',this)">Bin &rarr; Hex</button>
+    <button class="cbtn" onclick="setMode('dec-bin',this)">Dec &rarr; Bin</button>
+    <button class="cbtn" onclick="setMode('bin-dec',this)">Bin &rarr; Dec</button>
+  </div>
+
+  <div class="qcard">
+    <div class="q-type-tag" id="q-tag">Loading&hellip;</div>
+    <div class="q-val" id="q-val"></div>
+    <div class="q-hint" id="q-sub"></div>
+  </div>
+
+  <div class="fbanner" id="fb"></div>
+
+  <div class="afield large" id="ans-wrap">
+    <label id="ans-lbl">Answer</label>
+    <input id="ans-inp" autocomplete="off" spellcheck="false">
+    <div class="ahint large" id="ans-hint"></div>
+  </div>
+
+  <div class="actrow">
+    <button class="btn btn-p" id="chkbtn" onclick="checkAnswer()">Check Answer</button>
+    <button class="btn btn-s" id="skipbtn" onclick="skipQ()">Skip</button>
+    <button class="btn btn-s" id="nxtbtn" onclick="nextQ()" style="display:none">Next &rarr;</button>
+    <button class="btn btn-d" onclick="resetGame()">Reset</button>
+
+    <div class="opt-wrap">
+      <button class="opt-btn" id="opt-btn" onclick="toggleOpts()">
+        Options
+        <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="opt-menu" id="opt-menu">
+        <div class="opt-section-label">Reference Tools</div>
+        <label class="opt-row" onclick="toggleTool('hexref')">
+          <span class="opt-row-label">Hex Reference</span>
+          <div class="tog"><input type="checkbox" id="tog-hexref" checked><span class="tog-track"></span></div>
+        </label>
+        <label class="opt-row" onclick="toggleTool('placeval')">
+          <span class="opt-row-label">Bit Place Values</span>
+          <div class="tog"><input type="checkbox" id="tog-placeval" checked><span class="tog-track"></span></div>
+        </label>
+        <label class="opt-row" onclick="toggleTool('converter')">
+          <span class="opt-row-label">Hex Converter</span>
+          <div class="tog"><input type="checkbox" id="tog-converter"><span class="tog-track"></span></div>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div class="toolsec" id="toolsec">
+
+    <!-- Tool 1: Hex Reference (enabled) -->
+    <div class="tool-block" id="t-hexref">
+      <div class="tool-block-title">Hex Reference</div>
+      <p class="tool-note">Each hex digit maps to exactly 4 bits (one nibble). Use this per-digit to work through multi-digit conversions yourself.</p>
+      <table class="hex-ref-table">
+        <thead>
+          <tr><th>Hex</th><th>Dec</th><th>Binary</th><th class="sep"></th><th>Hex</th><th>Dec</th><th>Binary</th></tr>
+        </thead>
+        <tbody id="hex-ref-body"></tbody>
+      </table>
+    </div>
+
+    <!-- Tool 2: Bit Place Values (enabled) -->
+    <div class="tool-block" id="t-placeval">
+      <div class="tool-block-title">Bit Place Values</div>
+      <p class="tool-note" id="pv-note"></p>
+      <div class="place-val-grid" id="place-val-grid"></div>
+    </div>
+
+    <!-- Tool 3: Hex Converter (disabled — direct answers) -->
+    <div class="tool-block" id="t-converter" style="display:none">
+      <div class="tool-block-title">Hex Converter</div>
+      <p class="tool-note">Enter any value in hex (e.g. FF or 0xFF), decimal, or binary and see all three representations instantly.</p>
+      <div class="conv-tool-row">
+        <input class="conv-tool-inp" id="ct-inp" placeholder="hex, decimal, or binary&hellip;"
+               oninput="runConverter()" spellcheck="false" autocomplete="off">
+      </div>
+      <div class="conv-tool-result" id="ct-result" style="display:none">
+        <div class="conv-tool-field"><span class="conv-tool-lbl">Hex</span><span class="conv-tool-val" id="ct-hex">—</span></div>
+        <div class="conv-tool-field"><span class="conv-tool-lbl">Decimal</span><span class="conv-tool-val" id="ct-dec">—</span></div>
+        <div class="conv-tool-field"><span class="conv-tool-lbl">Binary</span><span class="conv-tool-val" id="ct-bin">—</span></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+/* ═══ State ═══════════════════════════════════════════════════════════════ */
+let Q=null, sz='byte', mode='random', score=0, rnd=1, streak=0, answered=false;
+
+function ri(a,b){ return Math.floor(Math.random()*(b-a+1))+a; }
+
+/* ═══ Selectors ═══════════════════════════════════════════════════════════ */
+function setSz(s,btn){
+  sz=s;
+  document.querySelectorAll('#sz-row .cbtn').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  updatePlaceValues();
+  nextQ();
+}
+function setMode(m,btn){
+  mode=m;
+  document.querySelectorAll('#mode-row .cbtn').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  nextQ();
+}
+
+/* ═══ Question generation ═════════════════════════════════════════════════ */
+const ALL_MODES=['hex-dec','dec-hex','hex-bin','bin-hex','dec-bin','bin-dec'];
+
+function genQ(){
+  const maxVal  = sz==='nibble'?15:sz==='byte'?255:65535;
+  const hexLen  = sz==='nibble'?1 :sz==='byte'?2  :4;
+  const binLen  = sz==='nibble'?4 :sz==='byte'?8  :16;
+  const pts     = sz==='nibble'?1 :sz==='byte'?2  :3;
+  const val     = ri(0, maxVal);
+  const hex     = val.toString(16).toUpperCase().padStart(hexLen,'0');
+  const bin     = val.toString(2).padStart(binLen,'0');
+  const qt      = mode==='random' ? ALL_MODES[ri(0,ALL_MODES.length-1)] : mode;
+  return {sz, qt, val, hex, bin, hexLen, binLen, pts};
+}
+
+/* ═══ Format helpers ══════════════════════════════════════════════════════ */
+function fmtBin(bin,s){
+  if(s==='nibble') return bin;
+  if(s==='byte')   return bin.slice(0,4)+'\u2009'+bin.slice(4);          // thin space
+  return bin.slice(0,4)+'\u2009'+bin.slice(4,8)+'\u2009'+bin.slice(8,12)+'\u2009'+bin.slice(12);
+}
+function fmtBinAns(bin,s){ return fmtBin(bin,s); }  // same, used in hint display
+
+/* ═══ Load question ═══════════════════════════════════════════════════════ */
+const FROM_LABEL={hex:'Hexadecimal', dec:'Decimal', bin:'Binary'};
+const TO_LABEL=  {hex:'Hexadecimal', dec:'Decimal', bin:'Binary'};
+const HEX_PH={nibble:'e.g. F', byte:'e.g. A3', word:'e.g. A3C5'};
+const DEC_PH={nibble:'e.g. 12', byte:'e.g. 163', word:'e.g. 41909'};
+const BIN_PH={nibble:'e.g. 1010', byte:'e.g. 1010 0011', word:'e.g. 1010 0011 1100 0101'};
+
+function loadQ(){
+  Q=genQ(); answered=false;
+  const [from,to]=Q.qt.split('-');
+
+  /* Question card */
+  document.getElementById('q-tag').textContent=
+    `Convert from ${FROM_LABEL[from]} \u2014 ${Q.pts} pt${Q.pts>1?'s':''}`;
+
+  const qv=document.getElementById('q-val');
+  if(from==='hex'){
+    qv.className='q-val hex';
+    qv.textContent='0x'+Q.hex;
+  } else if(from==='bin'){
+    qv.className='q-val bin';
+    qv.textContent=fmtBin(Q.bin,Q.sz);
+  } else {
+    qv.className='q-val';
+    qv.textContent=String(Q.val);
+  }
+  document.getElementById('q-sub').textContent='';
+
+  /* Answer field */
+  const wrap=document.getElementById('ans-wrap');
+  const inp=document.getElementById('ans-inp');
+  wrap.className='afield large';
+  inp.value=''; inp.disabled=false;
+  document.getElementById('ans-lbl').textContent=TO_LABEL[to]+' answer';
+  inp.placeholder = to==='hex' ? HEX_PH[Q.sz] : to==='dec' ? DEC_PH[Q.sz] : BIN_PH[Q.sz];
+  document.getElementById('ans-hint').innerHTML='';
+
+  /* Feedback & buttons */
+  const fb=document.getElementById('fb');
+  fb.className='fbanner'; fb.style.display='none';
+  document.getElementById('chkbtn').style.display='';
+  document.getElementById('skipbtn').style.display='';
+  document.getElementById('nxtbtn').style.display='none';
+  document.getElementById('sc').textContent=score;
+  document.getElementById('rnd').textContent=rnd;
+  document.getElementById('str').textContent=streak;
+
+  setTimeout(()=>inp.focus(),50);
+}
+
+/* ═══ Answer checking ═════════════════════════════════════════════════════ */
+function getCorrect(){
+  const [,to]=Q.qt.split('-');
+  if(to==='hex') return Q.hex.toLowerCase();
+  if(to==='dec') return String(Q.val);
+  return Q.bin;
+}
+
+function normalizeInput(raw){
+  const [,to]=Q.qt.split('-');
+  if(to==='hex')
+    return raw.trim().toLowerCase().replace(/^0x/,'').padStart(Q.hexLen,'0');
+  if(to==='dec')
+    return raw.trim().replace(/[,\s]/g,'');
+  /* bin: strip whitespace, pad to full length */
+  return raw.trim().replace(/[\s\u2009]/g,'').padStart(Q.binLen,'0');
+}
+
+/* What to show as the "correct answer" in hint / revealed field */
+function fmtCorrectDisplay(correct){
+  const [,to]=Q.qt.split('-');
+  if(to==='hex') return '0x'+correct.toUpperCase();
+  if(to==='bin') return fmtBinAns(correct, Q.sz);
+  return correct;
+}
+
+function checkAnswer(){
+  if(answered) return;
+  const inp=document.getElementById('ans-inp');
+  const raw=inp.value;
+  if(raw.trim()==='') { skipQ(); return; }
+
+  const correct=getCorrect();
+  const norm=normalizeInput(raw);
+  const ok=(norm===correct);
+
+  answered=true; inp.disabled=true;
+  const wrap=document.getElementById('ans-wrap');
+  const hint=document.getElementById('ans-hint');
+
+  if(ok){
+    wrap.classList.add('ok');
+    hint.textContent='\u2713 Correct';
+    score+=Q.pts; streak++;
+    showFb(`Correct! +${Q.pts} pt${Q.pts>1?'s':''}. Streak: ${streak}`,'ok');
+  } else {
+    wrap.classList.add('bad');
+    hint.textContent='Correct: '+fmtCorrectDisplay(correct);
+    showFb('Incorrect.','err');
+    streak=0;
+  }
+  finish();
+}
+
+function skipQ(){
+  if(answered) return;
+  answered=true;
+  const inp=document.getElementById('ans-inp');
+  inp.disabled=true;
+  const correct=getCorrect();
+  inp.value=fmtCorrectDisplay(correct);
+  document.getElementById('ans-wrap').classList.add('show');
+  document.getElementById('ans-hint').textContent='Revealed';
+  showFb('Answer revealed. No points.','warn');
+  streak=0;
+  finish();
+}
+
+function finish(){
+  rnd++;
+  document.getElementById('sc').textContent=score;
+  document.getElementById('str').textContent=streak;
+  document.getElementById('rnd').textContent=rnd;
+  document.getElementById('nxtbtn').style.display='';
+  document.getElementById('chkbtn').style.display='none';
+  document.getElementById('skipbtn').style.display='none';
+}
+
+function showFb(msg,type){
+  const fb=document.getElementById('fb');
+  fb.style.display='block'; fb.className='fbanner '+type; fb.textContent=msg;
+}
+function nextQ(){ loadQ(); }
+function resetGame(){ score=0;rnd=1;streak=0;loadQ(); }
+
+/* ═══ Options ═════════════════════════════════════════════════════════════ */
+function toggleOpts(){
+  const m=document.getElementById('opt-menu');
+  const b=document.getElementById('opt-btn');
+  m.classList.toggle('open');
+  b.classList.toggle('open',m.classList.contains('open'));
+}
+function toggleTool(id){
+  document.getElementById('tog-'+id).checked ^= true;
+  applyTools();
+}
+function applyTools(){
+  const tools=['hexref','placeval','converter'];
+  let any=false;
+  tools.forEach(t=>{
+    const on=document.getElementById('tog-'+t).checked;
+    document.getElementById('t-'+t).style.display=on?'':'none';
+    if(on) any=true;
+  });
+  document.getElementById('toolsec').style.display=any?'':'none';
+}
+document.addEventListener('click',e=>{
+  const w=document.getElementById('opt-btn').closest('.opt-wrap');
+  if(!w.contains(e.target)){
+    document.getElementById('opt-menu').classList.remove('open');
+    document.getElementById('opt-btn').classList.remove('open');
+  }
+});
+
+/* ═══ Hex Reference Table ═════════════════════════════════════════════════ */
+function buildHexRef(){
+  const tb=document.getElementById('hex-ref-body');
+  for(let i=0;i<8;i++){
+    const a=i, b=i+8;
+    const tr=document.createElement('tr');
+    tr.innerHTML=
+      `<td class="hx">${a.toString(16).toUpperCase()}</td>`+
+      `<td class="dc">${a}</td>`+
+      `<td class="bn">${a.toString(2).padStart(4,'0')}</td>`+
+      `<td class="sep"></td>`+
+      `<td class="hx">${b.toString(16).toUpperCase()}</td>`+
+      `<td class="dc">${b}</td>`+
+      `<td class="bn">${b.toString(2).padStart(4,'0')}</td>`;
+    tb.appendChild(tr);
+  }
+}
+
+/* ═══ Bit Place Values ════════════════════════════════════════════════════ */
+function updatePlaceValues(){
+  const bits=sz==='nibble'?4:sz==='byte'?8:16;
+  const labels={nibble:'4-bit nibble',byte:'8-bit byte',word:'16-bit word'};
+  document.getElementById('pv-note').textContent=
+    `Each bit in a ${labels[sz]} represents a power of 2. Add the values of the 1-bits to get the decimal total.`;
+  const grid=document.getElementById('place-val-grid');
+  grid.innerHTML='';
+  for(let i=bits-1;i>=0;i--){
+    const v=Math.pow(2,i);
+    const cell=document.createElement('div');
+    cell.className='pv-cell';
+    cell.innerHTML=
+      `<div class="pv-pos">2<sup>${i}</sup></div>`+
+      `<div class="pv-val">${v>=1000?v.toLocaleString():v}</div>`+
+      `<div class="pv-hex">${v.toString(16).toUpperCase()}</div>`;
+    grid.appendChild(cell);
+  }
+}
+
+/* ═══ Hex Converter Tool ══════════════════════════════════════════════════ */
+function runConverter(){
+  const raw=document.getElementById('ct-inp').value.trim();
+  const res=document.getElementById('ct-result');
+  if(!raw){ res.style.display='none'; return; }
+
+  let val=null;
+  if(/^(0x)?[0-9a-fA-F]+$/.test(raw))
+    val=parseInt(raw.replace(/^0x/i,''),16);
+  else if(/^[01][\s01]*$/.test(raw))
+    val=parseInt(raw.replace(/\s/g,''),2);
+  else if(/^\d+$/.test(raw))
+    val=parseInt(raw,10);
+
+  if(val===null||isNaN(val)||val<0||val>0xFFFF){ res.style.display='none'; return; }
+
+  const bits=sz==='nibble'?4:sz==='byte'?8:16;
+  const hLen=bits/4;
+  const hexStr=val.toString(16).toUpperCase().padStart(hLen,'0');
+  const binStr=val.toString(2).padStart(bits,'0');
+
+  document.getElementById('ct-hex').textContent='0x'+hexStr;
+  document.getElementById('ct-dec').textContent=String(val);
+  document.getElementById('ct-bin').textContent=fmtBin(binStr, sz);
+  res.style.display='';
+}
+
+/* ═══ Keyboard ════════════════════════════════════════════════════════════ */
+document.addEventListener('keydown',e=>{
+  if(e.key==='Enter'){
+    if(!answered) checkAnswer();
+    else nextQ();
+  }
+  if(e.key==='Escape'){
+    document.getElementById('opt-menu').classList.remove('open');
+    document.getElementById('opt-btn').classList.remove('open');
+  }
+});
+
+/* ═══ Init ════════════════════════════════════════════════════════════════ */
+buildHexRef();
+updatePlaceValues();
+loadQ();
+</script>
+</body>
+</html>
