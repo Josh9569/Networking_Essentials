@@ -1,0 +1,1242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Switching Lab</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="wrap">
+
+  <a href="index.html" class="home-link">&#8592; All Tools</a>
+
+  <div class="hdr">
+    <div>
+      <div class="hdr-title">Switching Lab</div>
+      <div class="hdr-sub">Cable devices, configure VLANs, trunks &amp; EtherChannel, identify STP roles</div>
+    </div>
+    <div class="chips">
+      <div class="chip">Score <b id="sc">0</b></div>
+      <div class="chip">Round <b id="rnd">1</b></div>
+      <div class="chip">Streak <b id="str">0</b></div>
+    </div>
+  </div>
+
+  <div class="conv-row" id="gmode-row">
+    <span>Mode:</span>
+    <button class="cbtn on" onclick="setGMode('challenge',this)">Challenges</button>
+    <button class="cbtn" onclick="setGMode('sandbox',this)">Sandbox</button>
+  </div>
+
+  <div class="conv-row" id="topic-row">
+    <span>Topic:</span>
+    <button class="cbtn on" onclick="setTopic('random',this)">Random</button>
+    <button class="cbtn" onclick="setTopic('vlan',this)">VLANs</button>
+    <button class="cbtn" onclick="setTopic('trunk',this)">Trunking</button>
+    <button class="cbtn" onclick="setTopic('ether',this)">EtherChannel</button>
+    <button class="cbtn" onclick="setTopic('stp',this)">STP</button>
+    <button class="cbtn" onclick="setTopic('ip',this)">IP / L3</button>
+  </div>
+
+  <div class="qcard">
+    <div class="qlbl" id="sc-title">Loading&hellip;</div>
+    <div class="q-prompt" id="sc-instr" style="font-size:15px"></div>
+    <div class="req-list" id="req-list"></div>
+  </div>
+
+  <div class="fbanner" id="fb"></div>
+
+  <div class="lab-card">
+    <div class="lab-toolbar">
+      <div class="palette" id="palette" style="display:none">
+        <button class="rand-btn" onclick="sbAdd('switch')">+ Switch</button>
+        <button class="rand-btn" onclick="sbAdd('pc')">+ PC</button>
+        <button class="rand-btn" onclick="sbClear()">Clear All</button>
+      </div>
+      <div class="legend">
+        <span class="lg"><i class="lgdot lg-acc1"></i>access (VLAN 1)</span>
+        <span class="lg"><i class="lgdot lg-acc"></i>access (VLAN set)</span>
+        <span class="lg"><i class="lgdot lg-trunk"></i>trunk</span>
+        <span class="lg"><i class="lgdot lg-chan"></i>EtherChannel</span>
+      </div>
+    </div>
+    <div class="lab-canvas" id="canvas">
+      <svg id="cable-svg"></svg>
+      <div id="dev-layer"></div>
+    </div>
+    <div class="lab-hint" id="lab-hint"></div>
+  </div>
+
+  <!-- Config panel -->
+  <div class="cfg-panel" id="cfg" style="display:none">
+    <div class="cfg-hdr">
+      <span class="cfg-name" id="cfg-name">SW1</span>
+      <button class="rand-btn" onclick="closeCfg()">Close &times;</button>
+    </div>
+    <div class="cfg-grid" id="cfg-sw">
+      <div>
+        <div class="cfg-sec-lbl">Port Configuration</div>
+        <table class="port-table">
+          <thead><tr><th>Port</th><th>Mode</th><th>VLAN</th><th>Ch-Grp</th><th>Connected To</th></tr></thead>
+          <tbody id="pt-body"></tbody>
+        </table>
+      </div>
+      <div>
+        <div class="cfg-sec-lbl">CLI Terminal</div>
+        <div class="term">
+          <div class="term-log" id="term-log"></div>
+          <div class="term-inrow">
+            <span class="term-prompt" id="term-prompt">SW1#</span>
+            <input class="term-in" id="term-in" autocomplete="off" spellcheck="false">
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="cfg-pc" style="display:none">
+      <div class="cfg-sec-lbl">IP Configuration</div>
+      <div class="pc-form">
+        <label class="pc-form-lbl">IP Address</label>
+        <input class="custom-ip-inp" id="pc-ip" placeholder="e.g. 192.168.10.11"
+               oninput="uiSetPCIP(this.value)" autocomplete="off" spellcheck="false">
+        <span class="pc-pfx">/ 24</span>
+        <span class="pc-ip-hint" id="pc-ip-hint"></span>
+      </div>
+    </div>
+  </div>
+
+  <div class="actrow">
+    <button class="btn btn-p" id="chkbtn" onclick="checkAll()">Check Requirements</button>
+    <button class="btn btn-s" id="skipbtn" onclick="skipQ()">Skip</button>
+    <button class="btn btn-s" id="nxtbtn" onclick="nextQ()" style="display:none">Next Challenge &rarr;</button>
+    <button class="btn btn-d" onclick="resetGame()">Reset</button>
+
+    <div class="opt-wrap">
+      <button class="opt-btn" id="opt-btn" onclick="toggleOpts()">
+        Options
+        <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="opt-menu" id="opt-menu">
+        <div class="opt-section-label">Reference Tools</div>
+        <label class="opt-row" onclick="toggleTool('vlanref')">
+          <span class="opt-row-label">VLAN / Trunk Reference</span>
+          <div class="tog"><input type="checkbox" id="tog-vlanref" checked><span class="tog-track"></span></div>
+        </label>
+        <label class="opt-row" onclick="toggleTool('stpref')">
+          <span class="opt-row-label">STP Rules</span>
+          <div class="tog"><input type="checkbox" id="tog-stpref" checked><span class="tog-track"></span></div>
+        </label>
+        <label class="opt-row" onclick="toggleTool('cmdref')">
+          <span class="opt-row-label">Command Reference</span>
+          <div class="tog"><input type="checkbox" id="tog-cmdref" checked><span class="tog-track"></span></div>
+        </label>
+        <label class="opt-row" onclick="toggleTool('analyzer')">
+          <span class="opt-row-label">Topology Analyzer</span>
+          <div class="tog"><input type="checkbox" id="tog-analyzer"><span class="tog-track"></span></div>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div class="toolsec" id="toolsec">
+
+    <div class="tool-block" id="t-vlanref">
+      <div class="tool-block-title">VLAN / Trunk Reference</div>
+      <ul class="rules-list">
+        <li class="rule-item"><div class="rule-num">1</div><div class="rule-body">
+          An <strong>access port</strong> belongs to exactly one VLAN and connects end devices (PCs).
+          Frames on it are untagged &mdash; the switch tracks the VLAN internally.
+          <div class="rule-ex">switchport mode access &middot; switchport access vlan 10</div>
+        </div></li>
+        <li class="rule-item"><div class="rule-num">2</div><div class="rule-body">
+          A <strong>trunk port</strong> carries <em>multiple</em> VLANs between switches using 802.1Q tags.
+          <strong>Both ends</strong> of the link must be trunks or traffic will not pass correctly.
+          <div class="rule-ex">switchport mode trunk</div>
+        </div></li>
+        <li class="rule-item"><div class="rule-num">3</div><div class="rule-body">
+          Two PCs can only communicate at Layer&nbsp;2 if they are in the <strong>same VLAN</strong>
+          and every switch-to-switch link on the path carries that VLAN.
+        </div></li>
+        <li class="rule-item"><div class="rule-num">4</div><div class="rule-body">
+          <strong>EtherChannel</strong> bundles multiple physical links into one logical link
+          (more bandwidth, no STP blocking between them). Every member port on a switch must share the
+          same <em>channel-group number</em> and identical configuration.
+          <div class="rule-ex">channel-group 1 mode on</div>
+        </div></li>
+      </ul>
+    </div>
+
+    <div class="tool-block" id="t-stpref">
+      <div class="tool-block-title">STP Rules</div>
+      <ul class="rules-list">
+        <li class="rule-item"><div class="rule-num">1</div><div class="rule-body">
+          <strong>Root bridge election:</strong> the switch with the <strong>lowest bridge ID</strong> wins.
+          Bridge ID = priority + MAC address. Compare priority first; if tied, the <strong>lowest MAC</strong> wins.
+        </div></li>
+        <li class="rule-item"><div class="rule-num">2</div><div class="rule-body">
+          Every non-root switch picks one <strong>root port</strong> &mdash; the port with the lowest
+          total path cost to the root (FastEthernet link = cost 19).
+        </div></li>
+        <li class="rule-item"><div class="rule-num">3</div><div class="rule-body">
+          Each link segment gets one <strong>designated port</strong> &mdash; the end whose switch has the
+          lower path cost to the root; ties are broken by lower bridge ID. All root-bridge ports are designated.
+        </div></li>
+        <li class="rule-item"><div class="rule-num">4</div><div class="rule-body">
+          Any port that is neither a root port nor a designated port becomes <strong>blocking</strong> &mdash;
+          this breaks the loop. In a triangle of switches exactly one port blocks: on the redundant link,
+          the end belonging to the switch with the <em>higher</em> bridge ID.
+        </div></li>
+        <li class="rule-item"><div class="rule-num">5</div><div class="rule-body">
+          Priorities can also be set with keywords: <strong>root primary</strong> configures priority
+          <strong>24576</strong> and <strong>root secondary</strong> configures <strong>28672</strong>,
+          both lower (better) than the <strong>default 32768</strong>. Lower always wins the election.
+          <div class="rule-ex">spanning-tree vlan 1 root primary</div>
+        </div></li>
+      </ul>
+    </div>
+
+    <div class="tool-block" id="t-cmdref">
+      <div class="tool-block-title">Command Reference</div>
+      <p class="tool-note">The CLI accepts Cisco IOS syntax with standard abbreviations (e.g. <code>conf t</code>, <code>int fa0/1</code>, <code>sw mo ac</code>). Commands work at any prompt level for convenience. Press <strong>Tab</strong> to auto-complete keywords and use the <strong>&uarr; / &darr;</strong> arrow keys for command history.</p>
+      <table class="cmd-table">
+        <tbody>
+          <tr><td class="cmd">configure terminal</td><td>Enter config mode (<code>conf t</code>)</td></tr>
+          <tr><td class="cmd">vlan &lt;n&gt;</td><td>Create VLAN n and enter config-vlan mode</td></tr>
+          <tr><td class="cmd">name &lt;text&gt;</td><td>Name the VLAN (from config-vlan mode)</td></tr>
+          <tr><td class="cmd">interface fa0/&lt;n&gt;</td><td>Select a port (<code>int fa0/1</code>)</td></tr>
+          <tr><td class="cmd">switchport mode access</td><td>Make the port an access port (<code>sw mo ac</code>)</td></tr>
+          <tr><td class="cmd">switchport access vlan &lt;n&gt;</td><td>Assign VLAN (<code>sw ac vl 10</code>)</td></tr>
+          <tr><td class="cmd">switchport mode trunk</td><td>Make the port a trunk (<code>sw mo tr</code>)</td></tr>
+          <tr><td class="cmd">channel-group &lt;n&gt; mode on</td><td>Add port to EtherChannel n</td></tr>
+          <tr><td class="cmd">no switchport access vlan</td><td>Return port to VLAN 1</td></tr>
+          <tr><td class="cmd">no channel-group</td><td>Remove from EtherChannel</td></tr>
+          <tr><td class="cmd">show vlan brief</td><td>Show VLAN &rarr; port table</td></tr>
+          <tr><td class="cmd">show run</td><td>Show this switch's port config</td></tr>
+          <tr><td class="cmd">exit / end</td><td>Go up one level / back to exec</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tool-block" id="t-analyzer" style="display:none">
+      <div class="tool-block-title">Topology Analyzer</div>
+      <p class="tool-note">Computes STP roles and PC-to-PC reachability for whatever is currently built on the canvas.</p>
+      <button class="btn btn-s" onclick="runAnalyzer()">Analyze Current Topology</button>
+      <div class="az-out" id="az-out"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+/* ═══ Utilities ═══════════════════════════════════════════════════════════ */
+function ri(a,b){ return Math.floor(Math.random()*(b-a+1))+a; }
+function pick(a){ return a[ri(0,a.length-1)]; }
+function genMac(){
+  let s=''; const h='0123456789abcdef';
+  for(let i=0;i<12;i++){ s+=h[ri(0,15)]; if(i===3||i===7)s+='.'; }
+  return s;
+}
+
+/* ═══ State ═══════════════════════════════════════════════════════════════ */
+const PORTN=4, SW_W=150, SW_H=66, PC_W=90, PC_H=52;
+let devices=[], cables=[], nid=1, cid=1;
+let topic='random', gmode='challenge';
+let scenario=null, done=false, score=0, rnd=1, streak=0;
+let pending=null, selected=null, qclick=null;   /* qclick: 'root' | 'port' */
+let swCount=0, pcCount=0;
+
+function byId(id){ return devices.find(d=>d.id===id); }
+
+function addSwitch(x,y,opts={}){
+  swCount++;
+  const d={ id:nid++, type:'switch', name:opts.name||('SW'+swCount), x, y,
+    priority:opts.priority??32768, mac:opts.mac??genMac(),
+    ports:Array.from({length:PORTN},(_,i)=>({name:'Fa0/'+(i+1),mode:'access',vlan:1,ch:0})),
+    priLabel:opts.priLabel||null, vlans:new Set([1]), vlanNames:{},
+    cm:'exec', ci:null, cv:null, log:[], hist:[], hi:0 };
+  devices.push(d); return d;
+}
+function addPC(x,y,opts={}){
+  pcCount++;
+  const d={ id:nid++, type:'pc', name:opts.name||('PC'+pcCount), x, y,
+    ip:opts.ip??null, pfx:24,
+    ports:[{name:'Eth0',mode:'access',vlan:1,ch:0}] };
+  devices.push(d); return d;
+}
+function addCable(dA,iA,dB,iB,locked=false){
+  cables.push({id:cid++, a:{d:dA,i:iA}, b:{d:dB,i:iB}, locked});
+}
+function portCable(dev,i){
+  return cables.find(c=>(c.a.d===dev&&c.a.i===i)||(c.b.d===dev&&c.b.i===i));
+}
+function cableBetween(devA,devB){
+  return cables.find(c=>
+    (byId(c.a.d)===devA&&byId(c.b.d)===devB)||(byId(c.a.d)===devB&&byId(c.b.d)===devA));
+}
+function cablesBetween(devA,devB){
+  return cables.filter(c=>
+    (byId(c.a.d)===devA&&byId(c.b.d)===devB)||(byId(c.a.d)===devB&&byId(c.b.d)===devA));
+}
+function otherEnd(c,devId){ return c.a.d===devId?c.b:c.a; }
+
+/* ═══ Geometry & rendering ════════════════════════════════════════════════ */
+function portPos(d,i){
+  if(d.type==='pc') return [PC_W/2, 0];
+  const pad=20, span=SW_W-2*pad;
+  return [pad + i*(span/(PORTN-1)), SW_H];
+}
+
+function render(){
+  const svg=document.getElementById('cable-svg');
+  const layer=document.getElementById('dev-layer');
+  svg.innerHTML=''; layer.innerHTML='';
+
+  cables.forEach(c=>{
+    const A=byId(c.a.d), B=byId(c.b.d);
+    const [ax,ay]=portPos(A,c.a.i), [bx,by]=portPos(B,c.b.i);
+    const l=document.createElementNS('http://www.w3.org/2000/svg','line');
+    l.setAttribute('x1',A.x+ax); l.setAttribute('y1',A.y+ay);
+    l.setAttribute('x2',B.x+bx); l.setAttribute('y2',B.y+by);
+    const pa=A.ports[c.a.i], pb=B.ports[c.b.i];
+    let cls='cable';
+    if(pa.ch>0&&pb.ch>0) cls+=' chan';
+    else if(pa.mode==='trunk'&&pb.mode==='trunk') cls+=' trunk';
+    if(c.locked) cls+=' locked';
+    l.setAttribute('class',cls);
+    l.dataset.cid=c.id;
+    svg.appendChild(l);
+  });
+
+  devices.forEach(d=>{
+    const el=document.createElement('div');
+    el.className='dev '+d.type+(selected===d.id?' selected':'')
+      +(d._mark?' '+d._mark:'');
+    el.style.left=d.x+'px'; el.style.top=d.y+'px';
+    el.dataset.did=d.id;
+    if(d.type==='switch'){
+      el.innerHTML=`<div class="dev-name">${d.name}</div>`+
+        `<div class="dev-sub">${d.priLabel?d.priLabel:'Pri '+d.priority}<br>${d.mac}</div>`;
+    } else {
+      el.innerHTML=`<div class="dev-name">${d.name}</div><div class="dev-sub">${d.ip?d.ip+'/'+d.pfx:'no IP'}</div>`;
+    }
+    d.ports.forEach((p,i)=>{
+      const [px,py]=portPos(d,i);
+      const s=document.createElement('span');
+      let pc='port';
+      if(p.mode==='trunk') pc+=' p-trunk';
+      else if(p.vlan>1) pc+=' p-acc';
+      if(p.ch>0) pc+=' p-chan';
+      if(pending&&pending.d===d.id&&pending.i===i) pc+=' p-pending';
+      if(p._mark) pc+=' '+p._mark;
+      s.className=pc;
+      s.style.left=(px-7)+'px'; s.style.top=(py-7)+'px';
+      s.title=p.name+(d.type==='switch'?` — ${p.mode}${p.mode==='access'?' vlan '+p.vlan:''}${p.ch>0?' ch'+p.ch:''}`:'');
+      s.dataset.did=d.id; s.dataset.pi=i;
+      el.appendChild(s);
+    });
+    layer.appendChild(el);
+  });
+}
+
+/* ═══ Canvas interaction ══════════════════════════════════════════════════ */
+let drag=null;
+
+document.getElementById('dev-layer').addEventListener('mousedown',e=>{
+  const pEl=e.target.closest('.port');
+  if(pEl){ onPortClick(+pEl.dataset.did, +pEl.dataset.pi); e.preventDefault(); return; }
+  const dEl=e.target.closest('.dev');
+  if(!dEl) return;
+  const d=byId(+dEl.dataset.did);
+  drag={d, sx:e.clientX, sy:e.clientY, ox:d.x, oy:d.y, moved:false};
+  e.preventDefault();
+});
+window.addEventListener('mousemove',e=>{
+  if(!drag) return;
+  const dx=e.clientX-drag.sx, dy=e.clientY-drag.sy;
+  if(Math.abs(dx)>4||Math.abs(dy)>4) drag.moved=true;
+  if(drag.moved){
+    const cw=document.getElementById('canvas').clientWidth;
+    const ch=document.getElementById('canvas').clientHeight;
+    const w=drag.d.type==='switch'?SW_W:PC_W, h=drag.d.type==='switch'?SW_H:PC_H;
+    drag.d.x=Math.max(0,Math.min(cw-w, drag.ox+dx));
+    drag.d.y=Math.max(0,Math.min(ch-h-8, drag.oy+dy));
+    render();
+  }
+});
+window.addEventListener('mouseup',()=>{
+  if(drag&&!drag.moved) onDevClick(drag.d.id);
+  drag=null;
+});
+
+document.getElementById('cable-svg').addEventListener('click',e=>{
+  const cidv=e.target.dataset&&e.target.dataset.cid;
+  if(!cidv) return;
+  const c=cables.find(x=>x.id===+cidv);
+  if(!c) return;
+  if(c.locked){ setHint('That cable is part of the scenario and cannot be removed.'); return; }
+  if(done) return;
+  cables=cables.filter(x=>x!==c);
+  setHint('Cable removed.');
+  render(); refreshCfg();
+});
+
+function onPortClick(did,i){
+  if(done) return;
+  const d=byId(did);
+  if(qclick==='port'&&d.type==='switch'){ answerPort(did,i); return; }
+  if(qclick==='root'){ answerRoot(did); return; }
+  if(portCable(did,i)){ setHint(`${d.name} ${d.ports[i].name} is already cabled — click the cable to remove it first.`); return; }
+  if(!pending){
+    pending={d:did,i};
+    setHint(`Selected ${d.name} ${d.ports[i].name} — now click a port on another device.`);
+  } else if(pending.d===did&&pending.i===i){
+    pending=null; setHint('Selection cleared.');
+  } else if(pending.d===did){
+    setHint('Choose a port on a different device.');
+  } else {
+    addCable(pending.d,pending.i,did,i);
+    const A=byId(pending.d);
+    setHint(`Cabled ${A.name} ${A.ports[pending.i].name} \u2194 ${d.name} ${d.ports[i].name}.`);
+    pending=null;
+  }
+  render(); refreshCfg();
+}
+
+function onDevClick(did){
+  const d=byId(did);
+  if(qclick==='root'&&d.type==='switch'){ answerRoot(did); return; }
+  if(qclick) return;
+  selected=did; openCfg(); render();
+}
+
+function setHint(t){ document.getElementById('lab-hint').textContent=t; }
+
+/* ═══ Config panel ════════════════════════════════════════════════════════ */
+function openCfg(){
+  const d=byId(selected); if(!d) return;
+  document.getElementById('cfg').style.display='';
+  const isSw=d.type==='switch';
+  document.getElementById('cfg-sw').style.display=isSw?'':'none';
+  document.getElementById('cfg-pc').style.display=isSw?'none':'';
+  if(isSw){
+    document.getElementById('cfg-name').textContent=
+      d.name+'  ·  '+(d.priLabel?d.priLabel:'Pri '+d.priority)+'  ·  '+d.mac;
+    buildPortTable(); renderTerm();
+  } else {
+    document.getElementById('cfg-name').textContent=d.name;
+    buildPCForm();
+  }
+}
+function buildPCForm(){
+  const d=byId(selected); if(!d||d.type!=='pc') return;
+  document.getElementById('pc-ip').value=d.ip||'';
+  document.getElementById('pc-ip-hint').textContent='';
+}
+function uiSetPCIP(v){
+  const d=byId(selected); if(!d||d.type!=='pc') return;
+  const s=v.trim();
+  const hint=document.getElementById('pc-ip-hint');
+  if(!s){ d.ip=null; hint.textContent=''; }
+  else if(isValidIP(s)){ d.ip=s; hint.textContent='\u2713'; }
+  else { d.ip=null; hint.textContent='invalid IP'; }
+  render();
+}
+function closeCfg(){ selected=null; document.getElementById('cfg').style.display='none'; render(); }
+function refreshCfg(){
+  const d=selected!=null?byId(selected):null;
+  if(d&&d.type==='switch') buildPortTable();
+  else if(d&&d.type==='pc') buildPCForm();
+}
+
+function buildPortTable(){
+  const d=byId(selected); if(!d) return;
+  const tb=document.getElementById('pt-body'); tb.innerHTML='';
+  d.ports.forEach((p,i)=>{
+    const c=portCable(d.id,i);
+    let conn='—';
+    if(c){ const o=otherEnd(c,d.id); const od=byId(o.d); conn=od.name+' '+od.ports[o.i].name; }
+    const tr=document.createElement('tr');
+    tr.innerHTML=
+      `<td class="pt-name">${p.name}</td>`+
+      `<td><select onchange="uiSetMode(${i},this.value)">`+
+        `<option value="access"${p.mode==='access'?' selected':''}>access</option>`+
+        `<option value="trunk"${p.mode==='trunk'?' selected':''}>trunk</option>`+
+      `</select></td>`+
+      `<td><input type="number" min="1" max="4094" value="${p.vlan}" ${p.mode==='trunk'?'disabled':''} onchange="uiSetVlan(${i},this.value)"></td>`+
+      `<td><input type="number" min="0" max="8" value="${p.ch}" onchange="uiSetCh(${i},this.value)"></td>`+
+      `<td class="pt-conn">${conn}</td>`;
+    tb.appendChild(tr);
+  });
+}
+function echoCli(d,cmds){
+  cmds.forEach(c=>{
+    d.log.push(prompt_(d)+' '+c);
+    const out=cli(d,c);
+    if(out) out.split('\n').forEach(l=>d.log.push(l));
+  });
+  if(selected===d.id) renderTerm();
+}
+function uiSetMode(i,v){
+  const d=byId(selected);
+  echoCli(d,['interface '+d.ports[i].name.toLowerCase(),'switchport mode '+v]);
+  buildPortTable(); render();
+}
+function uiSetVlan(i,v){
+  const d=byId(selected);
+  const n=Math.max(1,Math.min(4094,parseInt(v)||1));
+  echoCli(d,['interface '+d.ports[i].name.toLowerCase(),'switchport access vlan '+n]);
+  buildPortTable(); render();
+}
+function uiSetCh(i,v){
+  const d=byId(selected);
+  const n=Math.max(0,Math.min(8,parseInt(v)||0));
+  echoCli(d,['interface '+d.ports[i].name.toLowerCase(),
+             n>0?('channel-group '+n+' mode on'):'no channel-group']);
+  buildPortTable(); render();
+}
+
+/* ═══ CLI ═════════════════════════════════════════════════════════════════ */
+function prompt_(d){
+  return d.name+(d.cm==='conf'?'(config)':d.cm==='if'?'(config-if)':d.cm==='vlan'?'(config-vlan)':'')+'#';
+}
+function renderTerm(){
+  const d=byId(selected); if(!d) return;
+  const log=document.getElementById('term-log');
+  log.innerHTML=d.log.slice(-14).map(l=>`<div class="tl${l.startsWith('%')?' terr':''}">${l.replace(/</g,'&lt;')}</div>`).join('');
+  log.scrollTop=log.scrollHeight;
+  document.getElementById('term-prompt').textContent=prompt_(d);
+}
+document.getElementById('term-in').addEventListener('keydown',e=>{
+  const d=selected!=null?byId(selected):null;
+  if(!d||d.type!=='switch') return;
+  if(e.key==='Enter'){
+    const line=e.target.value;
+    e.target.value='';
+    if(line.trim()) d.hist.push(line);
+    d.hi=d.hist.length;
+    d.log.push(prompt_(d)+' '+line);
+    const out=cli(d,line);
+    if(out) out.split('\n').forEach(l=>d.log.push(l));
+    renderTerm(); buildPortTable(); render();
+  } else if(e.key==='ArrowUp'){
+    e.preventDefault();
+    if(!d.hist.length) return;
+    d.hi=Math.max(0,d.hi-1);
+    e.target.value=d.hist[d.hi]||'';
+  } else if(e.key==='ArrowDown'){
+    e.preventDefault();
+    if(!d.hist.length) return;
+    d.hi=Math.min(d.hist.length,d.hi+1);
+    e.target.value=d.hi===d.hist.length?'':d.hist[d.hi];
+  } else if(e.key==='Tab'){
+    e.preventDefault();
+    e.target.value=tabComplete(d,e.target.value);
+  }
+});
+
+/* Tab completion over the known keyword tree */
+const KW={
+  configure:{terminal:{}}, enable:{}, end:{}, exit:{},
+  show:{vlan:{brief:{}}, 'running-config':{}},
+  vlan:{}, name:{}, interface:{},
+  switchport:{mode:{access:{},trunk:{}}, access:{vlan:{}}},
+  'channel-group':{},
+  no:{switchport:{access:{vlan:{}}, mode:{}}, 'channel-group':{}},
+};
+function tabComplete(d,val){
+  const endsSpace=/\s$/.test(val);
+  const parts=val.trim().length?val.trim().split(/\s+/):[];
+  const walk=endsSpace?parts:parts.slice(0,-1);
+  let node=KW; const consumed=[];
+  for(const p of walk){
+    const ks=Object.keys(node).filter(k=>k.startsWith(p.toLowerCase()));
+    if(ks.length===1){ node=node[ks[0]]; consumed.push(ks[0]); }
+    else return val;                       /* ambiguous or unknown earlier token */
+  }
+  const partial=endsSpace?'':(parts[parts.length-1]||'').toLowerCase();
+  const cands=Object.keys(node).filter(k=>k.startsWith(partial));
+  if(!cands.length) return val;
+  const head=consumed.join(' ')+(consumed.length?' ':'');
+  if(cands.length===1) return head+cands[0]+' ';
+  let cp=cands[0];
+  cands.forEach(c=>{ while(!c.startsWith(cp)) cp=cp.slice(0,-1); });
+  d.log.push(cands.join('   '));
+  renderTerm();
+  return head+cp;
+}
+
+function parseIf(s){
+  const m=s.match(/(\d+)\s*\/\s*(\d+)\s*$/);
+  if(!m) return -1;
+  const n=+m[2];
+  return (n>=1&&n<=PORTN)?n-1:-1;
+}
+
+function cli(d,line){
+  const t=line.trim().replace(/\s+/g,' ');
+  if(!t) return '';
+  const w=t.toLowerCase().split(' ');
+  const M=(tok,cand)=>tok&&cand.startsWith(tok);
+
+  /* navigation */
+  if(M(w[0],'enable')) { d.cm='exec'; return ''; }
+  if(M(w[0],'configure')||(w[0]==='conf')){ d.cm='conf'; d.ci=null; return ''; }
+  if(M(w[0],'end')){ d.cm='exec'; d.ci=null; d.cv=null; return ''; }
+  if(M(w[0],'exit')){
+    if(d.cm==='if'){ d.cm='conf'; d.ci=null; }
+    else if(d.cm==='vlan'){ d.cm='conf'; d.cv=null; }
+    else d.cm='exec';
+    return '';
+  }
+
+  /* show commands */
+  if(M(w[0],'show')||w[0]==='sh'){
+    if(w[1]&&(M(w[1],'vlan'))){
+      const map={};
+      d.ports.forEach(p=>{ if(p.mode==='access'){ (map[p.vlan]=map[p.vlan]||[]).push(p.name);} });
+      const vl=[...new Set([...d.vlans,...Object.keys(map).map(Number)])].sort((a,b)=>a-b);
+      let out='VLAN  Name              Ports';
+      vl.forEach(v=>{
+        const nm=d.vlanNames[v]||(v===1?'default':'VLAN'+String(v).padStart(4,'0'));
+        out+='\n'+String(v).padEnd(6)+nm.padEnd(18)+(map[v]?map[v].join(', '):'');
+      });
+      return out;
+    }
+    if(w[1]&&(M(w[1],'running-config')||M(w[1],'run'))){
+      let out='';
+      d.ports.forEach(p=>{
+        out+=`interface ${p.name}\n switchport mode ${p.mode}\n`;
+        if(p.mode==='access') out+=` switchport access vlan ${p.vlan}\n`;
+        if(p.ch>0) out+=` channel-group ${p.ch} mode on\n`;
+      });
+      return out.trimEnd();
+    }
+    return '% supported: show vlan brief, show run';
+  }
+
+  /* vlan creation & config-vlan mode */
+  if(M(w[0],'vlan')){
+    if(!(w[1]&&/^\d+$/.test(w[1]))) return '% usage: vlan <n>';
+    d.vlans.add(+w[1]);
+    d.cv=+w[1]; d.cm='vlan';
+    return '';
+  }
+
+  /* vlan naming (config-vlan mode) */
+  if(M(w[0],'name')){
+    if(d.cm!=='vlan'||d.cv==null)
+      return '% name is only valid in VLAN config mode — enter "vlan <n>" first';
+    const rawName=line.trim().replace(/\s+/g,' ').split(' ').slice(1).join(' ');
+    if(!rawName) return '% usage: name <vlan-name>';
+    d.vlanNames[d.cv]=rawName;
+    return '';
+  }
+
+  /* interface selection */
+  if(M(w[0],'interface')||w[0]==='int'){
+    const p=parseIf(w.slice(1).join(''));
+    if(p<0) return '% invalid interface — this switch has Fa0/1 to Fa0/'+PORTN;
+    d.ci=p; d.cm='if'; d.cv=null;
+    return '';
+  }
+
+  /* no forms */
+  if(w[0]==='no'){
+    if(d.ci==null) return '% select an interface first (e.g. int fa0/1)';
+    const port=d.ports[d.ci];
+    if(M(w[1],'switchport')&&w[2]&&M(w[2],'access')){ port.vlan=1; return ''; }
+    if(M(w[1],'switchport')&&w[2]&&M(w[2],'mode')){ port.mode='access'; return ''; }
+    if(M(w[1],'channel-group')||w[1]==='channel'){ port.ch=0; return ''; }
+    return '% supported: no switchport access vlan, no switchport mode, no channel-group';
+  }
+
+  /* switchport commands */
+  if(M(w[0],'switchport')||w[0]==='sw'){
+    if(d.ci==null) return '% select an interface first (e.g. int fa0/1)';
+    const port=d.ports[d.ci];
+    if(w[1]&&M(w[1],'mode')){
+      if(w[2]&&M(w[2],'access')){ port.mode='access'; return ''; }
+      if(w[2]&&M(w[2],'trunk')) { port.mode='trunk';  return ''; }
+      return '% usage: switchport mode access|trunk';
+    }
+    if(w[1]&&M(w[1],'access')){
+      if(w[2]&&M(w[2],'vlan')&&w[3]&&/^\d+$/.test(w[3])){
+        const vn=+w[3];
+        const out=[];
+        if(!d.vlans.has(vn)){
+          out.push('% Access VLAN does not exist. Creating vlan '+vn);
+          out.push('%  Reminder: configure it with a name — "vlan '+vn+'" then "name <name>"');
+        }
+        d.vlans.add(vn);
+        port.vlan=vn;
+        if(port.mode!=='access') out.push('% note: port is not in access mode yet');
+        return out.join('\n');
+      }
+      return '% usage: switchport access vlan <n>';
+    }
+    if(w[1]&&M(w[1],'trunk')) return '% trunk sub-options are not needed in this lab';
+    return '% usage: switchport mode ... | switchport access vlan <n>';
+  }
+
+  /* channel-group */
+  if(M(w[0],'channel-group')||w[0]==='channel'||w[0]==='ch'){
+    if(d.ci==null) return '% select an interface first (e.g. int fa0/1)';
+    if(w[1]&&/^\d+$/.test(w[1])){
+      d.ports[d.ci].ch=+w[1];
+      return 'Creating a port-channel interface Port-channel '+w[1];
+    }
+    return '% usage: channel-group <n> mode on';
+  }
+
+  return '% unknown command: '+t;
+}
+
+/* ═══ Reachability ════════════════════════════════════════════════════════ */
+function pcUplink(pc){
+  const c=portCable(pc.id,0);
+  if(!c) return null;
+  const o=otherEnd(c,pc.id);
+  const sw=byId(o.d);
+  if(sw.type!=='switch') return null;
+  return {sw, port:sw.ports[o.i]};
+}
+
+function linkPasses(c,vlan){
+  const A=byId(c.a.d), B=byId(c.b.d);
+  if(A.type!=='switch'||B.type!=='switch') return false;
+  const pa=A.ports[c.a.i], pb=B.ports[c.b.i];
+  if(pa.mode==='trunk'&&pb.mode==='trunk') return true;
+  if(pa.mode==='access'&&pb.mode==='access'&&pa.vlan===vlan&&pb.vlan===vlan) return true;
+  return false;
+}
+
+function reach(pcA,pcB){
+  const upA=pcUplink(pcA), upB=pcUplink(pcB);
+  if(!upA||!upB) return false;
+  if(upA.port.mode!=='access'||upB.port.mode!=='access') return false;
+  const vlan=upA.port.vlan;
+  if(upB.port.vlan!==vlan) return false;
+  /* BFS across switches in this vlan */
+  const seen=new Set([upA.sw.id]);
+  const queue=[upA.sw.id];
+  while(queue.length){
+    const cur=queue.shift();
+    if(cur===upB.sw.id) return true;
+    cables.forEach(c=>{
+      if(c.a.d!==cur&&c.b.d!==cur) return;
+      if(!linkPasses(c,vlan)) return;
+      const nxt=c.a.d===cur?c.b.d:c.a.d;
+      if(!seen.has(nxt)){ seen.add(nxt); queue.push(nxt); }
+    });
+  }
+  return false;
+}
+
+/* ═══ IP helpers ══════════════════════════════════════════════════════════ */
+function isValidIP(ip){
+  const p=ip.split('.');
+  return p.length===4&&p.every(s=>/^\d+$/.test(s)&&+s>=0&&+s<=255);
+}
+function ipInt(s){ return s.split('.').reduce((a,o)=>((a<<8)>>>0)+(+o),0)>>>0; }
+function sameSubnet(a,b,pfx){
+  const m=pfx===0?0:(0xFFFFFFFF<<(32-pfx))>>>0;
+  return ((ipInt(a)&m)>>>0)===((ipInt(b)&m)>>>0);
+}
+function ipReach(A,B){
+  if(!A.ip||!B.ip||!isValidIP(A.ip)||!isValidIP(B.ip)) return false;
+  if(!sameSubnet(A.ip,B.ip,24)) return false;
+  return reach(A,B);
+}
+
+/* ═══ STP computation ═════════════════════════════════════════════════════ */
+function bid(d){ return [d.priority, d.mac]; }
+function bidLess(a,b){ return a.priority!==b.priority ? a.priority<b.priority : a.mac<b.mac; }
+
+function computeSTP(){
+  const sws=devices.filter(d=>d.type==='switch');
+  if(sws.length<2) return null;
+  const root=sws.reduce((r,s)=>bidLess(s,r)?s:r);
+  /* Dijkstra: cost 19 per link */
+  const dist={}; sws.forEach(s=>dist[s.id]=Infinity); dist[root.id]=0;
+  const todo=[...sws];
+  while(todo.length){
+    todo.sort((a,b)=>dist[a.id]-dist[b.id]);
+    const cur=todo.shift();
+    if(dist[cur.id]===Infinity) break;
+    cables.forEach(c=>{
+      const A=byId(c.a.d),B=byId(c.b.d);
+      if(A.type!=='switch'||B.type!=='switch')return;
+      let nb=null;
+      if(A===cur)nb=B; else if(B===cur)nb=A;
+      if(!nb)return;
+      if(dist[cur.id]+19<dist[nb.id]) dist[nb.id]=dist[cur.id]+19;
+    });
+  }
+  /* root port per non-root switch */
+  const rootLink={};
+  sws.forEach(s=>{
+    if(s===root) return;
+    let best=null;
+    cables.forEach(c=>{
+      const A=byId(c.a.d),B=byId(c.b.d);
+      if(A.type!=='switch'||B.type!=='switch')return;
+      let nb=null,myEnd=null;
+      if(A===s){nb=B;myEnd=c.a;} else if(B===s){nb=A;myEnd=c.b;}
+      if(!nb)return;
+      const cost=dist[nb.id]+19;
+      if(!best||cost<best.cost||(cost===best.cost&&bidLess(nb,best.nb)))
+        best={cable:c,cost,nb,myEnd};
+    });
+    if(best) rootLink[s.id]=best.cable.id;
+  });
+  /* blocked ports: non-tree segments */
+  const blocked=[];
+  cables.forEach(c=>{
+    const A=byId(c.a.d),B=byId(c.b.d);
+    if(A.type!=='switch'||B.type!=='switch')return;
+    if(rootLink[A.id]===c.id||rootLink[B.id]===c.id)return;
+    if(A===root||B===root)return; /* root's segments are all designated + other end is root port normally; but if redundant direct link to root existed it'd be root port anyway */
+    /* designated end = lower (dist, bid); other end blocks */
+    let des, blk;
+    if(dist[A.id]!==dist[B.id]) { des = dist[A.id]<dist[B.id]?c.a:c.b; }
+    else des = bidLess(A,B)?c.a:c.b;
+    blk = des===c.a?c.b:c.a;
+    blocked.push({cable:c, end:blk});
+  });
+  return {root, dist, rootLink, blocked};
+}
+
+/* ═══ Scenarios ═══════════════════════════════════════════════════════════ */
+function clearMarks(){
+  devices.forEach(d=>{ d._mark=null; d.ports.forEach(p=>p._mark=null); });
+}
+function resetTopo(){
+  devices=[];cables=[];nid=1;cid=1;swCount=0;pcCount=0;
+  pending=null;selected=null;qclick=null;clearMarks();
+  document.getElementById('cfg').style.display='none';
+}
+
+function newScenario(){
+  resetTopo(); done=false;
+  const pool=['vlan','trunk','ether','stp-root','stp-block','ip'];
+  let t;
+  if(topic==='random') t=pick(pool);
+  else if(topic==='stp') t=pick(['stp-root','stp-block']);
+  else t=topic;
+
+  const v1=pick([10,20,30]), v2=pick([40,50,60]);
+
+  if(t==='vlan'){
+    const sw=addSwitch(320,30);
+    const pcs=[addPC(60,210),addPC(240,210),addPC(420,210),addPC(600,210)];
+    scenario={type:t,
+      title:'VLAN Assignment',
+      instr:`Cable all four PCs to SW1. Put PC1 and PC3 in VLAN ${v1}, and PC2 and PC4 in VLAN ${v2}.`,
+      reqs:[
+        {desc:'All four PCs are cabled to SW1',
+          test(){ const miss=pcs.filter(p=>!cableBetween(p,sw)); return miss.length?
+            {ok:false,reason:miss.map(p=>p.name).join(', ')+' not cabled to SW1'}:{ok:true}; }},
+        {desc:`PC1 and PC3 are on access ports in VLAN ${v1}`,
+          test(){ return vlanReq([pcs[0],pcs[2]],v1); }},
+        {desc:`PC2 and PC4 are on access ports in VLAN ${v2}`,
+          test(){ return vlanReq([pcs[1],pcs[3]],v2); }},
+        {desc:'PC1 can reach PC3, and PC2 can reach PC4',
+          test(){ if(!reach(pcs[0],pcs[2]))return{ok:false,reason:'PC1 cannot reach PC3 — check cabling and VLANs'};
+                  if(!reach(pcs[1],pcs[3]))return{ok:false,reason:'PC2 cannot reach PC4 — check cabling and VLANs'};
+                  return{ok:true}; }},
+        {desc:'PC1 canNOT reach PC2 (separate VLANs)',
+          test(){ return reach(pcs[0],pcs[1])?
+            {ok:false,reason:'PC1 can still reach PC2 — they must be isolated in different VLANs'}:{ok:true}; }},
+      ]};
+  }
+  else if(t==='trunk'){
+    const s1=addSwitch(120,30), s2=addSwitch(500,30);
+    const p1=addPC(60,210),p2=addPC(230,210),p3=addPC(450,210),p4=addPC(620,210);
+    addCable(p1.id,0,s1.id,0,true); addCable(p2.id,0,s1.id,1,true);
+    addCable(p3.id,0,s2.id,0,true); addCable(p4.id,0,s2.id,1,true);
+    scenario={type:t,
+      title:'Inter-Switch Trunking',
+      instr:`PCs are pre-cabled. Put PC1 &amp; PC3 in VLAN ${v1}, PC2 &amp; PC4 in VLAN ${v2}, then cable SW1 to SW2 and make that link a trunk so both VLANs cross it.`,
+      reqs:[
+        {desc:'A cable connects SW1 and SW2',
+          test(){ return cableBetween(s1,s2)?{ok:true}:{ok:false,reason:'No link between SW1 and SW2 — cable two free ports together'}; }},
+        {desc:'Both ends of the SW1–SW2 link are in trunk mode',
+          test(){ const c=cableBetween(s1,s2); if(!c)return{ok:false,reason:'Link missing'};
+            const pa=byId(c.a.d).ports[c.a.i], pb=byId(c.b.d).ports[c.b.i];
+            const bad=[];
+            if(pa.mode!=='trunk')bad.push(byId(c.a.d).name+' '+pa.name);
+            if(pb.mode!=='trunk')bad.push(byId(c.b.d).name+' '+pb.name);
+            return bad.length?{ok:false,reason:bad.join(' and ')+' not in trunk mode'}:{ok:true}; }},
+        {desc:`PC1 and PC3 are in VLAN ${v1}`, test(){ return vlanReq([p1,p3],v1); }},
+        {desc:`PC2 and PC4 are in VLAN ${v2}`, test(){ return vlanReq([p2,p4],v2); }},
+        {desc:'PC1\u2194PC3 and PC2\u2194PC4 can communicate across the trunk',
+          test(){ if(!reach(p1,p3))return{ok:false,reason:'PC1 cannot reach PC3 across the switches'};
+                  if(!reach(p2,p4))return{ok:false,reason:'PC2 cannot reach PC4 across the switches'};
+                  return{ok:true}; }},
+        {desc:'PC1 canNOT reach PC4 (different VLANs stay separated)',
+          test(){ return reach(p1,p4)?
+            {ok:false,reason:'PC1 can reach PC4 — VLAN separation is broken'}:{ok:true}; }},
+      ]};
+  }
+  else if(t==='ether'){
+    const s1=addSwitch(140,90), s2=addSwitch(480,90);
+    addCable(s1.id,2,s2.id,2,true);
+    addCable(s1.id,3,s2.id,3,true);
+    scenario={type:t,
+      title:'EtherChannel Bundle',
+      instr:'Two parallel links already join SW1 and SW2. Bundle them into EtherChannel group 1 on both switches, and set all four ports to trunk mode.',
+      reqs:[
+        {desc:'SW1 Fa0/3 and Fa0/4 are in the same channel-group (1)',
+          test(){ return chReq(s1); }},
+        {desc:'SW2 Fa0/3 and Fa0/4 are in the same channel-group (1)',
+          test(){ return chReq(s2); }},
+        {desc:'All four EtherChannel member ports are in trunk mode',
+          test(){ const bad=[];
+            [s1,s2].forEach(s=>[2,3].forEach(i=>{ if(s.ports[i].mode!=='trunk')bad.push(s.name+' '+s.ports[i].name); }));
+            return bad.length?{ok:false,reason:bad.join(', ')+' not trunking'}:{ok:true}; }},
+      ]};
+  }
+  else if(t==='ip'){
+    const s1=addSwitch(120,30), s2=addSwitch(500,30);
+    const net=v=>`192.168.${v}.`;
+    const p1=addPC(60,215,{ip:net(v1)+'11'});
+    const p2=addPC(230,215,{ip:net(v2)+'21'});
+    const p3=addPC(450,215,{ip:net(v1)+'12'});
+    const p4=addPC(620,215,{ip:null});
+    addCable(p1.id,0,s1.id,0,true); addCable(p2.id,0,s1.id,1,true);
+    addCable(p3.id,0,s2.id,0,true); addCable(p4.id,0,s2.id,1,true);
+    scenario={type:t,
+      title:'IP Addressing &amp; VLANs (Hard)',
+      instr:`Each PC shows its IP. <strong>PC4 has no address</strong> — click PC4 and assign it a free host IP in 192.168.${v2}.0/24. `+
+        `Then place PCs that share a subnet into the same VLAN (VLAN ${v1} for 192.168.${v1}.x, VLAN ${v2} for 192.168.${v2}.x), `+
+        `cable SW1 to SW2 and trunk the link.`,
+      reqs:[
+        {desc:`PC4 has a valid, unused host IP in 192.168.${v2}.0/24`,
+          test(){
+            if(!p4.ip) return{ok:false,reason:'PC4 has no IP — click PC4 to assign one'};
+            if(!isValidIP(p4.ip)) return{ok:false,reason:'PC4\u2019s IP is not a valid IPv4 address'};
+            const o=p4.ip.split('.').map(Number);
+            if(!(o[0]===192&&o[1]===168&&o[2]===v2))
+              return{ok:false,reason:`PC4\u2019s IP ${p4.ip} is not inside 192.168.${v2}.0/24`};
+            if(o[3]<1||o[3]>254)
+              return{ok:false,reason:`.${o[3]} is not a usable host — .0 is the network and .255 the broadcast`};
+            if(p4.ip===p2.ip)
+              return{ok:false,reason:'PC4 duplicates PC2\u2019s address — pick a different host number'};
+            return{ok:true};
+          }},
+        {desc:'A cable connects SW1 and SW2, trunked on both ends',
+          test(){
+            const c=cableBetween(s1,s2);
+            if(!c) return{ok:false,reason:'No link between SW1 and SW2'};
+            const pa=byId(c.a.d).ports[c.a.i], pb=byId(c.b.d).ports[c.b.i];
+            const bad=[];
+            if(pa.mode!=='trunk')bad.push(byId(c.a.d).name+' '+pa.name);
+            if(pb.mode!=='trunk')bad.push(byId(c.b.d).name+' '+pb.name);
+            return bad.length?{ok:false,reason:bad.join(' and ')+' not in trunk mode'}:{ok:true};
+          }},
+        {desc:`PC1 and PC3 (192.168.${v1}.x) are in VLAN ${v1}`, test(){ return vlanReq([p1,p3],v1); }},
+        {desc:`PC2 and PC4 (192.168.${v2}.x) are in VLAN ${v2}`, test(){ return vlanReq([p2,p4],v2); }},
+        {desc:'Same-subnet PCs can ping each other (L2 + L3)',
+          test(){
+            if(!ipReach(p1,p3))return{ok:false,reason:'PC1 cannot reach PC3 — check VLANs, the trunk, and IPs'};
+            if(!ipReach(p2,p4))return{ok:false,reason:'PC2 cannot reach PC4 — check VLANs, the trunk, and PC4\u2019s IP'};
+            return{ok:true};
+          }},
+        {desc:'PC1 canNOT reach PC2 (subnets stay isolated at Layer 2)',
+          test(){ return reach(p1,p2)?
+            {ok:false,reason:'PC1 can still reach PC2 at Layer 2 — their VLANs must differ'}:{ok:true}; }},
+      ]};
+  }
+  else { /* stp-root or stp-block */
+    let s1,s2,s3;
+    if(ri(0,1)===1){
+      /* keyword priorities: spanning-tree root primary / secondary / default */
+      const roles=['root primary','root secondary','default'].sort(()=>Math.random()-.5);
+      const val=r=>r==='root primary'?24576:r==='root secondary'?28672:32768;
+      s1=addSwitch(110,30,{priority:val(roles[0]),priLabel:roles[0]});
+      s2=addSwitch(510,30,{priority:val(roles[1]),priLabel:roles[1]});
+      s3=addSwitch(310,200,{priority:val(roles[2]),priLabel:roles[2]});
+    } else {
+      const pris=pick([[4096,32768,32768],[8192,16384,32768],[4096,8192,32768],[32768,32768,32768]]);
+      const shuffled=[...pris].sort(()=>Math.random()-.5);
+      s1=addSwitch(110,30,{priority:shuffled[0]});
+      s2=addSwitch(510,30,{priority:shuffled[1]});
+      s3=addSwitch(310,200,{priority:shuffled[2]});
+    }
+    addCable(s1.id,0,s2.id,0,true);
+    addCable(s2.id,1,s3.id,0,true);
+    addCable(s1.id,1,s3.id,1,true);
+    const stp=computeSTP();
+    if(t==='stp-root'){
+      qclick='root';
+      scenario={type:t,title:'STP — Root Bridge Election',
+        instr:'Three switches form a loop. Using the priorities and MAC addresses shown, <strong>click the switch</strong> that will be elected the STP root bridge.',
+        stp, reqs:[]};
+    } else {
+      qclick='port';
+      scenario={type:t,title:'STP — Blocking Port',
+        instr:'Three switches form a loop. STP must block exactly one port to break it. Work out the root bridge and port roles, then <strong>click the port</strong> that will go into blocking state.',
+        stp, reqs:[]};
+    }
+  }
+
+  document.getElementById('sc-title').textContent=scenario.title;
+  document.getElementById('sc-instr').innerHTML=scenario.instr;
+  renderReqs(null);
+  document.getElementById('chkbtn').style.display=(qclick?'none':'');
+  document.getElementById('skipbtn').style.display='';
+  document.getElementById('nxtbtn').style.display='none';
+  const fb=document.getElementById('fb'); fb.className='fbanner'; fb.style.display='none';
+  setHint(qclick==='root'?'Click a switch to answer.'
+        : qclick==='port'?'Click a port (dot) on a switch to answer.'
+        : 'Click a port, then a port on another device, to run a cable. Click a switch body to configure it.');
+  document.getElementById('sc').textContent=score;
+  document.getElementById('rnd').textContent=rnd;
+  document.getElementById('str').textContent=streak;
+  render();
+}
+
+/* requirement helpers */
+function vlanReq(pcs,v){
+  const bad=[];
+  pcs.forEach(pc=>{
+    const up=pcUplink(pc);
+    if(!up){ bad.push(pc.name+' not cabled'); return; }
+    if(up.port.mode!=='access'){ bad.push(pc.name+"'s switch port is not access mode"); return; }
+    if(up.port.vlan!==v) bad.push(`${pc.name} is in VLAN ${up.port.vlan}, expected ${v}`);
+  });
+  return bad.length?{ok:false,reason:bad.join('; ')}:{ok:true};
+}
+function chReq(s){
+  const a=s.ports[2].ch, b=s.ports[3].ch;
+  if(a===0&&b===0)return{ok:false,reason:s.name+': neither port has a channel-group'};
+  if(a===0||b===0)return{ok:false,reason:s.name+': only one port is in a channel-group'};
+  if(a!==b)return{ok:false,reason:`${s.name}: ports are in different groups (${a} vs ${b})`};
+  return{ok:true};
+}
+
+/* ═══ Requirements UI ═════════════════════════════════════════════════════ */
+function renderReqs(results){
+  const el=document.getElementById('req-list');
+  if(!scenario||!scenario.reqs.length){ el.innerHTML=''; return; }
+  el.innerHTML=scenario.reqs.map((r,i)=>{
+    const res=results?results[i]:null;
+    const cls=res?(res.ok?'ok':'bad'):'';
+    const icon=res?(res.ok?'\u2713':'\u2717'):'\u2022';
+    const reason=(res&&!res.ok&&res.reason)?`<div class="req-reason">${res.reason}</div>`:'';
+    return `<div class="req-row ${cls}"><span class="req-ic">${icon}</span><div><div>${r.desc}</div>${reason}</div></div>`;
+  }).join('');
+}
+
+/* ═══ Checking / answering ════════════════════════════════════════════════ */
+function showFb(msg,type){
+  const fb=document.getElementById('fb');
+  fb.style.display='block'; fb.className='fbanner '+type; fb.innerHTML=msg;
+}
+function finish(){
+  rnd++;
+  document.getElementById('sc').textContent=score;
+  document.getElementById('str').textContent=streak;
+  document.getElementById('rnd').textContent=rnd;
+  document.getElementById('nxtbtn').style.display='';
+  document.getElementById('chkbtn').style.display='none';
+  document.getElementById('skipbtn').style.display='none';
+}
+
+function checkAll(){
+  if(done||!scenario||qclick)return;
+  const results=scenario.reqs.map(r=>r.test());
+  renderReqs(results);
+  const met=results.filter(r=>r.ok).length, total=results.length;
+  if(met===total){
+    done=true;
+    const pts=met+3;
+    score+=pts; streak++;
+    showFb(`All ${total} requirements met! +${pts} pts (+3 bonus). Streak: ${streak}`,'ok');
+    finish();
+  } else {
+    /* not done — let them keep fixing */
+    showFb(`${met}/${total} requirements met — the \u2717 rows explain what to fix. Adjust and check again.`,
+      met>=Math.ceil(total*.6)?'warn':'err');
+  }
+}
+
+function skipQ(){
+  if(done)return;
+  done=true; streak=0;
+  if(qclick&&scenario.stp){
+    revealSTP();
+    showFb('Answer revealed. No points.','warn');
+  } else {
+    const results=scenario.reqs.map(r=>r.test());
+    renderReqs(results);
+    showFb('Skipped — unmet requirements are marked with \u2717 and a reason. No points.','warn');
+  }
+  finish();
+}
+
+function getPriDesc(s){ return s.priLabel?`${s.priLabel} = ${s.priority}`:String(s.priority); }
+
+function answerRoot(did){
+  if(done)return;
+  done=true;
+  const stp=scenario.stp;
+  const d=byId(did);
+  const correct=stp.root;
+  d._mark = d===correct?'dev-ok':'dev-bad';
+  correct._mark='dev-ok';
+  const pris=devices.filter(x=>x.type==='switch').map(s=>`${s.name}=${getPriDesc(s)}`).join(', ');
+  const tie=devices.filter(x=>x.type==='switch'&&x.priority===correct.priority).length>1;
+  const why=tie
+    ? `Priorities: ${pris}. ${correct.name} wins the tie on the <strong>lowest MAC address</strong> (${correct.mac}).`
+    : `Priorities: ${pris}. ${correct.name} has the <strong>lowest priority</strong> (${getPriDesc(correct)}), so it becomes root.`;
+  if(d===correct){ score+=3; streak++; showFb(`Correct! ${correct.name} is the root bridge. +3 pts. ${why}`,'ok'); }
+  else { streak=0; showFb(`Incorrect — the root is <strong>${correct.name}</strong> (highlighted green). ${why}`,'err'); }
+  render(); finish();
+}
+
+function answerPort(did,pi){
+  if(done)return;
+  done=true;
+  const stp=scenario.stp;
+  const blk=stp.blocked[0];
+  const cd=byId(did), cp=cd.ports[pi];
+  const bd=byId(blk.end.d), bp=bd.ports[blk.end.i];
+  const correct=(blk.end.d===did&&blk.end.i===pi);
+  cp._mark = correct?'p-ok':'p-bad';
+  bp._mark='p-ok';
+  stp.root._mark='dev-root';
+  const A=byId(blk.cable.a.d), B=byId(blk.cable.b.d);
+  const other = bd===A?B:A;
+  const why=`Root: <strong>${stp.root.name}</strong>. The ${A.name}\u2013${B.name} link is the redundant segment. `+
+    `Both switches are one hop (cost 19) from the root, so the tie falls to bridge ID: `+
+    `${other.name} (lower bridge ID: ${getPriDesc(other)}) becomes designated, and <strong>${bd.name} ${bp.name}</strong> goes into blocking.`;
+  if(correct){ score+=3; streak++; showFb(`Correct! ${bd.name} ${bp.name} blocks. +3 pts. ${why}`,'ok'); }
+  else { streak=0; showFb(`Incorrect — the blocking port is <strong>${bd.name} ${bp.name}</strong> (green). ${why}`,'err'); }
+  render(); finish();
+}
+
+function revealSTP(){
+  const stp=scenario.stp;
+  stp.root._mark='dev-ok';
+  if(scenario.type==='stp-block'&&stp.blocked.length){
+    const e=stp.blocked[0].end;
+    byId(e.d).ports[e.i]._mark='p-ok';
+  }
+  render();
+}
+
+function nextQ(){ if(gmode==='challenge') newScenario(); }
+function resetGame(){ score=0;rnd=1;streak=0; if(gmode==='challenge')newScenario(); else initSandbox(); }
+
+/* ═══ Mode / topic ════════════════════════════════════════════════════════ */
+function setGMode(m,btn){
+  gmode=m;
+  document.querySelectorAll('#gmode-row .cbtn').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  document.getElementById('palette').style.display=m==='sandbox'?'':'none';
+  document.getElementById('topic-row').style.display=m==='sandbox'?'none':'';
+  if(m==='sandbox') initSandbox(); else newScenario();
+}
+function setTopic(t,btn){
+  topic=t;
+  document.querySelectorAll('#topic-row .cbtn').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  newScenario();
+}
+
+function initSandbox(){
+  resetTopo(); done=false; scenario=null;
+  document.getElementById('sc-title').textContent='Sandbox';
+  document.getElementById('sc-instr').innerHTML='Free build mode — add switches and PCs, cable them up, and configure anything. Enable the <strong>Topology Analyzer</strong> in Options to inspect STP roles and reachability.';
+  document.getElementById('req-list').innerHTML='';
+  document.getElementById('chkbtn').style.display='none';
+  document.getElementById('skipbtn').style.display='none';
+  document.getElementById('nxtbtn').style.display='none';
+  const fb=document.getElementById('fb'); fb.className='fbanner'; fb.style.display='none';
+  setHint('Add devices from the palette above the canvas.');
+  render();
+}
+function sbAdd(type){
+  if(gmode!=='sandbox')return;
+  const x=ri(30,560), y=ri(20,200);
+  if(type==='switch')addSwitch(x,y); else addPC(x,y);
+  render();
+}
+function sbClear(){ if(gmode!=='sandbox')return; resetTopo(); render(); setHint('Canvas cleared.'); }
+
+/* ═══ Analyzer ════════════════════════════════════════════════════════════ */
+function runAnalyzer(){
+  const out=document.getElementById('az-out');
+  let html='';
+  const stp=computeSTP();
+  if(stp){
+    html+=`<div class="az-sec">STP</div>`;
+    html+=`<div class="az-line">Root bridge: <strong>${stp.root.name}</strong> (Pri ${stp.root.priority}, ${stp.root.mac})</div>`;
+    if(stp.blocked.length){
+      stp.blocked.forEach(b=>{
+        const d=byId(b.end.d);
+        html+=`<div class="az-line">Blocking: <strong>${d.name} ${d.ports[b.end.i].name}</strong></div>`;
+      });
+    } else html+=`<div class="az-line">No blocked ports (no redundant switch links).</div>`;
+  } else html+=`<div class="az-line">Add at least two connected switches for STP analysis.</div>`;
+
+  const pcs=devices.filter(d=>d.type==='pc');
+  if(pcs.length>=2){
+    html+=`<div class="az-sec">PC Reachability</div>`;
+    for(let i=0;i<pcs.length;i++)for(let j=i+1;j<pcs.length;j++){
+      const l2=reach(pcs[i],pcs[j]);
+      let label, cls;
+      if(!l2){ label='no path'; cls='az-no'; }
+      else if(pcs[i].ip&&pcs[j].ip){
+        const l3=ipReach(pcs[i],pcs[j]);
+        label=l3?'reachable (L2+L3)':'L2 only — different subnets';
+        cls=l3?'az-ok':'az-no';
+      } else { label='reachable (L2)'; cls='az-ok'; }
+      html+=`<div class="az-line">${pcs[i].name} \u2194 ${pcs[j].name}: <strong class="${cls}">${label}</strong></div>`;
+    }
+  }
+  out.innerHTML=html;
+}
+
+/* ═══ Options ═════════════════════════════════════════════════════════════ */
+function toggleOpts(){
+  const m=document.getElementById('opt-menu');
+  const b=document.getElementById('opt-btn');
+  m.classList.toggle('open');
+  b.classList.toggle('open',m.classList.contains('open'));
+}
+function toggleTool(id){
+  const cb=document.getElementById('tog-'+id);
+  cb.checked=!cb.checked;
+  applyTools();
+}
+function applyTools(){
+  const tools=['vlanref','stpref','cmdref','analyzer'];
+  let any=false;
+  tools.forEach(t=>{
+    const on=document.getElementById('tog-'+t).checked;
+    document.getElementById('t-'+t).style.display=on?'':'none';
+    if(on)any=true;
+  });
+  document.getElementById('toolsec').style.display=any?'':'none';
+}
+document.addEventListener('click',e=>{
+  const w=document.getElementById('opt-btn').closest('.opt-wrap');
+  if(!w.contains(e.target)){
+    document.getElementById('opt-menu').classList.remove('open');
+    document.getElementById('opt-btn').classList.remove('open');
+  }
+});
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){
+    document.getElementById('opt-menu').classList.remove('open');
+    document.getElementById('opt-btn').classList.remove('open');
+  }
+});
+
+/* ═══ Init ════════════════════════════════════════════════════════════════ */
+newScenario();
+</script>
+</body>
+</html>
