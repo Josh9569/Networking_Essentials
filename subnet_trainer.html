@@ -163,10 +163,7 @@
       </div>
     </div>
 
-  </div>
-</div>
-
-<script>
+  </div></div><script>
 /* ─── Constants ─────────────────────── */
 const BV  = [128,64,32,16,8,4,2,1];
 const BV2 = [2,4,8,16,32,64,128,256]; 
@@ -243,7 +240,7 @@ function getFields(){
     {id:'bc',   key:'bc',   label:'Broadcast Address',        placeholder:'e.g. 192.168.1.127'},
     {id:'fh',   key:'fh',   label:'First Usable Host',        placeholder:'e.g. 192.168.1.97'},
     {id:'lh',   key:'lh',   label:'Last Usable Host',         placeholder:'e.g. 192.168.1.126'},
-    {id:'hosts',key:'hosts',label:'Usable Hosts per Subnet',    placeholder:'e.g. 30'},
+    {id:'hosts',key:'hosts',label:'Usable Hosts / Subnet',    placeholder:'e.g. 30'},
     {id:'subs', key:'subs', label:'Subnets (from class default)',placeholder:'e.g. 8'}
   );
   return f;
@@ -297,6 +294,14 @@ function renderGrid(){
 }
 
 /* ─── Custom IP Setup ────────────────── */
+function randCustIP(){
+  let o1; do{ o1=ri(1,223); }while(o1===127);
+  document.getElementById('c-ip').value = `${o1}.${ri(0,255)}.${ri(0,255)}.${ri(1,254)}`;
+}
+function randCustCidr(){
+  document.getElementById('c-cidr').value = ri(8,30);
+}
+
 function startCustom() {
   const ip = document.getElementById('c-ip').value.trim();
   const cidr = parseInt(document.getElementById('c-cidr').value);
@@ -346,7 +351,9 @@ function loadQ(){
     done = true; 
     document.getElementById('ipd').innerHTML = `
       <input id="c-ip" placeholder="192.168.1.50" class="cust-in" autocomplete="off">
+      <button class="rand-btn" title="Random IP address" onclick="randCustIP()">&#127922; IP</button>
       <span class="cidrbadge" style="display:flex; align-items:center; gap:2px;">/<input id="c-cidr" type="number" min="1" max="30" placeholder="24" class="cust-in-c"></span>
+      <button class="rand-btn" title="Random CIDR" onclick="randCustCidr()">&#127922; CIDR</button>
       <button class="btn btn-p" style="padding:6px 14px; font-size:14px" onclick="startCustom()">Set IP</button>
     `;
     document.getElementById('clsi').textContent = 'Enter a specific IP address and CIDR, then click Set IP.';
@@ -638,7 +645,7 @@ function toggleMnStats(){
   btn.textContent=hiding?'Show':'Hide';
 }
 
-function selectMnCol(i) {
+function selectMnCol(i){
   BV.forEach((_,idx)=>{
     // Update Row 0 (Binary 1s and 0s)
     const c0 = document.getElementById('mn-r0-'+idx);
