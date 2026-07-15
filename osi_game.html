@@ -22,12 +22,12 @@
     </div>
   </div>
 
-  <div class="sel-row">
+  <div class="sel-row" id="model-row">
     <span>Model:</span>
     <button class="cbtn on" onclick="setModel('osi',this)">OSI (7 layers)</button>
     <button class="cbtn" onclick="setModel('tcpip',this)">TCP/IP (4 layers)</button>
   </div>
-  <div class="sel-row">
+  <div class="sel-row" id="mode-row">
     <span>Mode:</span>
     <button class="cbtn on" onclick="setQType('random',this)">Random</button>
     <button class="cbtn" onclick="setQType('layer',this)">Name &rarr; Layer</button>
@@ -281,13 +281,13 @@ let score=0, rnd=1, streak=0;
 
 function setModel(m,btn){
   model=m;
-  document.querySelectorAll('.sel-row:first-of-type .cbtn').forEach(b=>b.classList.remove('on'));
+  document.querySelectorAll('#model-row .cbtn').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
   if(!answered) nextQ();
 }
 function setQType(t,btn){
   qtype=t;
-  document.querySelectorAll('.sel-row:last-of-type .cbtn').forEach(b=>b.classList.remove('on'));
+  document.querySelectorAll('#mode-row .cbtn').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
   if(!answered) nextQ();
 }

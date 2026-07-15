@@ -213,18 +213,20 @@ sup  { font-size: .65em; vertical-align: super; }
 /* body override — applied via .index-page on <body> */
 .index-page { padding: 3rem 1.5rem; }
 
-.site-header { margin-bottom: 3rem; }
+.site-header { margin-bottom: 3rem; display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
+.gh-link     { display: inline-flex; align-items: center; gap: .5rem; color: var(--text-s); text-decoration: none; border: 1px solid var(--border); border-radius: 8px; padding: .55rem .85rem; background: var(--surface); font-size: 14px; font-weight: 500; transition: all .15s; flex-shrink: 0; }
+.gh-link:hover { color: var(--text); border-color: var(--border-m); box-shadow: 0 2px 8px rgba(0,0,0,.07); }
 .site-title  { font-size: 28px; font-weight: 600; letter-spacing: -.01em; margin-bottom: .35rem; }
 .site-sub    { font-size: 15px; color: var(--text-s); max-width: 420px; }
 
 .card-grid  { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; }
-.game-card  { display: block; text-decoration: none; color: inherit; background: var(--surface); border: 1px solid var(--border); border-radius: var(--rl); overflow: hidden; transition: transform .18s, box-shadow .18s; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
+.game-card  { display: flex; flex-direction: column; text-decoration: none; color: inherit; background: var(--surface); border: 1px solid var(--border); border-radius: var(--rl); overflow: hidden; transition: transform .18s, box-shadow .18s; box-shadow: 0 1px 4px rgba(0,0,0,.06); }
 .game-card:hover { transform: translateY(-3px); box-shadow: 0 6px 20px rgba(0,0,0,.10); }
 
 .card-accent       { height: 5px; }
 .card-accent.blue  { background: var(--info-text); }
 .card-accent.green { background: var(--ok-text); }
-.card-body         { padding: 1.5rem 1.5rem 1.25rem; }
+.card-body         { padding: 1.5rem 1.5rem 1.25rem; flex: 1 1 auto; }
 .card-icon         { width: 44px; height: 44px; border-radius: var(--r); display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 13px; font-weight: 500; margin-bottom: 1rem; }
 .card-icon.blue    { background: var(--info-bg); color: var(--info-text); border: 1px solid var(--info-bdr); }
 .card-icon.green   { background: var(--ok-bg);   color: var(--ok-text);   border: 1px solid var(--ok-bdr); }
@@ -232,7 +234,7 @@ sup  { font-size: .65em; vertical-align: super; }
 .card-desc         { font-size: 14px; color: var(--text-s); line-height: 1.6; margin-bottom: 1rem; }
 .card-tags         { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 1rem; }
 .tag               { font-size: 11px; font-family: var(--mono); background: var(--surface-s); border: 1px solid var(--border); border-radius: 4px; padding: 2px 8px; color: var(--text-s); }
-.card-footer       { display: flex; align-items: center; justify-content: space-between; padding: .9rem 1.5rem; background: var(--surface-s); border-top: 1px solid var(--border); }
+.card-footer       { margin-top: auto; display: flex; align-items: center; justify-content: space-between; padding: .9rem 1.5rem; background: var(--surface-s); border-top: 1px solid var(--border); }
 .play-label        { font-size: 14px; font-weight: 500; color: var(--text-s); }
 .play-arrow        { font-size: 18px; color: var(--text-t); transition: transform .15s; }
 .game-card:hover .play-arrow { transform: translateX(4px); color: var(--text-s); }
@@ -540,12 +542,12 @@ sup  { font-size: .65em; vertical-align: super; }
 .lg-chan     { background: #ede9fe; border-color: #7c3aed; }
 
 .lab-canvas  { position: relative; height: 300px; min-height: 220px; max-height: 680px; resize: vertical; background: var(--surface-s); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; user-select: none; }
-#cable-svg   { position: absolute; inset: 0; width: 100%; height: 100%; }
+#cable-svg   { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; }
 #dev-layer   { position: absolute; inset: 0; }
 .lab-hint    { font-size: 12px; color: var(--text-s); margin-top: .55rem; min-height: 16px; }
 
 /* cables */
-.cable        { stroke: var(--border-m); stroke-width: 3; cursor: pointer; }
+.cable        { stroke: var(--border-m); stroke-width: 3; cursor: pointer; pointer-events: stroke; }
 .cable:hover  { stroke: var(--err-text); }
 .cable.trunk  { stroke: var(--info-text); }
 .cable.chan   { stroke: #7c3aed; stroke-dasharray: 7 4; }
@@ -556,16 +558,16 @@ sup  { font-size: .65em; vertical-align: super; }
 .dev          { position: absolute; border-radius: var(--r); border: 1.5px solid var(--border-m); background: var(--surface); cursor: grab; padding: 7px 10px 12px; }
 .dev:active   { cursor: grabbing; }
 .dev.switch   { width: 150px; height: 66px; }
-.dev.pc       { width: 90px; height: 52px; text-align: center; padding-top: 10px; }
+.dev.pc       { min-width: 90px; width: auto; height: 52px; text-align: center; padding-top: 10px; }
 .dev.selected { border-color: var(--info-text); box-shadow: 0 0 0 3px var(--info-bg); }
-.dev-name     { font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.2; }
-.dev-sub      { font-size: 10px; color: var(--text-t); font-family: var(--mono); line-height: 1.35; }
+.dev-name     { font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.2; position: relative; z-index: 3; pointer-events: none; }
+.dev-sub      { font-size: 10.5px; color: var(--text-s); font-family: var(--font); font-variant-numeric: tabular-nums; letter-spacing: .02em; line-height: 1.35; position: relative; z-index: 3; pointer-events: none; white-space: nowrap; }
 .dev.dev-ok   { border-color: var(--ok-bdr); box-shadow: 0 0 0 3px var(--ok-bg); }
 .dev.dev-bad  { border-color: var(--err-bdr); box-shadow: 0 0 0 3px var(--err-bg); }
 .dev.dev-root { border-color: var(--ok-bdr); }
 
 /* ports */
-.port           { position: absolute; width: 14px; height: 14px; border-radius: 50%; background: var(--surface-s); border: 2px solid var(--border-m); cursor: pointer; transition: transform .1s; }
+.port           { position: absolute; width: 14px; height: 14px; border-radius: 50%; background: var(--surface-s); border: 2px solid var(--border-m); cursor: pointer; transition: transform .1s; z-index: 4; }
 .port:hover     { transform: scale(1.35); border-color: var(--text-s); }
 .port.p-acc     { background: var(--ok-bg);   border-color: var(--ok-bdr); }
 .port.p-trunk   { background: var(--info-bg); border-color: var(--info-text); }
@@ -631,3 +633,27 @@ sup  { font-size: .65em; vertical-align: super; }
 .pc-form-lbl  { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-t); }
 .pc-pfx       { font-family: var(--mono); font-size: 14px; color: var(--text-s); }
 .pc-ip-hint   { font-size: 12.5px; font-family: var(--mono); color: var(--text-s); min-width: 70px; }
+
+/* Router device + VLAN manager + CLI-only note (Switching Lab) */
+.dev.router   { width: 116px; height: 46px; text-align: center; padding-top: 6px; border-radius: 23px; border-style: dashed; }
+.vm-add       { display: flex; gap: 6px; margin: 8px 0 14px; align-items: center; }
+.vm-inp       { font-family: var(--mono); font-size: 12.5px; background: var(--surface-s); border: 1px solid var(--border-m); border-radius: 5px; padding: 4px 7px; color: var(--text); outline: none; width: 60px; }
+.vm-inp:focus { border-color: var(--info-bdr); }
+.vm-inp.vm-name { width: 130px; font-family: var(--font); }
+.vlan-mgr-table input { max-width: 150px !important; font-family: var(--font) !important; }
+#vlan-mgr     { margin-bottom: 4px; }
+.cli-note     { font-size: 12.5px; color: var(--text-s); background: var(--surface-s); border: 1px dashed var(--border-m); border-radius: var(--r); padding: 10px 12px; line-height: 1.5; }
+
+/* Switching Lab: zoom wrapper, cable hit area, STP answer selection, ping, SVI */
+#zoom-wrap    { position: absolute; inset: 0; transform-origin: 0 0; }
+.cable-hit    { stroke: #000; stroke-opacity: 0; stroke-width: 14; pointer-events: stroke; cursor: pointer; }
+.dev.q-sel    { border-color: var(--info-bdr); box-shadow: 0 0 0 3px rgba(59,130,246,.25); }
+.port.p-sel   { border-color: var(--info-bdr); background: #dbeafe; transform: scale(1.25); }
+.lg-note      { color: var(--text-t); font-style: italic; }
+.svi-row      { display: flex; gap: 6px; align-items: center; margin-top: 10px; font-size: 12.5px; color: var(--text-s); flex-wrap: wrap; }
+.svi-row .vm-inp { font-family: var(--mono); }
+.svi-lbl      { font-weight: 600; color: var(--text); margin-right: 2px; }
+.ping-out     { font-family: var(--mono); font-size: 12px; margin: 8px 0 0; padding: 8px 10px; border-radius: var(--r); background: var(--surface-s); border: 1px solid var(--border); min-height: 20px; white-space: pre-wrap; color: var(--text-s); }
+.ping-out.pok  { border-color: var(--ok-bdr); background: var(--ok-bg); color: var(--ok-text); }
+.ping-out.perr { border-color: var(--err-bdr); background: var(--err-bg); color: var(--err-text); }
+.mono-inl     { font-family: var(--mono); font-size: .92em; background: var(--surface-s); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; }
