@@ -257,6 +257,7 @@
           <tr><td class="cmd">switchport mode trunk</td><td>Make the port a trunk (<code>sw mo tr</code>)</td></tr>
           <tr><td class="cmd">channel-group &lt;n&gt; mode on</td><td>Add port to EtherChannel n</td></tr>
           <tr><td class="cmd">no switchport access vlan</td><td>Return port to VLAN 1</td></tr>
+          <tr><td class="cmd">switchport trunk native vlan &lt;n&gt;</td><td>Set the trunk's native (untagged) VLAN</td></tr>
           <tr><td class="cmd">no channel-group</td><td>Remove from EtherChannel</td></tr>
           <tr><td class="cmd">show vlan brief</td><td>Show VLAN &rarr; port table</td></tr>
           <tr><td class="cmd">show run</td><td>Show this switch's port config</td></tr>
@@ -307,7 +308,7 @@ function addSwitch(x,y,opts={}){
   swCount++;
   const d={ id:nid++, type:'switch', name:opts.name||('SW'+swCount), x, y,
     priority:opts.priority??32768, mac:opts.mac??genMac(),
-    ports:Array.from({length:PORTN},(_,i)=>({name:'Fa0/'+(i+1),mode:'access',vlan:1,ch:0})),
+    ports:Array.from({length:PORTN},(_,i)=>({name:'Fa0/'+(i+1),mode:'access',vlan:1,ch:0,native:1})),
     priLabel:opts.priLabel||null, hwNote:opts.hwNote||null, vlans:new Set([1]), vlanNames:{},
     ip:null, ipVlan:null,
     cm:'exec', ci:null, cv:null, log:[], hist:[], hi:0 };
@@ -832,10 +833,10 @@ const KW={
   show:{vlan:{brief:{}}, 'running-config':{}, 'spanning-tree':{}},
   vlan:{}, name:{}, interface:{vlan:{}},
   ip:{address:{}},
-  switchport:{mode:{access:{},trunk:{}}, access:{vlan:{}}},
+  switchport:{mode:{access:{},trunk:{}}, access:{vlan:{}}, trunk:{native:{vlan:{}}}},
   'channel-group':{},
   'spanning-tree':{vlan:{}},
-  no:{switchport:{access:{vlan:{}}, mode:{}}, 'channel-group':{}, ip:{address:{}}},
+  no:{switchport:{access:{vlan:{}}, mode:{}, trunk:{native:{vlan:{}}}}, 'channel-group':{}, ip:{address:{}}},
 };
 function tabComplete(d,val){
   const endsSpace=/\s$/.test(val);
@@ -931,6 +932,7 @@ function cli(d,line){
       d.ports.forEach(p=>{
         out+=`interface ${p.name}\n switchport mode ${p.mode}\n`;
         if(p.mode==='access') out+=` switchport access vlan ${p.vlan}\n`;
+        if(p.mode==='trunk'&&p.native!==1) out+=` switchport trunk native vlan ${p.native}\n`;
         if(p.ch>0) out+=` channel-group ${p.ch} mode on\n`;
       });
       return out.trimEnd();
@@ -987,8 +989,9 @@ function cli(d,line){
     const port=d.ports[d.ci];
     if(M(w[1],'switchport')&&w[2]&&M(w[2],'access')){ port.vlan=1; return ''; }
     if(M(w[1],'switchport')&&w[2]&&M(w[2],'mode')){ port.mode='access'; return ''; }
+    if(M(w[1],'switchport')&&w[2]&&M(w[2],'trunk')&&w[3]&&M(w[3],'native')){ port.native=1; return ''; }
     if(M(w[1],'channel-group')||w[1]==='channel'){ port.ch=0; return ''; }
-    return '% supported: no switchport access vlan, no switchport mode, no channel-group';
+    return '% supported: no switchport access vlan, no switchport mode, no switchport trunk native vlan, no channel-group';
   }
 
   /* switchport commands */
@@ -1010,7 +1013,18 @@ function cli(d,line){
       }
       return '% usage: switchport access vlan <n>';
     }
-    if(w[1]&&M(w[1],'trunk')) return '% trunk sub-options are not needed in this lab';
+    if(w[1]&&M(w[1],'trunk')){
+      if(w[2]&&M(w[2],'native')){
+        if(w[3]&&M(w[3],'vlan')&&w[4]&&/^\d+$/.test(w[4])){
+          const nv=+w[4];
+          if(nv<1||nv>4094) return '% native VLAN must be between 1 and 4094';
+          port.native=nv;
+          return '';
+        }
+        return '% usage: switchport trunk native vlan <n>';
+      }
+      return '% usage: switchport trunk native vlan <n>';
+    }
     return '% usage: switchport mode ... | switchport access vlan <n>';
   }
 
@@ -1439,6 +1453,16 @@ function trunkLinkReq(sA,sB){
   if(pb.mode!=='trunk')bad.push(byId(c.b.d).name+' '+pb.name);
   return bad.length?{ok:false,reason:bad.join(' and ')+' not in trunk mode'}:{ok:true};
 }
+function nativeReq(sA,sB,expected){
+  const c=cableBetween(sA,sB);
+  if(!c)return{ok:false,reason:`No link between ${sA.name} and ${sB.name}`};
+  const pa=byId(c.a.d).ports[c.a.i], pb=byId(c.b.d).ports[c.b.i];
+  if(pa.native!==pb.native)
+    return{ok:false,reason:`Native VLAN mismatch on ${sA.name}\u2013${sB.name}: ${byId(c.a.d).name} is VLAN ${pa.native}, ${byId(c.b.d).name} is VLAN ${pb.native}`};
+  if(pa.native!==expected)
+    return{ok:false,reason:`${sA.name}\u2013${sB.name}'s native VLAN is ${pa.native}, expected VLAN ${expected}`};
+  return{ok:true};
+}
 function routerReq(){
   return {desc:'The router is connected to a switch on a trunk port',
     test(){
@@ -1627,20 +1651,25 @@ function buildTrunkScenario(D){
       ]};
   }
 
-  /* hard: 5–6 PCs, three VLANs with random uneven membership */
+  /* hard: 5–6 PCs, three VLANs with random uneven membership, plus
+     trunk encapsulation and a non-default native VLAN on every backbone link */
   const s1=addSwitch(70,30), s2=addSwitch(320,30), s3=addSwitch(570,30);
   const npc=pick([5,6]);
   const vids=pickVids(3), names=pickNames(3);
   const sizes=groupSizes(npc,3);
   const {groups,swOf}=buildGroupedPCs([s1,s2,s3],[3,2,3],sizes,{y:206});
   const [gi,gj]=pickTwoGroups(3);
+  const nativeVid=pick([99,199,222,777,888,999]);
   return {type:'trunk',allowIP:false,
-    _meta:{vids,names,groups,sizes},
+    _meta:{vids,names,groups,sizes,nativeVid},
     title:'Three Switches, Three VLANs',
-    instr:`${npc} PCs, three VLANs: ${membStr(groups,vids,names,false)}. Create and name each VLAN on the switches that carry its PCs, assign the ports, then cable and trunk both inter-switch links.`,
+    instr:`${npc} PCs, three VLANs: ${membStr(groups,vids,names,false)}. Create and name each VLAN on the switches that carry its PCs, assign the ports, then cable and trunk both inter-switch links. `+
+      `These switches are still defaulting to native VLAN 1, which is a VLAN-hopping risk \u2014 move the native VLAN on <em>both</em> backbone links to VLAN <strong>${nativeVid}</strong> with <span class="mono-inl">switchport trunk native vlan ${nativeVid}</span> (must match on both ends of each link).`,
     reqs:[
       {desc:'Both inter-switch links exist and are trunked',
         test(){ const r=trunkLinkReq(s1,s2); if(!r.ok)return r; return trunkLinkReq(s2,s3); }},
+      {desc:`Both backbone links have their native VLAN moved to VLAN ${nativeVid} on both ends`,
+        test(){ const r=nativeReq(s1,s2,nativeVid); if(!r.ok)return r; return nativeReq(s2,s3,nativeVid); }},
       groupNamesReq(groups,vids,names,swOf),
       groupAssignReq(groups,vids),
       groupReachReq(groups),
@@ -1874,7 +1903,8 @@ function buildComboScenario(D){
       ]};
   }
 
-  /* hard: user cables everything; IPs, router, SVI on top */
+  /* hard: user cables everything; IPs, router, SVI, native VLAN hardening
+     and an STP root-bridge optimization task, all on top */
   const npc=pick([3,4]);
   const k=npc===3?2:pick([2,3]);
   const vids=pickVids(k), names=pickNames(k);
@@ -1899,16 +1929,26 @@ function buildComboScenario(D){
   const [gi,gj]=pickTwoGroups(k);
   const cA=pick(groups[gi]), cB=pick(groups[gj]);
   const [ii,ij]=pickTwoGroups(k);
+  const nativeVid=pick([99,199,222,777,888,999]);
+  const hwPool=shuffle(STP_HW).slice(0,3);
+  [s1,s2,s3].forEach((s,i)=>{ s.hwNote=hwPool[i].tag; s._tier=hwPool[i].tier; });
+  const bySpeed=[s1,s2,s3].slice().sort((a,b)=>b._tier-a._tier);
+  const stpTarget=bySpeed[0], stpSecondary=bySpeed[1];
+  const specTable=[s1,s2,s3].map(s=>`<strong>${s.name}</strong>: ${s.hwNote}`).join('<br>');
   return {type:'combo',allowIP:true,
-    _meta:{vids,names,groups,sizes,missing,svSw,svV,cross:[cA,cB],bundlePair,singlePair},
+    _meta:{vids,names,groups,sizes,missing,svSw,svV,cross:[cA,cB],bundlePair,singlePair,nativeVid,stpTarget,stpSecondary},
     title:'Everything — Full Build',
     instr:`Build the backbone yourself: run <strong>two cables</strong> between ${bundlePair[0].name} and ${bundlePair[1].name} and bundle them, plus a single link between ${singlePair[0].name} and ${singlePair[1].name}; trunk every backbone port. `+
-      `Membership by subnet: ${membStr(groups,vids,names,true)}. Assign the missing IPs (${missing.map(p=>p.name).join(', ')}), give <strong>${svSw.name}</strong> a management SVI in 192.168.${svV}.0/24, and connect the router on a trunked port to route between subnets.`,
+      `The ${singlePair[0].name}\u2013${singlePair[1].name} link is still on native VLAN 1 \u2014 move it to VLAN <strong>${nativeVid}</strong> on both ends (<span class="mono-inl">switchport trunk native vlan ${nativeVid}</span>). `+
+      `Membership by subnet: ${membStr(groups,vids,names,true)}. Assign the missing IPs (${missing.map(p=>p.name).join(', ')}), give <strong>${svSw.name}</strong> a management SVI in 192.168.${svV}.0/24, and connect the router on a trunked port to route between subnets. `+
+      `<br><br>${specTable}<br><br>These switches are still at the STP default priority \u2014 using <span class="mono-inl">spanning-tree vlan 1 root primary</span> / <span class="mono-inl">root secondary</span> (or an explicit <span class="mono-inl">priority &lt;n&gt;</span>), make <strong>${stpTarget.name}</strong> the root bridge and <strong>${stpSecondary.name}</strong> the backup root.`,
     reqs:[
       {desc:`${bundlePair[0].name}\u2013${bundlePair[1].name} has two links in one consistent EtherChannel`,
         test(){ return bundleReq(bundlePair[0],bundlePair[1],bundlePair[0].name+'\u2013'+bundlePair[1].name); }},
       {desc:`${singlePair[0].name}\u2013${singlePair[1].name} link exists and is trunked on both ends`,
         test(){ return trunkLinkReq(singlePair[0],singlePair[1]); }},
+      {desc:`${singlePair[0].name}\u2013${singlePair[1].name}'s native VLAN is moved to VLAN ${nativeVid} on both ends`,
+        test(){ return nativeReq(singlePair[0],singlePair[1],nativeVid); }},
       bundleTrunkReq([bundlePair],4),
       groupNamesReq(groups,vids,names,swOf),
       groupAssignReq(groups,vids),
@@ -1918,6 +1958,21 @@ function buildComboScenario(D){
       groupIpReachReq(groups),
       crossPingReq(cA,cB),
       isoPairReq(groups[ii][0],groups[ij][0]),
+      {desc:`${stpTarget.name} (the newest/fastest switch) is the STP root bridge`,
+        test(){
+          const stp=computeSTP();
+          if(stp&&stp.root===stpTarget) return {ok:true};
+          return {ok:false,reason:`The current root is ${stp?stp.root.name:'undetermined'} \u2014 lower ${stpTarget.name}'s priority (e.g. "spanning-tree vlan 1 root primary")`};
+        }},
+      {desc:`${stpSecondary.name} is configured as the backup root (worse than ${stpTarget.name}, but better than everything else)`,
+        test(){
+          if(stpSecondary.priority<=stpTarget.priority)
+            return {ok:false,reason:`${stpSecondary.name}'s priority must stay higher than ${stpTarget.name}'s so it doesn't compete for root`};
+          const beaten=[s1,s2,s3].filter(s=>s!==stpTarget&&s!==stpSecondary&&s.priority<=stpSecondary.priority);
+          if(beaten.length)
+            return {ok:false,reason:`${beaten.map(s=>s.name).join(', ')} still has a priority equal to or lower than ${stpSecondary.name} \u2014 ${stpSecondary.name} needs the second-lowest priority overall`};
+          return {ok:true};
+        }},
     ]};
 }
 
