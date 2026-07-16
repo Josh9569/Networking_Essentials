@@ -343,15 +343,23 @@ function cablesBetween(devA,devB){
 function otherEnd(c,devId){ return c.a.d===devId?c.b:c.a; }
 
 /* ═══ Geometry & rendering ════════════════════════════════════════════════ */
+/* Switch boxes grow downward when the hardware-note flavor text
+   (used in the STP optimize task) is too long to fit on one line. */
+function swHeight(d){
+  if(!d.hwNote) return SW_H;
+  const charsPerLine=21;                       /* ~130px content width at 10.5px italic */
+  const lines=Math.max(1, Math.ceil(d.hwNote.length/charsPerLine));
+  return SW_H + Math.max(0, lines-1)*13;
+}
 function devSize(d){
-  if(d.type==='switch') return [SW_W,SW_H];
+  if(d.type==='switch') return [SW_W, swHeight(d)];
   if(d.type==='router') return [RT_W,RT_H];
   const label=d.ip?(d.ip+'/'+d.pfx):'no IP';
   return [Math.max(PC_W, Math.round(label.length*6.4)+24), PC_H];
 }
 function portPosSwitch(d,i){
   const pad=20, span=SW_W-2*pad;
-  return [pad + i*(span/(PORTN-1)), SW_H];
+  return [pad + i*(span/(PORTN-1)), swHeight(d)];
 }
 /* PCs and routers have a single port that slides around the box edge,
    pointing toward whatever it is cabled to. */
@@ -409,6 +417,7 @@ function render(){
       +(d._mark?' '+d._mark:'')+(d._ipConflict?' ip-conflict':'');
     el.style.left=d.x+'px'; el.style.top=d.y+'px';
     if(d.type!=='switch') el.style.width=w+'px';
+    else if(d.hwNote) el.style.height=h+'px';   /* switches grow downward only when a hardware note wraps */
     el.dataset.did=d.id;
     if(d.type==='switch'){
       const ipHtml=d.ip?`<br><span class="${d._ipConflict?'ip-bad':''}">${d.ip}</span> \u00b7 vlan ${d.ipVlan}`:'';
