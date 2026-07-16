@@ -633,6 +633,7 @@ sup  { font-size: .65em; vertical-align: super; }
 .pc-form-lbl  { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-t); }
 .pc-pfx       { font-family: var(--mono); font-size: 14px; color: var(--text-s); }
 .pc-ip-hint   { font-size: 12.5px; font-family: var(--mono); color: var(--text-s); min-width: 70px; }
+.pc-ip-hint.bad { color: var(--err-text); font-family: var(--font); font-weight: 500; min-width: 220px; }
 
 /* Router device + VLAN manager + CLI-only note (Switching Lab) */
 .dev.router   { width: 116px; height: 46px; text-align: center; padding-top: 6px; border-radius: 23px; border-style: dashed; }
@@ -657,3 +658,11 @@ sup  { font-size: .65em; vertical-align: super; }
 .ping-out.pok  { border-color: var(--ok-bdr); background: var(--ok-bg); color: var(--ok-text); }
 .ping-out.perr { border-color: var(--err-bdr); background: var(--err-bg); color: var(--err-text); }
 .mono-inl     { font-family: var(--mono); font-size: .92em; background: var(--surface-s); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; }
+
+/* IP address conflicts (Switching Lab) */
+.ip-bad         { color: var(--err-text); font-weight: 700; text-decoration: underline wavy; text-decoration-color: var(--err-text); }
+.dev.ip-conflict { border-color: var(--err-bdr); box-shadow: 0 0 0 3px rgba(220,38,38,.18); }
+.svi-conflict   { margin-top: 8px; font-size: 12.5px; color: var(--err-text); background: var(--err-bg); border: 1px solid var(--err-bdr); border-radius: var(--r); padding: 7px 10px; line-height: 1.45; }
+
+/* STP config-optimization hardware flavor note (Switching Lab) */
+.hw-note { color: var(--text-t); font-family: var(--font); font-style: italic; }
