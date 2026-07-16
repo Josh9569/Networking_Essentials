@@ -349,7 +349,8 @@ function swHeight(d){
   if(!d.hwNote) return SW_H;
   const charsPerLine=21;                       /* ~130px content width at 10.5px italic */
   const lines=Math.max(1, Math.ceil(d.hwNote.length/charsPerLine));
-  return SW_H + Math.max(0, lines-1)*13;
+  const CLEARANCE=14;                           /* blank gap between the note text and the bottom ports */
+  return SW_H + Math.max(0, lines-1)*13 + CLEARANCE;
 }
 function devSize(d){
   if(d.type==='switch') return [SW_W, swHeight(d)];
