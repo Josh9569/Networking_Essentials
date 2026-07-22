@@ -52,6 +52,77 @@
   }
 }
 
+/* Explicit overrides set by theme.js (data-theme attr on <html>) always win over the
+   prefers-color-scheme media query above, regardless of source order, because an
+   attribute selector on :root is more specific than a bare :root. This is what lets a
+   manual light/dark choice persist across pages and override the OS preference. */
+:root[data-theme="light"] {
+  --bg:        #f2f2ef;
+  --surface:   #ffffff;
+  --surface-s: #f0f0ec;
+  --text:      #1a1a18;
+  --text-s:    #68685f;
+  --text-t:    #aaa;
+  --border:    rgba(0,0,0,.09);
+  --border-m:  rgba(0,0,0,.16);
+  --info-bg:   #e5eefc;
+  --info-text: #174da8;
+  --info-bdr:  #a8c8f4;
+  --ok-bg:     #e5f5da;
+  --ok-text:   #2a6508;
+  --ok-bdr:    #9fd472;
+  --warn-bg:   #fdf2d0;
+  --warn-text: #8a5200;
+  --warn-bdr:  #f0c660;
+  --err-bg:    #fce8e8;
+  --err-text:  #b22020;
+  --err-bdr:   #f0a0a0;
+}
+:root[data-theme="dark"] {
+  --bg:        #141412;
+  --surface:   #1e1e1c;
+  --surface-s: #272725;
+  --text:      #f0f0ec;
+  --text-s:    #999;
+  --text-t:    #555;
+  --border:    rgba(255,255,255,.09);
+  --border-m:  rgba(255,255,255,.16);
+  --info-bg:   #0a1e40;
+  --info-text: #7aabf0;
+  --info-bdr:  #1a4fa5;
+  --ok-bg:     #0a200a;
+  --ok-text:   #7ec050;
+  --ok-bdr:    #2a6508;
+  --warn-bg:   #201200;
+  --warn-text: #f0c660;
+  --warn-bdr:  #8a5200;
+  --err-bg:    #200808;
+  --err-text:  #f09090;
+  --err-bdr:   #b22020;
+}
+
+/* ── Global theme toggle (injected by theme.js into #theme-toggle-slot on every page) ── */
+.theme-toggle {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--surface);
+  border: 1px solid var(--border-m);
+  color: var(--text-s);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.theme-toggle:hover  { background: var(--surface-s); color: var(--text); }
+.theme-toggle svg    { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Fallback only: if a page has no #theme-toggle-slot, theme.js pins the button to the corner. */
+.theme-toggle.tt-fixed { position: fixed; top: 16px; right: 16px; z-index: 1000; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+
 /* ── Reset & base ───────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; padding: 2rem 1rem; line-height: 1.6; }
@@ -66,6 +137,7 @@ sup  { font-size: .65em; vertical-align: super; }
 .hdr       { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; }
 .hdr-title { font-size: 22px; font-weight: 600; }
 .hdr-sub   { font-size: 13px; color: var(--text-s); margin-top: 2px; }
+.hdr-right { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
 .chips     { display: flex; gap: 8px; flex-wrap: wrap; }
 .chip      { background: var(--surface); border: 1px solid var(--border-m); border-radius: var(--r); padding: 5px 14px; font-size: 13px; color: var(--text-s); }
 .chip b    { color: var(--text); font-weight: 500; font-family: var(--mono); }
@@ -214,8 +286,9 @@ sup  { font-size: .65em; vertical-align: super; }
 .index-page { padding: 3rem 1.5rem; }
 
 .site-header { margin-bottom: 3rem; display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
-.gh-link     { display: inline-flex; align-items: center; gap: .5rem; color: var(--text-s); text-decoration: none; border: 1px solid var(--border); border-radius: 8px; padding: .55rem .85rem; background: var(--surface); font-size: 14px; font-weight: 500; transition: all .15s; flex-shrink: 0; }
+.gh-link     { display: inline-flex; align-items: center; gap: .5rem; color: var(--text-s); text-decoration: none; border: 1px solid var(--border-m); border-radius: var(--r); padding: 5px 14px; background: var(--surface); font-size: 13px; font-weight: 500; transition: all .15s; flex-shrink: 0; }
 .gh-link:hover { color: var(--text); border-color: var(--border-m); box-shadow: 0 2px 8px rgba(0,0,0,.07); }
+.gh-link svg { width: 16px; height: 16px; flex-shrink: 0; }
 .site-title  { font-size: 28px; font-weight: 600; letter-spacing: -.01em; margin-bottom: .35rem; }
 .site-sub    { font-size: 15px; color: var(--text-s); max-width: 420px; }
 
