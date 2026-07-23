@@ -454,52 +454,52 @@ function pickLPM(id){
 }
 
 /* ─── Render: Binary Match ──────────────────────────────────────── */
-/* One masked box per address (not graded/scored — it's working space to help
-   pick the right candidate) covering all 4 octets at once. The box starts
-   pre-filled with "00000000.00000000.00000000.00000000" as real content, not
-   a placeholder: typing 0/1 overwrites the digit under the cursor and jumps
-   to the next digit, hopping over the dots automatically. The dots themselves
-   are fixed — typing "." does nothing, and only 0/1 are ever accepted. Check/
-   Reveal still colors the box ok/bad purely as feedback; only the candidate
-   pick below actually earns points. */
-const BIN_TEMPLATE='00000000.00000000.00000000.00000000';
-function isBinDotPos(i){ return i===8 || i===17 || i===26; }
-function nextBinDigitPos(i){ let p=i; while(p<35 && isBinDotPos(p)) p++; return p; }
-function prevBinDigitPos(i){ let p=i-1; while(p>=0 && isBinDotPos(p)) p--; return p<0?0:p; }
+/* One box per address (not graded/scored — it's working space to help pick
+   the right candidate) covering all 4 octets at once. The box starts empty,
+   showing "00000000.00000000.00000000.00000000" as a real dimmed placeholder
+   (not pre-filled content) — the learner types out every bit themselves.
+   Typing 0/1 appends to whatever's been typed so far and auto-inserts the
+   dot every 8 digits; the dots are never typed directly (typing "." does
+   nothing, and only 0/1 are ever accepted). Check/Reveal still colors the
+   box ok/bad purely as feedback; only the candidate pick below actually
+   earns points. */
+const BIN_PLACEHOLDER='00000000.00000000.00000000.00000000';
+function formatBits(raw){
+  const parts=[];
+  for(let i=0;i<raw.length;i+=8) parts.push(raw.slice(i,i+8));
+  return parts.join('.');
+}
+function rawBitsOf(el){ return el.value.replace(/\./g,''); }
 function binInputHtml(id){
-  return `<input class="bin-single" id="${id}" inputmode="numeric" autocomplete="off" spellcheck="false"><div class="bin-hint" id="hint-${id}"></div>`;
+  return `<input class="bin-single" id="${id}" placeholder="${BIN_PLACEHOLDER}" inputmode="numeric" autocomplete="off" spellcheck="false"><div class="bin-hint" id="hint-${id}"></div>`;
 }
 function wireBinSingle(id){
   const el=document.getElementById(id);
-  el.value=BIN_TEMPLATE;
-  el.dataset.touched='0';
-  // A click's native caret placement can land after 'focus' fires (on mouseup,
-  // not mousedown), so defer the override to the next tick to reliably win —
-  // covers both mouse clicks and keyboard/Tab focus.
-  const snapToStart=()=>{
-    if(el.dataset.touched==='0') setTimeout(()=>{ if(el.dataset.touched==='0') el.setSelectionRange(0,0); }, 0);
-  };
-  el.addEventListener('focus', snapToStart);
-  el.addEventListener('mouseup', snapToStart);
+  el.value='';
+  // Always resume typing at the end of whatever's already been entered —
+  // there's no mid-string editing, so clicking anywhere just continues
+  // appending (deferred to the next tick since a click's native caret
+  // placement can otherwise land after 'focus' fires and override this).
+  const snapToEnd=()=>{ setTimeout(()=>{ const len=el.value.length; el.setSelectionRange(len,len); }, 0); };
+  el.addEventListener('focus', snapToEnd);
+  el.addEventListener('mouseup', snapToEnd);
   el.addEventListener('keydown', e=>{
     if(e.ctrlKey || e.metaKey || e.altKey) return;
     const nav=['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','Tab'];
     if(nav.includes(e.key)) return;
     e.preventDefault();
-    const val=el.value;
+    let raw=rawBitsOf(el);
     if(e.key==='Backspace' || e.keyCode===8){
-      const pos=prevBinDigitPos(el.selectionStart);
-      el.value=val.slice(0,pos)+'0'+val.slice(pos+1);
-      el.setSelectionRange(pos,pos);
-      el.dataset.touched='1';
+      raw=raw.slice(0,-1);
+    } else if(e.key==='0' || e.key==='1'){
+      if(raw.length>=32) return;
+      raw+=e.key;
+    } else {
       return;
     }
-    if(e.key!=='0' && e.key!=='1') return;
-    const pos=nextBinDigitPos(el.selectionStart);
-    if(pos>=35) return;
-    el.value=val.slice(0,pos)+e.key+val.slice(pos+1);
-    el.setSelectionRange(nextBinDigitPos(pos+1), nextBinDigitPos(pos+1));
-    el.dataset.touched='1';
+    el.value=formatBits(raw);
+    const len=el.value.length;
+    el.setSelectionRange(len,len);
   });
   el.addEventListener('paste', e=>e.preventDefault());
   el.addEventListener('drop', e=>e.preventDefault());

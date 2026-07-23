@@ -800,6 +800,7 @@ sup  { font-size: .65em; vertical-align: super; }
 .bin-card-bin.bad   { background: var(--err-bg);  color: var(--err-text); }
 .bin-card-bin.show  { background: var(--warn-bg); color: var(--warn-text); }
 .bin-single         { display: block; width: 100%; font-family: var(--mono); font-size: 15px; letter-spacing: .03em; background: transparent; border: none; border-radius: 4px; outline: none; color: inherit; padding: 6px 8px; margin: -6px -8px; }
+.bin-single::placeholder { color: var(--text-t); opacity: 1; }
 .bin-single:focus   { background: var(--info-bg); }
 /* the learner's own (wrong) answer stays in the field above; this shows the
    correct one underneath so they can compare the two at a glance */
