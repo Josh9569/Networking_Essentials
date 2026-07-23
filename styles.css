@@ -739,3 +739,64 @@ sup  { font-size: .65em; vertical-align: super; }
 
 /* STP config-optimization hardware flavor note (Switching Lab) */
 .hw-note { color: var(--text-t); font-family: var(--font); font-style: italic; white-space: normal; display: block; line-height: 1.3; margin-top: 1px; }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   ROUTING TRAINER
+══════════════════════════════════════════════════════════════════════════════ */
+
+/* routing table (Longest Match / Admin Distance) */
+.rt-wrap        { overflow-x: auto; margin-bottom: 1rem; }
+.rt-table       { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 13px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
+.rt-table th    { background: var(--surface-s); padding: 8px 12px; text-align: left; font-weight: 500; border-bottom: 1px solid var(--border); color: var(--text-s); font-size: 11px; font-family: var(--font); text-transform: uppercase; letter-spacing: .05em; }
+.rt-table td    { padding: 9px 12px; border-bottom: 1px solid var(--border); color: var(--text); }
+.rt-table tr:last-child td { border-bottom: none; }
+.rt-row.pick        { cursor: pointer; transition: background .12s; }
+.rt-row.pick:hover td { background: var(--surface-s); }
+.rt-row.sel td      { background: var(--info-bg) !important; color: var(--info-text); }
+.rt-row.correct td  { background: var(--ok-bg)  !important; color: var(--ok-text); }
+.rt-row.wrong td    { background: var(--err-bg) !important; color: var(--err-text); }
+.rt-code        { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; padding: 0 4px; border-radius: 4px; font-weight: 600; font-size: 11px; background: var(--surface-s); border: 1px solid var(--border-m); color: var(--text-s); }
+.rt-code.src-C  { background: var(--ok-bg);   color: var(--ok-text);   border-color: var(--ok-bdr); }
+.rt-code.src-S  { background: var(--info-bg); color: var(--info-text); border-color: var(--info-bdr); }
+.rt-code.src-O, .rt-code.src-D, .rt-code.src-R, .rt-code.src-B { background: var(--warn-bg); color: var(--warn-text); border-color: var(--warn-bdr); }
+
+/* single-box binary entry (Binary Match) — one free-typed field per address,
+   ungraded/unscored working space; only colored after Check/Reveal so the
+   learner can see whether their own conversion was right. */
+.bin-single        { width: 100%; max-width: 360px; font-family: var(--mono); font-size: 15px; letter-spacing: .03em; background: var(--surface); border: 1px solid var(--border-m); border-radius: var(--r); padding: 9px 12px; color: var(--text); outline: none; }
+.bin-single:focus  { border-color: var(--info-bdr); }
+.bin-single.ok     { border-color: var(--ok-bdr);  background: var(--ok-bg);  color: var(--ok-text); }
+.bin-single.bad    { border-color: var(--err-bdr); background: var(--err-bg); color: var(--err-text); }
+.bin-single.show   { border-color: var(--warn-bdr); background: var(--warn-bg); color: var(--warn-text); }
+.bin-cand       { margin-bottom: 1.1rem; padding-bottom: 1rem; border-bottom: 1px dashed var(--border-m); }
+.bin-cand:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+.bin-cand .type-btn { margin-bottom: .6rem; }
+.type-btn.sel   { background: var(--info-bg); border-color: var(--info-bdr); color: var(--info-text); }
+
+/* realistic single-line CLI output block (Route Table Anatomy / Build The Network) */
+.cli-block { font-family: var(--mono); font-size: 13px; line-height: 1.9; background: var(--surface-s); border: 1px solid var(--border); border-radius: var(--r); padding: 12px 14px; overflow-x: auto; white-space: nowrap; }
+
+/* Build The Network: topology canvas — router with interfaces + a pool of
+   draggable-feeling (click-to-place) network/neighbor nodes, wired with cables */
+.rt-canvas       { position: relative; min-height: 260px; display: flex; flex-direction: column; justify-content: space-between; gap: 22px; padding: 20px 14px; background: var(--surface-s); border: 1px solid var(--border); border-radius: var(--r); }
+#rt-svg          { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.rt-router-row   { display: flex; justify-content: center; position: relative; z-index: 1; }
+.rt-router       { background: var(--surface); border: 1.5px dashed var(--border-m); border-radius: 23px; padding: 10px 20px 14px; display: flex; flex-direction: column; align-items: center; font-size: 13px; font-weight: 600; color: var(--text); }
+.rt-ports        { display: flex; gap: 18px; margin-top: 8px; }
+.rt-port-wrap    { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.rt-port         { width: 16px; height: 16px; border-radius: 50%; background: var(--surface-s); border: 2px solid var(--border-m); cursor: pointer; transition: transform .12s, background .12s; }
+.rt-port:hover   { transform: scale(1.25); border-color: var(--text-s); }
+.rt-port.filled  { background: var(--info-bg); border-color: var(--info-text); }
+.rt-port.p-ok    { background: var(--ok-bg);  border-color: var(--ok-text);  box-shadow: 0 0 0 3px var(--ok-bg); }
+.rt-port.p-bad   { background: var(--err-bg); border-color: var(--err-text); box-shadow: 0 0 0 3px var(--err-bg); }
+.rt-port-lbl     { font-size: 10.5px; font-family: var(--mono); color: var(--text-t); white-space: nowrap; }
+.rt-pool         { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; position: relative; z-index: 1; }
+.rt-chip         { background: var(--surface); border: 1.5px solid var(--border-m); border-radius: var(--r); padding: 8px 14px; cursor: pointer; text-align: center; min-width: 120px; transition: all .15s; }
+.rt-chip:hover   { border-color: var(--info-bdr); }
+.rt-chip.sel     { border-color: var(--info-text); box-shadow: 0 0 0 3px var(--info-bg); }
+.rt-chip.used    { opacity: .5; cursor: default; }
+.rt-chip.p-ok    { border-color: var(--ok-bdr);  background: var(--ok-bg); }
+.rt-chip.p-bad   { border-color: var(--err-bdr); background: var(--err-bg); }
+.rt-chip-lbl     { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-t); margin-bottom: 3px; }
+.rt-chip-val     { font-family: var(--mono); font-size: 13px; font-weight: 500; color: var(--text); }
+.rt-cable        { stroke: var(--border-m); stroke-width: 2.5; }
