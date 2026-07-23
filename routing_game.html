@@ -6,6 +6,7 @@
 <title>Routing Table Trainer</title>
 <link rel="stylesheet" href="styles.css">
 <script src="theme.js"></script>
+<script src="options.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -835,6 +836,10 @@ function toggleTool(id){
   const cb=document.getElementById('tog-'+id);
   cb.checked=!cb.checked;
   document.getElementById('t-'+id).style.display=cb.checked?'':'none';
+  const tools=['ad','anat','lpm'];
+  const any=tools.some(t=>document.getElementById('tog-'+t).checked);
+  document.getElementById('toolsec').style.display=any?'':'none';
+  saveOptionsState();
 }
 document.addEventListener('click', e=>{
   const wrap=document.getElementById('opt-btn').closest('.opt-wrap');

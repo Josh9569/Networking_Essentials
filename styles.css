@@ -744,6 +744,11 @@ sup  { font-size: .65em; vertical-align: super; }
    ROUTING TRAINER
 ══════════════════════════════════════════════════════════════════════════════ */
 
+/* guarantees a gap before the action row regardless of which topic's content
+   is rendered inside (some end in an element whose own margin-bottom is
+   intentionally zeroed, e.g. the last .bin-cand, or has none, e.g. .rt-canvas) */
+#qbody          { margin-bottom: 1rem; }
+
 /* routing table (Longest Match / Admin Distance) */
 .rt-wrap        { overflow-x: auto; margin-bottom: 1rem; }
 .rt-table       { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 13px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }

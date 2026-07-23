@@ -6,6 +6,7 @@
 <title>Binary Trainer</title>
 <link rel="stylesheet" href="styles.css">
 <script src="theme.js"></script>
+<script src="options.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -42,7 +43,7 @@
 
   <div class="fbanner" id="fb"></div>
 
-  <div class="afield" id="f-ans">
+  <div class="afield large" id="f-ans">
     <label>Your answer</label>
     <input id="a-ans" placeholder="..." autocomplete="off" spellcheck="false">
     <div class="ahint" id="h-ans"></div>
@@ -237,6 +238,7 @@ function applyTools(){
   document.getElementById('t-bits').style.display=sb?'':'none';
   document.getElementById('t-powers').style.display=sp?'':'none';
   document.getElementById('toolsec').style.display=(sb||sp)?'':'none';
+  saveOptionsState();
 }
 document.addEventListener('click',e=>{
   const w=document.getElementById('opt-btn').closest('.opt-wrap');

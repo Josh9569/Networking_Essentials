@@ -35,6 +35,8 @@
     btn.setAttribute('aria-label', label);
   }
 
+  var toggleBtn = null;
+
   function init() {
     var btn = document.createElement('button');
     btn.type = 'button';
@@ -53,6 +55,7 @@
       btn.classList.add('tt-fixed');
       document.body.appendChild(btn);
     }
+    toggleBtn = btn;
   }
 
   if (document.readyState === 'loading') {
@@ -60,4 +63,15 @@
   } else {
     init();
   }
+
+  // Bfcache fix: navigating with the browser/mouse back-forward buttons can
+  // restore a page from the back-forward cache instead of re-running this
+  // script, so a theme change made on another page while this one was cached
+  // never gets picked up. `pageshow` fires on every render of the page
+  // (including bfcache restores), so re-syncing there catches it — re-running
+  // it on a normal load is harmless since it's just re-applying the same value.
+  window.addEventListener('pageshow', function () {
+    apply(localStorage.getItem(KEY));
+    if (toggleBtn) updateIcon(toggleBtn);
+  });
 })();

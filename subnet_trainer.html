@@ -6,6 +6,7 @@
 <title>Subnet Trainer</title>
 <link rel="stylesheet" href="styles.css">
 <script src="theme.js"></script>
+<script src="options.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -511,6 +512,7 @@ function applyTools(){
   document.getElementById('t-magic').style.display=showMagic?'':'none';
   document.getElementById('t-ranges').style.display=showRanges?'':'none';
   document.getElementById('toolsec').style.display=(showCidr||showMagic||showRanges)?'':'none';
+  saveOptionsState();
 }
 
 /* close menu when clicking outside */
