@@ -101,27 +101,29 @@
   --err-bdr:   #b22020;
 }
 
-/* ── Global theme toggle (injected by theme.js into #theme-toggle-slot on every page) ── */
-.theme-toggle {
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  flex-shrink: 0;
-  border-radius: 50%;
-  background: var(--surface);
-  border: 1px solid var(--border-m);
-  color: var(--text-s);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background .15s, color .15s;
-}
-.theme-toggle:hover  { background: var(--surface-s); color: var(--text); }
-.theme-toggle svg    { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+/* ── Global theme dropdown (injected by theme.js into #theme-toggle-slot on every page) ──
+   Light / Dark / Sync with Device, mirroring the per-page "Options" dropdown's
+   look (.opt-btn/.opt-menu/.opt-row) but sized to sit in the header next to
+   the chips/GitHub link, with its own class names to avoid colliding with
+   each trainer page's own Options dropdown. */
+.theme-dd            { position: relative; flex-shrink: 0; }
+.theme-dd-btn        { display: flex; align-items: center; gap: 6px; background: var(--surface); border: 1px solid var(--border-m); border-radius: var(--r); padding: 5px 14px; font-family: var(--font); font-size: 13px; color: var(--text-s); cursor: pointer; transition: all .15s; }
+.theme-dd-btn:hover  { background: var(--surface-s); color: var(--text); }
+.theme-dd.open .theme-dd-btn { background: var(--surface-s); color: var(--text); }
+.theme-dd-btn svg    { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; transition: transform .2s; }
+.theme-dd.open .theme-dd-btn svg { transform: rotate(180deg); }
 
-/* Fallback only: if a page has no #theme-toggle-slot, theme.js pins the button to the corner. */
-.theme-toggle.tt-fixed { position: fixed; top: 16px; right: 16px; z-index: 1000; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+.theme-dd-menu       { display: none; position: absolute; right: 0; top: calc(100% + 6px); width: 190px; background: var(--surface); border: 1px solid var(--border-m); border-radius: var(--rl); padding: 6px; z-index: 100; box-shadow: 0 4px 16px rgba(0,0,0,.10); }
+.theme-dd.open .theme-dd-menu { display: block; }
+.theme-dd-label      { font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--text-t); padding: 6px 10px 4px; }
+.theme-dd-item       { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 8px 10px; border: none; border-radius: var(--r); background: transparent; font-family: var(--font); font-size: 14px; color: var(--text); text-align: left; cursor: pointer; transition: background .12s; }
+.theme-dd-item:hover { background: var(--surface-s); }
+.theme-dd-item.on    { color: var(--info-text); font-weight: 500; }
+.theme-dd-check      { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+
+/* Fallback only: if a page has no #theme-toggle-slot, theme.js pins the dropdown to the corner. */
+.theme-dd.tt-fixed          { position: fixed; top: 16px; right: 16px; z-index: 1000; }
+.theme-dd.tt-fixed .theme-dd-btn { box-shadow: 0 2px 8px rgba(0,0,0,.08); }
 
 /* ── Reset & base ───────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
