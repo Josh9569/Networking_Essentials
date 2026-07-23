@@ -170,6 +170,48 @@ function randomNonMatchingEntry(destInt,prefixPool,extra){
   }while(matchesEntry(destInt,e) && tries<25);
   return e;
 }
+/* Structural containment — independent of any destination address — used to
+   render parent/child nesting depth (indentation) rather than assuming table
+   order. Prefix 0 (the default route) is excluded as a "parent": it contains
+   everything by definition, which isn't the specific nested relationship
+   we're trying to make visible, and would inflate every other row's depth. */
+function containsNet(parent,child){
+  return parent.prefix>0 && parent.prefix<child.prefix && (child.netInt & maskInt(parent.prefix))>>>0===parent.netInt;
+}
+function nestDepth(entry,all){
+  return all.filter(o=>o!==entry && containsNet(o,entry)).length;
+}
+/* The tightest (largest-prefix) entry that contains this one — its direct
+   parent in the nesting tree. Any two entries that both contain a third are
+   guaranteed comparable (whichever has the shorter prefix must also contain
+   the other), so "all ancestors" is always a single chain, not parallel
+   branches — there's exactly one unambiguous direct parent. */
+function directParent(entry,all){
+  let best=null;
+  all.forEach(o=>{ if(o!==entry && containsNet(o,entry)){ if(!best||o.prefix>best.prefix) best=o; } });
+  return best;
+}
+/* Sorting by prefix alone can interleave unrelated chains at the same depth
+   (a decoy sitting between a parent and its own child just because its
+   prefix falls in between), which visually implies the wrong parent. This
+   instead does a depth-first walk: every entry is immediately followed by
+   all of its own descendants (recursively) before moving on to the next
+   sibling, so a child always renders directly under its true parent. */
+function hierarchicalOrder(all){
+  const byParent=new Map();
+  all.forEach(e=>{
+    const p=directParent(e,all);
+    const key=p?p.id:null;
+    if(!byParent.has(key)) byParent.set(key,[]);
+    byParent.get(key).push(e);
+  });
+  byParent.forEach(list=>list.sort((a,b)=>a.prefix-b.prefix||a.netInt-b.netInt));
+  const out=[];
+  (function visit(parentId){
+    (byParent.get(parentId)||[]).forEach(e=>{ out.push(e); visit(e.id); });
+  })(null);
+  return out;
+}
 
 /* ─── Routing sources, administrative distance & CLI formatting ─── */
 const RT_SOURCES=[
@@ -231,7 +273,7 @@ function genLPM(diff){
   else { onlyDefault=Math.random()<0.2; nestedPrefixes=onlyDefault?[]:[8,16,24,choice([25,26,27,28,29,30])]; }
 
   const destInt = onlyDefault ? ip2int(randIpOctets().join('.')) : niceRawInt();
-  const entries=[];
+  let entries=[];
   nestedPrefixes.forEach(p=>entries.push(makeEntry(destInt,p,makeRouteExtras(choice(RT_SOURCES)))));
 
   const decoyPool = diff==='easy'?[16,24]:diff==='medium'?[16,20,24,28]:[8,16,20,24,28,30];
@@ -240,7 +282,10 @@ function genLPM(diff){
 
   if(diff==='hard') entries.push(makeEntry(0,0,makeRouteExtras(DEFAULT_SRC)));
 
-  shuffle(entries);
+  // Hierarchically ordered (not just sorted by prefix) so every child renders
+  // directly under its true parent — see hierarchicalOrder() for why a plain
+  // prefix sort can interleave unrelated chains and imply the wrong parent.
+  entries=hierarchicalOrder(entries);
   const correct=bestMatch(destInt,entries);
   return {destInt,entries,correct};
 }
@@ -265,9 +310,12 @@ function genBin(diff){
   const offset = block<=2 ? 0 : ri(1,block-2);
   const dest=(netDeep+offset)>>>0;
 
-  const candidates = prefixSteps.map(p=>makeEntry(dest,p,{}));
+  let candidates = prefixSteps.map(p=>makeEntry(dest,p,{}));
   for(let i=0;i<decoyCount;i++) candidates.push(randomNonMatchingEntry(dest,[16,20,24,28],()=>({})));
-  shuffle(candidates);
+  // Hierarchically ordered (not just sorted by prefix) so every child renders
+  // directly under its true parent — see hierarchicalOrder() for why a plain
+  // prefix sort can interleave unrelated chains and imply the wrong parent.
+  candidates=hierarchicalOrder(candidates);
   const correct=bestMatch(dest,candidates);
   return {dest,candidates,correct};
 }
@@ -386,12 +434,15 @@ function renderLPM(body,qip){
   document.getElementById('qprompt').textContent='A packet arrives destined for the address below. Click the routing table entry that will actually forward it, then submit.';
   qip.style.display=''; qip.innerHTML=int2ip(d.destInt);
 
-  const rows=d.entries.map(e=>`
+  const rows=d.entries.map(e=>{
+    const depth=Math.min(nestDepth(e,d.entries),3);
+    return `
     <tr class="rt-row pick" id="row-${e.id}" onclick="pickLPM('${e.id}')">
       <td>${srcCode(e.source)}</td>
-      <td>${e.network}/${e.prefix}</td>
+      <td><span class="rt-indent indent-${depth}">${e.network}/${e.prefix}</span></td>
       <td>${cliPath(e)}</td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
   body.innerHTML = rtTable(['Src','Network','Path'], rows);
   setBtns('mcq');
 }
@@ -416,7 +467,7 @@ function isBinDotPos(i){ return i===8 || i===17 || i===26; }
 function nextBinDigitPos(i){ let p=i; while(p<35 && isBinDotPos(p)) p++; return p; }
 function prevBinDigitPos(i){ let p=i-1; while(p>=0 && isBinDotPos(p)) p--; return p<0?0:p; }
 function binInputHtml(id){
-  return `<input class="bin-single" id="${id}" inputmode="numeric" autocomplete="off" spellcheck="false">`;
+  return `<input class="bin-single" id="${id}" inputmode="numeric" autocomplete="off" spellcheck="false"><div class="bin-hint" id="hint-${id}"></div>`;
 }
 function wireBinSingle(id){
   const el=document.getElementById(id);
@@ -456,24 +507,55 @@ function wireBinSingle(id){
 function trueBinStr(octets){ return octets.map(o=>toBin8(o)).join('.'); }
 function gradeBinInput(id, octets, reveal){
   const el=document.getElementById(id);
+  const wrap=el.closest('.bin-card-bin');
+  const hint=document.getElementById('hint-'+id);
   const trueStr=trueBinStr(octets);
   el.disabled=true;
   const uv=el.value;
-  if(reveal){ el.value=trueStr; el.classList.add('show'); return; }
-  if(uv===trueStr) el.classList.add('ok');
-  else { el.classList.add('bad'); el.value=trueStr; }
+  if(reveal){
+    el.value=trueStr;
+    wrap.classList.add('show');
+    hint.textContent='Revealed';
+    return;
+  }
+  if(uv===trueStr){ wrap.classList.add('ok'); return; }
+  // Wrong: keep the learner's own answer visible instead of overwriting it,
+  // and show the correct one underneath so they can compare the two.
+  wrap.classList.add('bad');
+  hint.textContent='Correct: '+trueStr;
+}
+/* Colors the "|" divider to match the IP side only — the binary side is just
+   working/scratch space and was never scored, so coloring the divider off of
+   it too read as inconsistent. Rows where the IP itself isn't being marked
+   (the destination row is never picked; a candidate that's neither correct
+   nor the wrong pick) leave the divider neutral even though their binary
+   field still gets its own color. */
+function syncBinDivider(ipId, divId){
+  const ip=document.getElementById(ipId);
+  const div=document.getElementById(divId);
+  if(!div) return;
+  div.classList.remove('ok','bad','show');
+  if(ip && ip.classList.contains('correct')) div.classList.add('ok');
+  else if(ip && ip.classList.contains('wrong')) div.classList.add('bad');
 }
 function renderBin(body,qip){
   const d=state.data;
   document.getElementById('qprompt').textContent="Convert the destination AND every candidate route below into binary to help you compare them (this part isn't scored), then pick whichever candidate is the longest (best) match. Not every candidate necessarily matches at all.";
-  qip.style.display=''; qip.innerHTML=int2ip(d.dest);
+  qip.style.display='none';
 
-  let html=`<div class="qlbl" style="margin-bottom:.5rem">Destination in binary</div>${binInputHtml('bin-dest')}`;
-  html+=`<div class="qlbl" style="margin:1.1rem 0 .5rem">Candidate routes &mdash; convert each, then pick the longest match</div>`;
+  let html=`<div class="qlbl" style="margin-bottom:.5rem">Destination in binary</div>`;
+  html+=`<div class="bin-card">
+    <div class="bin-card-ip" id="ip-bin-dest">${int2ip(d.dest)}</div>
+    <div class="bin-card-div" id="div-bin-dest">|</div>
+    <div class="bin-card-bin">${binInputHtml('bin-dest')}</div>
+  </div>`;
+  html+=`<div class="qlbl" style="margin:1.1rem 0 .5rem">Candidate routes &mdash; convert each, then pick the longest match (children are indented under their parent)</div>`;
   d.candidates.forEach((c,i)=>{
-    html+=`<div class="bin-cand">
-      <button class="type-btn" id="pick-${c.id}" onclick="pickBin('${c.id}')">${c.network}/${c.prefix}</button>
-      ${binInputHtml('bin-c'+i)}
+    const depth=Math.min(nestDepth(c,d.candidates),3);
+    html+=`<div class="bin-card indent-${depth}">
+      <div class="bin-card-ip pick" id="pick-${c.id}" onclick="pickBin('${c.id}')">${c.network}/${c.prefix}</div>
+      <div class="bin-card-div" id="div-bin-c${i}">|</div>
+      <div class="bin-card-bin">${binInputHtml('bin-c'+i)}</div>
     </div>`;
   });
   body.innerHTML=html;
@@ -484,7 +566,7 @@ function renderBin(body,qip){
 function pickBin(id){
   if(state.done) return;
   state.selectedId=id;
-  document.querySelectorAll('.bin-cand .type-btn').forEach(b=>b.classList.remove('sel'));
+  document.querySelectorAll('.bin-card-ip.pick').forEach(b=>b.classList.remove('sel'));
   document.getElementById('pick-'+id).classList.add('sel');
 }
 
@@ -555,6 +637,7 @@ function renderBuild(body,qip){
 
   html+=`<div class="rt-canvas" id="rt-canvas">
     <svg id="rt-svg"></svg>
+    <div class="rt-canvas-note">click a wire to delete it</div>
     <div class="rt-router-row">
       <div class="rt-router"><div>R1</div>
         <div class="rt-ports">`;
@@ -574,20 +657,29 @@ function renderBuild(body,qip){
 
   body.innerHTML=html;
   setBtns('build');
+  document.getElementById('rt-svg').addEventListener('click', e=>{
+    const iface=e.target.dataset && e.target.dataset.iface;
+    if(!iface || state.done) return;
+    detachIface(iface);
+  });
   requestAnimationFrame(drawCables);
 }
 
 function isChipUsed(id){ return Object.values(state.build.assign).includes(id); }
 function findIfaceForChip(id){ return Object.keys(state.build.assign).find(k=>state.build.assign[k]===id) || null; }
+function detachIface(iface){
+  const chipId=state.build.assign[iface];
+  if(!chipId) return;
+  delete state.build.assign[iface];
+  document.getElementById('chip-'+chipId).classList.remove('used');
+  document.getElementById('port-'+iface).classList.remove('filled');
+  drawCables();
+}
 
 function selectChip(id){
   if(state.done) return;
   if(isChipUsed(id)){
-    const iface=findIfaceForChip(id);
-    delete state.build.assign[iface];
-    document.getElementById('chip-'+id).classList.remove('used');
-    document.getElementById('port-'+iface).classList.remove('filled');
-    drawCables();
+    detachIface(findIfaceForChip(id));
     return;
   }
   document.querySelectorAll('.rt-chip').forEach(c=>c.classList.remove('sel'));
@@ -598,13 +690,7 @@ function selectChip(id){
 function clickPort(iface){
   if(state.done) return;
   if(!state.build.selected){
-    if(state.build.assign[iface]){
-      const chipId=state.build.assign[iface];
-      delete state.build.assign[iface];
-      document.getElementById('chip-'+chipId).classList.remove('used');
-      document.getElementById('port-'+iface).classList.remove('filled');
-      drawCables();
-    }
+    detachIface(iface);
     return;
   }
   const chipId=state.build.selected;
@@ -630,13 +716,21 @@ function drawCables(){
     const chipEl=document.getElementById('chip-'+chipId);
     if(!portEl||!chipEl) return;
     const pr=portEl.getBoundingClientRect(), cr=chipEl.getBoundingClientRect();
+    const x1=pr.left+pr.width/2-rect.left, y1=pr.top+pr.height/2-rect.top;
+    const x2=cr.left+cr.width/2-rect.left, y2=cr.top-rect.top;
     const line=document.createElementNS('http://www.w3.org/2000/svg','line');
-    line.setAttribute('x1', pr.left+pr.width/2-rect.left);
-    line.setAttribute('y1', pr.top+pr.height/2-rect.top);
-    line.setAttribute('x2', cr.left+cr.width/2-rect.left);
-    line.setAttribute('y2', cr.top-rect.top);
+    line.setAttribute('x1',x1); line.setAttribute('y1',y1);
+    line.setAttribute('x2',x2); line.setAttribute('y2',y2);
     line.setAttribute('class','rt-cable');
+    line.dataset.iface=iface;
     svg.appendChild(line);
+    /* invisible wide line so wires are easy to click */
+    const hit=document.createElementNS('http://www.w3.org/2000/svg','line');
+    hit.setAttribute('x1',x1); hit.setAttribute('y1',y1);
+    hit.setAttribute('x2',x2); hit.setAttribute('y2',y2);
+    hit.setAttribute('class','rt-cable-hit');
+    hit.dataset.iface=iface;
+    svg.appendChild(hit);
   });
 }
 window.addEventListener('resize', ()=>{ if(state.mode==='build') drawCables(); });
@@ -691,13 +785,15 @@ function checkAll(){
     if(!state.selectedId){ fb.className='fbanner warn'; fb.textContent='Pick the longest match first.'; fb.style.display='block'; return; }
     gradeBinInput('bin-dest', int2ip(d.dest).split('.').map(Number), false);
     d.candidates.forEach((c,i)=>gradeBinInput('bin-c'+i, c.network.split('.').map(Number), false));
-    document.querySelectorAll('.bin-cand .type-btn').forEach(b=>b.disabled=true);
+    document.querySelectorAll('.bin-card-ip.pick').forEach(b=>b.classList.add('locked'));
     const win = state.selectedId===d.correct.id;
     d.candidates.forEach(c=>{
       const btn=document.getElementById('pick-'+c.id);
       if(c.id===d.correct.id) btn.classList.add('correct');
       else if(c.id===state.selectedId) btn.classList.add('wrong');
     });
+    syncBinDivider('ip-bin-dest','div-bin-dest');
+    d.candidates.forEach((c,i)=>syncBinDivider('pick-'+c.id,'div-bin-c'+i));
     const pts = win ? POINTS[state.diff] : 0;
     state.score+=pts;
     state.streak = win ? state.streak+1 : 0;
@@ -778,8 +874,10 @@ function revealAll(){
     const d=state.data;
     gradeBinInput('bin-dest', int2ip(d.dest).split('.').map(Number), true);
     d.candidates.forEach((c,i)=>gradeBinInput('bin-c'+i, c.network.split('.').map(Number), true));
-    document.querySelectorAll('.bin-cand .type-btn').forEach(b=>b.disabled=true);
+    document.querySelectorAll('.bin-card-ip.pick').forEach(b=>b.classList.add('locked'));
     document.getElementById('pick-'+d.correct.id).classList.add('correct');
+    syncBinDivider('ip-bin-dest','div-bin-dest');
+    d.candidates.forEach((c,i)=>syncBinDivider('pick-'+c.id,'div-bin-c'+i));
     fb.textContent='Skipped. '+d.correct.network+'/'+d.correct.prefix+' is the longest match. No points awarded.';
   } else if(mode==='build'){
     const d=state.data;
