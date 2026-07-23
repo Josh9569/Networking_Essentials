@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Routing Table Trainer</title>
+<link rel="stylesheet" href="styles.css">
+<script src="theme.js"></script>
+<script src="options.js"></script>
+</head>
+<body>
+<div class="wrap">
+
+  <a href="index.html" class="home-link">&#8592; All Tools</a>
+  <div class="hdr">
+    <div>
+      <div class="hdr-title">Routing Table Trainer</div>
+      <div class="hdr-sub">Longest prefix match, administrative distance &amp; route table reading</div>
+    </div>
+    <div class="hdr-right">
+      <div class="chips">
+        <div class="chip">Score <b id="sc">0</b></div>
+        <div class="chip">Round <b id="rnd">1</b></div>
+        <div class="chip">Streak <b id="str">0</b></div>
+      </div>
+      <div id="theme-toggle-slot"></div>
+    </div>
+  </div>
+
+  <div class="cls-row">
+    <span>Topic:</span>
+    <button class="cbtn on" id="tb-rand" onclick="setTopic('rand',this)">Random</button>
+    <button class="cbtn" id="tb-lpm" onclick="setTopic('lpm',this)">Longest Match</button>
+    <button class="cbtn" id="tb-bin" onclick="setTopic('bin',this)">Binary Match</button>
+    <button class="cbtn" id="tb-ad" onclick="setTopic('ad',this)">Admin Distance</button>
+    <button class="cbtn" id="tb-read" onclick="setTopic('read',this)">Read Table</button>
+    <button class="cbtn" id="tb-build" onclick="setTopic('build',this)">Build Network</button>
+  </div>
+
+  <div class="diff-row">
+    <span>Difficulty:</span>
+    <button class="cbtn on" id="db-easy" onclick="setDiff('easy',this)">Easy</button>
+    <button class="cbtn" id="db-medium" onclick="setDiff('medium',this)">Medium</button>
+    <button class="cbtn" id="db-hard" onclick="setDiff('hard',this)">Hard</button>
+  </div>
+
+  <div class="qcard">
+    <div class="qlbl" id="qlbl">Longest Prefix Match</div>
+    <div class="q-prompt" id="qprompt">Loading&hellip;</div>
+    <div class="ipdisp" id="qip" style="display:none"></div>
+  </div>
+
+  <div class="fbanner" id="fb"></div>
+
+  <div id="qbody"></div>
+
+  <div class="actrow">
+    <button class="btn btn-p" id="chkbtn" onclick="checkAll()">Check Answers</button>
+    <button class="btn btn-s" id="revbtn" onclick="revealAll()">Reveal All</button>
+    <button class="btn btn-s" id="nxtbtn" onclick="nextQ()" style="display:none">Next Question &#8594;</button>
+    <button class="btn btn-d" onclick="resetGame()">Reset</button>
+
+    <div class="opt-wrap">
+      <button class="opt-btn" id="opt-btn" onclick="toggleOpts()">
+        Options
+        <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="opt-menu" id="opt-menu">
+        <div class="opt-section-label">Reference Tools</div>
+        <label class="opt-row" onclick="toggleTool('ad')">
+          <span class="opt-row-label">AD Reference</span>
+          <div class="tog"><input type="checkbox" id="tog-ad" checked><span class="tog-track"></span></div>
+        </label>
+        <label class="opt-row" onclick="toggleTool('anat')">
+          <span class="opt-row-label">Route Table Anatomy</span>
+          <div class="tog"><input type="checkbox" id="tog-anat" checked><span class="tog-track"></span></div>
+        </label>
+        <label class="opt-row" onclick="toggleTool('lpm')">
+          <span class="opt-row-label">LPM Rule</span>
+          <div class="tog"><input type="checkbox" id="tog-lpm" checked><span class="tog-track"></span></div>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div class="toolsec" id="toolsec">
+
+    <div class="tool-block" id="t-ad">
+      <div class="tool-block-title">Administrative Distance Reference</div>
+      <p class="tool-note">When two different routing sources learn a route to the <strong>same</strong> network, the router installs the one with the <strong>lowest</strong> administrative distance (AD). Lower always wins &mdash; it's a measure of trustworthiness, not speed.</p>
+      <table class="ref-table">
+        <thead><tr><th>Source</th><th>Code</th><th>Default AD</th></tr></thead>
+        <tbody>
+          <tr><td>Connected</td><td class="cidr-col">C</td><td>0</td></tr>
+          <tr><td>Static</td><td class="cidr-col">S</td><td>1</td></tr>
+          <tr><td>eBGP (external)</td><td class="cidr-col">B</td><td>20</td></tr>
+          <tr><td>EIGRP</td><td class="cidr-col">D</td><td>90</td></tr>
+          <tr><td>OSPF</td><td class="cidr-col">O</td><td>110</td></tr>
+          <tr><td>RIP</td><td class="cidr-col">R</td><td>120</td></tr>
+          <tr><td>iBGP (internal)</td><td class="cidr-col">B</td><td>200</td></tr>
+          <tr><td>Unreachable / unusable</td><td class="cidr-col">&mdash;</td><td>255</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tool-block" id="t-anat">
+      <div class="tool-block-title">Route Table Anatomy</div>
+      <p class="tool-note" style="margin-bottom:.85rem">Every dynamic route line follows the same shape. Static/connected lines drop the metric or next-hop where they don't apply.</p>
+      <div class="cli-block" style="margin-bottom:.85rem">O&nbsp;&nbsp;&nbsp;192.168.20.0/24&nbsp;[110/2]&nbsp;via&nbsp;10.0.0.2,&nbsp;GigabitEthernet0/1</div>
+      <ul class="rules-list">
+        <li class="rule-item"><span class="rule-num">1</span><span class="rule-body"><strong>O</strong> &mdash; the source code letter (see AD Reference). Tells you which protocol installed this route.</span></li>
+        <li class="rule-item"><span class="rule-num">2</span><span class="rule-body"><strong>192.168.20.0/24</strong> &mdash; the destination network and prefix length this entry covers.</span></li>
+        <li class="rule-item"><span class="rule-num">3</span><span class="rule-body"><strong>[110/2]</strong> &mdash; bracketed pair of <em>[Administrative Distance / Metric]</em>. AD ranks the source; metric ranks the path within that source.</span></li>
+        <li class="rule-item"><span class="rule-num">4</span><span class="rule-body"><strong>via 10.0.0.2</strong> &mdash; the next-hop IP address the router forwards matching packets to. Directly connected routes have no next-hop, only an interface.</span></li>
+        <li class="rule-item"><span class="rule-num">5</span><span class="rule-body"><strong>GigabitEthernet0/1</strong> &mdash; the exit interface used to reach that next-hop.</span></li>
+      </ul>
+    </div>
+
+    <div class="tool-block" id="t-lpm">
+      <div class="tool-block-title">Longest Prefix Match Rule</div>
+      <ul class="rules-list">
+        <li class="rule-item"><span class="rule-num">1</span><span class="rule-body">A router compares a packet's destination IP against <strong>every</strong> route in the table and keeps every entry whose network/mask contains that address.</span></li>
+        <li class="rule-item"><span class="rule-num">2</span><span class="rule-body">Among all matching entries, the router always uses the one with the <strong>longest prefix</strong> (the highest /N, i.e. the most specific, smallest network) &mdash; regardless of AD or metric.</span></li>
+        <li class="rule-item"><span class="rule-num">3</span><span class="rule-body">Administrative distance only breaks a tie when two <strong>different sources</strong> advertise the exact <strong>same</strong> prefix &mdash; it never overrides a longer match.</span></li>
+        <li class="rule-item"><span class="rule-num">4</span><span class="rule-body">If nothing else matches, the default route <code>0.0.0.0/0</code> (if present) catches everything. If even that's missing, the packet is dropped.</span></li>
+      </ul>
+    </div>
+
+  </div>
+
+</div><script>
+/* ─── IP / prefix helpers ──────────────────────────────────────── */
+function ri(a,b){ return Math.floor(Math.random()*(b-a+1))+a; }
+function choice(arr){ return arr[ri(0,arr.length-1)]; }
+function shuffle(arr){ for(let i=arr.length-1;i>0;i--){ const j=ri(0,i); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
+function ip2int(ip){ const p=ip.split('.').map(Number); return((p[0]<<24)|(p[1]<<16)|(p[2]<<8)|p[3])>>>0; }
+function int2ip(n){ return[(n>>>24)&255,(n>>>16)&255,(n>>>8)&255,n&255].join('.'); }
+function maskInt(cidr){ return cidr<=0?0:(cidr>=32?0xFFFFFFFF>>>0:(0xFFFFFFFF<<(32-cidr))>>>0); }
+function cidr2mask(cidr){ return int2ip(maskInt(cidr)); }
+function netIntOf(ipInt,cidr){ return (ipInt & maskInt(cidr))>>>0; }
+function bcastIntOf(netI,cidr){ const wc=cidr<=0?0xFFFFFFFF>>>0:(~maskInt(cidr))>>>0; return (netI|wc)>>>0; }
+function toBin8(n){ return n.toString(2).padStart(8,'0'); }
+function randIpOctets(){ let o1; do{ o1=ri(1,223); }while(o1===127); return [o1,ri(0,255),ri(0,255),ri(0,255)]; }
+const NICE_MAJORS=[10,172,192,128,150,203,64,198];
+function niceRawInt(){
+  const o1=choice(NICE_MAJORS);
+  const rest=ip2int(randIpOctets().join('.')) & 0x00FFFFFF;
+  return (((o1<<24)>>>0)|rest)>>>0;
+}
+
+function makeEntry(rawInt,prefix,extra){
+  const netInt=netIntOf(rawInt,prefix);
+  const e=Object.assign({netInt,prefix,network:int2ip(netInt)},extra||{});
+  e.id=e.network+'/'+e.prefix+'-'+Math.random().toString(36).slice(2,8);
+  return e;
+}
+function matchesEntry(destInt,entry){ return (destInt & maskInt(entry.prefix))>>>0 === entry.netInt; }
+function bestMatch(destInt,entries){
+  let best=null;
+  entries.forEach(e=>{ if(matchesEntry(destInt,e)){ if(!best||e.prefix>best.prefix) best=e; } });
+  return best;
+}
+function randomNonMatchingEntry(destInt,prefixPool,extra){
+  let e,tries=0;
+  do{
+    const raw=ip2int(randIpOctets().join('.'));
+    const p=choice(prefixPool);
+    e=makeEntry(raw,p,extra?extra():{});
+    tries++;
+  }while(matchesEntry(destInt,e) && tries<25);
+  return e;
+}
+/* Structural containment — independent of any destination address — used to
+   render parent/child nesting depth (indentation) rather than assuming table
+   order. Prefix 0 (the default route) is excluded as a "parent": it contains
+   everything by definition, which isn't the specific nested relationship
+   we're trying to make visible, and would inflate every other row's depth. */
+function containsNet(parent,child){
+  return parent.prefix>0 && parent.prefix<child.prefix && (child.netInt & maskInt(parent.prefix))>>>0===parent.netInt;
+}
+function nestDepth(entry,all){
+  return all.filter(o=>o!==entry && containsNet(o,entry)).length;
+}
+/* The tightest (largest-prefix) entry that contains this one — its direct
+   parent in the nesting tree. Any two entries that both contain a third are
+   guaranteed comparable (whichever has the shorter prefix must also contain
+   the other), so "all ancestors" is always a single chain, not parallel
+   branches — there's exactly one unambiguous direct parent. */
+function directParent(entry,all){
+  let best=null;
+  all.forEach(o=>{ if(o!==entry && containsNet(o,entry)){ if(!best||o.prefix>best.prefix) best=o; } });
+  return best;
+}
+/* Sorting by prefix alone can interleave unrelated chains at the same depth
+   (a decoy sitting between a parent and its own child just because its
+   prefix falls in between), which visually implies the wrong parent. This
+   instead does a depth-first walk: every entry is immediately followed by
+   all of its own descendants (recursively) before moving on to the next
+   sibling, so a child always renders directly under its true parent. */
+function hierarchicalOrder(all){
+  const byParent=new Map();
+  all.forEach(e=>{
+    const p=directParent(e,all);
+    const key=p?p.id:null;
+    if(!byParent.has(key)) byParent.set(key,[]);
+    byParent.get(key).push(e);
+  });
+  byParent.forEach(list=>list.sort((a,b)=>a.prefix-b.prefix||a.netInt-b.netInt));
+  const out=[];
+  (function visit(parentId){
+    (byParent.get(parentId)||[]).forEach(e=>{ out.push(e); visit(e.id); });
+  })(null);
+  return out;
+}
+
+/* ─── Routing sources, administrative distance & CLI formatting ─── */
+const RT_SOURCES=[
+  {code:'C', name:'Connected', ad:0,   alt:['DIRECTLY CONNECTED']},
+  {code:'S', name:'Static',    ad:1,   alt:[]},
+  {code:'B', name:'eBGP',      ad:20,  alt:['BGP','EXTERNAL BGP']},
+  {code:'D', name:'EIGRP',     ad:90,  alt:[]},
+  {code:'O', name:'OSPF',      ad:110, alt:[]},
+  {code:'R', name:'RIP',       ad:120, alt:[]}
+];
+const DEFAULT_SRC={code:'S*', name:'Static (default)', ad:1, alt:['STATIC']};
+const IFACES=['GigabitEthernet0/0','GigabitEthernet0/1','GigabitEthernet1/0','FastEthernet0/1','Serial0/0/0'];
+
+function metricFor(src){
+  if(src.code==='O') return ri(2,50);
+  if(src.code==='D') return ri(2000,300000);
+  if(src.code==='R') return ri(1,15);
+  if(src.code==='B') return ri(0,50);
+  return ri(0,10);
+}
+/* Builds the {source,nextHop,metric,iface} bundle shared by every generator.
+   Pass an explicit iface to pin it (Build topic); otherwise one is picked at random. */
+function makeRouteExtras(src,iface){
+  const ifc=iface||choice(IFACES);
+  if(src.code==='C') return {source:src, nextHop:null, metric:null, iface:ifc};
+  return {source:src, nextHop:randIpOctets().join('.'), metric:metricFor(src), iface:ifc};
+}
+/* Path only (no AD/metric) — for tables that show AD/Metric in its own column. */
+function cliPath(e){
+  return e.source.code==='C' ? `is directly connected, ${e.iface}` : `via ${e.nextHop}, ${e.iface}`;
+}
+function cliADMetric(e){
+  return e.source.code==='C' ? 'AD 0' : `[${e.source.ad}/${e.metric}]`;
+}
+/* One full realistic "show ip route" line, exactly like real IOS output. */
+function cliFullLine(e){
+  const path = e.source.code==='C' ? cliPath(e) : `[${e.source.ad}/${e.metric}] via ${e.nextHop}, ${e.iface}`;
+  return `${e.source.code}    ${e.network}/${e.prefix} ${path}`;
+}
+
+/* ─── State ─────────────────────────────────────────────────────── */
+let state={ topic:'rand', diff:'easy', score:0, round:1, streak:0, done:false, mode:null, data:null, lastTopic:null, selectedId:null, build:{assign:{},selected:null} };
+const TOPICS=['lpm','bin','ad','read','build'];
+const TOPIC_LABEL={lpm:'Longest Prefix Match', bin:'Binary Match', ad:'Administrative Distance', read:'Read The Table', build:'Build The Network'};
+const POINTS={easy:3, medium:4, hard:6};
+
+function pickTopic(){
+  if(state.topic!=='rand') return state.topic;
+  let t; do{ t=choice(TOPICS); }while(t===state.lastTopic);
+  state.lastTopic=t;
+  return t;
+}
+
+/* ─── Generators: Longest Prefix Match ─────────────────────────── */
+function genLPM(diff){
+  let nestedPrefixes, onlyDefault=false;
+  if(diff==='easy'){ nestedPrefixes=[16,24]; }
+  else if(diff==='medium'){ nestedPrefixes=[16,24,choice([26,27,28])]; }
+  else { onlyDefault=Math.random()<0.2; nestedPrefixes=onlyDefault?[]:[8,16,24,choice([25,26,27,28,29,30])]; }
+
+  const destInt = onlyDefault ? ip2int(randIpOctets().join('.')) : niceRawInt();
+  let entries=[];
+  nestedPrefixes.forEach(p=>entries.push(makeEntry(destInt,p,makeRouteExtras(choice(RT_SOURCES)))));
+
+  const decoyPool = diff==='easy'?[16,24]:diff==='medium'?[16,20,24,28]:[8,16,20,24,28,30];
+  const decoyCount = diff==='easy'?1:2;
+  for(let i=0;i<decoyCount;i++) entries.push(randomNonMatchingEntry(destInt,decoyPool,()=>makeRouteExtras(choice(RT_SOURCES))));
+
+  if(diff==='hard') entries.push(makeEntry(0,0,makeRouteExtras(DEFAULT_SRC)));
+
+  // Hierarchically ordered (not just sorted by prefix) so every child renders
+  // directly under its true parent — see hierarchicalOrder() for why a plain
+  // prefix sort can interleave unrelated chains and imply the wrong parent.
+  entries=hierarchicalOrder(entries);
+  const correct=bestMatch(destInt,entries);
+  return {destInt,entries,correct};
+}
+
+/* ─── Generators: Binary Match ──────────────────────────────────── */
+/* Difficulty scales how many candidate routes are in play. Easy is a single
+   matching entry plus one decoy — just "does this match at all". Medium
+   introduces genuine parent/child nesting (a shallow parent prefix and a
+   deeper child prefix that both match) plus a decoy. Hard at least doubles
+   medium's total: four nested levels (grandparent → parent → child →
+   grandchild) plus two decoys. Every candidate — matching or not — gets its
+   own binary entry box; the decoys still have to be reasoned about, which is
+   what makes the harder levels genuinely harder rather than just longer. */
+function genBin(diff){
+  const prefixSteps = diff==='easy' ? [24] : diff==='medium' ? [16,24] : [8,16,24,28];
+  const decoyCount = diff==='easy' ? 1 : diff==='medium' ? 1 : 2;
+
+  const raw=niceRawInt();
+  const deep=prefixSteps[prefixSteps.length-1];
+  const netDeep=netIntOf(raw,deep);
+  const block=Math.pow(2,32-deep);
+  const offset = block<=2 ? 0 : ri(1,block-2);
+  const dest=(netDeep+offset)>>>0;
+
+  let candidates = prefixSteps.map(p=>makeEntry(dest,p,{}));
+  for(let i=0;i<decoyCount;i++) candidates.push(randomNonMatchingEntry(dest,[16,20,24,28],()=>({})));
+  // Hierarchically ordered (not just sorted by prefix) so every child renders
+  // directly under its true parent — see hierarchicalOrder() for why a plain
+  // prefix sort can interleave unrelated chains and imply the wrong parent.
+  candidates=hierarchicalOrder(candidates);
+  const correct=bestMatch(dest,candidates);
+  return {dest,candidates,correct};
+}
+
+/* ─── Generators: Administrative Distance ───────────────────────── */
+function genAD(diff){
+  const raw=niceRawInt();
+  const prefix=choice([16,24,25,26,27,28]);
+  const netInt=netIntOf(raw,prefix);
+  const network=int2ip(netInt);
+
+  const n = diff==='easy'?2 : diff==='medium'?3 : 4;
+  const pool=shuffle(RT_SOURCES.slice());
+  const chosen=pool.slice(0,n);
+  const entries=chosen.map(src=>{
+    const ex=makeRouteExtras(src);
+    return {id:src.code+Math.random().toString(36).slice(2,8), source:src, network, prefix, netInt, nextHop:ex.nextHop, metric:ex.metric, iface:ex.iface};
+  });
+  shuffle(entries);
+  const correct=entries.reduce((a,b)=> a.source.ad<b.source.ad?a:b);
+  return {network,prefix,entries,correct};
+}
+
+/* ─── Generators: Read The Table ────────────────────────────────── */
+function genRead(diff){
+  const raw=niceRawInt();
+  const prefix=choice(diff==='easy'?[24]:diff==='medium'?[16,24,28]:[16,20,24,26,28,30]);
+  const netInt=netIntOf(raw,prefix);
+  const network=int2ip(netInt);
+  const isConnected=Math.random()<0.25;
+  const src = isConnected ? RT_SOURCES[0] : choice(RT_SOURCES.filter(s=>s.code!=='C'));
+  const ex=makeRouteExtras(src);
+  return {connected:isConnected, source:src, network, prefix, iface:ex.iface, nextHop:ex.nextHop, metric:ex.metric};
+}
+
+/* ─── Generators: Build The Network ─────────────────────────────── */
+/* Given a routing table, the learner must physically wire the topology it implies:
+   click a node (a network for a Connected entry, a neighbor router for anything
+   learned dynamically/statically), then click the router interface it belongs to. */
+function genBuild(diff){
+  const n = diff==='easy'?2 : diff==='medium'?3 : 4;
+  const ifacePool=shuffle(IFACES.slice()).slice(0,n);
+  const entries=ifacePool.map((iface,i)=>{
+    const raw=niceRawInt();
+    const prefix=choice([16,20,22,24,25,26,27,28]);
+    const netInt=netIntOf(raw,prefix);
+    const network=int2ip(netInt);
+    const isConnected = i===0 ? true : Math.random()<0.5;
+    const src = isConnected ? RT_SOURCES[0] : choice(RT_SOURCES.filter(s=>s.code!=='C'));
+    const ex=makeRouteExtras(src,iface);
+    return {id:'e'+i, network, prefix, iface, source:src, nextHop:ex.nextHop, metric:ex.metric};
+  });
+  const table=shuffle(entries.slice());
+  const ports=entries.slice().sort((a,b)=>a.iface.localeCompare(b.iface));
+  const chips=shuffle(entries.map(e=>({
+    id:e.id,
+    correctIface:e.iface,
+    label: e.source.code==='C' ? 'Network' : 'Neighbor Router',
+    value: e.source.code==='C' ? (e.network+'/'+e.prefix) : ('via '+e.nextHop)
+  })));
+  return {entries,table,ports,chips};
+}
+
+/* ─── Round control ──────────────────────────────────────────────── */
+function loadQ(){
+  state.done=false; state.selectedId=null; state.build={assign:{},selected:null};
+  const t=pickTopic();
+  state.mode=t;
+  if(t==='lpm') state.data=genLPM(state.diff);
+  else if(t==='bin') state.data=genBin(state.diff);
+  else if(t==='ad') state.data=genAD(state.diff);
+  else if(t==='read') state.data=genRead(state.diff);
+  else if(t==='build') state.data=genBuild(state.diff);
+  render();
+  updateChips();
+}
+
+function updateChips(){
+  document.getElementById('sc').textContent=state.score;
+  document.getElementById('rnd').textContent=state.round;
+  document.getElementById('str').textContent=state.streak;
+}
+
+function setBtns(mode){
+  const chk=document.getElementById('chkbtn'), rev=document.getElementById('revbtn'), nxt=document.getElementById('nxtbtn');
+  nxt.style.display='none';
+  if(mode==='mcq'){ chk.textContent='Submit Answer'; rev.textContent='Skip'; }
+  else if(mode==='build'){ chk.textContent='Check Wiring'; rev.textContent='Reveal All'; }
+  else { chk.textContent='Check Answers'; rev.textContent='Reveal All'; }
+  chk.style.display=''; rev.style.display='';
+  document.getElementById('fb').style.display='none';
+}
+
+/* ─── Render dispatcher ──────────────────────────────────────────── */
+function render(){
+  document.getElementById('qlbl').textContent=TOPIC_LABEL[state.mode];
+  const qip=document.getElementById('qip'); qip.style.display='none'; qip.style.fontSize='';
+  const body=document.getElementById('qbody');
+  body.innerHTML='';
+  if(state.mode==='lpm') renderLPM(body,qip);
+  else if(state.mode==='bin') renderBin(body,qip);
+  else if(state.mode==='ad') renderAD(body,qip);
+  else if(state.mode==='read') renderRead(body,qip);
+  else if(state.mode==='build') renderBuild(body,qip);
+}
+
+/* ── Shared: routing table element ── */
+function rtTable(headers, rowsHtml){
+  return `<div class="rt-wrap"><table class="rt-table"><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rowsHtml}</tbody></table></div>`;
+}
+function srcCode(src){ return `<span class="rt-code src-${src.code[0]}">${src.code}</span>`; }
+
+/* ─── Render: Longest Prefix Match ─────────────────────────────── */
+function renderLPM(body,qip){
+  const d=state.data;
+  document.getElementById('qprompt').textContent='A packet arrives destined for the address below. Click the routing table entry that will actually forward it, then submit.';
+  qip.style.display=''; qip.innerHTML=int2ip(d.destInt);
+
+  const rows=d.entries.map(e=>{
+    const depth=Math.min(nestDepth(e,d.entries),3);
+    return `
+    <tr class="rt-row pick" id="row-${e.id}" onclick="pickLPM('${e.id}')">
+      <td>${srcCode(e.source)}</td>
+      <td><span class="rt-indent indent-${depth}">${e.network}/${e.prefix}</span></td>
+      <td>${cliPath(e)}</td>
+    </tr>`;
+  }).join('');
+  body.innerHTML = rtTable(['Src','Network','Path'], rows);
+  setBtns('mcq');
+}
+function pickLPM(id){
+  if(state.done) return;
+  state.selectedId=id;
+  document.querySelectorAll('.rt-row').forEach(r=>r.classList.remove('sel'));
+  document.getElementById('row-'+id).classList.add('sel');
+}
+
+/* ─── Render: Binary Match ──────────────────────────────────────── */
+/* One masked box per address (not graded/scored — it's working space to help
+   pick the right candidate) covering all 4 octets at once. The box starts
+   pre-filled with "00000000.00000000.00000000.00000000" as real content, not
+   a placeholder: typing 0/1 overwrites the digit under the cursor and jumps
+   to the next digit, hopping over the dots automatically. The dots themselves
+   are fixed — typing "." does nothing, and only 0/1 are ever accepted. Check/
+   Reveal still colors the box ok/bad purely as feedback; only the candidate
+   pick below actually earns points. */
+const BIN_TEMPLATE='00000000.00000000.00000000.00000000';
+function isBinDotPos(i){ return i===8 || i===17 || i===26; }
+function nextBinDigitPos(i){ let p=i; while(p<35 && isBinDotPos(p)) p++; return p; }
+function prevBinDigitPos(i){ let p=i-1; while(p>=0 && isBinDotPos(p)) p--; return p<0?0:p; }
+function binInputHtml(id){
+  return `<input class="bin-single" id="${id}" inputmode="numeric" autocomplete="off" spellcheck="false"><div class="bin-hint" id="hint-${id}"></div>`;
+}
+function wireBinSingle(id){
+  const el=document.getElementById(id);
+  el.value=BIN_TEMPLATE;
+  el.dataset.touched='0';
+  // A click's native caret placement can land after 'focus' fires (on mouseup,
+  // not mousedown), so defer the override to the next tick to reliably win —
+  // covers both mouse clicks and keyboard/Tab focus.
+  const snapToStart=()=>{
+    if(el.dataset.touched==='0') setTimeout(()=>{ if(el.dataset.touched==='0') el.setSelectionRange(0,0); }, 0);
+  };
+  el.addEventListener('focus', snapToStart);
+  el.addEventListener('mouseup', snapToStart);
+  el.addEventListener('keydown', e=>{
+    if(e.ctrlKey || e.metaKey || e.altKey) return;
+    const nav=['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Home','End','Tab'];
+    if(nav.includes(e.key)) return;
+    e.preventDefault();
+    const val=el.value;
+    if(e.key==='Backspace' || e.keyCode===8){
+      const pos=prevBinDigitPos(el.selectionStart);
+      el.value=val.slice(0,pos)+'0'+val.slice(pos+1);
+      el.setSelectionRange(pos,pos);
+      el.dataset.touched='1';
+      return;
+    }
+    if(e.key!=='0' && e.key!=='1') return;
+    const pos=nextBinDigitPos(el.selectionStart);
+    if(pos>=35) return;
+    el.value=val.slice(0,pos)+e.key+val.slice(pos+1);
+    el.setSelectionRange(nextBinDigitPos(pos+1), nextBinDigitPos(pos+1));
+    el.dataset.touched='1';
+  });
+  el.addEventListener('paste', e=>e.preventDefault());
+  el.addEventListener('drop', e=>e.preventDefault());
+}
+function trueBinStr(octets){ return octets.map(o=>toBin8(o)).join('.'); }
+function gradeBinInput(id, octets, reveal){
+  const el=document.getElementById(id);
+  const wrap=el.closest('.bin-card-bin');
+  const hint=document.getElementById('hint-'+id);
+  const trueStr=trueBinStr(octets);
+  el.disabled=true;
+  const uv=el.value;
+  if(reveal){
+    el.value=trueStr;
+    wrap.classList.add('show');
+    hint.textContent='Revealed';
+    return;
+  }
+  if(uv===trueStr){ wrap.classList.add('ok'); return; }
+  // Wrong: keep the learner's own answer visible instead of overwriting it,
+  // and show the correct one underneath so they can compare the two.
+  wrap.classList.add('bad');
+  hint.textContent='Correct: '+trueStr;
+}
+/* Colors the "|" divider to match the IP side only — the binary side is just
+   working/scratch space and was never scored, so coloring the divider off of
+   it too read as inconsistent. Rows where the IP itself isn't being marked
+   (the destination row is never picked; a candidate that's neither correct
+   nor the wrong pick) leave the divider neutral even though their binary
+   field still gets its own color. */
+function syncBinDivider(ipId, divId){
+  const ip=document.getElementById(ipId);
+  const div=document.getElementById(divId);
+  if(!div) return;
+  div.classList.remove('ok','bad','show');
+  if(ip && ip.classList.contains('correct')) div.classList.add('ok');
+  else if(ip && ip.classList.contains('wrong')) div.classList.add('bad');
+}
+function renderBin(body,qip){
+  const d=state.data;
+  document.getElementById('qprompt').textContent="Convert the destination AND every candidate route below into binary to help you compare them (this part isn't scored), then pick whichever candidate is the longest (best) match. Not every candidate necessarily matches at all.";
+  qip.style.display='none';
+
+  let html=`<div class="qlbl" style="margin-bottom:.5rem">Destination in binary</div>`;
+  html+=`<div class="bin-card">
+    <div class="bin-card-ip" id="ip-bin-dest">${int2ip(d.dest)}</div>
+    <div class="bin-card-div" id="div-bin-dest">|</div>
+    <div class="bin-card-bin">${binInputHtml('bin-dest')}</div>
+  </div>`;
+  html+=`<div class="qlbl" style="margin:1.1rem 0 .5rem">Candidate routes &mdash; convert each, then pick the longest match (children are indented under their parent)</div>`;
+  d.candidates.forEach((c,i)=>{
+    const depth=Math.min(nestDepth(c,d.candidates),3);
+    html+=`<div class="bin-card indent-${depth}">
+      <div class="bin-card-ip pick" id="pick-${c.id}" onclick="pickBin('${c.id}')">${c.network}/${c.prefix}</div>
+      <div class="bin-card-div" id="div-bin-c${i}">|</div>
+      <div class="bin-card-bin">${binInputHtml('bin-c'+i)}</div>
+    </div>`;
+  });
+  body.innerHTML=html;
+  wireBinSingle('bin-dest');
+  d.candidates.forEach((c,i)=>wireBinSingle('bin-c'+i));
+  setBtns('mcq');
+}
+function pickBin(id){
+  if(state.done) return;
+  state.selectedId=id;
+  document.querySelectorAll('.bin-card-ip.pick').forEach(b=>b.classList.remove('sel'));
+  document.getElementById('pick-'+id).classList.add('sel');
+}
+
+/* ─── Render: Administrative Distance ───────────────────────────── */
+function renderAD(body,qip){
+  const d=state.data;
+  document.getElementById('qprompt').innerHTML=`Multiple sources are advertising a route to <strong>${d.network}/${d.prefix}</strong>. Click the one the router will actually install, then submit.`;
+
+  const rows=d.entries.map(e=>`
+    <tr class="rt-row pick" id="row-${e.id}" onclick="pickAD('${e.id}')">
+      <td>${srcCode(e.source)} ${e.source.name}</td>
+      <td>${cliPath(e)}</td>
+      <td>${cliADMetric(e)}</td>
+    </tr>`).join('');
+  body.innerHTML = rtTable(['Source','Path','AD / Metric'], rows);
+  setBtns('mcq');
+}
+function pickAD(id){
+  if(state.done) return;
+  state.selectedId=id;
+  document.querySelectorAll('.rt-row').forEach(r=>r.classList.remove('sel'));
+  document.getElementById('row-'+id).classList.add('sel');
+}
+
+/* ─── Render: Read The Table ─────────────────────────────────────── */
+function readFields(d){
+  const f=[];
+  f.push({id:'src', key:'src', label:'Route Source', placeholder:'e.g. EIGRP'});
+  f.push({id:'ad', key:'ad', label:'Administrative Distance', placeholder:'e.g. 90'});
+  if(!d.connected){
+    f.push({id:'metric', key:'metric', label:'Metric', placeholder:'e.g. 20514560'});
+    f.push({id:'nh', key:'nh', label:'Next-Hop IP', placeholder:'e.g. 10.0.0.2'});
+  }
+  f.push({id:'iface', key:'iface', label:'Exit Interface', placeholder:'e.g. GigabitEthernet0/0'});
+  return f;
+}
+function readAnswers(d){
+  const a={src:d.source.name, ad:String(d.source.ad), iface:d.iface};
+  if(!d.connected){ a.metric=String(d.metric); a.nh=d.nextHop; }
+  return a;
+}
+function renderRead(body,qip){
+  const d=state.data;
+  document.getElementById('qprompt').textContent='Read the routing table line below and fill in what each part means.';
+  qip.style.display=''; qip.style.fontSize='18px'; qip.innerHTML=`<span style="white-space:nowrap">${cliFullLine(d)}</span>`;
+
+  const grid=document.createElement('div');
+  grid.className='agrid'; grid.id='agrid';
+  readFields(d).forEach(f=>{
+    const div=document.createElement('div');
+    div.className='afield'; div.id='f-'+f.id;
+    div.innerHTML=`<label>${f.label}</label><input id="a-${f.id}" placeholder="${f.placeholder}" autocomplete="off"><div class="ahint" id="h-${f.id}"></div>`;
+    grid.appendChild(div);
+  });
+  body.appendChild(grid);
+  setBtns('text');
+}
+
+/* ─── Render: Build The Network ──────────────────────────────────── */
+function renderBuild(body,qip){
+  const d=state.data;
+  document.getElementById('qprompt').textContent="This router's routing table is shown below. Click a node, then click the interface it belongs to, to wire up the topology it implies.";
+  qip.style.display='none';
+
+  let html=`<div class="cli-block" style="margin-bottom:1rem">`;
+  html+=d.table.map(e=>cliFullLine(e)).join('<br>');
+  html+=`</div>`;
+
+  html+=`<div class="rt-canvas" id="rt-canvas">
+    <svg id="rt-svg"></svg>
+    <div class="rt-canvas-note">click a wire to delete it</div>
+    <div class="rt-router-row">
+      <div class="rt-router"><div>R1</div>
+        <div class="rt-ports">`;
+  d.ports.forEach(p=>{
+    const short=p.iface.replace('GigabitEthernet','Gi').replace('FastEthernet','Fa').replace('Serial','Se');
+    html+=`<div class="rt-port-wrap"><div class="rt-port" id="port-${p.iface}" onclick="clickPort('${p.iface}')"></div><div class="rt-port-lbl">${short}</div></div>`;
+  });
+  html+=`    </div>
+      </div>
+    </div>
+    <div class="rt-pool" id="rt-pool">`;
+  d.chips.forEach(c=>{
+    html+=`<div class="rt-chip" id="chip-${c.id}" onclick="selectChip('${c.id}')"><div class="rt-chip-lbl">${c.label}</div><div class="rt-chip-val">${c.value}</div></div>`;
+  });
+  html+=`</div>
+  </div>`;
+
+  body.innerHTML=html;
+  setBtns('build');
+  document.getElementById('rt-svg').addEventListener('click', e=>{
+    const iface=e.target.dataset && e.target.dataset.iface;
+    if(!iface || state.done) return;
+    detachIface(iface);
+  });
+  requestAnimationFrame(drawCables);
+}
+
+function isChipUsed(id){ return Object.values(state.build.assign).includes(id); }
+function findIfaceForChip(id){ return Object.keys(state.build.assign).find(k=>state.build.assign[k]===id) || null; }
+function detachIface(iface){
+  const chipId=state.build.assign[iface];
+  if(!chipId) return;
+  delete state.build.assign[iface];
+  document.getElementById('chip-'+chipId).classList.remove('used');
+  document.getElementById('port-'+iface).classList.remove('filled');
+  drawCables();
+}
+
+function selectChip(id){
+  if(state.done) return;
+  if(isChipUsed(id)){
+    detachIface(findIfaceForChip(id));
+    return;
+  }
+  document.querySelectorAll('.rt-chip').forEach(c=>c.classList.remove('sel'));
+  const was=state.build.selected;
+  state.build.selected = (was===id) ? null : id;
+  if(state.build.selected) document.getElementById('chip-'+id).classList.add('sel');
+}
+function clickPort(iface){
+  if(state.done) return;
+  if(!state.build.selected){
+    detachIface(iface);
+    return;
+  }
+  const chipId=state.build.selected;
+  const prevIface=findIfaceForChip(chipId);
+  if(prevIface){ delete state.build.assign[prevIface]; document.getElementById('port-'+prevIface).classList.remove('filled'); }
+  if(state.build.assign[iface]) document.getElementById('chip-'+state.build.assign[iface]).classList.remove('used');
+  state.build.assign[iface]=chipId;
+  document.getElementById('chip-'+chipId).classList.remove('sel');
+  document.getElementById('chip-'+chipId).classList.add('used');
+  document.getElementById('port-'+iface).classList.add('filled');
+  state.build.selected=null;
+  drawCables();
+}
+function drawCables(){
+  const canvas=document.getElementById('rt-canvas');
+  if(!canvas) return;
+  const svg=document.getElementById('rt-svg');
+  const rect=canvas.getBoundingClientRect();
+  svg.innerHTML='';
+  Object.keys(state.build.assign).forEach(iface=>{
+    const chipId=state.build.assign[iface];
+    const portEl=document.getElementById('port-'+iface);
+    const chipEl=document.getElementById('chip-'+chipId);
+    if(!portEl||!chipEl) return;
+    const pr=portEl.getBoundingClientRect(), cr=chipEl.getBoundingClientRect();
+    const x1=pr.left+pr.width/2-rect.left, y1=pr.top+pr.height/2-rect.top;
+    const x2=cr.left+cr.width/2-rect.left, y2=cr.top-rect.top;
+    const line=document.createElementNS('http://www.w3.org/2000/svg','line');
+    line.setAttribute('x1',x1); line.setAttribute('y1',y1);
+    line.setAttribute('x2',x2); line.setAttribute('y2',y2);
+    line.setAttribute('class','rt-cable');
+    line.dataset.iface=iface;
+    svg.appendChild(line);
+    /* invisible wide line so wires are easy to click */
+    const hit=document.createElementNS('http://www.w3.org/2000/svg','line');
+    hit.setAttribute('x1',x1); hit.setAttribute('y1',y1);
+    hit.setAttribute('x2',x2); hit.setAttribute('y2',y2);
+    hit.setAttribute('class','rt-cable-hit');
+    hit.dataset.iface=iface;
+    svg.appendChild(hit);
+  });
+}
+window.addEventListener('resize', ()=>{ if(state.mode==='build') drawCables(); });
+
+/* ─── Grading: generic text-field agrid (read) ──────────────────── */
+function gradeAgrid(fields, answers, reveal){
+  let correct=0;
+  fields.forEach(({id,key})=>{
+    const inp=document.getElementById('a-'+id);
+    const fld=document.getElementById('f-'+id);
+    const hnt=document.getElementById('h-'+id);
+    const uv=inp.value.trim().toUpperCase();
+    const cv=String(answers[key]).trim().toUpperCase();
+    inp.disabled=true;
+    const ok = reveal ? false : uv===cv;
+    if(!reveal && ok){ fld.classList.add('ok'); hnt.textContent='✓ Correct'; correct++; }
+    else if(reveal || uv===''){ fld.classList.add(uv===''?'show':'bad'); inp.value=answers[key]; hnt.textContent = uv==='' ? 'Revealed' : ('Correct: '+answers[key]); }
+    else { fld.classList.add('bad'); hnt.textContent='Correct: '+answers[key]; }
+  });
+  return correct;
+}
+
+/* ─── Check / Reveal / Next ──────────────────────────────────────── */
+function checkAll(){
+  if(state.done) return;
+  const mode=state.mode;
+  const fb=document.getElementById('fb');
+  fb.style.display='block';
+
+  if(mode==='lpm' || mode==='ad'){
+    const d=state.data;
+    const correctId=d.correct.id;
+    if(!state.selectedId){ fb.className='fbanner warn'; fb.textContent='Select an entry first.'; fb.style.display='block'; return; }
+    document.querySelectorAll('.rt-row').forEach(r=>r.classList.remove('pick','sel'));
+    document.getElementById('row-'+correctId).classList.add('correct');
+    const win = state.selectedId===correctId;
+    if(!win) document.getElementById('row-'+state.selectedId).classList.add('wrong');
+    const pts = win ? POINTS[state.diff] : 0;
+    state.score+=pts;
+    state.streak = win ? state.streak+1 : 0;
+    state.round++;
+    fb.className='fbanner '+(win?'ok':'err');
+    fb.textContent = win
+      ? `Correct! ${lpmAdExplain(mode,d,correctId)} +${pts} pts. Streak: ${state.streak}`
+      : `Not quite. ${lpmAdExplain(mode,d,correctId)} +0 pts.`;
+    finishRound();
+    return;
+  }
+
+  if(mode==='bin'){
+    const d=state.data;
+    if(!state.selectedId){ fb.className='fbanner warn'; fb.textContent='Pick the longest match first.'; fb.style.display='block'; return; }
+    gradeBinInput('bin-dest', int2ip(d.dest).split('.').map(Number), false);
+    d.candidates.forEach((c,i)=>gradeBinInput('bin-c'+i, c.network.split('.').map(Number), false));
+    document.querySelectorAll('.bin-card-ip.pick').forEach(b=>b.classList.add('locked'));
+    const win = state.selectedId===d.correct.id;
+    d.candidates.forEach(c=>{
+      const btn=document.getElementById('pick-'+c.id);
+      if(c.id===d.correct.id) btn.classList.add('correct');
+      else if(c.id===state.selectedId) btn.classList.add('wrong');
+    });
+    syncBinDivider('ip-bin-dest','div-bin-dest');
+    d.candidates.forEach((c,i)=>syncBinDivider('pick-'+c.id,'div-bin-c'+i));
+    const pts = win ? POINTS[state.diff] : 0;
+    state.score+=pts;
+    state.streak = win ? state.streak+1 : 0;
+    state.round++;
+    fb.className='fbanner '+(win?'ok':'err');
+    fb.textContent = win
+      ? `Correct! ${d.correct.network}/${d.correct.prefix} is the longest match. +${pts} pts. Streak: ${state.streak}`
+      : `Not quite — ${d.correct.network}/${d.correct.prefix} is the longest match. +0 pts.`;
+    finishRound();
+    return;
+  }
+
+  if(mode==='build'){
+    const d=state.data;
+    let correct=0;
+    d.ports.forEach(p=>{
+      const assigned=state.build.assign[p.iface];
+      const ok=assigned===p.id;
+      const portEl=document.getElementById('port-'+p.iface);
+      portEl.classList.remove('filled');
+      portEl.classList.add(ok?'p-ok':'p-bad');
+      if(assigned) document.getElementById('chip-'+assigned).classList.add(ok?'p-ok':'p-bad');
+      if(ok) correct++;
+    });
+    document.querySelectorAll('.rt-chip, .rt-port').forEach(el=>el.onclick=null);
+    const total=d.ports.length;
+    const bonus=correct===total?2:0;
+    const pts=correct+bonus;
+    state.score+=pts;
+    state.streak = correct===total ? state.streak+1 : 0;
+    state.round++;
+    fb.className='fbanner '+(correct===total?'ok':correct>=Math.ceil(total*.6)?'warn':'err');
+    fb.textContent = correct===total
+      ? `Perfect! All ${total} interfaces wired correctly. +${pts} pts (+2 bonus). Streak: ${state.streak}`
+      : `${correct}/${total} interfaces wired correctly. +${pts} pt${pts!==1?'s':''}.`;
+    finishRound();
+    return;
+  }
+
+  // text-entry (read)
+  const d=state.data;
+  const fields=readFields(d), answers=readAnswers(d);
+  const correct=gradeAgrid(fields,answers,false);
+  const total=fields.length;
+  const bonus=correct===total?2:0;
+  const pts=correct+bonus;
+  state.score+=pts;
+  state.streak = correct===total ? state.streak+1 : 0;
+  state.round++;
+  fb.className='fbanner '+(correct===total?'ok':correct>=Math.ceil(total*.6)?'warn':'err');
+  fb.textContent = correct===total
+    ? `Perfect! All ${total} correct. +${pts} pts (+2 bonus). Streak: ${state.streak}`
+    : `${correct}/${total} correct. +${pts} pt${pts!==1?'s':''}.`;
+  finishRound();
+}
+
+function lpmAdExplain(mode,d,correctId){
+  if(mode==='lpm'){
+    const c=d.entries.find(e=>e.id===correctId);
+    return c.prefix===0 ? `No specific route matched, so the default route 0.0.0.0/0 was used.` : `${c.network}/${c.prefix} is the longest (most specific) match.`;
+  }
+  const c=d.entries.find(e=>e.id===correctId);
+  return `${c.source.name} has the lowest administrative distance (AD ${c.source.ad}) among the candidates.`;
+}
+
+function revealAll(){
+  if(state.done) return;
+  const mode=state.mode;
+  const fb=document.getElementById('fb');
+  fb.style.display='block'; fb.className='fbanner warn';
+
+  if(mode==='lpm' || mode==='ad'){
+    const d=state.data;
+    document.querySelectorAll('.rt-row').forEach(r=>r.classList.remove('pick','sel'));
+    document.getElementById('row-'+d.correct.id).classList.add('correct');
+    fb.textContent='Skipped. '+lpmAdExplain(mode,d,d.correct.id)+' No points awarded.';
+  } else if(mode==='bin'){
+    const d=state.data;
+    gradeBinInput('bin-dest', int2ip(d.dest).split('.').map(Number), true);
+    d.candidates.forEach((c,i)=>gradeBinInput('bin-c'+i, c.network.split('.').map(Number), true));
+    document.querySelectorAll('.bin-card-ip.pick').forEach(b=>b.classList.add('locked'));
+    document.getElementById('pick-'+d.correct.id).classList.add('correct');
+    syncBinDivider('ip-bin-dest','div-bin-dest');
+    d.candidates.forEach((c,i)=>syncBinDivider('pick-'+c.id,'div-bin-c'+i));
+    fb.textContent='Skipped. '+d.correct.network+'/'+d.correct.prefix+' is the longest match. No points awarded.';
+  } else if(mode==='build'){
+    const d=state.data;
+    state.build.assign={};
+    d.ports.forEach(p=>{ state.build.assign[p.iface]=p.id; });
+    d.ports.forEach(p=>{
+      document.getElementById('port-'+p.iface).classList.add('filled');
+      document.getElementById('chip-'+p.id).classList.add('used');
+    });
+    drawCables();
+    document.querySelectorAll('.rt-chip, .rt-port').forEach(el=>el.onclick=null);
+    fb.textContent='Answers revealed. No points awarded.';
+  } else {
+    const d=state.data;
+    gradeAgrid(readFields(d),readAnswers(d),true);
+    fb.textContent='Answers revealed. No points awarded.';
+  }
+  state.streak=0; state.round++;
+  finishRound();
+}
+
+function finishRound(){
+  state.done=true;
+  updateChips();
+  document.getElementById('chkbtn').style.display='none';
+  document.getElementById('revbtn').style.display='none';
+  document.getElementById('nxtbtn').style.display='';
+}
+
+function nextQ(){ loadQ(); }
+function resetGame(){ state.score=0; state.round=1; state.streak=0; loadQ(); }
+
+function setTopic(t,btn){
+  state.topic=t;
+  document.querySelectorAll('#tb-rand,#tb-lpm,#tb-bin,#tb-ad,#tb-read,#tb-build').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  loadQ();
+}
+function setDiff(d,btn){
+  state.diff=d;
+  document.querySelectorAll('#db-easy,#db-medium,#db-hard').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  loadQ();
+}
+
+/* ─── Options menu / reference tools ─────────────────────────────── */
+function toggleOpts(){
+  const menu=document.getElementById('opt-menu');
+  const btn=document.getElementById('opt-btn');
+  const open=menu.classList.toggle('open');
+  btn.classList.toggle('open',open);
+}
+function toggleTool(id){
+  const cb=document.getElementById('tog-'+id);
+  cb.checked=!cb.checked;
+  document.getElementById('t-'+id).style.display=cb.checked?'':'none';
+  const tools=['ad','anat','lpm'];
+  const any=tools.some(t=>document.getElementById('tog-'+t).checked);
+  document.getElementById('toolsec').style.display=any?'':'none';
+  saveOptionsState();
+}
+document.addEventListener('click', e=>{
+  const wrap=document.getElementById('opt-btn').closest('.opt-wrap');
+  if(wrap && !wrap.contains(e.target)){
+    document.getElementById('opt-menu').classList.remove('open');
+    document.getElementById('opt-btn').classList.remove('open');
+  }
+});
+
+loadQ();
+</script>
+</body>
+</html>

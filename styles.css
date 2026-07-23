@@ -101,27 +101,29 @@
   --err-bdr:   #b22020;
 }
 
-/* ── Global theme toggle (injected by theme.js into #theme-toggle-slot on every page) ── */
-.theme-toggle {
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  flex-shrink: 0;
-  border-radius: 50%;
-  background: var(--surface);
-  border: 1px solid var(--border-m);
-  color: var(--text-s);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background .15s, color .15s;
-}
-.theme-toggle:hover  { background: var(--surface-s); color: var(--text); }
-.theme-toggle svg    { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+/* ── Global theme dropdown (injected by theme.js into #theme-toggle-slot on every page) ──
+   Light / Dark / Sync with Device, mirroring the per-page "Options" dropdown's
+   look (.opt-btn/.opt-menu/.opt-row) but sized to sit in the header next to
+   the chips/GitHub link, with its own class names to avoid colliding with
+   each trainer page's own Options dropdown. */
+.theme-dd            { position: relative; flex-shrink: 0; }
+.theme-dd-btn        { display: flex; align-items: center; gap: 6px; background: var(--surface); border: 1px solid var(--border-m); border-radius: var(--r); padding: 5px 14px; font-family: var(--font); font-size: 13px; color: var(--text-s); cursor: pointer; transition: all .15s; }
+.theme-dd-btn:hover  { background: var(--surface-s); color: var(--text); }
+.theme-dd.open .theme-dd-btn { background: var(--surface-s); color: var(--text); }
+.theme-dd-btn svg    { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; transition: transform .2s; }
+.theme-dd.open .theme-dd-btn svg { transform: rotate(180deg); }
 
-/* Fallback only: if a page has no #theme-toggle-slot, theme.js pins the button to the corner. */
-.theme-toggle.tt-fixed { position: fixed; top: 16px; right: 16px; z-index: 1000; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+.theme-dd-menu       { display: none; position: absolute; right: 0; top: calc(100% + 6px); width: 190px; background: var(--surface); border: 1px solid var(--border-m); border-radius: var(--rl); padding: 6px; z-index: 100; box-shadow: 0 4px 16px rgba(0,0,0,.10); }
+.theme-dd.open .theme-dd-menu { display: block; }
+.theme-dd-label      { font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--text-t); padding: 6px 10px 4px; }
+.theme-dd-item       { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 8px 10px; border: none; border-radius: var(--r); background: transparent; font-family: var(--font); font-size: 14px; color: var(--text); text-align: left; cursor: pointer; transition: background .12s; }
+.theme-dd-item:hover { background: var(--surface-s); }
+.theme-dd-item.on    { color: var(--info-text); font-weight: 500; }
+.theme-dd-check      { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+
+/* Fallback only: if a page has no #theme-toggle-slot, theme.js pins the dropdown to the corner. */
+.theme-dd.tt-fixed          { position: fixed; top: 16px; right: 16px; z-index: 1000; }
+.theme-dd.tt-fixed .theme-dd-btn { box-shadow: 0 2px 8px rgba(0,0,0,.08); }
 
 /* ── Reset & base ───────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -739,3 +741,98 @@ sup  { font-size: .65em; vertical-align: super; }
 
 /* STP config-optimization hardware flavor note (Switching Lab) */
 .hw-note { color: var(--text-t); font-family: var(--font); font-style: italic; white-space: normal; display: block; line-height: 1.3; margin-top: 1px; }
+
+/* ══════════════════════════════════════════════════════════════════════════════
+   ROUTING TRAINER
+══════════════════════════════════════════════════════════════════════════════ */
+
+/* guarantees a gap before the action row regardless of which topic's content
+   is rendered inside (some end in an element whose own margin-bottom is
+   intentionally zeroed, e.g. the last .bin-card, or has none, e.g. .rt-canvas) */
+#qbody          { margin-bottom: 1rem; }
+
+/* parent/child nesting depth — shared by the Longest Match table (.rt-indent,
+   an inline wrapper around the Network cell's text) and Binary Match's
+   candidate cards (.bin-card, indented as a whole block) so a deeper/more
+   specific route visibly sits under the broader one it's nested inside. */
+.indent-1 { margin-left: 20px; }
+.indent-2 { margin-left: 40px; }
+.indent-3 { margin-left: 60px; }
+.rt-indent { display: inline-block; }
+
+/* routing table (Longest Match / Admin Distance) */
+.rt-wrap        { overflow-x: auto; margin-bottom: 1rem; }
+.rt-table       { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 13px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
+.rt-table th    { background: var(--surface-s); padding: 8px 12px; text-align: left; font-weight: 500; border-bottom: 1px solid var(--border); color: var(--text-s); font-size: 11px; font-family: var(--font); text-transform: uppercase; letter-spacing: .05em; }
+.rt-table td    { padding: 9px 12px; border-bottom: 1px solid var(--border); color: var(--text); }
+.rt-table tr:last-child td { border-bottom: none; }
+.rt-row.pick        { cursor: pointer; transition: background .12s; }
+.rt-row.pick:hover td { background: var(--surface-s); }
+.rt-row.sel td      { background: var(--info-bg) !important; color: var(--info-text); }
+.rt-row.correct td  { background: var(--ok-bg)  !important; color: var(--ok-text); }
+.rt-row.wrong td    { background: var(--err-bg) !important; color: var(--err-text); }
+.rt-code        { display: inline-flex; align-items: center; justify-content: center; min-width: 22px; height: 22px; padding: 0 4px; border-radius: 4px; font-weight: 600; font-size: 11px; background: var(--surface-s); border: 1px solid var(--border-m); color: var(--text-s); }
+.rt-code.src-C  { background: var(--ok-bg);   color: var(--ok-text);   border-color: var(--ok-bdr); }
+.rt-code.src-S  { background: var(--info-bg); color: var(--info-text); border-color: var(--info-bdr); }
+.rt-code.src-O, .rt-code.src-D, .rt-code.src-R, .rt-code.src-B { background: var(--warn-bg); color: var(--warn-text); border-color: var(--warn-bdr); }
+
+/* Binary Match — one card per address, IP/CIDR and binary entry side by side
+   on the same row, divided by a dim "|". The IP doubles as the pick control
+   for candidates (destination's is plain, static text). The binary field
+   itself is unscored/ungraded working space; only colored after Check/Reveal
+   so the learner can see whether their own conversion was right — it never
+   affects the pick's score. */
+.bin-card           { display: flex; align-items: stretch; background: var(--surface); border: 1px solid var(--border-m); border-radius: var(--rl); overflow: hidden; margin-bottom: 1rem; transition: margin .15s; }
+.bin-card:last-child { margin-bottom: 0; }
+.bin-card-ip        { display: flex; align-items: center; padding: 10px 14px; font-family: var(--mono); font-size: 15px; font-weight: 500; color: var(--text); white-space: nowrap; flex-shrink: 0; min-width: 150px; }
+.bin-card-ip.pick   { cursor: pointer; transition: background .12s, color .12s; }
+.bin-card-ip.pick:hover { background: var(--surface-s); }
+.bin-card-ip.sel    { background: var(--info-bg); color: var(--info-text); }
+.bin-card-ip.correct{ background: var(--ok-bg)  !important; color: var(--ok-text)  !important; }
+.bin-card-ip.wrong  { background: var(--err-bg) !important; color: var(--err-text) !important; }
+.bin-card-ip.locked { cursor: default; }
+.bin-card-div       { display: flex; align-items: center; padding: 0 4px; color: var(--text-t); font-size: 15px; flex-shrink: 0; user-select: none; transition: background .15s, color .15s; }
+.bin-card-div.ok    { background: var(--ok-bg);   color: var(--ok-text); }
+.bin-card-div.bad   { background: var(--err-bg);  color: var(--err-text); }
+.bin-card-div.show  { background: var(--warn-bg); color: var(--warn-text); }
+.bin-card-bin       { flex: 1; min-width: 0; padding: 10px 14px; display: flex; flex-direction: column; justify-content: center; transition: background .15s, color .15s; }
+.bin-card-bin.ok    { background: var(--ok-bg);   color: var(--ok-text); }
+.bin-card-bin.bad   { background: var(--err-bg);  color: var(--err-text); }
+.bin-card-bin.show  { background: var(--warn-bg); color: var(--warn-text); }
+.bin-single         { display: block; width: 100%; font-family: var(--mono); font-size: 15px; letter-spacing: .03em; background: transparent; border: none; border-radius: 4px; outline: none; color: inherit; padding: 6px 8px; margin: -6px -8px; }
+.bin-single:focus   { background: var(--info-bg); }
+/* the learner's own (wrong) answer stays in the field above; this shows the
+   correct one underneath so they can compare the two at a glance */
+.bin-hint           { font-size: 12px; font-family: var(--mono); opacity: .85; }
+.bin-hint:not(:empty) { margin-top: 4px; }
+
+/* realistic single-line CLI output block (Route Table Anatomy / Build The Network) */
+.cli-block { font-family: var(--mono); font-size: 13px; line-height: 1.9; background: var(--surface-s); border: 1px solid var(--border); border-radius: var(--r); padding: 12px 14px; overflow-x: auto; white-space: nowrap; }
+
+/* Build The Network: topology canvas — router with interfaces + a pool of
+   draggable-feeling (click-to-place) network/neighbor nodes, wired with cables */
+.rt-canvas       { position: relative; min-height: 260px; display: flex; flex-direction: column; justify-content: space-between; gap: 22px; padding: 20px 14px; background: var(--surface-s); border: 1px solid var(--border); border-radius: var(--r); }
+#rt-svg          { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
+.rt-canvas-note  { position: absolute; top: 10px; right: 14px; font-size: 11px; color: var(--text-t); font-style: italic; z-index: 3; }
+.rt-router-row   { display: flex; justify-content: center; position: relative; z-index: 1; }
+.rt-router       { background: var(--surface); border: 1.5px dashed var(--border-m); border-radius: 23px; padding: 10px 20px 14px; display: flex; flex-direction: column; align-items: center; font-size: 13px; font-weight: 600; color: var(--text); }
+.rt-ports        { display: flex; gap: 18px; margin-top: 8px; }
+.rt-port-wrap    { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.rt-port         { width: 16px; height: 16px; border-radius: 50%; background: var(--surface-s); border: 2px solid var(--border-m); cursor: pointer; transition: transform .12s, background .12s; }
+.rt-port:hover   { transform: scale(1.25); border-color: var(--text-s); }
+.rt-port.filled  { background: var(--info-bg); border-color: var(--info-text); }
+.rt-port.p-ok    { background: var(--ok-bg);  border-color: var(--ok-text);  box-shadow: 0 0 0 3px var(--ok-bg); }
+.rt-port.p-bad   { background: var(--err-bg); border-color: var(--err-text); box-shadow: 0 0 0 3px var(--err-bg); }
+.rt-port-lbl     { font-size: 10.5px; font-family: var(--mono); color: var(--text-t); white-space: nowrap; }
+.rt-pool         { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; position: relative; z-index: 1; }
+.rt-chip         { background: var(--surface); border: 1.5px solid var(--border-m); border-radius: var(--r); padding: 8px 14px; cursor: pointer; text-align: center; min-width: 120px; transition: all .15s; }
+.rt-chip:hover   { border-color: var(--info-bdr); }
+.rt-chip.sel     { border-color: var(--info-text); box-shadow: 0 0 0 3px var(--info-bg); }
+.rt-chip.used    { opacity: .5; cursor: default; }
+.rt-chip.p-ok    { border-color: var(--ok-bdr);  background: var(--ok-bg); }
+.rt-chip.p-bad   { border-color: var(--err-bdr); background: var(--err-bg); }
+.rt-chip-lbl     { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-t); margin-bottom: 3px; }
+.rt-chip-val     { font-family: var(--mono); font-size: 13px; font-weight: 500; color: var(--text); }
+.rt-cable        { stroke: var(--border-m); stroke-width: 2.5; cursor: pointer; pointer-events: stroke; }
+.rt-cable:hover  { stroke: var(--err-text); }
+.rt-cable-hit    { stroke: #000; stroke-opacity: 0; stroke-width: 14; pointer-events: stroke; cursor: pointer; }

@@ -6,6 +6,7 @@
 <title>OSI / TCP-IP Trainer</title>
 <link rel="stylesheet" href="styles.css">
 <script src="theme.js"></script>
+<script src="options.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -450,6 +451,7 @@ function applyTools(){
   const s=document.getElementById('tog-ref').checked;
   document.getElementById('t-ref').style.display=s?'':'none';
   document.getElementById('toolsec').style.display=s?'':'none';
+  saveOptionsState();
 }
 document.addEventListener('click',e=>{
   const w=document.getElementById('opt-btn').closest('.opt-wrap');
