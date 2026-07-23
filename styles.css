@@ -120,6 +120,10 @@
 .theme-dd-item:hover { background: var(--surface-s); }
 .theme-dd-item.on    { color: var(--info-text); font-weight: 500; }
 .theme-dd-check      { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+.theme-dd-item-icons { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.theme-dd-edit       { display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; flex-shrink: 0; border: none; border-radius: 6px; background: transparent; color: var(--text-t); cursor: pointer; }
+.theme-dd-edit:hover { background: var(--surface); color: var(--info-text); }
+.theme-dd-edit svg   { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
 /* Fallback only: if a page has no #theme-toggle-slot, theme.js pins the dropdown to the corner. */
 .theme-dd.tt-fixed          { position: fixed; top: 16px; right: 16px; z-index: 1000; }
@@ -127,7 +131,7 @@
 
 /* ── Reset & base ───────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: var(--font); background: var(--bg); color: var(--text); min-height: 100vh; padding: 2rem 1rem; line-height: 1.6; }
+body { font-family: var(--font); background-color: var(--bg); background-image: var(--custom-bg-image, none); background-attachment: fixed; background-size: cover; color: var(--text); min-height: 100vh; padding: 2rem 1rem; line-height: 1.6; }
 .wrap { max-width: 840px; margin: 0 auto; }
 sup  { font-size: .65em; vertical-align: super; }
 
@@ -301,10 +305,25 @@ sup  { font-size: .65em; vertical-align: super; }
 .card-accent       { height: 5px; }
 .card-accent.blue  { background: var(--info-text); }
 .card-accent.green { background: var(--ok-text); }
+.card-accent.purple { background: #7c3aed; }
+.card-accent.teal   { background: #0f766e; }
+.card-accent.sky    { background: #0369a1; }
+.card-accent.amber  { background: #b45309; }
 .card-body         { padding: 1.5rem 1.5rem 1.25rem; flex: 1 1 auto; }
 .card-icon         { width: 44px; height: 44px; border-radius: var(--r); display: flex; align-items: center; justify-content: center; font-family: var(--mono); font-size: 13px; font-weight: 500; margin-bottom: 1rem; }
 .card-icon.blue    { background: var(--info-bg); color: var(--info-text); border: 1px solid var(--info-bdr); }
 .card-icon.green   { background: var(--ok-bg);   color: var(--ok-text);   border: 1px solid var(--ok-bdr); }
+.card-icon.purple  { background: #ede9fe; color: #5b21b6; border: 1px solid #c4b5fd; }
+.card-icon.teal    { background: #ccfbf1; color: #0f766e; border: 1px solid #99f6e4; }
+.card-icon.sky     { background: #e0f2fe; color: #0369a1; border: 1px solid #7dd3fc; }
+.card-icon.amber   { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+
+/* Custom Theme: the 6 hand-picked accent colors above (purple/teal/sky/amber,
+   on top of the existing blue/green which already track the info/ok vars)
+   clash with an arbitrary user-chosen palette, so unify every card to the
+   theme's own suggested accent instead of the fixed per-card colors. */
+:root[data-theme="custom"] .card-accent { background: var(--info-text); }
+:root[data-theme="custom"] .card-icon   { background: var(--info-bg); color: var(--info-text); border-color: var(--info-bdr); }
 .card-title        { font-size: 18px; font-weight: 600; margin-bottom: .4rem; }
 .card-desc         { font-size: 14px; color: var(--text-s); line-height: 1.6; margin-bottom: 1rem; }
 .card-tags         { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 1rem; }
@@ -836,4 +855,103 @@ sup  { font-size: .65em; vertical-align: super; }
 .rt-chip-val     { font-family: var(--mono); font-size: 13px; font-weight: 500; color: var(--text); }
 .rt-cable        { stroke: var(--border-m); stroke-width: 2.5; cursor: pointer; pointer-events: stroke; }
 .rt-cable:hover  { stroke: var(--err-text); }
+
+/* ── CUSTOM THEME (custom-theme.js) ────────────────────────────────────────────
+   Side drawer for building a "Custom" theme: background type, transparency,
+   and a suggested/overridable palette. --custom-blur is only ever set by
+   custom-theme.js (falls back to `none` otherwise), so this is a no-op for
+   Light/Dark/Sync — surfaces just go slightly translucent + blurred behind
+   them when the user has picked a transparency below 100%. */
+.chip, .qcard, .opt-menu, .theme-dd-menu, .tool-block, .afield, .btn, .ct-drawer {
+  backdrop-filter: var(--custom-blur, none);
+  -webkit-backdrop-filter: var(--custom-blur, none);
+}
+
+/* Deliberately no dimming here — the whole point of the live drawer is
+   seeing the page's real colors change as you tweak them. This stays a
+   fully transparent click-catcher purely so clicking outside the drawer
+   closes it. */
+.ct-backdrop      { position: fixed; inset: 0; background: transparent; z-index: 1099; pointer-events: none; }
+.ct-backdrop.open { pointer-events: auto; }
+
+.ct-drawer        { position: fixed; top: 0; right: 0; height: 100vh; width: 340px; max-width: 90vw; background: var(--surface); border-left: 1px solid var(--border-m); box-shadow: -8px 0 24px rgba(0,0,0,.18); z-index: 1100; display: flex; flex-direction: column; transform: translateX(100%); transition: transform .25s ease; }
+.ct-drawer.open   { transform: translateX(0); }
+
+.ct-drawer-hdr    { display: flex; align-items: center; justify-content: space-between; padding: 16px 18px; border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.ct-drawer-title  { font-size: 15px; font-weight: 600; color: var(--text); }
+.ct-drawer-close  { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border: none; border-radius: 6px; background: transparent; color: var(--text-s); cursor: pointer; }
+.ct-drawer-close:hover { background: var(--surface-s); color: var(--text); }
+.ct-drawer-close svg   { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; }
+
+.ct-drawer-body   { padding: 16px 18px 24px; display: flex; flex-direction: column; gap: 18px; overflow-y: auto; }
+.ct-section       { display: flex; flex-direction: column; gap: 8px; }
+.ct-label         { font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-t); display: flex; align-items: baseline; }
+.ct-label span    { margin-left: auto; text-transform: none; letter-spacing: normal; font-family: var(--mono); color: var(--text-s); }
+.ct-label-row     { display: flex; align-items: center; justify-content: space-between; }
+
+.ct-bgtype-row    { display: flex; gap: 8px; }
+.ct-bgtype-btn    { flex: 1; padding: 7px 0; border-radius: var(--r); border: 1px solid var(--border-m); background: transparent; color: var(--text-s); font-size: 12.5px; font-family: var(--font); cursor: pointer; transition: all .15s; }
+.ct-bgtype-btn:hover { background: var(--surface-s); color: var(--text); }
+.ct-bgtype-btn.on { background: var(--info-bg); border-color: var(--info-bdr); color: var(--info-text); font-weight: 500; }
+
+.ct-color-row     { display: flex; align-items: center; gap: 10px; }
+.ct-hex-label     { font-family: var(--mono); font-size: 12.5px; color: var(--text-s); letter-spacing: .03em; }
+
+/* Swatch trigger — opens the shared picker popover below instead of the
+   browser's native color dialog. */
+.ct-swatch-btn        { width: 40px; height: 32px; padding: 0; border: 1px solid var(--border-m); border-radius: 6px; cursor: pointer; flex-shrink: 0; transition: box-shadow .15s, transform .1s; }
+.ct-swatch-btn:hover   { box-shadow: 0 0 0 3px var(--info-bg); }
+.ct-swatch-btn:active  { transform: scale(.94); }
+
+/* Modern SV-square + hue-slider + hex-input popover, shared by all 4
+   swatches. Positioned absolutely within the drawer (set via inline
+   top/left in JS) and always fully opaque via --ct-picker-solid, since a
+   translucent color picker over a busy background would be unusable. */
+.ct-picker-pop      { display: none; position: absolute; z-index: 5; width: 200px; padding: 14px; background: var(--ct-picker-solid, var(--surface)); border: 1px solid var(--border-m); border-radius: var(--rl); box-shadow: 0 10px 30px rgba(0,0,0,.20); }
+.ct-picker-pop.open { display: block; }
+
+.ct-picker-sv        { position: relative; width: 100%; height: 120px; border-radius: 8px; background-color: hsl(var(--ct-hue, 210), 100%, 50%); background-image: linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, transparent); cursor: crosshair; touch-action: none; }
+.ct-picker-sv-cursor { position: absolute; width: 14px; height: 14px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.45), 0 1px 4px rgba(0,0,0,.4); transform: translate(-50%, -50%); pointer-events: none; }
+
+.ct-picker-hue        { position: relative; width: 100%; height: 14px; margin-top: 12px; border-radius: 7px; background: linear-gradient(to right, #f00, #ff0, #0f0, #0ff, #00f, #f0f, #f00); cursor: pointer; touch-action: none; }
+.ct-picker-hue-handle { position: absolute; top: 50%; width: 16px; height: 16px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px rgba(0,0,0,.45), 0 1px 4px rgba(0,0,0,.4); transform: translate(-50%, -50%); pointer-events: none; }
+
+.ct-picker-hex-row  { display: flex; align-items: center; gap: 6px; margin-top: 12px; background: var(--surface-s); border: 1px solid var(--border-m); border-radius: 6px; padding: 6px 10px; }
+.ct-picker-hash     { font-family: var(--mono); font-size: 13px; color: var(--text-t); }
+.ct-picker-hex      { flex: 1; min-width: 0; border: none; outline: none; background: transparent; font-family: var(--mono); font-size: 13px; letter-spacing: .04em; text-transform: uppercase; color: var(--text); }
+
+.ct-slider        { width: 100%; accent-color: var(--info-text); }
+
+.ct-mini-btn      { font-size: 11px; color: var(--info-text); background: transparent; border: none; cursor: pointer; padding: 2px 4px; }
+.ct-mini-btn:hover { text-decoration: underline; }
+.ct-mini-btn-danger { color: var(--err-text); }
+
+/* Diffused-shape editor: a live mini-preview of the background (same
+   radial-gradients as the real page, scaled into a small box) with each
+   blob rendered as a draggable dot. Shapes start at a fixed default layout
+   and only change when the user drags/places one here or hits Shuffle. */
+.ct-shapes-actions   { display: flex; gap: 8px; }
+.ct-shapes-actions .btn { flex: 1; }
+#ct-customize.on     { background: var(--info-bg); border-color: var(--info-bdr); color: var(--info-text); }
+
+.ct-shapes-editor      { display: none; flex-direction: column; gap: 8px; margin-top: 10px; }
+.ct-shapes-editor.open { display: flex; }
+
+.ct-shapes-canvas    { position: relative; width: 100%; height: 150px; border-radius: 8px; border: 1px solid var(--border-m); overflow: hidden; cursor: crosshair; touch-action: none; background-color: #14141a; }
+.ct-shape-dot         { position: absolute; border-radius: 50%; transform: translate(-50%, -50%); cursor: grab; border: 2px solid rgba(255,255,255,.85); box-shadow: 0 1px 5px rgba(0,0,0,.4); touch-action: none; }
+.ct-shape-dot:active  { cursor: grabbing; }
+.ct-shape-dot.selected { border-color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,.95), 0 1px 6px rgba(0,0,0,.5); }
+
+.ct-shapes-hint       { font-size: 11px; line-height: 1.5; color: var(--text-t); }
+
+.ct-shapes-toolbar     { display: none; align-items: center; gap: 10px; }
+.ct-shapes-toolbar-lbl { font-size: 12px; color: var(--text-s); flex-shrink: 0; }
+.ct-shapes-toolbar .ct-slider { flex: 1; }
+
+.ct-swatch-row    { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
+.ct-swatch-label  { font-size: 13px; color: var(--text); flex: 1; }
+.ct-auto-badge    { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-t); border: 1px solid var(--border-m); border-radius: 4px; padding: 1px 6px; flex-shrink: 0; }
+.ct-swatch-row:not(.auto) .ct-auto-badge { display: none; }
+
+.ct-reset-btn     { margin-top: 4px; width: 100%; }
 .rt-cable-hit    { stroke: #000; stroke-opacity: 0; stroke-width: 14; pointer-events: stroke; cursor: pointer; }

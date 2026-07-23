@@ -6,15 +6,19 @@
 
   function getStored() {
     var v = localStorage.getItem(KEY);
-    return (v === 'light' || v === 'dark') ? v : null;
+    return (v === 'light' || v === 'dark' || v === 'custom') ? v : null;
   }
 
   function apply(theme) {
-    if (theme === 'light' || theme === 'dark') {
+    if (theme === 'light' || theme === 'dark' || theme === 'custom') {
       document.documentElement.setAttribute('data-theme', theme);
     } else {
       document.documentElement.removeAttribute('data-theme');
     }
+    // custom-theme.js (loaded right after this script) owns the actual
+    // custom color values; when leaving Custom for another theme, drop the
+    // inline properties it set so they don't bleed into Light/Dark/Sync.
+    if (theme !== 'custom' && window.__neClearCustomVars) window.__neClearCustomVars();
   }
 
   // Applied immediately (script runs synchronously in <head>) to avoid a flash of the wrong theme.
@@ -22,10 +26,12 @@
 
   var CHEV = '<svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>';
   var CHECK = '<svg class="theme-dd-check" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>';
+  var EDIT = '<svg viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
   var OPTIONS = [
+    { value: 'system', label: 'Sync with Device' },
     { value: 'light', label: 'Light' },
     { value: 'dark', label: 'Dark' },
-    { value: 'system', label: 'Sync with Device' }
+    { value: 'custom', label: 'Custom' }
   ];
 
   var wrapEl = null, btnEl = null, menuEl = null;
@@ -39,9 +45,14 @@
     var html = '<div class="theme-dd-label">Theme</div>';
     OPTIONS.forEach(function (o) {
       var on = o.value === active;
-      html += '<button type="button" class="theme-dd-item' + (on ? ' on' : '') + '" data-value="' + o.value + '">' +
-        '<span>' + o.label + '</span>' + (on ? CHECK : '') +
-        '</button>';
+      var edit = o.value === 'custom' ? '<button type="button" class="theme-dd-edit" data-edit="custom" aria-label="Customize theme">' + EDIT + '</button>' : '';
+      // A <div role="button"> (not a real <button>) so the Custom row can
+      // legally nest its own edit <button> inside — buttons can't contain buttons.
+      // Trailing icons share one wrapper so the row stays a clean 2-child
+      // flex (label | icons), regardless of whether edit/check are present.
+      html += '<div class="theme-dd-item' + (on ? ' on' : '') + '" role="button" tabindex="0" data-value="' + o.value + '">' +
+        '<span>' + o.label + '</span><span class="theme-dd-item-icons">' + edit + (on ? CHECK : '') + '</span>' +
+        '</div>';
     });
     menuEl.innerHTML = html;
   }
@@ -60,7 +71,9 @@
     }
     renderMenu();
     closeMenu();
+    if (value === 'custom' && window.__neOnCustomSelected) window.__neOnCustomSelected();
   }
+  window.__neSelectTheme = selectValue;
 
   function init() {
     wrapEl = document.createElement('div');
@@ -85,6 +98,8 @@
     menuEl.addEventListener('click', function (e) {
       var item = e.target.closest('.theme-dd-item');
       if (item) selectValue(item.getAttribute('data-value'));
+      var edit = e.target.closest('.theme-dd-edit');
+      if (edit && window.__neOpenCustomDrawer) window.__neOpenCustomDrawer();
     });
 
     wrapEl.appendChild(btnEl);
