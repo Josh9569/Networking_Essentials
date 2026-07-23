@@ -323,7 +323,53 @@ sup  { font-size: .65em; vertical-align: super; }
    clash with an arbitrary user-chosen palette, so unify every card to the
    theme's own suggested accent instead of the fixed per-card colors. */
 :root[data-theme="custom"] .card-accent { background: var(--info-text); }
-:root[data-theme="custom"] .card-icon   { background: var(--info-bg); color: var(--info-text); border-color: var(--info-bdr); }
+:root[data-theme="custom"] .card-icon   { background: var(--info-bg); color: var(--accent-ink); border-color: var(--info-bdr); }
+
+/* Custom Theme: "Next"-style primary buttons default to background: var(--text)
+   in Light/Dark/Sync (a deliberate inverted-color look, tuned by hand for
+   those two palettes), but that means adjusting the Text swatch was also
+   repainting every primary button's background. Under Custom, match the
+   transparent/outline treatment every other secondary button already has
+   (Skip, Reset, Options) instead — accent-colored text and border on a
+   transparent background, so it's still clearly the accent-colored action
+   without ever looking like a solid, non-transparent block. */
+:root[data-theme="custom"] .btn-p { background: transparent; color: var(--info-text); border-color: var(--info-bdr); }
+
+/* Same idea for every other "colored pill with text on it" component
+   (toggle buttons, badges, selected rows/cells): Accent should only move
+   the pill's own background/border, never its label — the label uses the
+   derived --accent-ink shade (see custom-theme.js) instead of the raw
+   accent hue, so it can't collapse into the background it sits on. */
+:root[data-theme="custom"] .cbtn.on,
+:root[data-theme="custom"] .cidrbadge,
+:root[data-theme="custom"] .afield.class-q label,
+:root[data-theme="custom"] .afield.class-q input,
+:root[data-theme="custom"] .bbox.nb,
+:root[data-theme="custom"] .bdge-i,
+:root[data-theme="custom"] .mn-c0.active,
+:root[data-theme="custom"] .mn-c1:hover,
+:root[data-theme="custom"] .mn-c1.sel,
+:root[data-theme="custom"] .mn-c2.sel,
+:root[data-theme="custom"] .mn-sel-btn.on,
+:root[data-theme="custom"] .bit-cell.on .bit-digit,
+:root[data-theme="custom"] .parent-badge,
+:root[data-theme="custom"] .sub-ltr.a,
+:root[data-theme="custom"] .ref-table .hi td,
+:root[data-theme="custom"] .opt-card:not(:disabled):hover,
+:root[data-theme="custom"] .explain .ex-prefix,
+:root[data-theme="custom"] .rb-osi,
+:root[data-theme="custom"] .type-btn:not(:disabled):hover,
+:root[data-theme="custom"] .rule-num,
+:root[data-theme="custom"] .prefix-badge,
+:root[data-theme="custom"] .custom-src-btn.on,
+:root[data-theme="custom"] .custom-cls-btn.on,
+:root[data-theme="custom"] .rt-row.sel td,
+:root[data-theme="custom"] .rt-code.src-S,
+:root[data-theme="custom"] .bin-card-ip.sel,
+:root[data-theme="custom"] .ct-bgtype-btn.on,
+:root[data-theme="custom"] #ct-customize.on {
+  color: var(--accent-ink);
+}
 .card-title        { font-size: 18px; font-weight: 600; margin-bottom: .4rem; }
 .card-desc         { font-size: 14px; color: var(--text-s); line-height: 1.6; margin-bottom: 1rem; }
 .card-tags         { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 1rem; }

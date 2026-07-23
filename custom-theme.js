@@ -10,7 +10,8 @@
   var THEME_KEY = 'ne-theme';
   var DEFAULT_BASE = '#3a6ea5';
   var CUSTOM_PROPS = ['--bg', '--custom-bg-image', '--surface', '--surface-s', '--text', '--text-s',
-    '--text-t', '--border', '--border-m', '--info-text', '--info-bg', '--info-bdr', '--custom-blur', '--ct-picker-solid'];
+    '--text-t', '--border', '--border-m', '--info-text', '--info-bg', '--info-bdr', '--accent-ink',
+    '--custom-blur', '--ct-picker-solid'];
 
   /* ---------- color math ---------- */
   function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
@@ -75,6 +76,14 @@
   function withAlpha(hex, alpha) {
     var rgb = hexToRgb(hex);
     return 'rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ',' + alpha + ')';
+  }
+  // Blends hexA toward hexB by fraction t (0 = hexA, 1 = hexB). Used to
+  // derive "accent ink" — the text color drawn on top of accent-colored
+  // buttons/badges — as a shade darker or lighter than the accent itself,
+  // rather than reusing the accent's own hue directly as text.
+  function mixHex(hexA, hexB, t) {
+    var a = hexToRgb(hexA), b = hexToRgb(hexB);
+    return rgbToHex(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t);
   }
   // HSV (not HSL) is what the saturation/value picker square below renders —
   // it's the model where "drag right = more saturated, drag up = brighter"
@@ -167,6 +176,23 @@
       accentBg: accentBg, accentText: accentText, accentBdr: accentBdr, isDark: isDark
     };
   }
+  // Tertiary text (hints/placeholders) is one more muted step below whatever
+  // Paragraph currently is — auto-suggested or hand-picked — so it stays
+  // part of the same hierarchy instead of jumping back to a formula based
+  // only on the base color.
+  function deriveTextT(textSHex, isDark) {
+    var rgb = hexToRgb(textSHex);
+    var hsl = rgbToHsl(rgb.r, rgb.g, rgb.b);
+    var l = clamp(hsl.l + (isDark ? -10 : 10), 0, 100);
+    return hslToHex(hsl.h, isDark ? 8 : 10, l);
+  }
+  // The auto-suggested Button Text color: a shade darker/lighter than the
+  // accent itself, magnitude set by the Button Text Contrast slider.
+  function computeAutoAccentInk(accentHex, accentInkPct) {
+    var pct = clamp(typeof accentInkPct === 'number' ? accentInkPct : DEFAULT_ACCENT_INK, 20, 90) / 100;
+    var isDark = relativeLuminance(accentHex) < 0.179;
+    return mixHex(accentHex, isDark ? '#ffffff' : '#000000', pct);
+  }
 
   /* ---------- background image builder ---------- */
   function defaultBlobSeed() {
@@ -197,8 +223,9 @@
   }
 
   /* ---------- config persistence ---------- */
+  var DEFAULT_ACCENT_INK = 60;
   function defaultConfig() {
-    return { bgType: 'solid', base: DEFAULT_BASE, angle: 135, transparency: 1, blobSeed: defaultBlobSeed(), overrides: {} };
+    return { bgType: 'solid', base: DEFAULT_BASE, angle: 135, transparency: 0.3, accentInk: DEFAULT_ACCENT_INK, blobSeed: defaultBlobSeed(), overrides: {} };
   }
   function getConfig() {
     try {
@@ -210,8 +237,9 @@
       if (!cfg.blobSeed || !cfg.blobSeed.length) cfg.blobSeed = defaultBlobSeed();
       if (!cfg.base) cfg.base = DEFAULT_BASE;
       if (!cfg.bgType) cfg.bgType = 'solid';
-      if (typeof cfg.transparency !== 'number') cfg.transparency = 1;
+      if (typeof cfg.transparency !== 'number') cfg.transparency = 0.3;
       if (typeof cfg.angle !== 'number') cfg.angle = 135;
+      if (typeof cfg.accentInk !== 'number') cfg.accentInk = DEFAULT_ACCENT_INK;
       return cfg;
     } catch (e) { return null; }
   }
@@ -224,7 +252,12 @@
     var palette = suggestPalette(cfg.base);
     var surfaceHex = cfg.overrides.surface || palette.surface;
     var textHex = cfg.overrides.text || palette.text;
+    var textSHex = cfg.overrides.textS || palette.textS;
+    // Tertiary (hint/placeholder) text isn't independently overridable —
+    // it just follows one step below wherever Paragraph ends up, auto or not.
+    var textTHex = cfg.overrides.textS ? deriveTextT(textSHex, palette.isDark) : palette.textT;
     var accentHex = cfg.overrides.accent || palette.accentText;
+    var accentInkHex = cfg.overrides.buttonText || computeAutoAccentInk(accentHex, cfg.accentInk);
     var alpha = clamp(cfg.transparency, 0.3, 1);
 
     var root = document.documentElement.style;
@@ -233,13 +266,17 @@
     root.setProperty('--surface', withAlpha(surfaceHex, alpha));
     root.setProperty('--surface-s', withAlpha(surfaceHex, clamp(alpha - 0.06, 0.2, 1)));
     root.setProperty('--text', textHex);
-    root.setProperty('--text-s', palette.textS);
-    root.setProperty('--text-t', palette.textT);
+    root.setProperty('--text-s', textSHex);
+    root.setProperty('--text-t', textTHex);
     root.setProperty('--border', palette.border);
     root.setProperty('--border-m', palette.borderM);
     root.setProperty('--info-text', accentHex);
     root.setProperty('--info-bg', withAlpha(accentHex, palette.isDark ? 0.22 : 0.14));
     root.setProperty('--info-bdr', withAlpha(accentHex, 0.55));
+    // Text drawn ON TOP of an accent-colored button/badge — auto-suggested
+    // (shade darker/lighter than the accent, via the Button Text Contrast
+    // slider) unless the user picked an exact Button Text color themselves.
+    root.setProperty('--accent-ink', accentInkHex);
     root.setProperty('--custom-blur', alpha < 1 ? 'blur(' + Math.round((1 - alpha) * 18) + 'px)' : 'none');
     // The color picker popover always needs a fully opaque backdrop to stay
     // legible, regardless of the transparency slider — surfaceHex here is
@@ -335,8 +372,15 @@
             '<button type="button" class="ct-mini-btn" id="ct-regen">Regenerate</button>' +
           '</div>' +
           swatchRow('surface', 'Surface') +
-          swatchRow('text', 'Text') +
+          swatchRow('text', 'Headings') +
+          swatchRow('textS', 'Paragraph') +
           swatchRow('accent', 'Accent') +
+          swatchRow('buttonText', 'Button Text') +
+        '</div>' +
+        '<div class="ct-section">' +
+          '<div class="ct-label">Button Text Contrast <span id="ct-ink-val"></span></div>' +
+          '<input type="range" id="ct-ink" class="ct-slider" min="20" max="90" step="1">' +
+          '<div class="ct-shapes-hint">Sets the auto-suggested Button Text shade above — pick an exact color on that swatch instead if you’d rather not use this.</div>' +
         '</div>' +
         '<button type="button" class="btn btn-d ct-reset-btn" id="ct-reset">Reset Custom Theme</button>' +
       '</div>' +
@@ -376,11 +420,15 @@
     els.trans = drawer.querySelector('#ct-trans');
     els.transVal = drawer.querySelector('#ct-trans-val');
     els.regen = drawer.querySelector('#ct-regen');
+    els.ink = drawer.querySelector('#ct-ink');
+    els.inkVal = drawer.querySelector('#ct-ink-val');
     els.reset = drawer.querySelector('#ct-reset');
     els.swatches = {
       surface: drawer.querySelector('.ct-swatch-row[data-key="surface"]'),
       text: drawer.querySelector('.ct-swatch-row[data-key="text"]'),
-      accent: drawer.querySelector('.ct-swatch-row[data-key="accent"]')
+      textS: drawer.querySelector('.ct-swatch-row[data-key="textS"]'),
+      accent: drawer.querySelector('.ct-swatch-row[data-key="accent"]'),
+      buttonText: drawer.querySelector('.ct-swatch-row[data-key="buttonText"]')
     };
     els.pickerPop = drawer.querySelector('#ct-picker-pop');
     els.pickerSv = drawer.querySelector('#ct-picker-sv');
@@ -403,6 +451,20 @@
       '</div>';
   }
 
+  // The 5 "auto" suggested colors shown on each swatch when it has no
+  // manual override — Button Text's auto value tracks whatever Accent is
+  // actually resolved to (override or suggestion), not the raw suggestion.
+  function suggestedSwatchColors(cfg, palette) {
+    var accentHex = cfg.overrides.accent || palette.accentText;
+    return {
+      surface: palette.surface,
+      text: palette.text,
+      textS: palette.textS,
+      accent: palette.accentText,
+      buttonText: computeAutoAccentInk(accentHex, cfg.accentInk)
+    };
+  }
+
   function refreshUI() {
     var cfg = ensureConfig();
     var palette = suggestPalette(cfg.base);
@@ -420,9 +482,11 @@
     els.angleVal.textContent = cfg.angle + '°';
     els.trans.value = Math.round(cfg.transparency * 100);
     els.transVal.textContent = Math.round(cfg.transparency * 100) + '%';
+    els.ink.value = cfg.accentInk;
+    els.inkVal.textContent = cfg.accentInk + '%';
 
-    var suggested = { surface: palette.surface, text: palette.text, accent: palette.accentText };
-    ['surface', 'text', 'accent'].forEach(function (key) {
+    var suggested = suggestedSwatchColors(cfg, palette);
+    ['surface', 'text', 'textS', 'accent', 'buttonText'].forEach(function (key) {
       var row = els.swatches[key];
       var hex = cfg.overrides[key] || suggested[key];
       var isAuto = !cfg.overrides[key];
@@ -484,13 +548,27 @@
       els.transVal.textContent = Math.round(cfg.transparency * 100) + '%';
     });
 
-    ['surface', 'text', 'accent'].forEach(function (key) {
+    els.ink.addEventListener('input', function () {
+      var cfg = ensureConfig();
+      cfg.accentInk = clamp(parseInt(els.ink.value, 10), 20, 90);
+      commit(cfg);
+      els.inkVal.textContent = cfg.accentInk + '%';
+      // Only matters live when Button Text is still "auto" — a manual
+      // override on that swatch takes priority regardless of this slider.
+      if (!cfg.overrides.buttonText) {
+        var autoInk = computeAutoAccentInk(cfg.overrides.accent || suggestPalette(cfg.base).accentText, cfg.accentInk);
+        els.swatches.buttonText.querySelector('.ct-swatch-btn').style.backgroundColor = autoInk;
+        els.swatches.buttonText.querySelector('.ct-hex-label').textContent = autoInk.toUpperCase();
+      }
+    });
+
+    ['surface', 'text', 'textS', 'accent', 'buttonText'].forEach(function (key) {
       var row = els.swatches[key];
       var btn = row.querySelector('.ct-swatch-btn');
       btn.addEventListener('click', function () {
         var cfg = ensureConfig();
         var palette = suggestPalette(cfg.base);
-        var suggested = { surface: palette.surface, text: palette.text, accent: palette.accentText };
+        var suggested = suggestedSwatchColors(cfg, palette);
         var current = cfg.overrides[key] || suggested[key];
         openPicker(btn, current, function (hex) {
           var cfg2 = ensureConfig();
@@ -499,6 +577,9 @@
           commit(cfg2);
           btn.style.backgroundColor = hex;
           row.querySelector('.ct-hex-label').textContent = hex.toUpperCase();
+          // Paragraph feeds the tertiary (hint/placeholder) derivation, and
+          // Accent feeds Button Text's auto suggestion — refresh those too.
+          if (key === 'textS' || key === 'accent') refreshUI();
         });
       });
     });
@@ -765,7 +846,8 @@
     module.exports = {
       hexToRgb: hexToRgb, rgbToHsl: rgbToHsl, hslToRgb: hslToRgb, hslToHex: hslToHex,
       relativeLuminance: relativeLuminance, suggestPalette: suggestPalette,
-      hexToHsv: hexToHsv, hsvToHex: hsvToHex, rgbToHsv: rgbToHsv, hsvToRgb: hsvToRgb
+      hexToHsv: hexToHsv, hsvToHex: hsvToHex, rgbToHsv: rgbToHsv, hsvToRgb: hsvToRgb,
+      mixHex: mixHex, deriveTextT: deriveTextT, computeAutoAccentInk: computeAutoAccentInk
     };
   }
 })();
