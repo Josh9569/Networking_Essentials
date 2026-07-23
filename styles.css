@@ -924,6 +924,29 @@ sup  { font-size: .65em; vertical-align: super; }
 
 .ct-mini-btn      { font-size: 11px; color: var(--info-text); background: transparent; border: none; cursor: pointer; padding: 2px 4px; }
 .ct-mini-btn:hover { text-decoration: underline; }
+.ct-mini-btn-danger { color: var(--err-text); }
+
+/* Diffused-shape editor: a live mini-preview of the background (same
+   radial-gradients as the real page, scaled into a small box) with each
+   blob rendered as a draggable dot. Shapes start at a fixed default layout
+   and only change when the user drags/places one here or hits Shuffle. */
+.ct-shapes-actions   { display: flex; gap: 8px; }
+.ct-shapes-actions .btn { flex: 1; }
+#ct-customize.on     { background: var(--info-bg); border-color: var(--info-bdr); color: var(--info-text); }
+
+.ct-shapes-editor      { display: none; flex-direction: column; gap: 8px; margin-top: 10px; }
+.ct-shapes-editor.open { display: flex; }
+
+.ct-shapes-canvas    { position: relative; width: 100%; height: 150px; border-radius: 8px; border: 1px solid var(--border-m); overflow: hidden; cursor: crosshair; touch-action: none; background-color: #14141a; }
+.ct-shape-dot         { position: absolute; border-radius: 50%; transform: translate(-50%, -50%); cursor: grab; border: 2px solid rgba(255,255,255,.85); box-shadow: 0 1px 5px rgba(0,0,0,.4); touch-action: none; }
+.ct-shape-dot:active  { cursor: grabbing; }
+.ct-shape-dot.selected { border-color: #fff; box-shadow: 0 0 0 2px rgba(255,255,255,.95), 0 1px 6px rgba(0,0,0,.5); }
+
+.ct-shapes-hint       { font-size: 11px; line-height: 1.5; color: var(--text-t); }
+
+.ct-shapes-toolbar     { display: none; align-items: center; gap: 10px; }
+.ct-shapes-toolbar-lbl { font-size: 12px; color: var(--text-s); flex-shrink: 0; }
+.ct-shapes-toolbar .ct-slider { flex: 1; }
 
 .ct-swatch-row    { display: flex; align-items: center; gap: 10px; padding: 4px 0; }
 .ct-swatch-label  { font-size: 13px; color: var(--text); flex: 1; }

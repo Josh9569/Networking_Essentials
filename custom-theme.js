@@ -311,7 +311,19 @@
           '<input type="range" id="ct-angle" class="ct-slider" min="0" max="360" step="5">' +
         '</div>' +
         '<div class="ct-section" id="ct-shuffle-section">' +
-          '<button type="button" class="btn btn-s" id="ct-shuffle">Shuffle Shapes</button>' +
+          '<div class="ct-shapes-actions">' +
+            '<button type="button" class="btn btn-s" id="ct-shuffle">Shuffle Shapes</button>' +
+            '<button type="button" class="btn btn-s" id="ct-customize">Customize Shapes</button>' +
+          '</div>' +
+          '<div class="ct-shapes-editor" id="ct-shapes-editor">' +
+            '<div class="ct-shapes-canvas" id="ct-shapes-canvas"></div>' +
+            '<div class="ct-shapes-hint">Click empty space to place a shape · drag a shape to move it · click a shape to select it</div>' +
+            '<div class="ct-shapes-toolbar" id="ct-shapes-toolbar">' +
+              '<span class="ct-shapes-toolbar-lbl">Size</span>' +
+              '<input type="range" id="ct-shape-size" class="ct-slider" min="25" max="80" step="1">' +
+              '<button type="button" class="ct-mini-btn ct-mini-btn-danger" id="ct-shape-remove">Remove</button>' +
+            '</div>' +
+          '</div>' +
         '</div>' +
         '<div class="ct-section">' +
           '<div class="ct-label">Menu &amp; Card Transparency <span id="ct-trans-val"></span></div>' +
@@ -355,6 +367,12 @@
     els.angleVal = drawer.querySelector('#ct-angle-val');
     els.shuffleSection = drawer.querySelector('#ct-shuffle-section');
     els.shuffle = drawer.querySelector('#ct-shuffle');
+    els.customize = drawer.querySelector('#ct-customize');
+    els.shapesEditor = drawer.querySelector('#ct-shapes-editor');
+    els.shapesCanvas = drawer.querySelector('#ct-shapes-canvas');
+    els.shapesToolbar = drawer.querySelector('#ct-shapes-toolbar');
+    els.shapeSize = drawer.querySelector('#ct-shape-size');
+    els.shapeRemove = drawer.querySelector('#ct-shape-remove');
     els.trans = drawer.querySelector('#ct-trans');
     els.transVal = drawer.querySelector('#ct-trans-val');
     els.regen = drawer.querySelector('#ct-regen');
@@ -373,6 +391,7 @@
 
     wireDrawer();
     wirePicker();
+    wireShapesEditor();
   }
 
   function swatchRow(key, label) {
@@ -393,6 +412,7 @@
     });
     els.angleSection.style.display = cfg.bgType === 'gradient' ? '' : 'none';
     els.shuffleSection.style.display = cfg.bgType === 'diffused' ? '' : 'none';
+    if (cfg.bgType !== 'diffused') closeShapesEditor();
 
     els.base.style.backgroundColor = cfg.base;
     els.baseHex.textContent = cfg.base.toUpperCase();
@@ -447,7 +467,14 @@
     els.shuffle.addEventListener('click', function () {
       var cfg = ensureConfig();
       cfg.blobSeed = randomBlobSeed();
+      selectedShapeIndex = -1;
       commit(cfg);
+      if (shapesEditorOpen) renderShapesCanvas();
+    });
+
+    els.customize.addEventListener('click', function () {
+      if (shapesEditorOpen) closeShapesEditor();
+      else openShapesEditor();
     });
 
     els.trans.addEventListener('input', function () {
@@ -494,6 +521,11 @@
   function openDrawer() {
     if (!els.drawer) buildDrawer();
     ensureConfig();
+    // Every fresh open starts on the plain Shuffle/Customize buttons, not
+    // mid-edit — shapes stay wherever they were left, only the *editor
+    // panel* itself defaults to collapsed.
+    shapesEditorOpen = false;
+    selectedShapeIndex = -1;
     refreshUI();
     els.drawer.classList.add('open');
     els.backdrop.classList.add('open');
@@ -503,6 +535,109 @@
     els.drawer.classList.remove('open');
     els.backdrop.classList.remove('open');
     closePicker();
+  }
+
+  /* ---------- diffused-shape editor ----------
+     A small live mini-preview of the diffused background where each blob is
+     a draggable dot: click empty space to place a new shape, drag a dot to
+     reposition it, click one to select it (Size slider + Remove appear).
+     Every change calls commit() immediately, same as the rest of the
+     drawer, so the real page updates live as shapes are placed/moved. */
+  var shapesEditorOpen = false;
+  var selectedShapeIndex = -1;
+
+  function openShapesEditor() {
+    shapesEditorOpen = true;
+    els.customize.classList.add('on');
+    els.shapesEditor.classList.add('open');
+    renderShapesCanvas();
+  }
+  function closeShapesEditor() {
+    shapesEditorOpen = false;
+    selectedShapeIndex = -1;
+    if (els.customize) els.customize.classList.remove('on');
+    if (els.shapesEditor) els.shapesEditor.classList.remove('open');
+  }
+
+  function renderShapesCanvas() {
+    var cfg = ensureConfig();
+    var palette = suggestPalette(cfg.base);
+    var accentHex = cfg.overrides.accent || palette.accentText;
+    if (!cfg.blobSeed) cfg.blobSeed = defaultBlobSeed();
+
+    els.shapesCanvas.style.backgroundColor = cfg.base;
+    els.shapesCanvas.style.backgroundImage = buildBgImage({ bgType: 'diffused', blobSeed: cfg.blobSeed }, accentHex);
+    els.shapesCanvas.innerHTML = cfg.blobSeed.map(function (b, i) {
+      var color = i % 2 === 0 ? cfg.base : accentHex;
+      var size = clamp(b.r * 1.05, 22, 100);
+      var sel = i === selectedShapeIndex ? ' selected' : '';
+      return '<div class="ct-shape-dot' + sel + '" data-i="' + i + '" style="left:' + b.x + '%;top:' + b.y + '%;width:' + size + 'px;height:' + size + 'px;background:' + color + ';"></div>';
+    }).join('');
+
+    var hasSel = selectedShapeIndex !== -1 && cfg.blobSeed[selectedShapeIndex];
+    els.shapesToolbar.style.display = hasSel ? 'flex' : 'none';
+    if (hasSel) els.shapeSize.value = cfg.blobSeed[selectedShapeIndex].r;
+  }
+
+  function shapesCanvasPoint(e, rect) {
+    return {
+      x: clamp((e.clientX - rect.left) / rect.width * 100, 0, 100),
+      y: clamp((e.clientY - rect.top) / rect.height * 100, 0, 100)
+    };
+  }
+
+  function wireShapesEditor() {
+    els.shapesCanvas.addEventListener('pointerdown', function (e) {
+      var cfg = ensureConfig();
+      if (!cfg.blobSeed) cfg.blobSeed = defaultBlobSeed();
+      var rect = els.shapesCanvas.getBoundingClientRect();
+      var dotEl = e.target.closest('.ct-shape-dot');
+
+      if (dotEl) {
+        var idx = parseInt(dotEl.getAttribute('data-i'), 10);
+        selectedShapeIndex = idx;
+        renderShapesCanvas();
+        els.shapesCanvas.setPointerCapture(e.pointerId);
+        var move = function (ev) {
+          var pt = shapesCanvasPoint(ev, rect);
+          cfg.blobSeed[idx].x = Math.round(pt.x);
+          cfg.blobSeed[idx].y = Math.round(pt.y);
+          commit(cfg);
+          renderShapesCanvas();
+        };
+        var up = function () {
+          els.shapesCanvas.removeEventListener('pointermove', move);
+          els.shapesCanvas.removeEventListener('pointerup', up);
+        };
+        els.shapesCanvas.addEventListener('pointermove', move);
+        els.shapesCanvas.addEventListener('pointerup', up);
+      } else {
+        if (cfg.blobSeed.length >= 10) return;
+        var pt2 = shapesCanvasPoint(e, rect);
+        cfg.blobSeed.push({ x: Math.round(pt2.x), y: Math.round(pt2.y), r: 45 });
+        selectedShapeIndex = cfg.blobSeed.length - 1;
+        commit(cfg);
+        renderShapesCanvas();
+      }
+    });
+
+    els.shapeSize.addEventListener('input', function () {
+      if (selectedShapeIndex === -1) return;
+      var cfg = ensureConfig();
+      if (!cfg.blobSeed[selectedShapeIndex]) return;
+      cfg.blobSeed[selectedShapeIndex].r = parseInt(els.shapeSize.value, 10);
+      commit(cfg);
+      renderShapesCanvas();
+    });
+
+    els.shapeRemove.addEventListener('click', function () {
+      if (selectedShapeIndex === -1) return;
+      var cfg = ensureConfig();
+      cfg.blobSeed.splice(selectedShapeIndex, 1);
+      selectedShapeIndex = -1;
+      commit(cfg);
+      renderShapesCanvas();
+    });
   }
 
   /* ---------- color picker popover ----------
