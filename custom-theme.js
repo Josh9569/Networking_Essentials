@@ -189,7 +189,7 @@
   // The auto-suggested Button Text color: a shade darker/lighter than the
   // accent itself, magnitude set by the Button Text Contrast slider.
   function computeAutoAccentInk(accentHex, accentInkPct) {
-    var pct = clamp(typeof accentInkPct === 'number' ? accentInkPct : DEFAULT_ACCENT_INK, 20, 90) / 100;
+    var pct = clamp(typeof accentInkPct === 'number' ? accentInkPct : DEFAULT_ACCENT_INK, 0, 100) / 100;
     var isDark = relativeLuminance(accentHex) < 0.179;
     return mixHex(accentHex, isDark ? '#ffffff' : '#000000', pct);
   }
@@ -223,7 +223,7 @@
   }
 
   /* ---------- config persistence ---------- */
-  var DEFAULT_ACCENT_INK = 60;
+  var DEFAULT_ACCENT_INK = 15;
   function defaultConfig() {
     return { bgType: 'solid', base: DEFAULT_BASE, angle: 135, transparency: 0.3, accentInk: DEFAULT_ACCENT_INK, blobSeed: defaultBlobSeed(), overrides: {} };
   }
@@ -379,7 +379,7 @@
         '</div>' +
         '<div class="ct-section">' +
           '<div class="ct-label">Button Text Contrast <span id="ct-ink-val"></span></div>' +
-          '<input type="range" id="ct-ink" class="ct-slider" min="20" max="90" step="1">' +
+          '<input type="range" id="ct-ink" class="ct-slider" min="0" max="100" step="1">' +
           '<div class="ct-shapes-hint">Sets the auto-suggested Button Text shade above — pick an exact color on that swatch instead if you’d rather not use this.</div>' +
         '</div>' +
         '<button type="button" class="btn btn-d ct-reset-btn" id="ct-reset">Reset Custom Theme</button>' +
@@ -550,7 +550,7 @@
 
     els.ink.addEventListener('input', function () {
       var cfg = ensureConfig();
-      cfg.accentInk = clamp(parseInt(els.ink.value, 10), 20, 90);
+      cfg.accentInk = clamp(parseInt(els.ink.value, 10), 0, 100);
       commit(cfg);
       els.inkVal.textContent = cfg.accentInk + '%';
       // Only matters live when Button Text is still "auto" — a manual
