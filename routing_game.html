@@ -31,11 +31,11 @@
   <div class="cls-row">
     <span>Topic:</span>
     <button class="cbtn on" id="tb-rand" onclick="setTopic('rand',this)">Random</button>
-    <button class="cbtn" id="tb-lpm" onclick="setTopic('lpm',this)">Longest Match</button>
-    <button class="cbtn" id="tb-bin" onclick="setTopic('bin',this)">Binary Match</button>
-    <button class="cbtn" id="tb-ad" onclick="setTopic('ad',this)">Admin Distance</button>
     <button class="cbtn" id="tb-read" onclick="setTopic('read',this)">Read Table</button>
-    <button class="cbtn" id="tb-build" onclick="setTopic('build',this)">Build Network</button>
+    <button class="cbtn" id="tb-bin" onclick="setTopic('bin',this)">Binary Match</button>
+    <button class="cbtn" id="tb-lpm" onclick="setTopic('lpm',this)">Longest Match</button>
+    <button class="cbtn" id="tb-ad" onclick="setTopic('ad',this)">Admin Distance</button>
+    <button class="cbtn" id="tb-route" onclick="setTopic('route',this)">IP Routing</button>
   </div>
 
   <div class="diff-row">
@@ -79,6 +79,10 @@
         <label class="opt-row" onclick="toggleTool('lpm')">
           <span class="opt-row-label">LPM Rule</span>
           <div class="tog"><input type="checkbox" id="tog-lpm" checked><span class="tog-track"></span></div>
+        </label>
+        <label class="opt-row" onclick="toggleTool('cli')">
+          <span class="opt-row-label">Router CLI Reference</span>
+          <div class="tog"><input type="checkbox" id="tog-cli" checked><span class="tog-track"></span></div>
         </label>
       </div>
     </div>
@@ -125,6 +129,23 @@
         <li class="rule-item"><span class="rule-num">3</span><span class="rule-body">Administrative distance only breaks a tie when two <strong>different sources</strong> advertise the exact <strong>same</strong> prefix &mdash; it never overrides a longer match.</span></li>
         <li class="rule-item"><span class="rule-num">4</span><span class="rule-body">If nothing else matches, the default route <code>0.0.0.0/0</code> (if present) catches everything. If even that's missing, the packet is dropped.</span></li>
       </ul>
+    </div>
+
+    <div class="tool-block" id="t-cli">
+      <div class="tool-block-title">Router CLI Quick Reference</div>
+      <table class="cmd-table">
+        <tbody>
+          <tr><td class="cmd">configure terminal</td><td>Enter global configuration mode (<code>conf t</code>)</td></tr>
+          <tr><td class="cmd">interface &lt;name&gt;</td><td>Select an interface to configure (<code>int gi0/0</code>)</td></tr>
+          <tr><td class="cmd">ip address &lt;ip&gt; &lt;mask&gt;</td><td>Address the selected interface</td></tr>
+          <tr><td class="cmd">no shutdown</td><td>Bring the selected interface up &mdash; interfaces start administratively down</td></tr>
+          <tr><td class="cmd">ip route &lt;net&gt; &lt;mask&gt; &lt;next-hop&gt;</td><td>Static route by next-hop IP (from global config mode)</td></tr>
+          <tr><td class="cmd">ip route &lt;net&gt; &lt;mask&gt; &lt;interface&gt;</td><td>Static route by exit interface &mdash; only reliable on a genuine point-to-point link, not through a switch</td></tr>
+          <tr><td class="cmd">ip route &lt;net&gt; &lt;mask&gt; &lt;interface&gt; &lt;next-hop&gt;</td><td>Fully specified static route &mdash; always unambiguous, required on multi-access (switched) links</td></tr>
+          <tr><td class="cmd">show ip route</td><td>Show the router's routing table</td></tr>
+          <tr><td class="cmd">exit</td><td>Step back one configuration level</td></tr>
+        </tbody>
+      </table>
     </div>
 
   </div>
@@ -254,9 +275,9 @@ function cliFullLine(e){
 }
 
 /* ─── State ─────────────────────────────────────────────────────── */
-let state={ topic:'rand', diff:'easy', score:0, round:1, streak:0, done:false, mode:null, data:null, lastTopic:null, selectedId:null, build:{assign:{},selected:null} };
-const TOPICS=['lpm','bin','ad','read','build'];
-const TOPIC_LABEL={lpm:'Longest Prefix Match', bin:'Binary Match', ad:'Administrative Distance', read:'Read The Table', build:'Build The Network'};
+let state={ topic:'rand', diff:'easy', score:0, round:1, streak:0, done:false, mode:null, data:null, lastTopic:null, selectedId:null };
+const TOPICS=['read','bin','lpm','ad','route'];
+const TOPIC_LABEL={read:'Read The Table', bin:'Binary Match', lpm:'Longest Prefix Match', ad:'Administrative Distance', route:'IP Routing'};
 const POINTS={easy:3, medium:4, hard:6};
 
 function pickTopic(){
@@ -352,44 +373,447 @@ function genRead(diff){
   return {connected:isConnected, source:src, network, prefix, iface:ex.iface, nextHop:ex.nextHop, metric:ex.metric};
 }
 
-/* ─── Generators: Build The Network ─────────────────────────────── */
-/* Given a routing table, the learner must physically wire the topology it implies:
-   click a node (a network for a Connected entry, a neighbor router for anything
-   learned dynamically/statically), then click the router interface it belongs to. */
-function genBuild(diff){
-  const n = diff==='easy'?2 : diff==='medium'?3 : 4;
-  const ifacePool=shuffle(IFACES.slice()).slice(0,n);
-  const entries=ifacePool.map((iface,i)=>{
-    const raw=niceRawInt();
-    const prefix=choice([16,20,22,24,25,26,27,28]);
-    const netInt=netIntOf(raw,prefix);
-    const network=int2ip(netInt);
-    const isConnected = i===0 ? true : Math.random()<0.5;
-    const src = isConnected ? RT_SOURCES[0] : choice(RT_SOURCES.filter(s=>s.code!=='C'));
-    const ex=makeRouteExtras(src,iface);
-    return {id:'e'+i, network, prefix, iface, source:src, nextHop:ex.nextHop, metric:ex.metric};
+/* ─── IP Routing Lab (topic: route) ───────────────────────────────
+   A real hands-on multi-router static-routing lab: cable routers/PCs on a
+   canvas, configure everything through a typed CLI (or a graphical helper
+   at easy/medium), and prove it works by pinging across the topology.
+   All globals/functions below are prefixed rl* to avoid clashing with the
+   page's existing render() and state fields used by the other four topics. */
+function isValidIP(ip){
+  if(typeof ip!=='string') return false;
+  const p=ip.split('.');
+  return p.length===4 && p.every(s=>/^\d+$/.test(s) && +s>=0 && +s<=255);
+}
+/* Dotted mask -> CIDR prefix length, or null if not a valid contiguous mask. */
+function maskToCidr(maskStr){
+  if(!isValidIP(maskStr)) return null;
+  const n=ip2int(maskStr)>>>0;
+  let cidr=0, seenZero=false;
+  for(let i=31;i>=0;i--){
+    const bit=(n>>>i)&1;
+    if(bit===1){ if(seenZero) return null; cidr++; }
+    else seenZero=true;
+  }
+  return cidr;
+}
+
+const RT_PORTN=3, SW_PORTN=4;
+let rlDevices=[], rlCables=[], rlNid=1, rlCid=1, rlSelected=null, rlPending=null, rlRtCount=0, rlPcCount=0, rlSwCount=0;
+
+function rlResetTopo(){ rlDevices=[]; rlCables=[]; rlNid=1; rlCid=1; rlSelected=null; rlPending=null; rlRtCount=0; rlPcCount=0; rlSwCount=0; }
+function rlById(id){ return rlDevices.find(d=>d.id===id); }
+function rlAddRouter(x,y){
+  rlRtCount++;
+  const d={ id:rlNid++, type:'router', name:'R'+rlRtCount, x, y,
+    ports:Array.from({length:RT_PORTN},(_,i)=>({name:'Gi0/'+i, ip:null, pfx:null, up:false})),
+    staticRoutes:[], cm:'exec', ci:null, log:[], hist:[], hi:0 };
+  rlDevices.push(d); return d;
+}
+function rlAddPC(x,y){
+  rlPcCount++;
+  const d={ id:rlNid++, type:'pc', name:'PC'+rlPcCount, x, y, ip:null, pfx:24 };
+  rlDevices.push(d); return d;
+}
+/* A plain unmanaged Layer 2 switch — no VLANs/CLI/config surface at all
+   (deliberately, this topic is about routing, not switching). Its only job
+   is to turn a link into a multi-access segment: connect 2+ routers to one
+   and an interface-only static route pointed at it becomes ambiguous/
+   unreliable, same as on real hardware — that's what forces the "fully
+   specified" route form (exit interface + next-hop) on hard difficulty. */
+function rlAddSwitch(x,y){
+  rlSwCount++;
+  const d={ id:rlNid++, type:'switch', name:'SW'+rlSwCount, x, y, ports:Array.from({length:SW_PORTN},(_,i)=>({name:'Fa0/'+(i+1)})) };
+  rlDevices.push(d); return d;
+}
+function rlAddCable(dA,iA,dB,iB){ rlCables.push({id:rlCid++, a:{d:dA,i:iA}, b:{d:dB,i:iB}, locked:false}); }
+function rlPortCable(dev,i){ return rlCables.find(c=>(c.a.d===dev&&c.a.i===i)||(c.b.d===dev&&c.b.i===i)); }
+function rlOtherEnd(c,devId){ return c.a.d===devId?c.b:c.a; }
+function rlCableBetween(devA,devB){
+  return rlCables.find(c=>(rlById(c.a.d)===devA&&rlById(c.b.d)===devB)||(rlById(c.a.d)===devB&&rlById(c.b.d)===devA));
+}
+/* L2 reachability: the set of routers/PCs directly reachable from a given
+   port, transparently hopping through any chain of switches (a switch has
+   no "up" state and floods to every other port, mirroring real L2
+   flooding). Two or more router neighbors on the far side of one port means
+   that segment is multi-access, not point-to-point. */
+function rlL2Neighbors(startDevId,startPortIdx){
+  const results=[], visitedSwitches=new Set();
+  const queue=[{d:startDevId,i:startPortIdx}];
+  while(queue.length){
+    const {d,i}=queue.shift();
+    const c=rlPortCable(d,i);
+    if(!c) continue;
+    const o=rlOtherEnd(c,d);
+    const od=rlById(o.d);
+    if(od.type==='switch'){
+      if(visitedSwitches.has(od.id)) continue;
+      visitedSwitches.add(od.id);
+      od.ports.forEach((p,idx)=>{ if(idx!==o.i) queue.push({d:od.id,i:idx}); });
+    } else {
+      results.push(od);
+    }
+  }
+  return results;
+}
+
+/* ── CLI engine (ported from switching_lab.html's cli(d,line)/echoCli) ──
+   Same mode-nested-context pattern: d.cm tracks exec/conf/if, d.ci the
+   selected interface. The graphical helper form and the typed terminal
+   both funnel through rlCli() so they can never disagree. */
+function rlParseIfName(text){
+  const s=text.toLowerCase().replace(/\s+/g,'');
+  const m=s.match(/^(gi|gigabitethernet)0\/(\d+)$/);
+  if(!m) return -1;
+  const n=+m[2];
+  return (n>=0 && n<RT_PORTN) ? n : -1;
+}
+function rlCli(d,line){
+  const t=line.trim().replace(/\s+/g,' ');
+  if(!t) return '';
+  const w=t.toLowerCase().split(' ');
+  const M=(tok,cand)=>tok&&cand.startsWith(tok);
+
+  if(M(w[0],'enable')){ d.cm='exec'; return ''; }
+  if(M(w[0],'configure')||w[0]==='conf'){ d.cm='conf'; d.ci=null; return ''; }
+  if(M(w[0],'end')){ d.cm='exec'; d.ci=null; return ''; }
+  if(M(w[0],'exit')){ d.cm = d.cm==='if' ? 'conf' : 'exec'; d.ci=null; return ''; }
+  if(w[0]==='cls'||M(w[0],'clear')){ d.log.length=0; return ''; }
+
+  if(M(w[0],'show')||w[0]==='sh'){
+    if(w[1]&&M(w[1],'ip')&&w[2]&&M(w[2],'route')){
+      const table=rlRoutingTable(d);
+      return table.length ? table.map(e=>cliFullLine(e)).join('\n') : 'No routes.';
+    }
+    return '% Unknown show command';
+  }
+
+  if(M(w[0],'interface')||w[0]==='int'){
+    const idx=rlParseIfName(t.slice(t.indexOf(' ')+1));
+    if(idx<0) return '% Invalid interface — try "interface Gi0/0"';
+    d.cm='if'; d.ci=idx; return '';
+  }
+
+  if(d.cm==='if'){
+    if(w[0]==='no'&&w[1]&&M(w[1],'shutdown')){ d.ports[d.ci].up=true; return ''; }
+    if(M(w[0],'shutdown')){ d.ports[d.ci].up=false; return ''; }
+    if(w[0]==='no'&&w[1]&&M(w[1],'ip')&&w[2]&&M(w[2],'address')){ d.ports[d.ci].ip=null; d.ports[d.ci].pfx=null; return ''; }
+    if(M(w[0],'ip')&&w[1]&&M(w[1],'address')){
+      const parts=t.split(' ');
+      const ip=parts[2], mask=parts[3];
+      if(!ip||!isValidIP(ip)) return '% Invalid IP address';
+      const pfx=maskToCidr(mask);
+      if(pfx==null) return '% Invalid subnet mask';
+      d.ports[d.ci].ip=ip; d.ports[d.ci].pfx=pfx;
+      return '';
+    }
+  }
+
+  if(d.cm==='conf'){
+    if(w[0]==='no'&&w[1]&&M(w[1],'ip')&&w[2]&&M(w[2],'route')){
+      const raw=t.split(' ').slice(3).join(' ');
+      d.staticRoutes=d.staticRoutes.filter(r=>r._raw!==raw);
+      return '';
+    }
+    /* Real IOS accepts three forms here: next-hop only ("...<next-hop>"),
+       exit-interface only ("...<interface>"), or fully specified
+       ("...<interface> <next-hop>") — the last is what a multi-access link
+       (through a switch) requires, since interface-only is ambiguous there. */
+    if(M(w[0],'ip')&&w[1]&&M(w[1],'route')){
+      const parts=t.split(' ');
+      const net=parts[2], mask=parts[3], arg4=parts[4], arg5=parts[5];
+      if(!net||!mask||!arg4||!isValidIP(net)) return '% Invalid syntax — ip route <network> <mask> {<next-hop> | <exit-interface> [<next-hop>]}';
+      const pfx=maskToCidr(mask);
+      if(pfx==null) return '% Invalid subnet mask';
+      const netInt=netIntOf(ip2int(net),pfx);
+      let exitIface=null, nextHop=null;
+      const ifaceIdx=rlParseIfName(arg4);
+      if(ifaceIdx>=0){
+        exitIface=ifaceIdx;
+        if(arg5){
+          if(!isValidIP(arg5)) return '% Invalid next-hop address';
+          nextHop=arg5;
+        }
+      } else {
+        if(!isValidIP(arg4)) return '% Invalid next-hop address or exit interface';
+        nextHop=arg4;
+      }
+      d.staticRoutes.push({netInt,prefix:pfx,exitIface,nextHop,_raw:parts.slice(2).join(' ')});
+      return '';
+    }
+  }
+
+  return '% Invalid input detected';
+}
+function rlPromptFor(d){
+  return d.name+(d.cm==='conf'?'(config)#':d.cm==='if'?'(config-if)#':'#');
+}
+function rlEchoCli(d,cmds){
+  cmds.forEach(c=>{
+    d.log.push(rlPromptFor(d)+' '+c);
+    const out=rlCli(d,c);
+    if(out) out.split('\n').forEach(l=>d.log.push(l));
   });
-  const table=shuffle(entries.slice());
-  const ports=entries.slice().sort((a,b)=>a.iface.localeCompare(b.iface));
-  const chips=shuffle(entries.map(e=>({
-    id:e.id,
-    correctIface:e.iface,
-    label: e.source.code==='C' ? 'Network' : 'Neighbor Router',
-    value: e.source.code==='C' ? (e.network+'/'+e.prefix) : ('via '+e.nextHop)
-  })));
-  return {entries,table,ports,chips};
+}
+
+/* ── Routing table + multi-hop reachability (no prior equivalent anywhere
+   in this codebase's ping logic — switching_lab's is a single-router,
+   "everything just routes" shortcut that doesn't generalize). ── */
+function rlRoutingTable(router){
+  const table=[];
+  router.ports.forEach(p=>{
+    if(p.ip&&p.up){
+      const netInt=netIntOf(ip2int(p.ip),p.pfx);
+      table.push({source:RT_SOURCES[0], network:int2ip(netInt), prefix:p.pfx, netInt, nextHop:null, metric:null, iface:p.name, _port:p});
+    }
+  });
+  router.staticRoutes.forEach(r=>{
+    const src = r.prefix===0 ? DEFAULT_SRC : RT_SOURCES[1];
+    let viaPort, displayNextHop=r.nextHop;
+    if(r.exitIface!=null){
+      viaPort=router.ports[r.exitIface];
+      /* interface-only: no next-hop was typed, so resolve one purely for
+         "show ip route" display — if there's a single unambiguous router on
+         the far side, show its IP; otherwise leave it blank (matching the
+         fact the route may not actually be resolvable — see rlResolvePing). */
+      if(!displayNextHop && viaPort){
+        const nbs=rlL2Neighbors(router.id,r.exitIface).filter(n=>n.type==='router');
+        if(nbs.length===1){
+          const nbPort=nbs[0].ports.find(p=>p.ip&&p.up&&viaPort.ip&&netIntOf(ip2int(p.ip),viaPort.pfx)===netIntOf(ip2int(viaPort.ip),viaPort.pfx));
+          if(nbPort) displayNextHop=nbPort.ip;
+        }
+      }
+    } else {
+      viaPort=router.ports.find(p=>p.ip&&p.up&&netIntOf(ip2int(p.ip),p.pfx)===netIntOf(ip2int(r.nextHop),p.pfx));
+    }
+    table.push({source:src, network:int2ip(r.netInt), prefix:r.prefix, netInt:r.netInt, nextHop:displayNextHop, metric:0, iface:viaPort?viaPort.name:'(unresolved)', _route:r});
+  });
+  return table;
+}
+function rlDeviceWithIp(ipStr){ return rlDevices.find(d=>d.type==='pc'&&d.ip===ipStr); }
+function rlRouterPortWithIp(ipStr){
+  for(const d of rlDevices){
+    if(d.type!=='router') continue;
+    const p=d.ports.find(p=>p.ip===ipStr&&p.up);
+    if(p) return {router:d,port:p};
+  }
+  return null;
+}
+/* Longest-prefix-match hop-chasing: find the PC's gateway, then repeatedly
+   look up the destination in the current router's table; a connected
+   winner means "arrived, verify the last hop is really cabled", a static
+   winner means "jump to whoever owns that next-hop IP and keep going". */
+function rlResolvePing(srcPc,dstStr){
+  if(!srcPc.ip||!isValidIP(srcPc.ip)) return {ok:false,reason:srcPc.name+' has no valid IP'};
+  if(!dstStr||!isValidIP(dstStr)) return {ok:false,reason:'Invalid destination address'};
+  const dstInt=ip2int(dstStr);
+  const c=rlPortCable(srcPc.id,0);
+  if(!c) return {ok:false,reason:srcPc.name+' is not cabled to anything'};
+  const o=rlOtherEnd(c,srcPc.id);
+  const gw=rlById(o.d);
+  if(gw.type!=='router') return {ok:false,reason:srcPc.name+' is not connected to a router'};
+  const gwPort=gw.ports[o.i];
+  if(!gwPort.ip||!gwPort.up) return {ok:false,reason:gw.name+' '+gwPort.name+" isn't addressed and up yet"};
+  if(netIntOf(ip2int(srcPc.ip),gwPort.pfx)!==netIntOf(ip2int(gwPort.ip),gwPort.pfx))
+    return {ok:false,reason:srcPc.name+"'s IP isn't in the same subnet as "+gw.name+' '+gwPort.name};
+
+  let current=gw;
+  const visited=new Set();
+  for(let hop=0; hop<8; hop++){
+    if(visited.has(current.id)) return {ok:false,reason:'Routing loop detected at '+current.name};
+    visited.add(current.id);
+    const table=rlRoutingTable(current);
+    const winner=bestMatch(dstInt,table);
+    if(!winner) return {ok:false,reason:current.name+' has no route to '+dstStr};
+
+    if(winner.source.code==='C'){
+      const destPc=rlDeviceWithIp(dstStr);
+      if(!destPc) return {ok:false,reason:'No device currently holds '+dstStr};
+      const portIdx=current.ports.indexOf(winner._port);
+      if(!rlL2Neighbors(current.id,portIdx).includes(destPc))
+        return {ok:false,reason:dstStr+' is not actually reachable via '+current.name+' '+winner.iface};
+      return {ok:true};
+    }
+
+    /* Static route: figure out which local port it exits and which router
+       is on the other side. Three forms, same as real IOS:
+         - exit-interface only: only valid if that segment is a genuine
+           point-to-point link (exactly one router neighbor) — on a switch
+           with 2+ routers it's ambiguous and this fails, same as hardware.
+         - next-hop only: find the port whose subnet contains the next-hop.
+         - fully specified: exit interface AND next-hop both given, always
+           unambiguous regardless of point-to-point or multi-access. */
+    let viaIdx=-1, nextRouter=null;
+    if(winner._route && winner._route.exitIface!=null){
+      viaIdx=winner._route.exitIface;
+      const p=current.ports[viaIdx];
+      if(!p||!p.ip||!p.up) return {ok:false,reason:current.name+' '+(p?p.name:'')+" isn't addressed and up — the static route's exit interface is down"};
+      if(winner._route.nextHop){
+        const hit=rlRouterPortWithIp(winner._route.nextHop);
+        if(!hit||hit.router===current) return {ok:false,reason:'Next hop '+winner._route.nextHop+" doesn't belong to any other router's up interface"};
+        if(!rlL2Neighbors(current.id,viaIdx).includes(hit.router))
+          return {ok:false,reason:current.name+' '+p.name+' cannot reach next-hop '+winner._route.nextHop+' — check the cabling'};
+        nextRouter=hit.router;
+      } else {
+        /* Interface-only is only reliable on a genuine point-to-point link —
+           i.e. the port's cable leads DIRECTLY to a router, not to a switch.
+           Real IOS technically still lets you configure it either way, but
+           on a multi-access (switched) segment it relies on proxy-ARP and
+           is unreliable/not recommended — modeled here as simply not
+           working, forcing the next-hop (or fully specified) form instead. */
+        const c=rlPortCable(current.id,viaIdx);
+        if(!c) return {ok:false,reason:current.name+' '+p.name+' is not cabled'};
+        const otherDev=rlById(rlOtherEnd(c,current.id).d);
+        if(otherDev.type==='switch') return {ok:false,reason:current.name+' '+p.name+" leads to a switch — that's a multi-access link, so an exit-interface-only route is ambiguous there. Add the next-hop IP too (a \"fully specified\" route)."};
+        if(otherDev.type!=='router') return {ok:false,reason:current.name+' '+p.name+' has no router on the other end'};
+        nextRouter=otherDev;
+      }
+    } else {
+      const nh=winner._route.nextHop;
+      const hit=rlRouterPortWithIp(nh);
+      if(!hit||hit.router===current) return {ok:false,reason:'Next hop '+nh+" doesn't belong to any other router's up interface"};
+      viaIdx=current.ports.findIndex(p=>p.ip&&p.up&&netIntOf(ip2int(p.ip),p.pfx)===netIntOf(ip2int(nh),p.pfx));
+      if(viaIdx<0) return {ok:false,reason:current.name+' cannot reach next-hop '+nh};
+      if(!rlL2Neighbors(current.id,viaIdx).includes(hit.router))
+        return {ok:false,reason:current.name+' '+current.ports[viaIdx].name+' cannot reach next-hop '+nh};
+      nextRouter=hit.router;
+    }
+    current=nextRouter;
+  }
+  return {ok:false,reason:'Too many hops — check for a routing loop'};
+}
+
+/* ── Requirement-factory helpers (same {desc,test()} shape as switching_lab's
+   reqs[], ported in since routing_game.html had no checklist UI before). ── */
+function rlIfaceReq(router,portIdx,expectedNetInt,expectedPfx){
+  const p=router.ports[portIdx];
+  return {desc:`${router.name} ${p.name} has a valid IP in ${int2ip(expectedNetInt)}/${expectedPfx} and is up (no shutdown)`,
+    test(){
+      if(!p.ip) return {ok:false,reason:`${router.name} ${p.name} has no IP address configured`};
+      if(!isValidIP(p.ip)) return {ok:false,reason:`${router.name} ${p.name}'s IP is invalid`};
+      if(p.pfx!==expectedPfx||netIntOf(ip2int(p.ip),expectedPfx)!==expectedNetInt)
+        return {ok:false,reason:`${router.name} ${p.name} must be in ${int2ip(expectedNetInt)}/${expectedPfx}`};
+      const ipInt=ip2int(p.ip);
+      if(expectedPfx<31&&(ipInt===expectedNetInt||ipInt===bcastIntOf(expectedNetInt,expectedPfx)))
+        return {ok:false,reason:`${router.name} ${p.name}'s IP can't be the network or broadcast address`};
+      if(!p.up) return {ok:false,reason:`${router.name} ${p.name} is administratively down — "no shutdown" it`};
+      return {ok:true};
+    }};
+}
+function rlPcIpReq(pc,netInt,pfx){
+  return {desc:`${pc.name} has a valid host IP in ${int2ip(netInt)}/${pfx}`,
+    test(){
+      if(!pc.ip||!isValidIP(pc.ip)) return {ok:false,reason:`${pc.name} has no valid IP`};
+      const ipInt=ip2int(pc.ip);
+      if(netIntOf(ipInt,pfx)!==netInt) return {ok:false,reason:`${pc.name}'s IP must be in ${int2ip(netInt)}/${pfx}`};
+      if(ipInt===netInt||ipInt===bcastIntOf(netInt,pfx)) return {ok:false,reason:`${pc.name}'s IP can't be the network or broadcast address`};
+      return {ok:true};
+    }};
+}
+function rlCableReq(devA,labelA,devB,labelB){
+  return {desc:`${labelA} is cabled to ${labelB}`,
+    test(){ return rlCableBetween(devA,devB) ? {ok:true} : {ok:false,reason:`${labelA} and ${labelB} are not cabled yet`}; }};
+}
+/* A real ping needs the echo REPLY to route back too, not just the request
+   getting there — check both directions, so a one-way-only route (e.g. an
+   interface-only static route that happens to break just the return path)
+   doesn't slip through as "working". */
+function rlPingReq(pcA,pcB){
+  return {desc:`${pcA.name} can ping ${pcB.name}`,
+    test(){
+      if(!pcA.ip) return {ok:false,reason:`${pcA.name} needs a valid IP before you can ping`};
+      if(!pcB.ip) return {ok:false,reason:`${pcB.name} needs a valid IP before you can ping it`};
+      const there=rlResolvePing(pcA,pcB.ip);
+      if(!there.ok) return {ok:false,reason:there.reason};
+      const back=rlResolvePing(pcB,pcA.ip);
+      if(!back.ok) return {ok:false,reason:`The reply can't get back from ${pcB.name} to ${pcA.name} — ${back.reason}`};
+      return {ok:true};
+    }};
+}
+function rlFullySpecReq(router,expectedNetInt,expectedPfx){
+  return {desc:`${router.name} uses a fully specified static route (exit interface AND next-hop) to reach ${int2ip(expectedNetInt)}/${expectedPfx}`,
+    test(){
+      const match=router.staticRoutes.find(r=>r.netInt===expectedNetInt&&r.prefix===expectedPfx);
+      if(!match) return {ok:false,reason:`${router.name} has no static route to ${int2ip(expectedNetInt)}/${expectedPfx} yet`};
+      if(match.exitIface==null||!match.nextHop)
+        return {ok:false,reason:`That route needs both an exit interface and a next-hop IP — e.g. "ip route ${int2ip(expectedNetInt)} ${cidr2mask(expectedPfx)} <interface> <next-hop>"`};
+      return {ok:true};
+    }};
+}
+
+/* ── Scenario generator ── */
+function genRoute(diff){
+  rlResetTopo();
+  const reqs=[]; let title, instr;
+  const lanSubnet=()=>netIntOf(niceRawInt(),24);
+  const wanSubnet=()=>netIntOf(niceRawInt(),30);
+
+  if(diff==='easy'){
+    const r1=rlAddRouter(255,25);
+    const pc1=rlAddPC(30,190), pc2=rlAddPC(460,190);
+    const netA=lanSubnet(), netB=lanSubnet();
+    const ipA=int2ip(netA+1), ipB=int2ip(netB+1);
+    title='IP Routing — Directly Connected Networks';
+    instr=`Cable both PCs to ${r1.name}. Give ${r1.name} ${r1.ports[0].name} the address <span class="mono-inl">${ipA} 255.255.255.0</span> and ${r1.name} ${r1.ports[1].name} the address <span class="mono-inl">${ipB} 255.255.255.0</span> (don't forget <span class="mono-inl">no shutdown</span> on each). Then give ${pc1.name} any host address in ${int2ip(netA)}/24 and ${pc2.name} any host address in ${int2ip(netB)}/24 — both networks are directly connected to ${r1.name}, so no static routes are needed.`;
+    reqs.push(
+      rlCableReq(pc1,pc1.name,r1,r1.name+' '+r1.ports[0].name),
+      rlCableReq(pc2,pc2.name,r1,r1.name+' '+r1.ports[1].name),
+      rlIfaceReq(r1,0,netA,24), rlIfaceReq(r1,1,netB,24),
+      rlPcIpReq(pc1,netA,24), rlPcIpReq(pc2,netB,24),
+      rlPingReq(pc1,pc2)
+    );
+  } else if(diff==='medium'){
+    const r1=rlAddRouter(50,25), r2=rlAddRouter(460,25);
+    const pc1=rlAddPC(30,190), pc2=rlAddPC(490,190);
+    const netA=lanSubnet(), netB=lanSubnet(), netW=wanSubnet();
+    const ipA=int2ip(netA+1), ipB=int2ip(netB+1);
+    const wIp1=int2ip(netW+1), wIp2=int2ip(netW+2);
+    title='IP Routing — Static Routes Across Two Routers';
+    instr=`Cable ${pc1.name} to ${r1.name} ${r1.ports[0].name}, ${pc2.name} to ${r2.name} ${r2.ports[0].name}, and ${r1.name} ${r1.ports[1].name} to ${r2.name} ${r2.ports[1].name} for the WAN link. Address the LANs: ${r1.name} ${r1.ports[0].name} = <span class="mono-inl">${ipA} 255.255.255.0</span>, ${r2.name} ${r2.ports[0].name} = <span class="mono-inl">${ipB} 255.255.255.0</span>. Address the WAN link: ${r1.name} ${r1.ports[1].name} = <span class="mono-inl">${wIp1} 255.255.255.252</span>, ${r2.name} ${r2.ports[1].name} = <span class="mono-inl">${wIp2} 255.255.255.252</span>. "no shutdown" every interface, then give ${pc1.name} a host IP in ${int2ip(netA)}/24 and ${pc2.name} a host IP in ${int2ip(netB)}/24. Neither router knows the other's LAN yet — add a static (or default) route on each, e.g. <span class="mono-inl">ip route ${int2ip(netB)} 255.255.255.0 ${wIp2}</span> on ${r1.name}.`;
+    reqs.push(
+      rlCableReq(pc1,pc1.name,r1,r1.name+' '+r1.ports[0].name),
+      rlCableReq(pc2,pc2.name,r2,r2.name+' '+r2.ports[0].name),
+      rlCableReq(r1,r1.name+' '+r1.ports[1].name,r2,r2.name+' '+r2.ports[1].name),
+      rlIfaceReq(r1,0,netA,24), rlIfaceReq(r2,0,netB,24),
+      rlIfaceReq(r1,1,netW,30), rlIfaceReq(r2,1,netW,30),
+      rlPcIpReq(pc1,netA,24), rlPcIpReq(pc2,netB,24),
+      rlPingReq(pc1,pc2)
+    );
+  } else {
+    const r1=rlAddRouter(20,25), r2=rlAddRouter(270,25), r3=rlAddRouter(590,25);
+    const sw1=rlAddSwitch(440,140);
+    const pc1=rlAddPC(10,190), pc3=rlAddPC(630,190);
+    const netA=lanSubnet(), netC=lanSubnet(), netW1=wanSubnet(), netW2=wanSubnet();
+    const ipA=int2ip(netA+1), ipC=int2ip(netC+1);
+    const w1a=int2ip(netW1+1), w1b=int2ip(netW1+2), w2a=int2ip(netW2+1), w2b=int2ip(netW2+2);
+    title='IP Routing — Multi-Hop Static Routing';
+    instr=`Cable ${pc1.name}–${r1.name} ${r1.ports[0].name}, ${pc3.name}–${r3.name} ${r3.ports[0].name}, ${r1.name} ${r1.ports[1].name}–${r2.name} ${r2.ports[0].name} directly, and ${r2.name} ${r2.ports[1].name}–${sw1.name}–${r3.name} ${r3.ports[1].name} (both routers cable into the switch, not to each other). Address every link: ${r1.name} ${r1.ports[0].name}=<span class="mono-inl">${ipA} 255.255.255.0</span>, ${r3.name} ${r3.ports[0].name}=<span class="mono-inl">${ipC} 255.255.255.0</span>, ${r1.name} ${r1.ports[1].name}=<span class="mono-inl">${w1a} 255.255.255.252</span>, ${r2.name} ${r2.ports[0].name}=<span class="mono-inl">${w1b} 255.255.255.252</span>, ${r2.name} ${r2.ports[1].name}=<span class="mono-inl">${w2a} 255.255.255.252</span>, ${r3.name} ${r3.ports[1].name}=<span class="mono-inl">${w2b} 255.255.255.252</span>. "no shutdown" everything, then give ${pc1.name}/${pc3.name} host IPs in their own LANs. ${r2.name} is only directly connected to the two WAN links, not either LAN, so all three routers need static (or default) routes: ${r1.name} and ${r3.name} to reach the far LAN two hops away, and ${r2.name} to reach both LANs so it can forward between them. ${sw1.name} makes the ${r2.name}–${r3.name} link a multi-access segment rather than point-to-point — an exit-interface-only route there is ambiguous, so <strong>${r3.name}'s route back to ${r1.name}'s LAN must be fully specified</strong> (exit interface AND next-hop), e.g. <span class="mono-inl">ip route ${int2ip(netA)} 255.255.255.0 ${r3.ports[1].name} ${w2a}</span>.`;
+    reqs.push(
+      rlCableReq(pc1,pc1.name,r1,r1.name+' '+r1.ports[0].name),
+      rlCableReq(pc3,pc3.name,r3,r3.name+' '+r3.ports[0].name),
+      rlCableReq(r1,r1.name+' '+r1.ports[1].name,r2,r2.name+' '+r2.ports[0].name),
+      rlCableReq(r2,r2.name+' '+r2.ports[1].name,sw1,sw1.name+' '+sw1.ports[0].name),
+      rlCableReq(sw1,sw1.name+' '+sw1.ports[1].name,r3,r3.name+' '+r3.ports[1].name),
+      rlIfaceReq(r1,0,netA,24), rlIfaceReq(r3,0,netC,24),
+      rlIfaceReq(r1,1,netW1,30), rlIfaceReq(r2,0,netW1,30),
+      rlIfaceReq(r2,1,netW2,30), rlIfaceReq(r3,1,netW2,30),
+      rlPcIpReq(pc1,netA,24), rlPcIpReq(pc3,netC,24),
+      rlFullySpecReq(r3,netA,24),
+      rlPingReq(pc1,pc3)
+    );
+  }
+  return {title,instr,reqs};
 }
 
 /* ─── Round control ──────────────────────────────────────────────── */
 function loadQ(){
-  state.done=false; state.selectedId=null; state.build={assign:{},selected:null};
+  state.done=false; state.selectedId=null;
   const t=pickTopic();
   state.mode=t;
   if(t==='lpm') state.data=genLPM(state.diff);
   else if(t==='bin') state.data=genBin(state.diff);
   else if(t==='ad') state.data=genAD(state.diff);
   else if(t==='read') state.data=genRead(state.diff);
-  else if(t==='build') state.data=genBuild(state.diff);
+  else if(t==='route') state.data=genRoute(state.diff);
   render();
   updateChips();
 }
@@ -404,7 +828,7 @@ function setBtns(mode){
   const chk=document.getElementById('chkbtn'), rev=document.getElementById('revbtn'), nxt=document.getElementById('nxtbtn');
   nxt.style.display='none';
   if(mode==='mcq'){ chk.textContent='Submit Answer'; rev.textContent='Skip'; }
-  else if(mode==='build'){ chk.textContent='Check Wiring'; rev.textContent='Reveal All'; }
+  else if(mode==='route'){ chk.textContent='Check Requirements'; rev.textContent='Reveal All'; }
   else { chk.textContent='Check Answers'; rev.textContent='Reveal All'; }
   chk.style.display=''; rev.style.display='';
   document.getElementById('fb').style.display='none';
@@ -420,7 +844,7 @@ function render(){
   else if(state.mode==='bin') renderBin(body,qip);
   else if(state.mode==='ad') renderAD(body,qip);
   else if(state.mode==='read') renderRead(body,qip);
-  else if(state.mode==='build') renderBuild(body,qip);
+  else if(state.mode==='route') renderRoute(body,qip);
 }
 
 /* ── Shared: routing table element ── */
@@ -626,115 +1050,321 @@ function renderRead(body,qip){
   setBtns('text');
 }
 
-/* ─── Render: Build The Network ──────────────────────────────────── */
-function renderBuild(body,qip){
-  const d=state.data;
-  document.getElementById('qprompt').textContent="This router's routing table is shown below. Click a node, then click the interface it belongs to, to wire up the topology it implies.";
+/* ─── Render: IP Routing Lab ──────────────────────────────────────
+   Canvas/cable interaction and the CLI terminal DOM are ported from
+   switching_lab.html's dev-layer/cable-svg/.term pattern (same CSS classes,
+   reused as-is — .dev, .port, .cable, .cfg-panel, .term-, .req-list are all
+   already in styles.css from that page and are not scoped to it in any way. */
+function renderRoute(body,qip){
+  document.getElementById('qprompt').innerHTML=state.data.instr;
   qip.style.display='none';
-
-  let html=`<div class="cli-block" style="margin-bottom:1rem">`;
-  html+=d.table.map(e=>cliFullLine(e)).join('<br>');
-  html+=`</div>`;
-
-  html+=`<div class="rt-canvas" id="rt-canvas">
-    <svg id="rt-svg"></svg>
-    <div class="rt-canvas-note">click a wire to delete it</div>
-    <div class="rt-router-row">
-      <div class="rt-router"><div>R1</div>
-        <div class="rt-ports">`;
-  d.ports.forEach(p=>{
-    const short=p.iface.replace('GigabitEthernet','Gi').replace('FastEthernet','Fa').replace('Serial','Se');
-    html+=`<div class="rt-port-wrap"><div class="rt-port" id="port-${p.iface}" onclick="clickPort('${p.iface}')"></div><div class="rt-port-lbl">${short}</div></div>`;
-  });
-  html+=`    </div>
+  body.innerHTML=`
+    <div class="lab-card">
+      <div class="lab-toolbar">
+        <div class="legend"><span class="lg"><i class="lgdot lg-acc"></i>addressed &amp; up</span></div>
       </div>
+      <div class="lab-canvas"><svg id="rl-cable-svg"></svg><div id="rl-dev-layer"></div></div>
+      <div class="lab-hint" id="rl-hint">Click a port, then click another port to cable them. Click a device to configure it. Click a cable to remove it.</div>
     </div>
-    <div class="rt-pool" id="rt-pool">`;
-  d.chips.forEach(c=>{
-    html+=`<div class="rt-chip" id="chip-${c.id}" onclick="selectChip('${c.id}')"><div class="rt-chip-lbl">${c.label}</div><div class="rt-chip-val">${c.value}</div></div>`;
+    <div class="cfg-panel" id="rl-cfg" style="display:none"></div>
+    <div class="req-list" id="req-list"></div>`;
+  document.getElementById('rl-dev-layer').addEventListener('click', rlOnCanvasClick);
+  document.getElementById('rl-cable-svg').addEventListener('click', rlOnCableClick);
+  setBtns('route');
+  rlRenderCanvas();
+  rlRenderReqs(null);
+}
+
+function rlSetHint(msg){ const el=document.getElementById('rl-hint'); if(el) el.textContent=msg; }
+
+function rlDevSize(d){
+  if(d.type==='router') return [128,60];
+  if(d.type==='switch') return [150,66];
+  const label=d.ip?d.ip:'no IP';
+  return [Math.max(90,Math.round(label.length*6.4)+24), 52];
+}
+function rlPortPosRouter(d,i){
+  const pad=20, span=128-2*pad;
+  return [pad+i*(span/(RT_PORTN-1)), 60];
+}
+function rlPortPosSwitch(d,i){
+  const pad=20, span=150-2*pad;
+  return [pad+i*(span/(SW_PORTN-1)), 66];
+}
+function rlFixedPortPos(d,i){
+  if(d.type==='router') return rlPortPosRouter(d,i);
+  if(d.type==='switch') return rlPortPosSwitch(d,i);
+  return null;
+}
+/* PCs have one port that slides around the box edge toward whatever
+   they're cabled to (same trick as switching_lab's portPos). */
+function rlPortPos(d,i){
+  const fixed=rlFixedPortPos(d,i);
+  if(fixed) return fixed;
+  const [w,h]=rlDevSize(d);
+  const c=rlPortCable(d.id,0);
+  if(!c) return [w/2,0];
+  const o=rlOtherEnd(c,d.id), od=rlById(o.d);
+  let tx,ty;
+  const oFixed=rlFixedPortPos(od,o.i);
+  if(oFixed){ tx=od.x+oFixed[0]; ty=od.y+oFixed[1]; }
+  else { const [ow,oh]=rlDevSize(od); tx=od.x+ow/2; ty=od.y+oh/2; }
+  const cx=d.x+w/2, cy=d.y+h/2, dx=tx-cx, dy=ty-cy;
+  if(!dx&&!dy) return [w/2,0];
+  const sx=dx?(w/2)/Math.abs(dx):Infinity, sy=dy?(h/2)/Math.abs(dy):Infinity;
+  const s=Math.min(sx,sy);
+  return [Math.min(w,Math.max(0,w/2+dx*s)), Math.min(h,Math.max(0,h/2+dy*s))];
+}
+
+function rlRenderCanvas(){
+  const svg=document.getElementById('rl-cable-svg'), layer=document.getElementById('rl-dev-layer');
+  if(!svg||!layer) return;
+  svg.innerHTML=''; layer.innerHTML='';
+
+  rlCables.forEach(c=>{
+    const A=rlById(c.a.d), B=rlById(c.b.d);
+    const [ax,ay]=rlPortPos(A,c.a.i), [bx,by]=rlPortPos(B,c.b.i);
+    const l=document.createElementNS('http://www.w3.org/2000/svg','line');
+    l.setAttribute('x1',A.x+ax); l.setAttribute('y1',A.y+ay);
+    l.setAttribute('x2',B.x+bx); l.setAttribute('y2',B.y+by);
+    l.setAttribute('class','cable'); l.dataset.cid=c.id;
+    svg.appendChild(l);
+    const hl=document.createElementNS('http://www.w3.org/2000/svg','line');
+    hl.setAttribute('x1',A.x+ax); hl.setAttribute('y1',A.y+ay);
+    hl.setAttribute('x2',B.x+bx); hl.setAttribute('y2',B.y+by);
+    hl.setAttribute('class','cable-hit'); hl.dataset.cid=c.id;
+    svg.appendChild(hl);
   });
-  html+=`</div>
+
+  rlDevices.forEach(d=>{
+    const [w] = rlDevSize(d);
+    const el=document.createElement('div');
+    el.className='dev '+d.type+(rlSelected===d.id?' selected':'');
+    el.style.left=d.x+'px'; el.style.top=d.y+'px'; el.style.width=w+'px';
+    el.dataset.did=d.id;
+    if(d.type==='router'){
+      const up=d.ports.filter(p=>p.ip&&p.up).length;
+      el.innerHTML=`<div class="dev-name">${d.name}</div><div class="dev-sub">router · ${up}/${RT_PORTN} interfaces up</div>`;
+    } else if(d.type==='switch'){
+      el.innerHTML=`<div class="dev-name">${d.name}</div><div class="dev-sub">unmanaged switch</div>`;
+    } else {
+      el.innerHTML=`<div class="dev-name">${d.name}</div><div class="dev-sub">${d.ip?d.ip:'no IP'}</div>`;
+    }
+    layer.appendChild(el);
+
+    const ports = (d.type==='router'||d.type==='switch') ? d.ports.map((p,i)=>[i,p]) : [[0,null]];
+    ports.forEach(([i,p])=>{
+      const [px,py]=rlPortPos(d,i);
+      const pel=document.createElement('span');
+      let cls='port';
+      if(rlPending&&rlPending.d===d.id&&rlPending.i===i) cls+=' p-pending';
+      else if(p&&p.ip&&p.up) cls+=' p-acc';
+      pel.className=cls;
+      pel.style.left=(d.x+px-7)+'px'; pel.style.top=(d.y+py-7)+'px';
+      pel.dataset.did=d.id; pel.dataset.pi=i;
+      pel.title = p ? p.name+(p.ip?' '+p.ip+'/'+p.pfx:'')+(p.up?'':' (down)') : 'Eth0';
+      layer.appendChild(pel);
+    });
+  });
+}
+
+function rlOnCanvasClick(e){
+  const portEl=e.target.closest('.port');
+  if(portEl){ rlOnPortClick(+portEl.dataset.did,+portEl.dataset.pi); return; }
+  const devEl=e.target.closest('.dev');
+  if(devEl) rlOpenCfg(+devEl.dataset.did);
+}
+function rlOnPortClick(did,i){
+  if(state.done) return;
+  const d=rlById(did);
+  const label=d.name+' '+((d.type==='router'||d.type==='switch')?d.ports[i].name:'Eth0');
+  if(rlPortCable(did,i)){ rlSetHint(label+' is already cabled — click the cable to remove it first.'); return; }
+  if(!rlPending){
+    rlPending={d:did,i};
+    rlSetHint('Selected '+label+' — now click a port on another device.');
+  } else if(rlPending.d===did&&rlPending.i===i){
+    rlPending=null; rlSetHint('Selection cleared.');
+  } else if(rlPending.d===did){
+    rlSetHint('Choose a port on a different device.');
+  } else {
+    rlAddCable(rlPending.d,rlPending.i,did,i);
+    rlSetHint('Cabled.');
+    rlPending=null;
+  }
+  rlRenderCanvas();
+}
+function rlOnCableClick(e){
+  if(state.done) return;
+  const cid=e.target.dataset&&e.target.dataset.cid;
+  if(!cid) return;
+  const idx=rlCables.findIndex(c=>String(c.id)===cid);
+  if(idx<0) return;
+  rlCables.splice(idx,1);
+  rlRenderCanvas();
+}
+
+/* ── Config panel ── */
+function rlOpenCfg(did){
+  rlSelected=did;
+  rlRenderCanvas();
+  rlRefreshCfg();
+}
+function rlCloseCfgPanel(){
+  rlSelected=null;
+  rlRenderCanvas();
+  const p=document.getElementById('rl-cfg'); if(p) p.style.display='none';
+}
+function rlRefreshCfg(){
+  const d=rlById(rlSelected);
+  const panel=document.getElementById('rl-cfg');
+  if(!panel) return;
+  if(!d){ panel.style.display='none'; return; }
+  panel.style.display='';
+  if(d.type==='router') rlRenderRouterCfg(d,panel);
+  else if(d.type==='switch') rlRenderSwitchCfg(d,panel);
+  else rlRenderPcCfg(d,panel);
+}
+function rlEsc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+function rlPortTableHtml(d){
+  let html=`<table class="port-table"><thead><tr><th>Interface</th><th>IP Address</th><th>Mask</th><th>Up</th></tr></thead><tbody>`;
+  d.ports.forEach((p,i)=>{
+    html+=`<tr><td class="pt-name">${p.name}</td>
+      <td><input type="text" value="${p.ip||''}" placeholder="e.g. 10.0.0.1" onchange="rlSetIfIp(${d.id},${i},this.value)"></td>
+      <td><input type="text" value="${p.pfx!=null?cidr2mask(p.pfx):''}" placeholder="255.255.255.0" onchange="rlSetIfMask(${d.id},${i},this.value)"></td>
+      <td><input type="checkbox" ${p.up?'checked':''} onchange="rlSetIfUp(${d.id},${i},this.checked)"></td></tr>`;
+  });
+  return html+'</tbody></table>';
+}
+function rlRouteFormHtml(d){
+  let html=`<div class="vm-add">
+    <input class="vm-inp" id="rl-rt-net" placeholder="network">
+    <input class="vm-inp" id="rl-rt-mask" placeholder="mask">
+    <input class="vm-inp" id="rl-rt-nh" placeholder="next-hop">
+    <button class="rand-btn" onclick="rlAddRoute(${d.id})">+ Add Route</button>
   </div>`;
-
-  body.innerHTML=html;
-  setBtns('build');
-  document.getElementById('rt-svg').addEventListener('click', e=>{
-    const iface=e.target.dataset && e.target.dataset.iface;
-    if(!iface || state.done) return;
-    detachIface(iface);
-  });
-  requestAnimationFrame(drawCables);
-}
-
-function isChipUsed(id){ return Object.values(state.build.assign).includes(id); }
-function findIfaceForChip(id){ return Object.keys(state.build.assign).find(k=>state.build.assign[k]===id) || null; }
-function detachIface(iface){
-  const chipId=state.build.assign[iface];
-  if(!chipId) return;
-  delete state.build.assign[iface];
-  document.getElementById('chip-'+chipId).classList.remove('used');
-  document.getElementById('port-'+iface).classList.remove('filled');
-  drawCables();
-}
-
-function selectChip(id){
-  if(state.done) return;
-  if(isChipUsed(id)){
-    detachIface(findIfaceForChip(id));
-    return;
+  if(d.staticRoutes.length){
+    html+='<table class="port-table"><tbody>';
+    d.staticRoutes.forEach(r=>{
+      html+=`<tr><td class="pt-conn">${int2ip(r.netInt)}/${r.prefix} via ${r.nextHop}</td><td><button class="rand-btn" onclick="rlDelRoute(${d.id},'${rlEsc(r._raw)}')">×</button></td></tr>`;
+    });
+    html+='</tbody></table>';
   }
-  document.querySelectorAll('.rt-chip').forEach(c=>c.classList.remove('sel'));
-  const was=state.build.selected;
-  state.build.selected = (was===id) ? null : id;
-  if(state.build.selected) document.getElementById('chip-'+id).classList.add('sel');
+  return html;
 }
-function clickPort(iface){
-  if(state.done) return;
-  if(!state.build.selected){
-    detachIface(iface);
-    return;
+function rlTermHtml(){
+  return `<div class="term"><div class="term-log" id="rl-term-log"></div>
+    <div class="term-inrow"><span class="term-prompt" id="rl-term-prompt"></span><input class="term-in" id="rl-term-in" autocomplete="off" spellcheck="false"></div></div>`;
+}
+function rlRenderRouterCfg(d,panel){
+  const helper=state.diff!=='hard';
+  panel.innerHTML=`
+    <div class="cfg-hdr"><div class="cfg-name">${d.name}</div><button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="rlCloseCfgPanel()">Close</button></div>
+    <div class="cfg-grid">
+      <div>
+        <div class="cfg-sec-lbl">Interfaces</div>
+        ${helper ? rlPortTableHtml(d) : '<div class="cli-note">Hard mode — configure interfaces via the CLI only (interface, ip address, no shutdown).</div>'}
+        <div class="cfg-sec-lbl" style="margin-top:14px">Static Routes</div>
+        ${helper ? rlRouteFormHtml(d) : '<div class="cli-note">Hard mode — configure static routes via the CLI only (ip route).</div>'}
+      </div>
+      <div><div class="cfg-sec-lbl">CLI</div>${rlTermHtml()}</div>
+    </div>`;
+  rlRenderTerm();
+}
+function rlRenderPcCfg(d,panel){
+  panel.innerHTML=`
+    <div class="cfg-hdr"><div class="cfg-name">${d.name}</div><button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="rlCloseCfgPanel()">Close</button></div>
+    <div class="pc-form"><span class="pc-form-lbl">IP Address</span>
+      <input type="text" value="${d.ip||''}" placeholder="e.g. 192.168.1.10" oninput="rlSetPcIp(${d.id},this.value)"><span class="pc-pfx">/${d.pfx}</span>
+    </div>`;
+}
+function rlRenderSwitchCfg(d,panel){
+  panel.innerHTML=`
+    <div class="cfg-hdr"><div class="cfg-name">${d.name}</div><button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="rlCloseCfgPanel()">Close</button></div>
+    <div class="cli-note">This is an unmanaged Layer 2 switch — nothing to configure. It just passes traffic between everything cabled to it, which makes this a multi-access link rather than a point-to-point one.</div>`;
+}
+function rlSetIfIp(did,i,val){
+  const d=rlById(did), p=d.ports[i];
+  const mask=p.pfx!=null?cidr2mask(p.pfx):'255.255.255.0';
+  rlEchoCli(d, val ? ['interface '+p.name,'ip address '+val+' '+mask,'exit'] : ['interface '+p.name,'no ip address','exit']);
+  rlRenderCanvas(); rlRefreshCfg();
+}
+function rlSetIfMask(did,i,val){
+  const d=rlById(did), p=d.ports[i];
+  if(p.ip) rlEchoCli(d,['interface '+p.name,'ip address '+p.ip+' '+val,'exit']);
+  rlRenderCanvas(); rlRefreshCfg();
+}
+function rlSetIfUp(did,i,checked){
+  const d=rlById(did), p=d.ports[i];
+  rlEchoCli(d,['interface '+p.name, checked?'no shutdown':'shutdown','exit']);
+  rlRenderCanvas(); rlRefreshCfg();
+}
+function rlAddRoute(did){
+  const d=rlById(did);
+  const net=document.getElementById('rl-rt-net').value.trim();
+  const mask=document.getElementById('rl-rt-mask').value.trim();
+  const nh=document.getElementById('rl-rt-nh').value.trim();
+  if(!net||!mask||!nh) return;
+  rlEchoCli(d,['configure terminal','ip route '+net+' '+mask+' '+nh,'end']);
+  rlRefreshCfg();
+}
+function rlDelRoute(did,raw){
+  const d=rlById(did);
+  const parts=raw.split(' ');
+  rlEchoCli(d,['configure terminal','no ip route '+parts[0]+' '+parts[1]+' '+parts[2],'end']);
+  rlRefreshCfg();
+}
+function rlSetPcIp(did,val){
+  const d=rlById(did), s=val.trim();
+  if(!s) d.ip=null; else if(isValidIP(s)) d.ip=s;
+  rlRenderCanvas();
+}
+
+/* ── CLI terminal render + input (ported from switching_lab's renderTerm /
+   the Enter-key handler on #term-in — one delegated listener, since the
+   input element gets rebuilt every time the config panel re-renders). ── */
+function rlRenderTerm(){
+  const d=rlById(rlSelected);
+  if(!d||d.type!=='router') return;
+  const log=document.getElementById('rl-term-log');
+  if(!log) return;
+  log.innerHTML=d.log.slice(-14).map(l=>`<div class="tl${l.startsWith('%')?' terr':''}">${rlEsc(l)}</div>`).join('');
+  log.scrollTop=log.scrollHeight;
+  const pr=document.getElementById('rl-term-prompt');
+  if(pr) pr.textContent=rlPromptFor(d);
+}
+document.addEventListener('keydown', e=>{
+  const input=document.getElementById('rl-term-in');
+  if(!input||document.activeElement!==input) return;
+  const d=rlById(rlSelected);
+  if(!d||d.type!=='router') return;
+  if(e.key==='Enter'){
+    const line=input.value; input.value='';
+    if(line.trim()){ d.hist.push(line); d.hi=d.hist.length; }
+    d.log.push(rlPromptFor(d)+' '+line);
+    const out=rlCli(d,line);
+    if(out) out.split('\n').forEach(l=>d.log.push(l));
+    rlRenderTerm(); rlRenderCanvas(); rlRefreshCfg();
+  } else if(e.key==='ArrowUp'){
+    e.preventDefault();
+    if(d.hi>0){ d.hi--; input.value=d.hist[d.hi]||''; }
+  } else if(e.key==='ArrowDown'){
+    e.preventDefault();
+    if(d.hi<d.hist.length-1){ d.hi++; input.value=d.hist[d.hi]||''; } else { d.hi=d.hist.length; input.value=''; }
   }
-  const chipId=state.build.selected;
-  const prevIface=findIfaceForChip(chipId);
-  if(prevIface){ delete state.build.assign[prevIface]; document.getElementById('port-'+prevIface).classList.remove('filled'); }
-  if(state.build.assign[iface]) document.getElementById('chip-'+state.build.assign[iface]).classList.remove('used');
-  state.build.assign[iface]=chipId;
-  document.getElementById('chip-'+chipId).classList.remove('sel');
-  document.getElementById('chip-'+chipId).classList.add('used');
-  document.getElementById('port-'+iface).classList.add('filled');
-  state.build.selected=null;
-  drawCables();
+});
+
+function rlRenderReqs(results){
+  const el=document.getElementById('req-list');
+  if(!el||!state.data||!state.data.reqs) return;
+  el.innerHTML=state.data.reqs.map((r,i)=>{
+    const res=results?results[i]:null;
+    const cls=res?(res.ok?'ok':'bad'):'';
+    const icon=res?(res.ok?'✓':'✗'):'•';
+    const reason=(res&&!res.ok&&res.reason)?`<div class="req-reason">${rlEsc(res.reason)}</div>`:'';
+    return `<div class="req-row ${cls}"><span class="req-ic">${icon}</span><div><div>${r.desc}</div>${reason}</div></div>`;
+  }).join('');
 }
-function drawCables(){
-  const canvas=document.getElementById('rt-canvas');
-  if(!canvas) return;
-  const svg=document.getElementById('rt-svg');
-  const rect=canvas.getBoundingClientRect();
-  svg.innerHTML='';
-  Object.keys(state.build.assign).forEach(iface=>{
-    const chipId=state.build.assign[iface];
-    const portEl=document.getElementById('port-'+iface);
-    const chipEl=document.getElementById('chip-'+chipId);
-    if(!portEl||!chipEl) return;
-    const pr=portEl.getBoundingClientRect(), cr=chipEl.getBoundingClientRect();
-    const x1=pr.left+pr.width/2-rect.left, y1=pr.top+pr.height/2-rect.top;
-    const x2=cr.left+cr.width/2-rect.left, y2=cr.top-rect.top;
-    const line=document.createElementNS('http://www.w3.org/2000/svg','line');
-    line.setAttribute('x1',x1); line.setAttribute('y1',y1);
-    line.setAttribute('x2',x2); line.setAttribute('y2',y2);
-    line.setAttribute('class','rt-cable');
-    line.dataset.iface=iface;
-    svg.appendChild(line);
-    /* invisible wide line so wires are easy to click */
-    const hit=document.createElementNS('http://www.w3.org/2000/svg','line');
-    hit.setAttribute('x1',x1); hit.setAttribute('y1',y1);
-    hit.setAttribute('x2',x2); hit.setAttribute('y2',y2);
-    hit.setAttribute('class','rt-cable-hit');
-    hit.dataset.iface=iface;
-    svg.appendChild(hit);
-  });
-}
-window.addEventListener('resize', ()=>{ if(state.mode==='build') drawCables(); });
 
 /* ─── Grading: generic text-field agrid (read) ──────────────────── */
 function gradeAgrid(fields, answers, reveal){
@@ -807,29 +1437,20 @@ function checkAll(){
     return;
   }
 
-  if(mode==='build'){
+  if(mode==='route'){
     const d=state.data;
-    let correct=0;
-    d.ports.forEach(p=>{
-      const assigned=state.build.assign[p.iface];
-      const ok=assigned===p.id;
-      const portEl=document.getElementById('port-'+p.iface);
-      portEl.classList.remove('filled');
-      portEl.classList.add(ok?'p-ok':'p-bad');
-      if(assigned) document.getElementById('chip-'+assigned).classList.add(ok?'p-ok':'p-bad');
-      if(ok) correct++;
-    });
-    document.querySelectorAll('.rt-chip, .rt-port').forEach(el=>el.onclick=null);
-    const total=d.ports.length;
-    const bonus=correct===total?2:0;
-    const pts=correct+bonus;
+    const results=d.reqs.map(r=>r.test());
+    rlRenderReqs(results);
+    const met=results.filter(r=>r.ok).length, total=results.length;
+    const bonus=met===total?2:0;
+    const pts=met+bonus;
     state.score+=pts;
-    state.streak = correct===total ? state.streak+1 : 0;
+    state.streak = met===total ? state.streak+1 : 0;
     state.round++;
-    fb.className='fbanner '+(correct===total?'ok':correct>=Math.ceil(total*.6)?'warn':'err');
-    fb.textContent = correct===total
-      ? `Perfect! All ${total} interfaces wired correctly. +${pts} pts (+2 bonus). Streak: ${state.streak}`
-      : `${correct}/${total} interfaces wired correctly. +${pts} pt${pts!==1?'s':''}.`;
+    fb.className='fbanner '+(met===total?'ok':met>=Math.ceil(total*.6)?'warn':'err');
+    fb.textContent = met===total
+      ? `Perfect! All ${total} requirements met. +${pts} pts (+2 bonus). Streak: ${state.streak}`
+      : `${met}/${total} requirements met. +${pts} pt${pts!==1?'s':''}.`;
     finishRound();
     return;
   }
@@ -880,17 +1501,14 @@ function revealAll(){
     syncBinDivider('ip-bin-dest','div-bin-dest');
     d.candidates.forEach((c,i)=>syncBinDivider('pick-'+c.id,'div-bin-c'+i));
     fb.textContent='Skipped. '+d.correct.network+'/'+d.correct.prefix+' is the longest match. No points awarded.';
-  } else if(mode==='build'){
+  } else if(mode==='route'){
+    /* Unlike the other topics there's no single "correct answer" to fill in
+       here (many valid IP/route choices all work) — reveal just shows the
+       current requirement status rather than auto-solving the exercise. */
     const d=state.data;
-    state.build.assign={};
-    d.ports.forEach(p=>{ state.build.assign[p.iface]=p.id; });
-    d.ports.forEach(p=>{
-      document.getElementById('port-'+p.iface).classList.add('filled');
-      document.getElementById('chip-'+p.id).classList.add('used');
-    });
-    drawCables();
-    document.querySelectorAll('.rt-chip, .rt-port').forEach(el=>el.onclick=null);
-    fb.textContent='Answers revealed. No points awarded.';
+    const results=d.reqs.map(r=>r.test());
+    rlRenderReqs(results);
+    fb.textContent='Skipped. Review the requirement checklist above for what’s still needed. No points awarded.';
   } else {
     const d=state.data;
     gradeAgrid(readFields(d),readAnswers(d),true);
@@ -913,7 +1531,7 @@ function resetGame(){ state.score=0; state.round=1; state.streak=0; loadQ(); }
 
 function setTopic(t,btn){
   state.topic=t;
-  document.querySelectorAll('#tb-rand,#tb-lpm,#tb-bin,#tb-ad,#tb-read,#tb-build').forEach(b=>b.classList.remove('on'));
+  document.querySelectorAll('#tb-rand,#tb-read,#tb-bin,#tb-lpm,#tb-ad,#tb-route').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
   loadQ();
 }
@@ -935,7 +1553,7 @@ function toggleTool(id){
   const cb=document.getElementById('tog-'+id);
   cb.checked=!cb.checked;
   document.getElementById('t-'+id).style.display=cb.checked?'':'none';
-  const tools=['ad','anat','lpm'];
+  const tools=['ad','anat','lpm','cli'];
   const any=tools.some(t=>document.getElementById('tog-'+t).checked);
   document.getElementById('toolsec').style.display=any?'':'none';
   saveOptionsState();

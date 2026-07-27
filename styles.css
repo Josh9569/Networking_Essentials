@@ -813,7 +813,7 @@ sup  { font-size: .65em; vertical-align: super; }
 
 /* guarantees a gap before the action row regardless of which topic's content
    is rendered inside (some end in an element whose own margin-bottom is
-   intentionally zeroed, e.g. the last .bin-card, or has none, e.g. .rt-canvas) */
+   intentionally zeroed, e.g. the last .bin-card, or has none, e.g. .lab-card) */
 #qbody          { margin-bottom: 1rem; }
 
 /* parent/child nesting depth — shared by the Longest Match table (.rt-indent,
@@ -874,33 +874,6 @@ sup  { font-size: .65em; vertical-align: super; }
 
 /* realistic single-line CLI output block (Route Table Anatomy / Build The Network) */
 .cli-block { font-family: var(--mono); font-size: 13px; line-height: 1.9; background: var(--surface-s); border: 1px solid var(--border); border-radius: var(--r); padding: 12px 14px; overflow-x: auto; white-space: nowrap; }
-
-/* Build The Network: topology canvas — router with interfaces + a pool of
-   draggable-feeling (click-to-place) network/neighbor nodes, wired with cables */
-.rt-canvas       { position: relative; min-height: 260px; display: flex; flex-direction: column; justify-content: space-between; gap: 22px; padding: 20px 14px; background: var(--surface-s); border: 1px solid var(--border); border-radius: var(--r); }
-#rt-svg          { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
-.rt-canvas-note  { position: absolute; top: 10px; right: 14px; font-size: 11px; color: var(--text-t); font-style: italic; z-index: 3; }
-.rt-router-row   { display: flex; justify-content: center; position: relative; z-index: 1; }
-.rt-router       { background: var(--surface); border: 1.5px dashed var(--border-m); border-radius: 23px; padding: 10px 20px 14px; display: flex; flex-direction: column; align-items: center; font-size: 13px; font-weight: 600; color: var(--text); }
-.rt-ports        { display: flex; gap: 18px; margin-top: 8px; }
-.rt-port-wrap    { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-.rt-port         { width: 16px; height: 16px; border-radius: 50%; background: var(--surface-s); border: 2px solid var(--border-m); cursor: pointer; transition: transform .12s, background .12s; }
-.rt-port:hover   { transform: scale(1.25); border-color: var(--text-s); }
-.rt-port.filled  { background: var(--info-bg); border-color: var(--info-text); }
-.rt-port.p-ok    { background: var(--ok-bg);  border-color: var(--ok-text);  box-shadow: 0 0 0 3px var(--ok-bg); }
-.rt-port.p-bad   { background: var(--err-bg); border-color: var(--err-text); box-shadow: 0 0 0 3px var(--err-bg); }
-.rt-port-lbl     { font-size: 10.5px; font-family: var(--mono); color: var(--text-t); white-space: nowrap; }
-.rt-pool         { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; position: relative; z-index: 1; }
-.rt-chip         { background: var(--surface); border: 1.5px solid var(--border-m); border-radius: var(--r); padding: 8px 14px; cursor: pointer; text-align: center; min-width: 120px; transition: all .15s; }
-.rt-chip:hover   { border-color: var(--info-bdr); }
-.rt-chip.sel     { border-color: var(--info-text); box-shadow: 0 0 0 3px var(--info-bg); }
-.rt-chip.used    { opacity: .5; cursor: default; }
-.rt-chip.p-ok    { border-color: var(--ok-bdr);  background: var(--ok-bg); }
-.rt-chip.p-bad   { border-color: var(--err-bdr); background: var(--err-bg); }
-.rt-chip-lbl     { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-t); margin-bottom: 3px; }
-.rt-chip-val     { font-family: var(--mono); font-size: 13px; font-weight: 500; color: var(--text); }
-.rt-cable        { stroke: var(--border-m); stroke-width: 2.5; cursor: pointer; pointer-events: stroke; }
-.rt-cable:hover  { stroke: var(--err-text); }
 
 /* ── CUSTOM THEME (custom-theme.js) ────────────────────────────────────────────
    Side drawer for building a "Custom" theme: background type, transparency,
@@ -1000,4 +973,3 @@ sup  { font-size: .65em; vertical-align: super; }
 .ct-swatch-row:not(.auto) .ct-auto-badge { display: none; }
 
 .ct-reset-btn     { margin-top: 4px; width: 100%; }
-.rt-cable-hit    { stroke: #000; stroke-opacity: 0; stroke-width: 14; pointer-events: stroke; cursor: pointer; }
