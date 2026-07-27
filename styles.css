@@ -466,7 +466,15 @@ sup  { font-size: .65em; vertical-align: super; }
 .cidr-wrap input { flex: 1; width: auto; }
 
 /* CIDR reference table */
-.ref-table          { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 13px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
+/* border-collapse: separate + border-spacing: 0 here (not collapse) — a
+   table's own border-radius doesn't clip collapsed borders in Firefox
+   (Chromium does), so a collapsed .ref-table renders square corners there
+   even though overflow:hidden looks like it should round them. Separate
+   mode with zero spacing keeps the exact same row-divider look (only
+   border-bottom is ever set on th/td, so there's nothing for adjacent
+   cells' borders to double up on) while actually clipping to the radius
+   in every browser. */
+.ref-table          { width: 100%; border-collapse: separate; border-spacing: 0; font-family: var(--mono); font-size: 13px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
 .ref-table th       { background: var(--surface-s); padding: 7px 10px; text-align: left; font-weight: 500; border-bottom: 1px solid var(--border); color: var(--text-s); font-size: 11px; font-family: var(--font); }
 .ref-table td       { padding: 7px 10px; border-bottom: 1px solid var(--border); color: var(--text); }
 .ref-table tr:last-child td { border-bottom: none; }
@@ -842,7 +850,9 @@ sup  { font-size: .65em; vertical-align: super; }
 
 /* routing table (Longest Match / Admin Distance) */
 .rt-wrap        { overflow-x: auto; margin-bottom: 1rem; }
-.rt-table       { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 13px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
+/* separate + zero spacing, not collapse — see .ref-table's comment above,
+   same Firefox corner-clipping issue applies here. */
+.rt-table       { width: 100%; border-collapse: separate; border-spacing: 0; font-family: var(--mono); font-size: 13px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
 .rt-table th    { background: var(--surface-s); padding: 8px 12px; text-align: left; font-weight: 500; border-bottom: 1px solid var(--border); color: var(--text-s); font-size: 11px; font-family: var(--font); text-transform: uppercase; letter-spacing: .05em; }
 .rt-table td    { padding: 9px 12px; border-bottom: 1px solid var(--border); color: var(--text); }
 .rt-table tr:last-child td { border-bottom: none; }
