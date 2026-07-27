@@ -554,6 +554,17 @@ function rlParseIfName(text){
   const n=+m[2];
   return (n>=0 && n<RT_PORTN) ? n : -1;
 }
+/* Tab-completion keyword tree — walked by the shared LabShared.tabComplete
+   (see lab-shared.js; switching_lab.html has its own tree, VLAN/trunk
+   commands rather than IP-routing ones, over the same generic walker). */
+const RL_KW={
+  enable:{}, configure:{terminal:{}}, end:{}, exit:{}, clear:{},
+  show:{ip:{route:{}}},
+  interface:{},
+  shutdown:{},
+  ip:{address:{}, route:{}},
+  no:{shutdown:{}, ip:{address:{}, route:{}}},
+};
 function rlCli(d,line){
   const t=line.trim().replace(/\s+/g,' ');
   if(!t) return '';
@@ -1483,12 +1494,22 @@ document.addEventListener('keydown', e=>{
     const out=rlCli(d,line);
     if(out) out.split('\n').forEach(l=>d.log.push(l));
     rlRenderTerm(); rlRenderCanvas(); rlRefreshCfg();
+    /* rlRefreshCfg() just rebuilt the whole config panel from scratch —
+       including this very input element — so the DOM node that had focus
+       no longer exists and typing would go nowhere until the learner
+       clicked back in. Refocus the freshly-rendered one so the terminal
+       stays usable for as many commands in a row as they want. */
+    const freshInput=document.getElementById('rl-term-in');
+    if(freshInput) freshInput.focus();
   } else if(e.key==='ArrowUp'){
     e.preventDefault();
     if(d.hi>0){ d.hi--; input.value=d.hist[d.hi]||''; }
   } else if(e.key==='ArrowDown'){
     e.preventDefault();
     if(d.hi<d.hist.length-1){ d.hi++; input.value=d.hist[d.hi]||''; } else { d.hi=d.hist.length; input.value=''; }
+  } else if(e.key==='Tab'){
+    e.preventDefault();
+    input.value=LabShared.tabComplete(RL_KW, input.value, cands=>{ d.log.push(cands.join('   ')); rlRenderTerm(); });
   }
 });
 

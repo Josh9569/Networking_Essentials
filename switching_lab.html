@@ -796,7 +796,9 @@ document.getElementById('term-in').addEventListener('keydown',e=>{
   }
 });
 
-/* Tab completion over the known keyword tree */
+/* Tab-completion keyword tree. The walker itself (LabShared.tabComplete)
+   lives in lab-shared.js, shared with routing_game.html's own tree (IP
+   routing commands rather than VLAN/trunk ones) over the same walker. */
 const KW={
   configure:{terminal:{}}, enable:{}, end:{}, exit:{}, clear:{},
   show:{vlan:{brief:{}}, 'running-config':{}, 'spanning-tree':{}},
@@ -808,25 +810,7 @@ const KW={
   no:{switchport:{access:{vlan:{}}, mode:{}, trunk:{native:{vlan:{}}}}, 'channel-group':{}, ip:{address:{}}},
 };
 function tabComplete(d,val){
-  const endsSpace=/\s$/.test(val);
-  const parts=val.trim().length?val.trim().split(/\s+/):[];
-  const walk=endsSpace?parts:parts.slice(0,-1);
-  let node=KW; const consumed=[];
-  for(const p of walk){
-    const ks=Object.keys(node).filter(k=>k.startsWith(p.toLowerCase()));
-    if(ks.length===1){ node=node[ks[0]]; consumed.push(ks[0]); }
-    else return val;                       /* ambiguous or unknown earlier token */
-  }
-  const partial=endsSpace?'':(parts[parts.length-1]||'').toLowerCase();
-  const cands=Object.keys(node).filter(k=>k.startsWith(partial));
-  if(!cands.length) return val;
-  const head=consumed.join(' ')+(consumed.length?' ':'');
-  if(cands.length===1) return head+cands[0]+' ';
-  let cp=cands[0];
-  cands.forEach(c=>{ while(!c.startsWith(cp)) cp=cp.slice(0,-1); });
-  d.log.push(cands.join('   '));
-  renderTerm();
-  return head+cp;
+  return LabShared.tabComplete(KW, val, cands=>{ d.log.push(cands.join('   ')); renderTerm(); });
 }
 
 function parseIf(s){

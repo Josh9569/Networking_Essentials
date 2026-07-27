@@ -739,14 +739,31 @@ sup  { font-size: .65em; vertical-align: super; }
 .port.p-ok      { background: var(--ok-bg);  border-color: var(--ok-text);  box-shadow: 0 0 0 3px var(--ok-bg);  transform: scale(1.45); }
 .port.p-bad     { background: var(--err-bg); border-color: var(--err-text); box-shadow: 0 0 0 3px var(--err-bg); transform: scale(1.45); }
 
-/* requirements list */
+/* requirements list — each row has its own checkbox (manual, learner-ticked
+   to-do tracking, not tied to grading) plus, once Check Requirements has
+   actually run, a small ✓/✗ underneath it showing the real verdict. */
 .req-list   { margin-top: .8rem; display: flex; flex-direction: column; gap: 6px; }
 .req-row    { display: flex; gap: 9px; font-size: 13.5px; color: var(--text-s); align-items: flex-start; padding: 7px 11px; border-radius: var(--r); border: 1px solid var(--border); background: var(--surface-s); }
-.req-ic     { font-family: var(--mono); font-weight: 600; width: 14px; flex-shrink: 0; }
+.req-check-col { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 14px; flex-shrink: 0; padding-top: 1px; }
+/* Custom-drawn rather than a bare native checkbox — appearance:none lets it
+   pick up the theme's own border/surface/accent colors and an actual
+   border-radius (native checkboxes mostly ignore border-radius, and their
+   OS-drawn check mark ignores accent-color in some browsers). */
+.req-checkbox   { appearance: none; -webkit-appearance: none; margin: 0; width: 14px; height: 14px; border: 1.5px solid var(--border-m); border-radius: 4px; background: var(--surface-s); cursor: pointer; position: relative; flex-shrink: 0; transition: background .12s, border-color .12s; }
+.req-checkbox:hover   { border-color: var(--info-text); }
+.req-checkbox:checked { background: var(--info-text); border-color: var(--info-text); }
+/* --accent-ink is Custom theme's purpose-built "text on an accent surface"
+   shade; Light/Dark/Sync never set it, so fall back to --surface, which
+   contrasts against --info-text there for the same reason (page text
+   already has to read against the page background). */
+.req-checkbox:checked::after { content: ''; position: absolute; left: 4px; top: 1px; width: 3px; height: 7px; border: solid var(--accent-ink, var(--surface)); border-width: 0 2px 2px 0; transform: rotate(40deg); }
+.req-result-ic  { font-family: var(--mono); font-weight: 600; font-size: 12px; line-height: 1; }
+.req-result-ic.ok  { color: var(--ok-text); }
+.req-result-ic.bad { color: var(--err-text); }
 .req-row.ok  { border-color: var(--ok-bdr);  background: var(--ok-bg); }
-.req-row.ok, .req-row.ok .req-ic   { color: var(--ok-text); }
+.req-row.ok  { color: var(--ok-text); }
 .req-row.bad { border-color: var(--err-bdr); background: var(--err-bg); }
-.req-row.bad, .req-row.bad .req-ic { color: var(--err-text); }
+.req-row.bad { color: var(--err-text); }
 .req-reason { font-size: 12px; margin-top: 3px; opacity: .85; }
 
 /* config panel */

@@ -124,25 +124,78 @@
 
   /* ---------- requirements checklist ----------
      Renders a scenario's {desc, test} objectives plus their latest
-     {ok, reason} results into a <div class="req-list">. */
+     {ok, reason} results into a <div class="req-list">. Each row gets its
+     own checkbox the learner can tick manually as a personal to-do tracker
+     — it's not wired to the real grading, it's just memory-jogging while
+     they work. Once Check Requirements actually runs, the real ✓/✗ verdict
+     shows up under the checkbox regardless of what the learner ticked, so
+     they can compare "what I thought I'd done" against "what's actually
+     verified." Checked state persists across re-renders of the *same*
+     requirement list (identified by reqs array identity — every page
+     reuses one reqs array for a whole scenario) and resets automatically
+     the moment a genuinely new scenario's reqs array comes in. */
+  var reqCheckState = { reqs: null, checked: [] };
   function renderReqList(containerId, reqs, results, escapeFn) {
     var el = document.getElementById(containerId);
     if (!el) return;
     var esc = escapeFn || function (s) { return s; };
-    if (!reqs || !reqs.length) { el.innerHTML = ''; return; }
+    if (!reqs || !reqs.length) { el.innerHTML = ''; reqCheckState = { reqs: null, checked: [] }; return; }
+    if (reqCheckState.reqs !== reqs) {
+      reqCheckState = { reqs: reqs, checked: reqs.map(function () { return false; }) };
+    }
+    var checked = reqCheckState.checked;
     el.innerHTML = reqs.map(function (r, i) {
       var res = results ? results[i] : null;
       var cls = res ? (res.ok ? 'ok' : 'bad') : '';
-      var icon = res ? (res.ok ? '✓' : '✗') : '•';
       var reason = (res && !res.ok && res.reason) ? '<div class="req-reason">' + esc(res.reason) + '</div>' : '';
-      return '<div class="req-row ' + cls + '"><span class="req-ic">' + icon + '</span><div><div>' + r.desc + '</div>' + reason + '</div></div>';
+      var resultIc = res ? ('<span class="req-result-ic ' + (res.ok ? 'ok' : 'bad') + '">' + (res.ok ? '✓' : '✗') + '</span>') : '';
+      return '<div class="req-row ' + cls + '">' +
+        '<span class="req-check-col">' +
+          '<input type="checkbox" class="req-checkbox" data-i="' + i + '"' + (checked[i] ? ' checked' : '') + '>' +
+          resultIc +
+        '</span>' +
+        '<div><div>' + r.desc + '</div>' + reason + '</div>' +
+      '</div>';
     }).join('');
+    Array.prototype.forEach.call(el.querySelectorAll('.req-checkbox'), function (cb) {
+      cb.addEventListener('change', function () { checked[+cb.dataset.i] = cb.checked; });
+    });
+  }
+
+  /* ---------- CLI tab-completion ----------
+     Walks a nested keyword tree (each page defines its own — VLAN/trunk
+     commands vs. IP-routing commands are completely different grammars)
+     completing the last token, or listing candidates (via onAmbiguous)
+     when more than one keyword matches. Returns the new input value;
+     callers are expected to also preventDefault the Tab keypress
+     themselves, since this only computes the replacement text. */
+  function tabComplete(kwTree, val, onAmbiguous) {
+    var endsSpace = /\s$/.test(val);
+    var parts = val.trim().length ? val.trim().split(/\s+/) : [];
+    var walk = endsSpace ? parts : parts.slice(0, -1);
+    var node = kwTree, consumed = [];
+    for (var i = 0; i < walk.length; i++) {
+      var p = walk[i];
+      var ks = Object.keys(node).filter(function (k) { return k.indexOf(p.toLowerCase()) === 0; });
+      if (ks.length === 1) { node = node[ks[0]]; consumed.push(ks[0]); }
+      else return val;
+    }
+    var partial = endsSpace ? '' : (parts[parts.length - 1] || '').toLowerCase();
+    var cands = Object.keys(node).filter(function (k) { return k.indexOf(partial) === 0; });
+    if (!cands.length) return val;
+    var head = consumed.join(' ') + (consumed.length ? ' ' : '');
+    if (cands.length === 1) return head + cands[0] + ' ';
+    var cp = cands[0];
+    cands.forEach(function (c) { while (c.indexOf(cp) !== 0) cp = cp.slice(0, -1); });
+    if (onAmbiguous) onAmbiguous(cands);
+    return head + cp;
   }
 
   window.LabShared = {
     isValidIP: isValidIP,
     attachCanvasDrag: attachCanvasDrag,
     runPing: runPing,
+    tabComplete: tabComplete,
     renderReqList: renderReqList,
     /* Shared device-box geometry so both labs' switches/PCs render (and
        therefore dock ports) at identical sizes. Router geometry stays
