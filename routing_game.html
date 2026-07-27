@@ -1259,7 +1259,7 @@ function rlRenderCanvas(){
     el.dataset.did=d.id;
     if(d.type==='router'){
       const up=d.ports.filter(p=>p.ip&&p.up).length;
-      el.innerHTML=`<div class="dev-name">${d.name}</div><div class="dev-sub">router · ${up}/${RT_PORTN} interfaces up</div>`;
+      el.innerHTML=`<div class="dev-name">${d.name}</div><div class="dev-sub">router · ${up}/${RT_PORTN} up</div>`;
     } else if(d.type==='switch'){
       el.innerHTML=`<div class="dev-name">${d.name}</div><div class="dev-sub">unmanaged switch</div>`;
     } else {

@@ -436,7 +436,7 @@ function render(){
       el.innerHTML=`<div class="dev-name">${d.name}</div>`+
         `<div class="dev-sub">${d.priLabel?d.priLabel:'Pri '+d.priority}<br>${d.mac}${ipHtml}${hwHtml}</div>`;
     } else if(d.type==='router'){
-      el.innerHTML=`<div class="dev-name">${d.name}</div><div class="dev-sub">router · routes all VLANs</div>`;
+      el.innerHTML=`<div class="dev-name">${d.name}</div><div class="dev-sub">router · VLANs</div>`;
     } else {
       const ipHtml=d.ip?`<span class="${d._ipConflict?'ip-bad':''}">${d.ip}</span>/${d.pfx}`:'no IP';
       el.innerHTML=`<div class="dev-name">${d.name}</div><div class="dev-sub">${ipHtml}</div>`;
