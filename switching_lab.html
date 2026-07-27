@@ -8,6 +8,7 @@
 <script src="theme.js"></script>
 <script src="custom-theme.js"></script>
 <script src="options.js"></script>
+<script src="lab-shared.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -300,7 +301,9 @@ function genMac(){
 }
 
 /* ═══ State ═══════════════════════════════════════════════════════════════ */
-const PORTN=4, SW_W=150, SW_H=66, PC_W=90, PC_H=52, RT_W=116, RT_H=46;
+/* SW_W/SW_H/PC_W/PC_H come from lab-shared.js so both labs' switches and
+   PCs render at identical sizes (and therefore dock ports identically). */
+const PORTN=4, SW_W=LabShared.SW_W, SW_H=LabShared.SW_H, PC_W=LabShared.PC_W, PC_H=LabShared.PC_H, RT_W=116, RT_H=46;
 let devices=[], cables=[], nid=1, cid=1;
 let topic='rand', diffLevel='easy', gmode='challenge';
 let scenario=null, done=false, score=0, rnd=1, streak=0;
@@ -433,7 +436,7 @@ function render(){
       el.innerHTML=`<div class="dev-name">${d.name}</div>`+
         `<div class="dev-sub">${d.priLabel?d.priLabel:'Pri '+d.priority}<br>${d.mac}${ipHtml}${hwHtml}</div>`;
     } else if(d.type==='router'){
-      el.innerHTML=`<div class="dev-name">${d.name}</div><div class="dev-sub">router · routes all VLANs</div>`;
+      el.innerHTML=`<div class="dev-name">${d.name}</div><div class="dev-sub">router · VLANs</div>`;
     } else {
       const ipHtml=d.ip?`<span class="${d._ipConflict?'ip-bad':''}">${d.ip}</span>/${d.pfx}`:'no IP';
       el.innerHTML=`<div class="dev-name">${d.name}</div><div class="dev-sub">${ipHtml}</div>`;
@@ -457,40 +460,18 @@ function render(){
   });
 }
 
-/* ═══ Canvas interaction ══════════════════════════════════════════════════ */
-let drag=null;
-
-document.getElementById('dev-layer').addEventListener('mousedown',e=>{
-  const pEl=e.target.closest('.port');
-  if(pEl){ onPortClick(+pEl.dataset.did, +pEl.dataset.pi); e.preventDefault(); return; }
-  const dEl=e.target.closest('.dev');
-  if(!dEl) return;
-  const d=byId(+dEl.dataset.did);
-  drag={d, sx:e.clientX, sy:e.clientY, ox:d.x, oy:d.y, moved:false};
-  e.preventDefault();
-});
-window.addEventListener('mousemove',e=>{
-  if(!drag) return;
-  const dx=(e.clientX-drag.sx)/labZoom, dy=(e.clientY-drag.sy)/labZoom;
-  if(Math.abs(dx)>4||Math.abs(dy)>4) drag.moved=true;
-  if(drag.moved){
-    const cw=document.getElementById('canvas').clientWidth/labZoom;
-    const ch=document.getElementById('canvas').clientHeight/labZoom;
-    const [w,h]=devSize(drag.d);
-    drag.d.x=Math.max(0,Math.min(cw-w, drag.ox+dx));
-    drag.d.y=Math.max(0,Math.min(ch-h-8, drag.oy+dy));
-    render();
-  }
-});
-document.getElementById('canvas').addEventListener('wheel',e=>{
-  e.preventDefault();
-  const f=e.deltaY<0?1.1:1/1.1;
-  labZoom=Math.min(2,Math.max(0.4,labZoom*f));
-  document.getElementById('zoom-wrap').style.transform='scale('+labZoom+')';
-},{passive:false});
-window.addEventListener('mouseup',()=>{
-  if(drag&&!drag.moved) onDevClick(drag.d.id);
-  drag=null;
+/* ═══ Canvas interaction (drag/zoom mechanics live in lab-shared.js) ═══════ */
+LabShared.attachCanvasDrag({
+  layer: document.getElementById('dev-layer'),
+  canvas: document.getElementById('canvas'),
+  zoomWrap: document.getElementById('zoom-wrap'),
+  getZoom: ()=>labZoom,
+  setZoom: z=>{ labZoom=z; },
+  getDevice: id=>byId(id),
+  devSize: d=>devSize(d),
+  onRender: ()=>render(),
+  onDevClick: id=>onDevClick(id),
+  onPortClick: (id,i)=>onPortClick(id,i)
 });
 
 document.getElementById('cable-svg').addEventListener('click',e=>{
@@ -645,49 +626,31 @@ function swPingReach(pc,sw){
 function doPing(src,dst){
   if(!src.ip||!isValidIP(src.ip)) return {msg:'source PC has no valid IP'};
   if(!isValidIP(dst))             return {msg:'invalid target address'};
-  if(dst===src.ip) return {ok:true,probes:['!','!','!','!','!']};
+  if(dst===src.ip) return {ok:true};
   const tpc=devices.find(x=>x.type==='pc'&&x.ip===dst&&x!==src);
   const tsw=!tpc?devices.find(x=>x.type==='switch'&&x.ip===dst):null;
   let ok;
   if(tpc) ok=routedReach(src,tpc);
   else if(tsw) ok=swPingReach(src,tsw);
   else ok=false;
-  if(!ok) return {ok:false,probes:['.','.','.','.','.']};
+  if(!ok) return {ok:false};
   /* first contact with a new destination: the initial echo times out
      while ARP resolves the MAC address, exactly like a real host. */
   src._arpKnown = src._arpKnown || new Set();
   const firstTime = !src._arpKnown.has(dst);
   src._arpKnown.add(dst);
-  return {ok:true, probes: firstTime ? ['.','!','!','!','!'] : ['!','!','!','!','!'], firstTime};
+  return {ok:true, firstTime};
 }
 let pingGen=0;
 function pingRun(){
   const d=selected!=null?byId(selected):null;
   if(!d||d.type!=='pc') return;
-  const dst=document.getElementById('ping-ip').value.trim();
-  const out=document.getElementById('ping-out');
-  const btn=document.getElementById('ping-btn');
-  const r=doPing(d,dst);
-  if(r.msg){ out.textContent='% '+r.msg; out.className='ping-out perr'; return; }
-  const myGen=++pingGen, pcId=d.id, seq=r.probes;
-  out.className='ping-out';
-  out.textContent=`Pinging ${dst} with 32 bytes of data:\n`;
-  if(btn) btn.disabled=true;
-  let i=0;
-  const step=()=>{
-    if(myGen!==pingGen||selected!==pcId){ if(btn) btn.disabled=false; return; }
-    out.textContent += seq[i]==='!'
-      ? `Reply from ${dst}: bytes=32 time<1ms TTL=128\n`
-      : `Request timed out.\n`;
-    out.scrollTop=out.scrollHeight;
-    i++;
-    if(i<seq.length){ setTimeout(step,260); return; }
-    const got=seq.filter(c=>c==='!').length;
-    out.textContent += `\nPing statistics for ${dst}:\n    Packets: Sent = 5, Received = ${got}, Lost = ${5-got} (${Math.round((5-got)/5*100)}% loss)`;
-    out.className='ping-out '+(r.ok?'pok':'perr');
-    if(btn) btn.disabled=false;
-  };
-  setTimeout(step,260);
+  const myGen=++pingGen, pcId=d.id;
+  LabShared.runPing({
+    inputId:'ping-ip', btnId:'ping-btn', outId:'ping-out',
+    resolve: dst=>doPing(d,dst),
+    stillActive: ()=>myGen===pingGen && selected===pcId
+  });
 }
 function refreshCfg(){
   const d=selected!=null?byId(selected):null;
@@ -833,7 +796,9 @@ document.getElementById('term-in').addEventListener('keydown',e=>{
   }
 });
 
-/* Tab completion over the known keyword tree */
+/* Tab-completion keyword tree. The walker itself (LabShared.tabComplete)
+   lives in lab-shared.js, shared with routing_game.html's own tree (IP
+   routing commands rather than VLAN/trunk ones) over the same walker. */
 const KW={
   configure:{terminal:{}}, enable:{}, end:{}, exit:{}, clear:{},
   show:{vlan:{brief:{}}, 'running-config':{}, 'spanning-tree':{}},
@@ -845,25 +810,7 @@ const KW={
   no:{switchport:{access:{vlan:{}}, mode:{}, trunk:{native:{vlan:{}}}}, 'channel-group':{}, ip:{address:{}}},
 };
 function tabComplete(d,val){
-  const endsSpace=/\s$/.test(val);
-  const parts=val.trim().length?val.trim().split(/\s+/):[];
-  const walk=endsSpace?parts:parts.slice(0,-1);
-  let node=KW; const consumed=[];
-  for(const p of walk){
-    const ks=Object.keys(node).filter(k=>k.startsWith(p.toLowerCase()));
-    if(ks.length===1){ node=node[ks[0]]; consumed.push(ks[0]); }
-    else return val;                       /* ambiguous or unknown earlier token */
-  }
-  const partial=endsSpace?'':(parts[parts.length-1]||'').toLowerCase();
-  const cands=Object.keys(node).filter(k=>k.startsWith(partial));
-  if(!cands.length) return val;
-  const head=consumed.join(' ')+(consumed.length?' ':'');
-  if(cands.length===1) return head+cands[0]+' ';
-  let cp=cands[0];
-  cands.forEach(c=>{ while(!c.startsWith(cp)) cp=cp.slice(0,-1); });
-  d.log.push(cands.join('   '));
-  renderTerm();
-  return head+cp;
+  return LabShared.tabComplete(KW, val, cands=>{ d.log.push(cands.join('   ')); renderTerm(); });
 }
 
 function parseIf(s){
@@ -1157,10 +1104,7 @@ function refreshIPConflicts(){
 }
 
 /* ═══ IP helpers ══════════════════════════════════════════════════════════ */
-function isValidIP(ip){
-  const p=ip.split('.');
-  return p.length===4&&p.every(s=>/^\d+$/.test(s)&&+s>=0&&+s<=255);
-}
+const isValidIP = LabShared.isValidIP;
 function ipInt(s){ return s.split('.').reduce((a,o)=>((a<<8)>>>0)+(+o),0)>>>0; }
 function sameSubnet(a,b,pfx){
   const m=pfx===0?0:(0xFFFFFFFF<<(32-pfx))>>>0;
@@ -2013,15 +1957,7 @@ function newScenario(){
 
 /* ═══ Requirements UI ═════════════════════════════════════════════════════ */
 function renderReqs(results){
-  const el=document.getElementById('req-list');
-  if(!scenario||!scenario.reqs.length){ el.innerHTML=''; return; }
-  el.innerHTML=scenario.reqs.map((r,i)=>{
-    const res=results?results[i]:null;
-    const cls=res?(res.ok?'ok':'bad'):'';
-    const icon=res?(res.ok?'\u2713':'\u2717'):'\u2022';
-    const reason=(res&&!res.ok&&res.reason)?`<div class="req-reason">${res.reason}</div>`:'';
-    return `<div class="req-row ${cls}"><span class="req-ic">${icon}</span><div><div>${r.desc}</div>${reason}</div></div>`;
-  }).join('');
+  LabShared.renderReqList('req-list', scenario?scenario.reqs:null, results);
 }
 
 /* ═══ Checking / answering ════════════════════════════════════════════════ */

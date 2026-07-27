@@ -466,7 +466,15 @@ sup  { font-size: .65em; vertical-align: super; }
 .cidr-wrap input { flex: 1; width: auto; }
 
 /* CIDR reference table */
-.ref-table          { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 13px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
+/* border-collapse: separate + border-spacing: 0 here (not collapse) — a
+   table's own border-radius doesn't clip collapsed borders in Firefox
+   (Chromium does), so a collapsed .ref-table renders square corners there
+   even though overflow:hidden looks like it should round them. Separate
+   mode with zero spacing keeps the exact same row-divider look (only
+   border-bottom is ever set on th/td, so there's nothing for adjacent
+   cells' borders to double up on) while actually clipping to the radius
+   in every browser. */
+.ref-table          { width: 100%; border-collapse: separate; border-spacing: 0; font-family: var(--mono); font-size: 13px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
 .ref-table th       { background: var(--surface-s); padding: 7px 10px; text-align: left; font-weight: 500; border-bottom: 1px solid var(--border); color: var(--text-s); font-size: 11px; font-family: var(--font); }
 .ref-table td       { padding: 7px 10px; border-bottom: 1px solid var(--border); color: var(--text); }
 .ref-table tr:last-child td { border-bottom: none; }
@@ -689,8 +697,16 @@ sup  { font-size: .65em; vertical-align: super; }
 .lg-chan     { background: #ede9fe; border-color: #7c3aed; }
 
 .lab-canvas  { position: relative; height: 300px; min-height: 220px; max-height: 680px; resize: vertical; background: var(--surface-s); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; user-select: none; }
-#cable-svg   { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; }
-#dev-layer   { position: absolute; inset: 0; }
+/* #rl-* ids are routing_game.html's IP Routing lab (rl-prefixed so its ids
+   never collide with the page's other four topics) — same canvas/SVG-overlay
+   shell as switching_lab.html's #cable-svg/#dev-layer, sharing this rule
+   rather than duplicating it under a second selector. Without an explicit
+   size an <svg> falls back to its default 300x150 intrinsic box instead of
+   filling the canvas, which is what "can't see the full cable" was: the
+   line's coordinates matched device positions across the whole canvas, but
+   were being rendered inside a much smaller, unstyled SVG box. */
+#cable-svg, #rl-cable-svg   { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; }
+#dev-layer, #rl-dev-layer   { position: absolute; inset: 0; }
 .lab-hint    { font-size: 12px; color: var(--text-s); margin-top: .55rem; min-height: 16px; }
 
 /* cables */
@@ -702,9 +718,9 @@ sup  { font-size: .65em; vertical-align: super; }
 .cable.locked:hover { stroke: inherit; }
 
 /* devices */
-.dev          { position: absolute; border-radius: var(--r); border: 1.5px solid var(--border-m); background: var(--surface); cursor: grab; padding: 7px 10px 12px; }
+.dev          { position: absolute; border-radius: var(--r); border: 1.5px solid var(--border-m); background: var(--surface); cursor: grab; padding: 7px 10px 8px; }
 .dev:active   { cursor: grabbing; }
-.dev.switch   { width: 150px; height: 66px; min-height: 66px; }
+.dev.switch   { width: 150px; height: 58px; min-height: 58px; }
 .dev.pc       { min-width: 90px; width: auto; height: 52px; text-align: center; padding-top: 10px; }
 .dev.selected { border-color: var(--info-text); box-shadow: 0 0 0 3px var(--info-bg); }
 .dev-name     { font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.2; position: relative; z-index: 3; pointer-events: none; }
@@ -723,14 +739,31 @@ sup  { font-size: .65em; vertical-align: super; }
 .port.p-ok      { background: var(--ok-bg);  border-color: var(--ok-text);  box-shadow: 0 0 0 3px var(--ok-bg);  transform: scale(1.45); }
 .port.p-bad     { background: var(--err-bg); border-color: var(--err-text); box-shadow: 0 0 0 3px var(--err-bg); transform: scale(1.45); }
 
-/* requirements list */
+/* requirements list — each row has its own checkbox (manual, learner-ticked
+   to-do tracking, not tied to grading) plus, once Check Requirements has
+   actually run, a small ✓/✗ underneath it showing the real verdict. */
 .req-list   { margin-top: .8rem; display: flex; flex-direction: column; gap: 6px; }
 .req-row    { display: flex; gap: 9px; font-size: 13.5px; color: var(--text-s); align-items: flex-start; padding: 7px 11px; border-radius: var(--r); border: 1px solid var(--border); background: var(--surface-s); }
-.req-ic     { font-family: var(--mono); font-weight: 600; width: 14px; flex-shrink: 0; }
+.req-check-col { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 14px; flex-shrink: 0; padding-top: 1px; }
+/* Custom-drawn rather than a bare native checkbox — appearance:none lets it
+   pick up the theme's own border/surface/accent colors and an actual
+   border-radius (native checkboxes mostly ignore border-radius, and their
+   OS-drawn check mark ignores accent-color in some browsers). */
+.req-checkbox   { appearance: none; -webkit-appearance: none; margin: 0; width: 14px; height: 14px; border: 1.5px solid var(--border-m); border-radius: 4px; background: var(--surface-s); cursor: pointer; position: relative; flex-shrink: 0; transition: background .12s, border-color .12s; }
+.req-checkbox:hover   { border-color: var(--info-text); }
+.req-checkbox:checked { background: var(--info-text); border-color: var(--info-text); }
+/* --accent-ink is Custom theme's purpose-built "text on an accent surface"
+   shade; Light/Dark/Sync never set it, so fall back to --surface, which
+   contrasts against --info-text there for the same reason (page text
+   already has to read against the page background). */
+.req-checkbox:checked::after { content: ''; position: absolute; left: 4px; top: 1px; width: 3px; height: 7px; border: solid var(--accent-ink, var(--surface)); border-width: 0 2px 2px 0; transform: rotate(40deg); }
+.req-result-ic  { font-family: var(--mono); font-weight: 600; font-size: 12px; line-height: 1; }
+.req-result-ic.ok  { color: var(--ok-text); }
+.req-result-ic.bad { color: var(--err-text); }
 .req-row.ok  { border-color: var(--ok-bdr);  background: var(--ok-bg); }
-.req-row.ok, .req-row.ok .req-ic   { color: var(--ok-text); }
+.req-row.ok  { color: var(--ok-text); }
 .req-row.bad { border-color: var(--err-bdr); background: var(--err-bg); }
-.req-row.bad, .req-row.bad .req-ic { color: var(--err-text); }
+.req-row.bad { color: var(--err-text); }
 .req-reason { font-size: 12px; margin-top: 3px; opacity: .85; }
 
 /* config panel */
@@ -834,7 +867,9 @@ sup  { font-size: .65em; vertical-align: super; }
 
 /* routing table (Longest Match / Admin Distance) */
 .rt-wrap        { overflow-x: auto; margin-bottom: 1rem; }
-.rt-table       { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 13px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
+/* separate + zero spacing, not collapse — see .ref-table's comment above,
+   same Firefox corner-clipping issue applies here. */
+.rt-table       { width: 100%; border-collapse: separate; border-spacing: 0; font-family: var(--mono); font-size: 13px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; }
 .rt-table th    { background: var(--surface-s); padding: 8px 12px; text-align: left; font-weight: 500; border-bottom: 1px solid var(--border); color: var(--text-s); font-size: 11px; font-family: var(--font); text-transform: uppercase; letter-spacing: .05em; }
 .rt-table td    { padding: 9px 12px; border-bottom: 1px solid var(--border); color: var(--text); }
 .rt-table tr:last-child td { border-bottom: none; }

@@ -8,6 +8,7 @@
 <script src="theme.js"></script>
 <script src="custom-theme.js"></script>
 <script src="options.js"></script>
+<script src="lab-shared.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -49,6 +50,7 @@
     <div class="qlbl" id="qlbl">Longest Prefix Match</div>
     <div class="q-prompt" id="qprompt">Loading&hellip;</div>
     <div class="ipdisp" id="qip" style="display:none"></div>
+    <div class="req-list" id="req-list"></div>
   </div>
 
   <div class="fbanner" id="fb"></div>
@@ -464,11 +466,7 @@ function genRead(diff){
    at easy/medium), and prove it works by pinging across the topology.
    All globals/functions below are prefixed rl* to avoid clashing with the
    page's existing render() and state fields used by the other four topics. */
-function isValidIP(ip){
-  if(typeof ip!=='string') return false;
-  const p=ip.split('.');
-  return p.length===4 && p.every(s=>/^\d+$/.test(s) && +s>=0 && +s<=255);
-}
+const isValidIP = LabShared.isValidIP;
 /* Dotted mask -> CIDR prefix length, or null if not a valid contiguous mask. */
 function maskToCidr(maskStr){
   if(!isValidIP(maskStr)) return null;
@@ -482,7 +480,11 @@ function maskToCidr(maskStr){
   return cidr;
 }
 
-const RT_PORTN=3, SW_PORTN=4;
+/* SW_PORTN's box size comes from lab-shared.js (LabShared.SW_W/SW_H) so this
+   lab's switches render identically to switching_lab.html's. The router is
+   a real multi-port L3 device with no switching_lab equivalent, so its size
+   stays local. */
+const RT_PORTN=3, SW_PORTN=4, RT_W=128, RT_H=60;
 let rlDevices=[], rlCables=[], rlNid=1, rlCid=1, rlSelected=null, rlPending=null, rlRtCount=0, rlPcCount=0, rlSwCount=0;
 
 function rlResetTopo(){ rlDevices=[]; rlCables=[]; rlNid=1; rlCid=1; rlSelected=null; rlPending=null; rlRtCount=0; rlPcCount=0; rlSwCount=0; }
@@ -552,6 +554,17 @@ function rlParseIfName(text){
   const n=+m[2];
   return (n>=0 && n<RT_PORTN) ? n : -1;
 }
+/* Tab-completion keyword tree — walked by the shared LabShared.tabComplete
+   (see lab-shared.js; switching_lab.html has its own tree, VLAN/trunk
+   commands rather than IP-routing ones, over the same generic walker). */
+const RL_KW={
+  enable:{}, configure:{terminal:{}}, end:{}, exit:{}, clear:{},
+  show:{ip:{route:{}}},
+  interface:{},
+  shutdown:{},
+  ip:{address:{}, route:{}},
+  no:{shutdown:{}, ip:{address:{}, route:{}}},
+};
 function rlCli(d,line){
   const t=line.trim().replace(/\s+/g,' ');
   if(!t) return '';
@@ -925,6 +938,7 @@ function render(){
   const qip=document.getElementById('qip'); qip.style.display='none'; qip.style.fontSize='';
   const body=document.getElementById('qbody');
   body.innerHTML='';
+  document.getElementById('req-list').innerHTML='';
   if(state.mode==='lpm') renderLPM(body,qip);
   else if(state.mode==='bin') renderBin(body,qip);
   else if(state.mode==='ad') renderAD(body,qip);
@@ -1154,7 +1168,12 @@ function renderRead(body,qip){
    Canvas/cable interaction and the CLI terminal DOM are ported from
    switching_lab.html's dev-layer/cable-svg/.term pattern (same CSS classes,
    reused as-is — .dev, .port, .cable, .cfg-panel, .term-, .req-list are all
-   already in styles.css from that page and are not scoped to it in any way. */
+   already in styles.css from that page and are not scoped to it in any way.
+   Dragging devices and the requirements-checklist renderer are shared
+   mechanics pulled from lab-shared.js rather than reimplemented here — see
+   the LabShared.attachCanvasDrag call below and rlRenderReqs(). #req-list
+   itself lives in the page's static .qcard (next to #qprompt), same as
+   switching_lab's #req-list sits next to #sc-instr — not injected here. */
 function renderRoute(body,qip){
   document.getElementById('qprompt').innerHTML=state.data.instr;
   qip.style.display='none';
@@ -1163,12 +1182,19 @@ function renderRoute(body,qip){
       <div class="lab-toolbar">
         <div class="legend"><span class="lg"><i class="lgdot lg-acc"></i>addressed &amp; up</span></div>
       </div>
-      <div class="lab-canvas"><svg id="rl-cable-svg"></svg><div id="rl-dev-layer"></div></div>
-      <div class="lab-hint" id="rl-hint">Click a port, then click another port to cable them. Click a device to configure it. Click a cable to remove it.</div>
+      <div class="lab-canvas" id="rl-canvas"><svg id="rl-cable-svg"></svg><div id="rl-dev-layer"></div></div>
+      <div class="lab-hint" id="rl-hint">Click a port, then click another port to cable them. Click a device to configure it or drag it to move it. Click a cable to remove it.</div>
     </div>
-    <div class="cfg-panel" id="rl-cfg" style="display:none"></div>
-    <div class="req-list" id="req-list"></div>`;
-  document.getElementById('rl-dev-layer').addEventListener('click', rlOnCanvasClick);
+    <div class="cfg-panel" id="rl-cfg" style="display:none"></div>`;
+  LabShared.attachCanvasDrag({
+    layer: document.getElementById('rl-dev-layer'),
+    canvas: document.getElementById('rl-canvas'),
+    getDevice: id=>rlById(id),
+    devSize: d=>rlDevSize(d),
+    onRender: ()=>rlRenderCanvas(),
+    onDevClick: id=>rlOpenCfg(id),
+    onPortClick: (id,i)=>rlOnPortClick(id,i)
+  });
   document.getElementById('rl-cable-svg').addEventListener('click', rlOnCableClick);
   setBtns('route');
   rlRenderCanvas();
@@ -1178,18 +1204,18 @@ function renderRoute(body,qip){
 function rlSetHint(msg){ const el=document.getElementById('rl-hint'); if(el) el.textContent=msg; }
 
 function rlDevSize(d){
-  if(d.type==='router') return [128,60];
-  if(d.type==='switch') return [150,66];
+  if(d.type==='router') return [RT_W,RT_H];
+  if(d.type==='switch') return [LabShared.SW_W,LabShared.SW_H];
   const label=d.ip?d.ip:'no IP';
-  return [Math.max(90,Math.round(label.length*6.4)+24), 52];
+  return [Math.max(LabShared.PC_W,Math.round(label.length*6.4)+24), LabShared.PC_H];
 }
 function rlPortPosRouter(d,i){
-  const pad=20, span=128-2*pad;
-  return [pad+i*(span/(RT_PORTN-1)), 60];
+  const pad=20, span=RT_W-2*pad;
+  return [pad+i*(span/(RT_PORTN-1)), RT_H];
 }
 function rlPortPosSwitch(d,i){
-  const pad=20, span=150-2*pad;
-  return [pad+i*(span/(SW_PORTN-1)), 66];
+  const pad=20, span=LabShared.SW_W-2*pad;
+  return [pad+i*(span/(SW_PORTN-1)), LabShared.SW_H];
 }
 function rlFixedPortPos(d,i){
   if(d.type==='router') return rlPortPosRouter(d,i);
@@ -1237,14 +1263,14 @@ function rlRenderCanvas(){
   });
 
   rlDevices.forEach(d=>{
-    const [w] = rlDevSize(d);
+    const [w,h] = rlDevSize(d);
     const el=document.createElement('div');
     el.className='dev '+d.type+(rlSelected===d.id?' selected':'');
-    el.style.left=d.x+'px'; el.style.top=d.y+'px'; el.style.width=w+'px';
+    el.style.left=d.x+'px'; el.style.top=d.y+'px'; el.style.width=w+'px'; el.style.height=h+'px';
     el.dataset.did=d.id;
     if(d.type==='router'){
       const up=d.ports.filter(p=>p.ip&&p.up).length;
-      el.innerHTML=`<div class="dev-name">${d.name}</div><div class="dev-sub">router · ${up}/${RT_PORTN} interfaces up</div>`;
+      el.innerHTML=`<div class="dev-name">${d.name}</div><div class="dev-sub">router · ${up}/${RT_PORTN} up</div>`;
     } else if(d.type==='switch'){
       el.innerHTML=`<div class="dev-name">${d.name}</div><div class="dev-sub">unmanaged switch</div>`;
     } else {
@@ -1268,12 +1294,6 @@ function rlRenderCanvas(){
   });
 }
 
-function rlOnCanvasClick(e){
-  const portEl=e.target.closest('.port');
-  if(portEl){ rlOnPortClick(+portEl.dataset.did,+portEl.dataset.pi); return; }
-  const devEl=e.target.closest('.dev');
-  if(devEl) rlOpenCfg(+devEl.dataset.did);
-}
 function rlOnPortClick(did,i){
   if(state.done) return;
   const d=rlById(did);
@@ -1376,7 +1396,36 @@ function rlRenderPcCfg(d,panel){
     <div class="cfg-hdr"><div class="cfg-name">${d.name}</div><button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="rlCloseCfgPanel()">Close</button></div>
     <div class="pc-form"><span class="pc-form-lbl">IP Address</span>
       <input type="text" class="custom-ip-inp" value="${d.ip||''}" placeholder="e.g. 192.168.1.10" autocomplete="off" spellcheck="false" oninput="rlSetPcIp(${d.id},this.value)"><span class="pc-pfx">/${d.pfx}</span>
-    </div>`;
+    </div>
+    <div class="cfg-sec-lbl" style="margin-top:14px">Ping</div>
+    <div class="pc-form">
+      <label class="pc-form-lbl">Target IP</label>
+      <input class="custom-ip-inp" id="rl-ping-ip" placeholder="e.g. 172.214.3.1"
+             autocomplete="off" spellcheck="false" onkeydown="if(event.key==='Enter')rlPingRun()">
+      <button class="rand-btn" id="rl-ping-btn" onclick="rlPingRun()">Ping</button>
+    </div>
+    <pre class="ping-out" id="rl-ping-out"></pre>`;
+}
+let rlPingGen=0;
+function rlPingRun(){
+  const d=rlSelected!=null?rlById(rlSelected):null;
+  if(!d||d.type!=='pc') return;
+  const myGen=++rlPingGen, pcId=d.id;
+  LabShared.runPing({
+    inputId:'rl-ping-ip', btnId:'rl-ping-btn', outId:'rl-ping-out',
+    resolve: dst=>{
+      if(!d.ip||!isValidIP(d.ip)) return {msg:d.name+' has no valid IP'};
+      if(!isValidIP(dst)) return {msg:'invalid target address'};
+      if(dst===d.ip) return {ok:true};
+      const r=rlResolvePing(d,dst);
+      if(!r.ok) return {ok:false};
+      d._arpKnown = d._arpKnown || new Set();
+      const firstTime = !d._arpKnown.has(dst);
+      d._arpKnown.add(dst);
+      return {ok:true, firstTime};
+    },
+    stillActive: ()=>myGen===rlPingGen && rlSelected===pcId
+  });
 }
 function rlRenderSwitchCfg(d,panel){
   panel.innerHTML=`
@@ -1445,25 +1494,28 @@ document.addEventListener('keydown', e=>{
     const out=rlCli(d,line);
     if(out) out.split('\n').forEach(l=>d.log.push(l));
     rlRenderTerm(); rlRenderCanvas(); rlRefreshCfg();
+    /* rlRefreshCfg() just rebuilt the whole config panel from scratch —
+       including this very input element — so the DOM node that had focus
+       no longer exists and typing would go nowhere until the learner
+       clicked back in. Refocus the freshly-rendered one so the terminal
+       stays usable for as many commands in a row as they want. */
+    const freshInput=document.getElementById('rl-term-in');
+    if(freshInput) freshInput.focus();
   } else if(e.key==='ArrowUp'){
     e.preventDefault();
     if(d.hi>0){ d.hi--; input.value=d.hist[d.hi]||''; }
   } else if(e.key==='ArrowDown'){
     e.preventDefault();
     if(d.hi<d.hist.length-1){ d.hi++; input.value=d.hist[d.hi]||''; } else { d.hi=d.hist.length; input.value=''; }
+  } else if(e.key==='Tab'){
+    e.preventDefault();
+    input.value=LabShared.tabComplete(RL_KW, input.value, cands=>{ d.log.push(cands.join('   ')); rlRenderTerm(); });
   }
 });
 
 function rlRenderReqs(results){
-  const el=document.getElementById('req-list');
-  if(!el||!state.data||!state.data.reqs) return;
-  el.innerHTML=state.data.reqs.map((r,i)=>{
-    const res=results?results[i]:null;
-    const cls=res?(res.ok?'ok':'bad'):'';
-    const icon=res?(res.ok?'✓':'✗'):'•';
-    const reason=(res&&!res.ok&&res.reason)?`<div class="req-reason">${rlEsc(res.reason)}</div>`:'';
-    return `<div class="req-row ${cls}"><span class="req-ic">${icon}</span><div><div>${r.desc}</div>${reason}</div></div>`;
-  }).join('');
+  if(!state.data||!state.data.reqs) return;
+  LabShared.renderReqList('req-list', state.data.reqs, results, rlEsc);
 }
 
 /* ─── Grading: generic text-field agrid (read) ──────────────────── */
