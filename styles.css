@@ -702,9 +702,9 @@ sup  { font-size: .65em; vertical-align: super; }
 .cable.locked:hover { stroke: inherit; }
 
 /* devices */
-.dev          { position: absolute; border-radius: var(--r); border: 1.5px solid var(--border-m); background: var(--surface); cursor: grab; padding: 7px 10px 12px; }
+.dev          { position: absolute; border-radius: var(--r); border: 1.5px solid var(--border-m); background: var(--surface); cursor: grab; padding: 7px 10px 8px; }
 .dev:active   { cursor: grabbing; }
-.dev.switch   { width: 150px; height: 66px; min-height: 66px; }
+.dev.switch   { width: 150px; height: 58px; min-height: 58px; }
 .dev.pc       { min-width: 90px; width: auto; height: 52px; text-align: center; padding-top: 10px; }
 .dev.selected { border-color: var(--info-text); box-shadow: 0 0 0 3px var(--info-bg); }
 .dev-name     { font-size: 13px; font-weight: 600; color: var(--text); line-height: 1.2; position: relative; z-index: 3; pointer-events: none; }
