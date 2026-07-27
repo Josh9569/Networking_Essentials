@@ -192,6 +192,27 @@ function randomNonMatchingEntry(destInt,prefixPool,extra){
   }while(matchesEntry(destInt,e) && tries<25);
   return e;
 }
+/* A "trap" entry at the given prefix: shifted just one or two blocks away
+   from the network that actually contains destInt, so it still looks like
+   a plausible child of the real chain (same prefix, nearby address) but
+   fails the match — you have to actually check the bits, not just click
+   whichever candidate looks most nested. */
+function nearMissEntry(destInt,prefix,extra){
+  const trueNet=netIntOf(destInt,prefix);
+  const block=Math.pow(2,32-prefix);
+  const steps=choice([-2,-1,1,2]);
+  const net=(trueNet+steps*block)>>>0;
+  return makeEntry(net,prefix,extra||{});
+}
+/* A genuinely matching entry at some prefix deeper than minPrefix — used to
+   let what looks like a throwaway decoy actually turn out to be the real
+   (and correct) longest match, instead of the correct answer always being
+   one of the "obvious" chain entries. */
+function extraMatchingEntry(destInt,minPrefix,extra){
+  const pool=[]; for(let p=minPrefix+1;p<=30;p++) pool.push(p);
+  const p=pool.length?choice(pool):30;
+  return makeEntry(destInt,p,extra||{});
+}
 /* Structural containment — independent of any destination address — used to
    render parent/child nesting depth (indentation) rather than assuming table
    order. Prefix 0 (the default route) is excluded as a "parent": it contains
@@ -295,12 +316,31 @@ function genLPM(diff){
   else { onlyDefault=Math.random()<0.2; nestedPrefixes=onlyDefault?[]:[8,16,24,choice([25,26,27,28,29,30])]; }
 
   const destInt = onlyDefault ? ip2int(randIpOctets().join('.')) : niceRawInt();
-  let entries=[];
-  nestedPrefixes.forEach(p=>entries.push(makeEntry(destInt,p,makeRouteExtras(choice(RT_SOURCES)))));
+  // Same near-miss-trap / decoy-can-win variety as Binary Match (see
+  // nearMissEntry()/extraMatchingEntry()) so the correct answer isn't always
+  // just "whichever chain entry looks deepest". Left off for the onlyDefault
+  // scenario, where the whole point is that nothing specific matches.
+  const trapChance = diff==='easy' ? 0 : diff==='medium' ? 0.5 : 0.45;
+  const decoyMatchChance = onlyDefault ? 0 : diff==='medium' ? 0.35 : diff==='hard' ? 0.3 : 0;
+
+  let entries=nestedPrefixes.map((p,idx)=>
+    (idx>0 && Math.random()<trapChance)
+      ? nearMissEntry(destInt,p,makeRouteExtras(choice(RT_SOURCES)))
+      : makeEntry(destInt,p,makeRouteExtras(choice(RT_SOURCES)))
+  );
 
   const decoyPool = diff==='easy'?[16,24]:diff==='medium'?[16,20,24,28]:[8,16,20,24,28,30];
   const decoyCount = diff==='easy'?1:2;
-  for(let i=0;i<decoyCount;i++) entries.push(randomNonMatchingEntry(destInt,decoyPool,()=>makeRouteExtras(choice(RT_SOURCES))));
+  let bestSoFar = entries.length ? Math.max(...entries.filter(e=>matchesEntry(destInt,e)).map(e=>e.prefix)) : -1;
+  for(let i=0;i<decoyCount;i++){
+    if(decoyMatchChance>0 && bestSoFar>=0 && bestSoFar<30 && Math.random()<decoyMatchChance){
+      const entry=extraMatchingEntry(destInt,bestSoFar,makeRouteExtras(choice(RT_SOURCES)));
+      entries.push(entry);
+      bestSoFar=entry.prefix;
+    } else {
+      entries.push(randomNonMatchingEntry(destInt,decoyPool,()=>makeRouteExtras(choice(RT_SOURCES))));
+    }
+  }
 
   if(diff==='hard') entries.push(makeEntry(0,0,makeRouteExtras(DEFAULT_SRC)));
 
@@ -324,6 +364,17 @@ function genLPM(diff){
 function genBin(diff){
   const prefixSteps = diff==='easy' ? [24] : diff==='medium' ? [16,24] : [8,16,24,28];
   const decoyCount = diff==='easy' ? 1 : diff==='medium' ? 1 : 2;
+  // Chance that a non-shallowest chain level gets swapped for a near-miss
+  // trap instead of the true containing network — see nearMissEntry(). The
+  // shallowest level is always kept genuine so there's always a guaranteed
+  // fallback correct answer.
+  const trapChance = diff==='easy' ? 0 : diff==='medium' ? 0.5 : 0.45;
+  // Chance that a "decoy" slot is instead a genuinely matching entry deeper
+  // than everything else so far — i.e. the decoy itself turns out to be the
+  // correct answer, not just the obvious parent/child chain. Left at 0 for
+  // easy to keep that tier's single real entry unambiguous, per the ladder
+  // design (easy stays simple everywhere in this topic).
+  const decoyMatchChance = diff==='medium' ? 0.35 : diff==='hard' ? 0.3 : 0;
 
   const raw=niceRawInt();
   const deep=prefixSteps[prefixSteps.length-1];
@@ -332,8 +383,19 @@ function genBin(diff){
   const offset = block<=2 ? 0 : ri(1,block-2);
   const dest=(netDeep+offset)>>>0;
 
-  let candidates = prefixSteps.map(p=>makeEntry(dest,p,{}));
-  for(let i=0;i<decoyCount;i++) candidates.push(randomNonMatchingEntry(dest,[16,20,24,28],()=>({})));
+  let candidates = prefixSteps.map((p,idx)=>
+    (idx>0 && Math.random()<trapChance) ? nearMissEntry(dest,p) : makeEntry(dest,p,{})
+  );
+  let bestSoFar=Math.max(...candidates.filter(c=>matchesEntry(dest,c)).map(c=>c.prefix));
+  for(let i=0;i<decoyCount;i++){
+    if(decoyMatchChance>0 && bestSoFar<30 && Math.random()<decoyMatchChance){
+      const entry=extraMatchingEntry(dest,bestSoFar);
+      candidates.push(entry);
+      bestSoFar=entry.prefix;
+    } else {
+      candidates.push(randomNonMatchingEntry(dest,[16,20,24,28],()=>({})));
+    }
+  }
   // Hierarchically ordered (not just sorted by prefix) so every child renders
   // directly under its true parent — see hierarchicalOrder() for why a plain
   // prefix sort can interleave unrelated chains and imply the wrong parent.
@@ -350,14 +412,37 @@ function genAD(diff){
   const network=int2ip(netInt);
 
   const n = diff==='easy'?2 : diff==='medium'?3 : 4;
+  // Chance a candidate's network is a near-miss (same prefix, address just
+  // off enough that it doesn't actually match the network everyone's
+  // supposedly competing for) instead of the real thing — so a low AD alone
+  // isn't enough, you have to check the network column first. Off at easy
+  // to keep that tier a pure "lowest AD wins" comparison.
+  const nearMissChance = diff==='easy' ? 0 : diff==='medium' ? 0.3 : 0.4;
+
   const pool=shuffle(RT_SOURCES.slice());
   const chosen=pool.slice(0,n);
-  const entries=chosen.map(src=>{
+  // Bias medium/hard toward including a Connected source sometimes — a
+  // Connected near-miss (AD 0, but the wrong network) is one of the best
+  // traps: it looks unbeatable until you check what it's actually a route to.
+  if(diff!=='easy' && !chosen.some(s=>s.code==='C') && Math.random()<0.5){
+    chosen[ri(0,chosen.length-1)]=RT_SOURCES[0];
+  }
+
+  let entries=chosen.map(src=>{
     const ex=makeRouteExtras(src);
-    return {id:src.code+Math.random().toString(36).slice(2,8), source:src, network, prefix, netInt, nextHop:ex.nextHop, metric:ex.metric, iface:ex.iface};
+    return Math.random()<nearMissChance ? nearMissEntry(netInt,prefix,ex) : makeEntry(netInt,prefix,ex);
   });
   shuffle(entries);
-  const correct=entries.reduce((a,b)=> a.source.ad<b.source.ad?a:b);
+
+  // Guarantee at least one entry genuinely matches, so the round always has
+  // a well-defined correct answer.
+  if(!entries.some(e=>matchesEntry(netInt,e))){
+    const fix=choice(entries);
+    Object.assign(fix,makeEntry(netInt,prefix,{source:fix.source,nextHop:fix.nextHop,metric:fix.metric,iface:fix.iface}));
+  }
+
+  const matching=entries.filter(e=>matchesEntry(netInt,e));
+  const correct=matching.reduce((a,b)=> a.source.ad<b.source.ad?a:b);
   return {network,prefix,entries,correct};
 }
 
@@ -892,7 +977,11 @@ const BIN_PLACEHOLDER='00000000.00000000.00000000.00000000';
 function formatBits(raw){
   const parts=[];
   for(let i=0;i<raw.length;i+=8) parts.push(raw.slice(i,i+8));
-  return parts.join('.');
+  let out=parts.join('.');
+  // Show the separator as soon as an octet is complete, not only once the
+  // next octet's first bit is typed.
+  if(raw.length>0 && raw.length<32 && raw.length%8===0) out+='.';
+  return out;
 }
 function rawBitsOf(el){ return el.value.replace(/\./g,''); }
 function binInputHtml(id){
@@ -998,15 +1087,21 @@ function pickBin(id){
 /* ─── Render: Administrative Distance ───────────────────────────── */
 function renderAD(body,qip){
   const d=state.data;
-  document.getElementById('qprompt').innerHTML=`Multiple sources are advertising a route to <strong>${d.network}/${d.prefix}</strong>. Click the one the router will actually install, then submit.`;
+  document.getElementById('qprompt').innerHTML=`A packet is destined for <strong>${d.network}/${d.prefix}</strong>. Click the routing table entry that will actually forward it, then submit.`;
 
+  // Column order mirrors a real "show ip route" line left-to-right (code,
+  // network/prefix, [AD/metric], via next-hop/interface) — just split into
+  // table columns instead of one run-on line. Not every row's network is
+  // guaranteed to actually be the one in the prompt above, so this is also
+  // where a near-miss reveals itself, before AD even comes into it.
   const rows=d.entries.map(e=>`
     <tr class="rt-row pick" id="row-${e.id}" onclick="pickAD('${e.id}')">
       <td>${srcCode(e.source)} ${e.source.name}</td>
-      <td>${cliPath(e)}</td>
+      <td>${e.network}/${e.prefix}</td>
       <td>${cliADMetric(e)}</td>
+      <td>${cliPath(e)}</td>
     </tr>`).join('');
-  body.innerHTML = rtTable(['Source','Path','AD / Metric'], rows);
+  body.innerHTML = rtTable(['Source','Network','AD / Metric','Path'], rows);
   setBtns('mcq');
 }
 function pickAD(id){
@@ -1019,13 +1114,18 @@ function pickAD(id){
 /* ─── Render: Read The Table ─────────────────────────────────────── */
 function readFields(d){
   const f=[];
-  f.push({id:'src', key:'src', label:'Route Source', placeholder:'e.g. EIGRP'});
-  f.push({id:'ad', key:'ad', label:'Administrative Distance', placeholder:'e.g. 90'});
+  f.push({id:'src', key:'src', label:'Route Source', placeholder:'e.g. EIGRP',
+    tip:'Which protocol (or Connected/Static) installed this route — shown in the table as a one-letter code, e.g. ‘O’ for OSPF.'});
+  f.push({id:'ad', key:'ad', label:'Administrative Distance', placeholder:'e.g. 90',
+    tip:'How trustworthy this source is — lower wins if two sources learn the same network, e.g. Connected 0, Static 1, OSPF 110.'});
   if(!d.connected){
-    f.push({id:'metric', key:'metric', label:'Metric', placeholder:'e.g. 20514560'});
-    f.push({id:'nh', key:'nh', label:'Next-Hop IP', placeholder:'e.g. 10.0.0.2'});
+    f.push({id:'metric', key:'metric', label:'Metric', placeholder:'e.g. 20514560',
+      tip:'The route’s cost within its own source, e.g. OSPF cost 2 or EIGRP 20514560 — never compared across different sources.'});
+    f.push({id:'nh', key:'nh', label:'Next-Hop IP', placeholder:'e.g. 10.0.0.2',
+      tip:'The next router’s IP address this packet gets forwarded to, e.g. 10.0.0.2. Connected routes have no next-hop.'});
   }
-  f.push({id:'iface', key:'iface', label:'Exit Interface', placeholder:'e.g. GigabitEthernet0/0'});
+  f.push({id:'iface', key:'iface', label:'Exit Interface', placeholder:'e.g. GigabitEthernet0/0',
+    tip:'The local interface the router sends matching packets out of, e.g. GigabitEthernet0/1.'});
   return f;
 }
 function readAnswers(d){
@@ -1043,7 +1143,7 @@ function renderRead(body,qip){
   readFields(d).forEach(f=>{
     const div=document.createElement('div');
     div.className='afield'; div.id='f-'+f.id;
-    div.innerHTML=`<label>${f.label}</label><input id="a-${f.id}" placeholder="${f.placeholder}" autocomplete="off"><div class="ahint" id="h-${f.id}"></div>`;
+    div.innerHTML=`<label>${f.label}<span class="tip-ic" tabindex="0" data-tip="${rlEsc(f.tip)}">?</span></label><input id="a-${f.id}" placeholder="${f.placeholder}" autocomplete="off"><div class="ahint" id="h-${f.id}"></div>`;
     grid.appendChild(div);
   });
   body.appendChild(grid);
@@ -1478,7 +1578,7 @@ function lpmAdExplain(mode,d,correctId){
     return c.prefix===0 ? `No specific route matched, so the default route 0.0.0.0/0 was used.` : `${c.network}/${c.prefix} is the longest (most specific) match.`;
   }
   const c=d.entries.find(e=>e.id===correctId);
-  return `${c.source.name} has the lowest administrative distance (AD ${c.source.ad}) among the candidates.`;
+  return `${c.source.name} (AD ${c.source.ad}) is the lowest-AD source whose network actually matches ${c.network}/${c.prefix} — the rest either lose on AD or aren't a match at all.`;
 }
 
 function revealAll(){
