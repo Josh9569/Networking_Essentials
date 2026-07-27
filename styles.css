@@ -751,12 +751,12 @@ sup  { font-size: .65em; vertical-align: super; }
    OS-drawn check mark ignores accent-color in some browsers). */
 .req-checkbox   { appearance: none; -webkit-appearance: none; margin: 0; width: 14px; height: 14px; border: 1.5px solid var(--border-m); border-radius: 4px; background: var(--surface-s); cursor: pointer; position: relative; flex-shrink: 0; transition: background .12s, border-color .12s; }
 .req-checkbox:hover   { border-color: var(--info-text); }
-.req-checkbox:checked { background: var(--info-text); border-color: var(--info-text); }
-/* --accent-ink is Custom theme's purpose-built "text on an accent surface"
-   shade; Light/Dark/Sync never set it, so fall back to --surface, which
-   contrasts against --info-text there for the same reason (page text
-   already has to read against the page background). */
-.req-checkbox:checked::after { content: ''; position: absolute; left: 4px; top: 1px; width: 3px; height: 7px; border: solid var(--accent-ink, var(--surface)); border-width: 0 2px 2px 0; transform: rotate(40deg); }
+/* Same "selected" language as .cbtn.on/topic-and-difficulty pills — a low-
+   opacity tinted fill (--info-bg/--info-bdr), not a solid block. A solid
+   --info-text fill (what this used to be) buried the check mark inside a
+   flat color of almost the same value as the mark itself. */
+.req-checkbox:checked { background: var(--info-bg); border-color: var(--info-bdr); }
+.req-checkbox:checked::after { content: ''; position: absolute; left: 4px; top: 1px; width: 3px; height: 7px; border: solid var(--info-text); border-width: 0 2px 2px 0; transform: rotate(40deg); }
 .req-result-ic  { font-family: var(--mono); font-weight: 600; font-size: 12px; line-height: 1; }
 .req-result-ic.ok  { color: var(--ok-text); }
 .req-result-ic.bad { color: var(--err-text); }
