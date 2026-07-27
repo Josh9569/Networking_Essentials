@@ -1375,7 +1375,7 @@ function rlRenderPcCfg(d,panel){
   panel.innerHTML=`
     <div class="cfg-hdr"><div class="cfg-name">${d.name}</div><button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="rlCloseCfgPanel()">Close</button></div>
     <div class="pc-form"><span class="pc-form-lbl">IP Address</span>
-      <input type="text" value="${d.ip||''}" placeholder="e.g. 192.168.1.10" oninput="rlSetPcIp(${d.id},this.value)"><span class="pc-pfx">/${d.pfx}</span>
+      <input type="text" class="custom-ip-inp" value="${d.ip||''}" placeholder="e.g. 192.168.1.10" autocomplete="off" spellcheck="false" oninput="rlSetPcIp(${d.id},this.value)"><span class="pc-pfx">/${d.pfx}</span>
     </div>`;
 }
 function rlRenderSwitchCfg(d,panel){

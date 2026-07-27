@@ -189,8 +189,8 @@ sup  { font-size: .65em; vertical-align: super; }
 
 /* ── Field hover tooltips ────────────────────────────────────────────────────── */
 .tip-ic            { display: inline-flex; align-items: center; justify-content: center; width: 13px; height: 13px; margin-left: 5px; border-radius: 50%; border: 1px solid var(--border-m); background: var(--surface-s); color: var(--text-t); font-size: 9px; font-weight: 700; letter-spacing: normal; text-transform: none; line-height: 1; cursor: help; position: relative; vertical-align: middle; }
-.tip-ic::after     { content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 7px); transform: translateX(-50%); width: max-content; max-width: 220px; background: var(--surface); color: var(--text-s); border: 1px solid var(--border); font-size: 11.5px; font-weight: 400; letter-spacing: normal; text-transform: none; line-height: 1.4; padding: 6px 9px; border-radius: 6px; opacity: 0; pointer-events: none; transition: opacity .12s ease; z-index: 30; }
-.tip-ic::before    { content: ''; position: absolute; left: 50%; bottom: calc(100% + 2px); transform: translateX(-50%); border: 5px solid transparent; border-top-color: var(--surface); opacity: 0; transition: opacity .12s ease; }
+.tip-ic::after     { content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 7px); transform: translateX(-50%); width: max-content; max-width: 220px; background: var(--custom-surface-tip, var(--surface)); color: var(--text-s); border: 1px solid var(--border); font-size: 11.5px; font-weight: 400; letter-spacing: normal; text-transform: none; line-height: 1.4; padding: 6px 9px; border-radius: 6px; opacity: 0; pointer-events: none; transition: opacity .12s ease; z-index: 30; }
+.tip-ic::before    { content: ''; position: absolute; left: 50%; bottom: calc(100% + 2px); transform: translateX(-50%); border: 5px solid transparent; border-top-color: var(--custom-surface-tip, var(--surface)); opacity: 0; transition: opacity .12s ease; }
 .tip-ic:hover::after, .tip-ic:hover::before,
 .tip-ic:focus::after, .tip-ic:focus::before { opacity: 1; }
 
@@ -888,24 +888,31 @@ sup  { font-size: .65em; vertical-align: super; }
    custom-theme.js (falls back to `none` otherwise), so this is a no-op for
    Light/Dark/Sync — surfaces just go slightly translucent + blurred behind
    them when the user has picked a transparency below 100%.
-   This selector list is every class anywhere in this file whose own
-   background is `var(--surface)` or `var(--surface-s)` — the exact same set
-   of "menu & card" surfaces the Transparency slider's alpha already reaches
-   (that one works automatically since it lives inside those two variables).
-   Blur has to be listed explicitly per element instead, so any new class
-   that uses --surface/--surface-s as its background should be added here
-   too, or it'll go translucent without going blurry. */
+   This selector list is every class anywhere in this file that ever paints
+   `var(--surface)` or `var(--surface-s)` as its own background — including
+   ones that are transparent by default and only pick up that background on
+   :hover/.open/.on (a hover-only button still needs backdrop-filter armed
+   on its resting class, since blurring a transparent box is a no-op until
+   the moment it does go translucent) — the exact same set of "menu & card"
+   surfaces the Transparency slider's alpha already reaches (that one works
+   automatically since it lives inside those two variables). Blur has to be
+   listed explicitly per element instead, so any new class that uses
+   --surface/--surface-s as its background (at rest or on hover/open/on)
+   should be added here too, or it'll go translucent without going blurry. */
 .chip, .qcard, .opt-menu, .theme-dd-menu, .tool-block, .afield, .btn, .ct-drawer,
-.theme-dd-btn, .opt-btn.open, .tip-ic, .expl-box code, .bbox.hb, .bdge-s,
-.mn-c1, .mn-stat, .mn-mask-row, .mn-cls-badge, .gh-link, .game-card, .tag,
+.theme-dd-btn, .theme-dd-edit, .theme-dd-item, .opt-btn, .tip-ic, .expl-box code, .bbox.hb, .bdge-s,
+.mn-c1, .mn-stat, .mn-mask-row, .mn-cls-badge, .mn-stats-toggle, .mn-sel-btn,
+.gh-link, .game-card, .tag, .cbtn,
 .card-footer, .bit-cell, .pow-cell, .req-chip, .sub-panel, .sub-hdr, .sub-ltr.e,
 .ref-table, .custom-card, .custom-num-inp, .rand-btn, .custom-host-row,
+.custom-src-btn, .custom-cls-btn,
 .layer-btn, .opt-card, .explain, .ref-search, .ref-card, .rb-port, .ans-field,
 .type-btn, .rule-ex, .type-ref-table th, .az-input, .az-result, .custom-ip-inp,
 .custom-cidr-inp, .hex-ref-table th, .pv-cell, .conv-tool-inp, .conv-tool-result,
 .lab-card, .lab-canvas, .dev, .req-row, .cfg-panel, .port-table th,
-.port-table input, .cmd-table code, .vm-inp, .cli-note, .ping-out, .mono-inl,
-.rt-table, .rt-code, .bin-card, .cli-block, .ct-picker-hex-row {
+.port-table select, .port-table input, .cmd-table code, .vm-inp, .cli-note, .ping-out, .mono-inl,
+.rt-table, .rt-code, .bin-card, .cli-block, .ct-picker-hex-row, .opt-row,
+.ct-drawer-close, .ct-bgtype-btn {
   backdrop-filter: var(--custom-blur, none);
   -webkit-backdrop-filter: var(--custom-blur, none);
 }
@@ -926,11 +933,13 @@ sup  { font-size: .65em; vertical-align: super; }
 .tool-block .rule-ex, .tool-block .az-input, .tool-block .az-result,
 .tool-block .type-ref-table, .tool-block .ref-search, .tool-block .ref-card,
 .tool-block .rb-port, .tool-block .cmd-table code, .tool-block .bit-cell,
-.tool-block .pow-cell,
+.tool-block .pow-cell, .tool-block .mn-sel-btn, .tool-block .mn-stats-toggle,
 .qcard .type-btn, .qcard .opt-card, .qcard .layer-btn, .qcard .mono-inl,
 .qcard .req-chip, .qcard .req-row, .qcard .rand-btn,
+.game-card .tag, .game-card .card-footer,
 .cfg-panel .vm-inp, .cfg-panel .ping-out, .cfg-panel .cli-note,
-.cfg-panel .port-table, .cfg-panel .rand-btn, .cfg-panel .custom-ip-inp,
+.cfg-panel .port-table th, .cfg-panel .port-table select, .cfg-panel .port-table input,
+.cfg-panel .rand-btn, .cfg-panel .custom-ip-inp,
 .lab-card .lab-canvas, .lab-card .dev, .lab-card .rand-btn,
 .sub-panel .sub-hdr, .sub-panel .sub-ltr, .sub-panel .afield,
 .sub-panel .expl-box code,
@@ -938,14 +947,23 @@ sup  { font-size: .65em; vertical-align: super; }
 .custom-card .custom-cidr-inp, .custom-card .custom-host-row,
 .custom-card .rand-btn, .custom-card .custom-src-btn, .custom-card .custom-cls-btn,
 .afield .tip-ic, .afield .expl-box code,
-.ct-drawer .ct-picker-hex-row {
+.theme-dd-menu .theme-dd-edit, .theme-dd-menu .theme-dd-item,
+.opt-menu .opt-row,
+.ct-drawer .ct-picker-hex-row, .ct-drawer .ct-drawer-close, .ct-drawer .ct-bgtype-btn,
+.ct-drawer .btn {
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
 }
 /* The Read Table hint popups sit directly over other body text, so a plain
-   translucent surface reads poorly there — they get their own (heavier)
-   blur amount, --custom-blur-tip, set 10 points above the base Menu & Card
-   Blur slider (falls back to the same amount, then none, on Light/Dark/Sync). */
+   translucent surface reads poorly there — they get their own blur amount,
+   --custom-blur-tip, floored at 10% even when the base Menu & Card Blur
+   slider is 0 (falls back to the same amount, then none, on Light/Dark/Sync).
+   Blur alone isn't dependable here though: this popup is a descendant of
+   .afield, which has its own backdrop-filter, and some browsers don't let a
+   nested backdrop-filter see past an ancestor's — so the popup would show
+   no blur at all there. --custom-surface-tip (set alongside --custom-blur-tip
+   in custom-theme.js) backs it with a higher opacity floor for the same
+   reason: blur is a bonus, not the thing actually guaranteeing legibility. */
 .tip-ic::after {
   backdrop-filter: var(--custom-blur-tip, var(--custom-blur, none));
   -webkit-backdrop-filter: var(--custom-blur-tip, var(--custom-blur, none));

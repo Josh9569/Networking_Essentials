@@ -11,7 +11,7 @@
   var DEFAULT_BASE = '#3a6ea5';
   var CUSTOM_PROPS = ['--bg', '--custom-bg-image', '--surface', '--surface-s', '--text', '--text-s',
     '--text-t', '--border', '--border-m', '--info-text', '--info-bg', '--info-bdr', '--accent-ink',
-    '--custom-blur', '--custom-blur-tip', '--ct-picker-solid'];
+    '--custom-blur', '--custom-blur-tip', '--custom-surface-tip', '--ct-picker-solid'];
 
   /* ---------- color math ---------- */
   function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
@@ -230,8 +230,9 @@
   /* ---------- config persistence ---------- */
   var DEFAULT_ACCENT_INK = 15;
   var DEFAULT_BLUR = 20;
+  var DEFAULT_TRANSPARENCY = 0.15;
   function defaultConfig() {
-    return { bgType: 'solid', base: DEFAULT_BASE, angle: 135, transparency: 0.3, blur: DEFAULT_BLUR, accentInk: DEFAULT_ACCENT_INK, blobSeed: defaultBlobSeed(), overrides: {} };
+    return { bgType: 'solid', base: DEFAULT_BASE, angle: 135, transparency: DEFAULT_TRANSPARENCY, blur: DEFAULT_BLUR, accentInk: DEFAULT_ACCENT_INK, blobSeed: defaultBlobSeed(), overrides: {} };
   }
   function getConfig() {
     try {
@@ -243,7 +244,7 @@
       if (!cfg.blobSeed || !cfg.blobSeed.length) cfg.blobSeed = defaultBlobSeed();
       if (!cfg.base) cfg.base = DEFAULT_BASE;
       if (!cfg.bgType) cfg.bgType = 'solid';
-      if (typeof cfg.transparency !== 'number') cfg.transparency = 0.3;
+      if (typeof cfg.transparency !== 'number') cfg.transparency = DEFAULT_TRANSPARENCY;
       if (typeof cfg.blur !== 'number') cfg.blur = DEFAULT_BLUR;
       if (typeof cfg.angle !== 'number') cfg.angle = 135;
       if (typeof cfg.accentInk !== 'number') cfg.accentInk = DEFAULT_ACCENT_INK;
@@ -265,13 +266,13 @@
     var textTHex = cfg.overrides.textS ? deriveTextT(textSHex, palette.isDark) : palette.textT;
     var accentHex = cfg.overrides.accent || palette.accentText;
     var accentInkHex = cfg.overrides.buttonText || computeAutoAccentInk(accentHex, cfg.accentInk);
-    var alpha = clamp(cfg.transparency, 0.3, 1);
+    var alpha = clamp(cfg.transparency, 0, 1);
 
     var root = document.documentElement.style;
     root.setProperty('--bg', cfg.base);
     root.setProperty('--custom-bg-image', buildBgImage(cfg, accentHex));
     root.setProperty('--surface', withAlpha(surfaceHex, alpha));
-    root.setProperty('--surface-s', withAlpha(surfaceHex, clamp(alpha - 0.06, 0.2, 1)));
+    root.setProperty('--surface-s', withAlpha(surfaceHex, clamp(alpha - 0.06, 0, 1)));
     root.setProperty('--text', textHex);
     root.setProperty('--text-s', textSHex);
     root.setProperty('--text-t', textTHex);
@@ -287,8 +288,19 @@
     var blurPct = clamp(typeof cfg.blur === 'number' ? cfg.blur : DEFAULT_BLUR, 0, 100);
     root.setProperty('--custom-blur', blurCss(blurPct));
     // The Read Table hint popups sit over other text and are harder to read
-    // through, so they always get 10 points more blur than the base slider.
-    root.setProperty('--custom-blur-tip', blurCss(clamp(blurPct + 10, 0, 100)));
+    // through, so they never drop below 10% blur even when the base slider
+    // is all the way down.
+    root.setProperty('--custom-blur-tip', blurCss(Math.max(blurPct, 10)));
+    // Blur alone isn't a reliable way to hide the text underneath — some
+    // browsers don't sample backdrop-filter through an already-blurred
+    // ancestor (the hint sits inside .afield, which has its own blur), so
+    // the popup would render with no blur at all there. Back it with a
+    // fixed opacity floor too, so it stays legible even if blur silently
+    // does nothing. Fixed, not derived from the Transparency slider's alpha
+    // — that slider only ever controls opacity on the elements it already
+    // reaches, it shouldn't be a second input into how the Blur slider's
+    // own legibility fallback behaves.
+    root.setProperty('--custom-surface-tip', withAlpha(surfaceHex, 0.85));
     // The color picker popover always needs a fully opaque backdrop to stay
     // legible, regardless of the transparency slider — surfaceHex here is
     // the pre-alpha value, unlike --surface above.
@@ -375,7 +387,7 @@
         '</div>' +
         '<div class="ct-section">' +
           '<div class="ct-label">Menu &amp; Card Transparency <span id="ct-trans-val"></span></div>' +
-          '<input type="range" id="ct-trans" class="ct-slider" min="30" max="100" step="1">' +
+          '<input type="range" id="ct-trans" class="ct-slider" min="0" max="100" step="1">' +
         '</div>' +
         '<div class="ct-section">' +
           '<div class="ct-label">Menu &amp; Card Blur <span id="ct-blur-val"></span></div>' +
@@ -562,7 +574,7 @@
 
     els.trans.addEventListener('input', function () {
       var cfg = ensureConfig();
-      cfg.transparency = clamp(parseInt(els.trans.value, 10) / 100, 0.3, 1);
+      cfg.transparency = clamp(parseInt(els.trans.value, 10) / 100, 0, 1);
       commit(cfg);
       els.transVal.textContent = Math.round(cfg.transparency * 100) + '%';
     });
