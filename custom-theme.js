@@ -11,7 +11,7 @@
   var DEFAULT_BASE = '#3a6ea5';
   var CUSTOM_PROPS = ['--bg', '--custom-bg-image', '--surface', '--surface-s', '--text', '--text-s',
     '--text-t', '--border', '--border-m', '--info-text', '--info-bg', '--info-bdr', '--accent-ink',
-    '--custom-blur', '--ct-picker-solid'];
+    '--custom-blur', '--custom-blur-tip', '--custom-surface-tip', '--ct-picker-solid'];
 
   /* ---------- color math ---------- */
   function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
@@ -76,6 +76,11 @@
   function withAlpha(hex, alpha) {
     var rgb = hexToRgb(hex);
     return 'rgba(' + rgb.r + ',' + rgb.g + ',' + rgb.b + ',' + alpha + ')';
+  }
+  // 0-100 slider value -> a CSS backdrop-filter blur, 20px at full strength.
+  function blurCss(pct) {
+    var p = clamp(typeof pct === 'number' ? pct : 0, 0, 100);
+    return p > 0 ? 'blur(' + Math.round(p / 100 * 20) + 'px)' : 'none';
   }
   // Blends hexA toward hexB by fraction t (0 = hexA, 1 = hexB). Used to
   // derive "accent ink" — the text color drawn on top of accent-colored
@@ -224,8 +229,10 @@
 
   /* ---------- config persistence ---------- */
   var DEFAULT_ACCENT_INK = 15;
+  var DEFAULT_BLUR = 20;
+  var DEFAULT_TRANSPARENCY = 0.15;
   function defaultConfig() {
-    return { bgType: 'solid', base: DEFAULT_BASE, angle: 135, transparency: 0.3, accentInk: DEFAULT_ACCENT_INK, blobSeed: defaultBlobSeed(), overrides: {} };
+    return { bgType: 'solid', base: DEFAULT_BASE, angle: 135, transparency: DEFAULT_TRANSPARENCY, blur: DEFAULT_BLUR, accentInk: DEFAULT_ACCENT_INK, blobSeed: defaultBlobSeed(), overrides: {} };
   }
   function getConfig() {
     try {
@@ -237,7 +244,8 @@
       if (!cfg.blobSeed || !cfg.blobSeed.length) cfg.blobSeed = defaultBlobSeed();
       if (!cfg.base) cfg.base = DEFAULT_BASE;
       if (!cfg.bgType) cfg.bgType = 'solid';
-      if (typeof cfg.transparency !== 'number') cfg.transparency = 0.3;
+      if (typeof cfg.transparency !== 'number') cfg.transparency = DEFAULT_TRANSPARENCY;
+      if (typeof cfg.blur !== 'number') cfg.blur = DEFAULT_BLUR;
       if (typeof cfg.angle !== 'number') cfg.angle = 135;
       if (typeof cfg.accentInk !== 'number') cfg.accentInk = DEFAULT_ACCENT_INK;
       return cfg;
@@ -258,13 +266,13 @@
     var textTHex = cfg.overrides.textS ? deriveTextT(textSHex, palette.isDark) : palette.textT;
     var accentHex = cfg.overrides.accent || palette.accentText;
     var accentInkHex = cfg.overrides.buttonText || computeAutoAccentInk(accentHex, cfg.accentInk);
-    var alpha = clamp(cfg.transparency, 0.3, 1);
+    var alpha = clamp(cfg.transparency, 0, 1);
 
     var root = document.documentElement.style;
     root.setProperty('--bg', cfg.base);
     root.setProperty('--custom-bg-image', buildBgImage(cfg, accentHex));
     root.setProperty('--surface', withAlpha(surfaceHex, alpha));
-    root.setProperty('--surface-s', withAlpha(surfaceHex, clamp(alpha - 0.06, 0.2, 1)));
+    root.setProperty('--surface-s', withAlpha(surfaceHex, clamp(alpha - 0.06, 0, 1)));
     root.setProperty('--text', textHex);
     root.setProperty('--text-s', textSHex);
     root.setProperty('--text-t', textTHex);
@@ -277,7 +285,22 @@
     // (shade darker/lighter than the accent, via the Button Text Contrast
     // slider) unless the user picked an exact Button Text color themselves.
     root.setProperty('--accent-ink', accentInkHex);
-    root.setProperty('--custom-blur', alpha < 1 ? 'blur(' + Math.round((1 - alpha) * 18) + 'px)' : 'none');
+    var blurPct = clamp(typeof cfg.blur === 'number' ? cfg.blur : DEFAULT_BLUR, 0, 100);
+    root.setProperty('--custom-blur', blurCss(blurPct));
+    // The Read Table hint popups sit over other text and are harder to read
+    // through, so they never drop below 10% blur even when the base slider
+    // is all the way down.
+    root.setProperty('--custom-blur-tip', blurCss(Math.max(blurPct, 10)));
+    // Blur alone isn't a reliable way to hide the text underneath — some
+    // browsers don't sample backdrop-filter through an already-blurred
+    // ancestor (the hint sits inside .afield, which has its own blur), so
+    // the popup would render with no blur at all there. Back it with a
+    // fixed opacity floor too, so it stays legible even if blur silently
+    // does nothing. Fixed, not derived from the Transparency slider's alpha
+    // — that slider only ever controls opacity on the elements it already
+    // reaches, it shouldn't be a second input into how the Blur slider's
+    // own legibility fallback behaves.
+    root.setProperty('--custom-surface-tip', withAlpha(surfaceHex, 0.85));
     // The color picker popover always needs a fully opaque backdrop to stay
     // legible, regardless of the transparency slider — surfaceHex here is
     // the pre-alpha value, unlike --surface above.
@@ -364,7 +387,11 @@
         '</div>' +
         '<div class="ct-section">' +
           '<div class="ct-label">Menu &amp; Card Transparency <span id="ct-trans-val"></span></div>' +
-          '<input type="range" id="ct-trans" class="ct-slider" min="30" max="100" step="1">' +
+          '<input type="range" id="ct-trans" class="ct-slider" min="0" max="100" step="1">' +
+        '</div>' +
+        '<div class="ct-section">' +
+          '<div class="ct-label">Menu &amp; Card Blur <span id="ct-blur-val"></span></div>' +
+          '<input type="range" id="ct-blur" class="ct-slider" min="0" max="100" step="1">' +
         '</div>' +
         '<div class="ct-section">' +
           '<div class="ct-label-row">' +
@@ -419,6 +446,8 @@
     els.shapeRemove = drawer.querySelector('#ct-shape-remove');
     els.trans = drawer.querySelector('#ct-trans');
     els.transVal = drawer.querySelector('#ct-trans-val');
+    els.blur = drawer.querySelector('#ct-blur');
+    els.blurVal = drawer.querySelector('#ct-blur-val');
     els.regen = drawer.querySelector('#ct-regen');
     els.ink = drawer.querySelector('#ct-ink');
     els.inkVal = drawer.querySelector('#ct-ink-val');
@@ -482,6 +511,8 @@
     els.angleVal.textContent = cfg.angle + '°';
     els.trans.value = Math.round(cfg.transparency * 100);
     els.transVal.textContent = Math.round(cfg.transparency * 100) + '%';
+    els.blur.value = cfg.blur;
+    els.blurVal.textContent = cfg.blur + '%';
     els.ink.value = cfg.accentInk;
     els.inkVal.textContent = cfg.accentInk + '%';
 
@@ -543,9 +574,16 @@
 
     els.trans.addEventListener('input', function () {
       var cfg = ensureConfig();
-      cfg.transparency = clamp(parseInt(els.trans.value, 10) / 100, 0.3, 1);
+      cfg.transparency = clamp(parseInt(els.trans.value, 10) / 100, 0, 1);
       commit(cfg);
       els.transVal.textContent = Math.round(cfg.transparency * 100) + '%';
+    });
+
+    els.blur.addEventListener('input', function () {
+      var cfg = ensureConfig();
+      cfg.blur = clamp(parseInt(els.blur.value, 10), 0, 100);
+      commit(cfg);
+      els.blurVal.textContent = cfg.blur + '%';
     });
 
     els.ink.addEventListener('input', function () {

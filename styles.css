@@ -187,6 +187,13 @@ sup  { font-size: .65em; vertical-align: super; }
 .afield.class-q label { color: var(--info-text); }
 .afield.class-q input { color: var(--info-text); font-size: 16px; font-weight: 500; }
 
+/* ── Field hover tooltips ────────────────────────────────────────────────────── */
+.tip-ic            { display: inline-flex; align-items: center; justify-content: center; width: 13px; height: 13px; margin-left: 5px; border-radius: 50%; border: 1px solid var(--border-m); background: var(--surface-s); color: var(--text-t); font-size: 9px; font-weight: 700; letter-spacing: normal; text-transform: none; line-height: 1; cursor: help; position: relative; vertical-align: middle; }
+.tip-ic::after     { content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 7px); transform: translateX(-50%); width: max-content; max-width: 220px; background: var(--custom-surface-tip, var(--surface)); color: var(--text-s); border: 1px solid var(--border); font-size: 11.5px; font-weight: 400; letter-spacing: normal; text-transform: none; line-height: 1.4; padding: 6px 9px; border-radius: 6px; opacity: 0; pointer-events: none; transition: opacity .12s ease; z-index: 30; }
+.tip-ic::before    { content: ''; position: absolute; left: 50%; bottom: calc(100% + 2px); transform: translateX(-50%); border: 5px solid transparent; border-top-color: var(--custom-surface-tip, var(--surface)); opacity: 0; transition: opacity .12s ease; }
+.tip-ic:hover::after, .tip-ic:hover::before,
+.tip-ic:focus::after, .tip-ic:focus::before { opacity: 1; }
+
 /* ── Explanations ───────────────────────────────────────────────────────────── */
 .expl-btn          { background: transparent; border: 1px solid var(--border-m); color: var(--text-s); border-radius: 4px; padding: 2px 6px; font-size: 10px; cursor: pointer; opacity: 0.8; font-family: var(--font); text-transform: uppercase; letter-spacing: .05em; transition: opacity .15s; }
 .expl-btn:hover    { border-color: var(--text-s); color: var(--text);}
@@ -813,7 +820,7 @@ sup  { font-size: .65em; vertical-align: super; }
 
 /* guarantees a gap before the action row regardless of which topic's content
    is rendered inside (some end in an element whose own margin-bottom is
-   intentionally zeroed, e.g. the last .bin-card, or has none, e.g. .rt-canvas) */
+   intentionally zeroed, e.g. the last .bin-card, or has none, e.g. .lab-card) */
 #qbody          { margin-bottom: 1rem; }
 
 /* parent/child nesting depth — shared by the Longest Match table (.rt-indent,
@@ -875,42 +882,91 @@ sup  { font-size: .65em; vertical-align: super; }
 /* realistic single-line CLI output block (Route Table Anatomy / Build The Network) */
 .cli-block { font-family: var(--mono); font-size: 13px; line-height: 1.9; background: var(--surface-s); border: 1px solid var(--border); border-radius: var(--r); padding: 12px 14px; overflow-x: auto; white-space: nowrap; }
 
-/* Build The Network: topology canvas — router with interfaces + a pool of
-   draggable-feeling (click-to-place) network/neighbor nodes, wired with cables */
-.rt-canvas       { position: relative; min-height: 260px; display: flex; flex-direction: column; justify-content: space-between; gap: 22px; padding: 20px 14px; background: var(--surface-s); border: 1px solid var(--border); border-radius: var(--r); }
-#rt-svg          { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 2; }
-.rt-canvas-note  { position: absolute; top: 10px; right: 14px; font-size: 11px; color: var(--text-t); font-style: italic; z-index: 3; }
-.rt-router-row   { display: flex; justify-content: center; position: relative; z-index: 1; }
-.rt-router       { background: var(--surface); border: 1.5px dashed var(--border-m); border-radius: 23px; padding: 10px 20px 14px; display: flex; flex-direction: column; align-items: center; font-size: 13px; font-weight: 600; color: var(--text); }
-.rt-ports        { display: flex; gap: 18px; margin-top: 8px; }
-.rt-port-wrap    { display: flex; flex-direction: column; align-items: center; gap: 4px; }
-.rt-port         { width: 16px; height: 16px; border-radius: 50%; background: var(--surface-s); border: 2px solid var(--border-m); cursor: pointer; transition: transform .12s, background .12s; }
-.rt-port:hover   { transform: scale(1.25); border-color: var(--text-s); }
-.rt-port.filled  { background: var(--info-bg); border-color: var(--info-text); }
-.rt-port.p-ok    { background: var(--ok-bg);  border-color: var(--ok-text);  box-shadow: 0 0 0 3px var(--ok-bg); }
-.rt-port.p-bad   { background: var(--err-bg); border-color: var(--err-text); box-shadow: 0 0 0 3px var(--err-bg); }
-.rt-port-lbl     { font-size: 10.5px; font-family: var(--mono); color: var(--text-t); white-space: nowrap; }
-.rt-pool         { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; position: relative; z-index: 1; }
-.rt-chip         { background: var(--surface); border: 1.5px solid var(--border-m); border-radius: var(--r); padding: 8px 14px; cursor: pointer; text-align: center; min-width: 120px; transition: all .15s; }
-.rt-chip:hover   { border-color: var(--info-bdr); }
-.rt-chip.sel     { border-color: var(--info-text); box-shadow: 0 0 0 3px var(--info-bg); }
-.rt-chip.used    { opacity: .5; cursor: default; }
-.rt-chip.p-ok    { border-color: var(--ok-bdr);  background: var(--ok-bg); }
-.rt-chip.p-bad   { border-color: var(--err-bdr); background: var(--err-bg); }
-.rt-chip-lbl     { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: var(--text-t); margin-bottom: 3px; }
-.rt-chip-val     { font-family: var(--mono); font-size: 13px; font-weight: 500; color: var(--text); }
-.rt-cable        { stroke: var(--border-m); stroke-width: 2.5; cursor: pointer; pointer-events: stroke; }
-.rt-cable:hover  { stroke: var(--err-text); }
-
 /* ── CUSTOM THEME (custom-theme.js) ────────────────────────────────────────────
    Side drawer for building a "Custom" theme: background type, transparency,
    and a suggested/overridable palette. --custom-blur is only ever set by
    custom-theme.js (falls back to `none` otherwise), so this is a no-op for
    Light/Dark/Sync — surfaces just go slightly translucent + blurred behind
-   them when the user has picked a transparency below 100%. */
-.chip, .qcard, .opt-menu, .theme-dd-menu, .tool-block, .afield, .btn, .ct-drawer {
+   them when the user has picked a transparency below 100%.
+   This selector list is every class anywhere in this file that ever paints
+   `var(--surface)` or `var(--surface-s)` as its own background — including
+   ones that are transparent by default and only pick up that background on
+   :hover/.open/.on (a hover-only button still needs backdrop-filter armed
+   on its resting class, since blurring a transparent box is a no-op until
+   the moment it does go translucent) — the exact same set of "menu & card"
+   surfaces the Transparency slider's alpha already reaches (that one works
+   automatically since it lives inside those two variables). Blur has to be
+   listed explicitly per element instead, so any new class that uses
+   --surface/--surface-s as its background (at rest or on hover/open/on)
+   should be added here too, or it'll go translucent without going blurry. */
+.chip, .qcard, .opt-menu, .theme-dd-menu, .tool-block, .afield, .btn, .ct-drawer,
+.theme-dd-btn, .theme-dd-edit, .theme-dd-item, .opt-btn, .tip-ic, .expl-box code, .bbox.hb, .bdge-s,
+.mn-c1, .mn-stat, .mn-mask-row, .mn-cls-badge, .mn-stats-toggle, .mn-sel-btn,
+.gh-link, .game-card, .tag, .cbtn,
+.card-footer, .bit-cell, .pow-cell, .req-chip, .sub-panel, .sub-hdr, .sub-ltr.e,
+.ref-table, .custom-card, .custom-num-inp, .rand-btn, .custom-host-row,
+.custom-src-btn, .custom-cls-btn,
+.layer-btn, .opt-card, .explain, .ref-search, .ref-card, .rb-port, .ans-field,
+.type-btn, .rule-ex, .type-ref-table th, .az-input, .az-result, .custom-ip-inp,
+.custom-cidr-inp, .hex-ref-table th, .pv-cell, .conv-tool-inp, .conv-tool-result,
+.lab-card, .lab-canvas, .dev, .req-row, .cfg-panel, .port-table th,
+.port-table select, .port-table input, .cmd-table code, .vm-inp, .cli-note, .ping-out, .mono-inl,
+.rt-table, .rt-code, .bin-card, .cli-block, .ct-picker-hex-row, .opt-row,
+.ct-drawer-close, .ct-bgtype-btn {
   backdrop-filter: var(--custom-blur, none);
   -webkit-backdrop-filter: var(--custom-blur, none);
+}
+/* The rule above matches transparency's reach 1:1, but several of those
+   elements normally render INSIDE another element that's also in the list
+   (e.g. the AD Reference <table> sitting inside its .tool-block). Blurring
+   both layers compounds into a visibly different, harder blur right where
+   they overlap — a hard-edged "seam" that looks like a stray unrounded box
+   instead of one smooth pane of glass. The fix isn't to stop blurring the
+   inner element (it still needs to be translucent, matching transparency) —
+   it's to not blur it a second time once it's already sitting on a blurred
+   backdrop. Every pairing below is a real nested case found in the site's
+   HTML; add to it whenever a new nested case shows up. */
+.tool-block .ref-table, .tool-block .cli-block, .tool-block .mn-mask-row,
+.tool-block .mn-cls-badge, .tool-block .mn-c1, .tool-block .mn-stat,
+.tool-block .bdge-s, .tool-block .bbox, .tool-block .conv-tool-inp,
+.tool-block .conv-tool-result, .tool-block .pv-cell, .tool-block .hex-ref-table,
+.tool-block .rule-ex, .tool-block .az-input, .tool-block .az-result,
+.tool-block .type-ref-table, .tool-block .ref-search, .tool-block .ref-card,
+.tool-block .rb-port, .tool-block .cmd-table code, .tool-block .bit-cell,
+.tool-block .pow-cell, .tool-block .mn-sel-btn, .tool-block .mn-stats-toggle,
+.qcard .type-btn, .qcard .opt-card, .qcard .layer-btn, .qcard .mono-inl,
+.qcard .req-chip, .qcard .req-row, .qcard .rand-btn,
+.game-card .tag, .game-card .card-footer,
+.cfg-panel .vm-inp, .cfg-panel .ping-out, .cfg-panel .cli-note,
+.cfg-panel .port-table th, .cfg-panel .port-table select, .cfg-panel .port-table input,
+.cfg-panel .rand-btn, .cfg-panel .custom-ip-inp,
+.lab-card .lab-canvas, .lab-card .dev, .lab-card .rand-btn,
+.sub-panel .sub-hdr, .sub-panel .sub-ltr, .sub-panel .afield,
+.sub-panel .expl-box code,
+.custom-card .sub-ltr, .custom-card .custom-num-inp, .custom-card .custom-ip-inp,
+.custom-card .custom-cidr-inp, .custom-card .custom-host-row,
+.custom-card .rand-btn, .custom-card .custom-src-btn, .custom-card .custom-cls-btn,
+.afield .tip-ic, .afield .expl-box code,
+.theme-dd-menu .theme-dd-edit, .theme-dd-menu .theme-dd-item,
+.opt-menu .opt-row,
+.ct-drawer .ct-picker-hex-row, .ct-drawer .ct-drawer-close, .ct-drawer .ct-bgtype-btn,
+.ct-drawer .btn {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+/* The Read Table hint popups sit directly over other body text, so a plain
+   translucent surface reads poorly there — they get their own blur amount,
+   --custom-blur-tip, floored at 10% even when the base Menu & Card Blur
+   slider is 0 (falls back to the same amount, then none, on Light/Dark/Sync).
+   Blur alone isn't dependable here though: this popup is a descendant of
+   .afield, which has its own backdrop-filter, and some browsers don't let a
+   nested backdrop-filter see past an ancestor's — so the popup would show
+   no blur at all there. --custom-surface-tip (set alongside --custom-blur-tip
+   in custom-theme.js) backs it with a higher opacity floor for the same
+   reason: blur is a bonus, not the thing actually guaranteeing legibility. */
+.tip-ic::after {
+  backdrop-filter: var(--custom-blur-tip, var(--custom-blur, none));
+  -webkit-backdrop-filter: var(--custom-blur-tip, var(--custom-blur, none));
 }
 
 /* Deliberately no dimming here — the whole point of the live drawer is
@@ -1000,4 +1056,3 @@ sup  { font-size: .65em; vertical-align: super; }
 .ct-swatch-row:not(.auto) .ct-auto-badge { display: none; }
 
 .ct-reset-btn     { margin-top: 4px; width: 100%; }
-.rt-cable-hit    { stroke: #000; stroke-opacity: 0; stroke-width: 14; pointer-events: stroke; cursor: pointer; }
