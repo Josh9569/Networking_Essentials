@@ -828,6 +828,11 @@ sup  { font-size: .65em; vertical-align: super; }
 .port-table select,
 .port-table input  { font-family: var(--mono); font-size: 12.5px; background: var(--surface-s); border: 1px solid var(--border-m); border-radius: 5px; padding: 3px 6px; color: var(--text); outline: none; width: 100%; max-width: 82px; }
 .port-table input:disabled { opacity: .4; }
+/* IP Routing's interface IP/mask columns (routing_game.html) hold real dotted-
+   quad values — "255.255.255.255" measures ~127px in this font/size, well
+   past the 82px default sized for switching_lab's short VLAN-ID/Ch-Grp
+   numbers, which this class leaves untouched. */
+.port-table input.pt-wide { max-width: 132px; }
 
 /* CLI terminal */
 .term        { background: #101012; border: 1px solid var(--border-m); border-radius: var(--r); overflow: hidden; display: flex; flex-direction: column; height: 218px; min-height: 150px; max-height: 560px; resize: vertical; }

@@ -1363,8 +1363,8 @@ function rlPortTableHtml(d){
   let html=`<table class="port-table"><thead><tr><th>Interface</th><th>IP Address</th><th>Mask</th><th>Up</th></tr></thead><tbody>`;
   d.ports.forEach((p,i)=>{
     html+=`<tr><td class="pt-name">${p.name}</td>
-      <td><input type="text" value="${p.ip||''}" placeholder="e.g. 10.0.0.1" onchange="rlSetIfIp(${d.id},${i},this.value)"></td>
-      <td><input type="text" value="${p.pfx!=null?cidr2mask(p.pfx):''}" placeholder="255.255.255.0" onchange="rlSetIfMask(${d.id},${i},this.value)"></td>
+      <td><input type="text" class="pt-wide" value="${p.ip||''}" placeholder="e.g. 10.0.0.1" onchange="rlSetIfIp(${d.id},${i},this.value)"></td>
+      <td><input type="text" class="pt-wide" value="${p.pfx!=null?cidr2mask(p.pfx):''}" placeholder="255.255.255.0" onchange="rlSetIfMask(${d.id},${i},this.value)"></td>
       <td><input type="checkbox" ${p.up?'checked':''} onchange="rlSetIfUp(${d.id},${i},this.checked)"></td></tr>`;
   });
   return html+'</tbody></table>';
