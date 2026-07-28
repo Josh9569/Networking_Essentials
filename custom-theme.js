@@ -879,6 +879,25 @@
     openDrawer();
   };
 
+  // Bfcache fix, mirrors theme.js's own pageshow listener: navigating back
+  // to a page that was restored from the back-forward cache instead of
+  // reloaded means the synchronous apply at the top of this file never
+  // re-runs, so a color/transparency/blur change made on another page while
+  // this one sat cached never shows up here even though data-theme is still
+  // "custom" the whole time (theme.js's own pageshow fix only re-applies
+  // the data-theme attribute, not our actual CSS variable values). Re-read
+  // localStorage and re-apply on every pageshow — cheap and harmless when
+  // nothing actually changed. Also refreshes the drawer's own form fields
+  // if it's ever been built, so reopening it after a bfcache restore
+  // doesn't show stale slider positions.
+  window.addEventListener('pageshow', function () {
+    if (activeTheme() === 'custom') {
+      liveConfig = getConfig() || defaultConfig();
+      applyCustomTheme(liveConfig);
+      if (els.trans) refreshUI();
+    }
+  });
+
   /* Expose for the Node test harness. */
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
