@@ -53,8 +53,13 @@
     <button class="cbtn" onclick="setDiff('hard',this)">Hard</button>
   </div>
 
-  <div class="qcard">
-    <div class="qlbl" id="sc-title">Loading&hellip;</div>
+  <div class="qcard" id="qcard">
+    <div class="qcard-hdr">
+      <div class="qlbl" id="sc-title">Loading&hellip;</div>
+      <button type="button" class="qcard-pop-btn" id="qcard-pop-btn" title="Pop out instructions to a floating panel" aria-label="Pop out instructions to a floating panel" onclick="LabShared.toggleQcardPopout('qcard','qcard-pop-btn')">
+        <svg viewBox="0 0 24 24"><path d="M11 4H4v16h7M15 8l-4 4 4 4"/></svg>
+      </button>
+    </div>
     <div class="q-prompt" id="sc-instr" style="font-size:15px"></div>
     <div class="req-list" id="req-list"></div>
   </div>
@@ -2088,6 +2093,12 @@ function setGMode(m,btn){
   document.getElementById('palette').style.display=m==='sandbox'?'':'none';
   document.getElementById('topic-row').style.display=m==='sandbox'?'none':'';
   document.getElementById('diff-row').style.display=m==='sandbox'?'none':'';
+  /* Sandbox has no scenario/checklist to keep in view while scrolling —
+     just free-build instructions — so the pop-out doesn't earn its keep
+     there the way it does for an actual challenge. */
+  const popBtn=document.getElementById('qcard-pop-btn');
+  if(m==='sandbox'){ LabShared.dockQcardPopout('qcard','qcard-pop-btn'); if(popBtn) popBtn.style.display='none'; }
+  else if(popBtn) popBtn.style.display='';
   if(m==='sandbox') initSandbox(); else newScenario();
 }
 function setDiff(d,btn){
