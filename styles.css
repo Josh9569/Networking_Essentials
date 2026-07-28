@@ -1,4 +1,15 @@
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+/* Self-hosted (fonts/) instead of Google Fonts — @import from
+   fonts.googleapis.com was render-blocking (CSS parsing stalls until it
+   resolves, then a second external origin for the actual font files on
+   fonts.gstatic.com) and an unnecessary external dependency for a fully
+   static site. Only the weights actually used anywhere in this file are
+   here — see fonts/Outfit/ and fonts/JetBrains_Mono/ for the OFL license
+   these are distributed under. */
+@font-face { font-family: 'Outfit'; src: url('fonts/Outfit/static/Outfit-Regular.ttf') format('truetype'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Outfit'; src: url('fonts/Outfit/static/Outfit-Medium.ttf') format('truetype'); font-weight: 500; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Outfit'; src: url('fonts/Outfit/static/Outfit-SemiBold.ttf') format('truetype'); font-weight: 600; font-style: normal; font-display: swap; }
+@font-face { font-family: 'JetBrains Mono'; src: url('fonts/JetBrains_Mono/static/JetBrainsMono-Regular.ttf') format('truetype'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'JetBrains Mono'; src: url('fonts/JetBrains_Mono/static/JetBrainsMono-Medium.ttf') format('truetype'); font-weight: 500; font-style: normal; font-display: swap; }
 
 /* ── Variables ─────────────────────────────────────────────────────────────── */
 :root {
