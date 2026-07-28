@@ -158,6 +158,40 @@ sup  { font-size: .65em; vertical-align: super; }
 /* ── Question card & IP Display ─────────────────────────────────────────────── */
 .qcard  { background: var(--surface); border: 1px solid var(--border); border-radius: var(--rl); padding: 1.25rem 1.5rem; margin-bottom: 1rem; }
 .qlbl   { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-t); margin-bottom: .4rem; }
+
+/* Instructions pop-out (packet-tracer labs only — switching_lab.html always,
+   routing_game.html only while on its IP Routing topic). Same .qcard, same
+   look, just pinned to the viewport and slimmed down so it stays visible
+   while the learner works the canvas/CLI further down the page. */
+.qcard-hdr        { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.qcard-hdr .qlbl  { margin-bottom: 0; }
+.qcard-pop-btn    { width: 22px; height: 22px; margin-top: -2px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; border: none; border-radius: 6px; background: transparent; color: var(--text-t); cursor: pointer; }
+.qcard-pop-btn:hover { background: var(--surface-s); color: var(--info-text); }
+.qcard-pop-btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.qcard.popped {
+  position: fixed; top: 84px; width: 260px;
+  /* Pinned beside .wrap's own left edge (.wrap is max-width:840px,
+     margin:0 auto — this mirrors that centering math), not the raw
+     viewport edge, so it sits close to the content it's about instead of
+     stranded out at the side of an ultra-wide window. */
+  left: calc(max(16px, (100vw - 840px) / 2) - 280px);
+  max-height: calc(100vh - 100px); overflow-y: auto;
+  z-index: 45; box-shadow: 0 10px 30px rgba(0,0,0,.20);
+  padding: .85rem 1rem;
+}
+.qcard.popped .q-prompt   { font-size: 13.5px; margin-bottom: 8px; }
+.qcard.popped .ipdisp     { font-size: 18px; }
+.qcard.popped .req-list   { margin-top: .6rem; gap: 5px; }
+.qcard.popped .req-row    { padding: 6px 8px; font-size: 12px; gap: 7px; }
+.qcard.popped .req-reason { font-size: 11px; }
+/* Not enough spare width beside a centered 840px .wrap for a 260px panel +
+   gap to clear the page content below that (needs ~1440px of viewport) —
+   dock it back inline instead of letting it overlap. */
+@media (max-width: 1440px) {
+  .qcard-pop-btn { display: none !important; }
+  .qcard.popped  { position: static; width: auto; max-height: none; overflow-y: visible; box-shadow: none; padding: 1.25rem 1.5rem; }
+  .qcard.popped .q-prompt, .qcard.popped .req-row, .qcard.popped .req-reason, .qcard.popped .ipdisp { font-size: revert; }
+}
 .ipdisp    { font-family: var(--mono); font-size: 26px; font-weight: 500; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
 .cidrbadge { font-size: 16px; padding: 2px 12px; border-radius: var(--r); background: var(--info-bg); color: var(--info-text); border: 1px solid var(--info-bdr); }
 .clsinfo        { font-size: 13px; color: var(--text-s); }
@@ -947,7 +981,7 @@ sup  { font-size: .65em; vertical-align: super; }
 .lab-card, .lab-canvas, .dev, .req-row, .cfg-panel, .port-table th,
 .port-table select, .port-table input, .cmd-table code, .vm-inp, .cli-note, .ping-out, .mono-inl,
 .rt-table, .rt-code, .bin-card, .cli-block, .ct-picker-hex-row, .opt-row,
-.ct-drawer-close, .ct-bgtype-btn {
+.ct-drawer-close, .ct-bgtype-btn, .qcard-pop-btn {
   backdrop-filter: var(--custom-blur, none);
   -webkit-backdrop-filter: var(--custom-blur, none);
 }
@@ -984,6 +1018,7 @@ sup  { font-size: .65em; vertical-align: super; }
 .afield .tip-ic, .afield .expl-box code,
 .theme-dd-menu .theme-dd-edit, .theme-dd-menu .theme-dd-item,
 .opt-menu .opt-row,
+.qcard .qcard-pop-btn,
 .ct-drawer .ct-picker-hex-row, .ct-drawer .ct-drawer-close, .ct-drawer .ct-bgtype-btn,
 .ct-drawer .btn {
   backdrop-filter: none;

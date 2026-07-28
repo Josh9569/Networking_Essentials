@@ -46,8 +46,13 @@
     <button class="cbtn" id="db-hard" onclick="setDiff('hard',this)">Hard</button>
   </div>
 
-  <div class="qcard">
-    <div class="qlbl" id="qlbl">Longest Prefix Match</div>
+  <div class="qcard" id="qcard">
+    <div class="qcard-hdr">
+      <div class="qlbl" id="qlbl">Longest Prefix Match</div>
+      <button type="button" class="qcard-pop-btn" id="qcard-pop-btn" style="display:none" title="Pop out instructions to a floating panel" aria-label="Pop out instructions to a floating panel" onclick="LabShared.toggleQcardPopout('qcard','qcard-pop-btn')">
+        <svg viewBox="0 0 24 24"><path d="M11 4H4v16h7M15 8l-4 4 4 4"/></svg>
+      </button>
+    </div>
     <div class="q-prompt" id="qprompt">Loading&hellip;</div>
     <div class="ipdisp" id="qip" style="display:none"></div>
     <div class="req-list" id="req-list"></div>
@@ -939,6 +944,14 @@ function render(){
   const body=document.getElementById('qbody');
   body.innerHTML='';
   document.getElementById('req-list').innerHTML='';
+  /* The pop-out button only makes sense on the packet-tracer-style IP
+     Routing topic — everywhere else there's no canvas/CLI to keep visible
+     while scrolling, just a normal question card. Docking it back on the
+     way out means it's never left stuck floating over a topic it doesn't
+     apply to. */
+  const popBtn=document.getElementById('qcard-pop-btn');
+  if(state.mode==='route'){ if(popBtn) popBtn.style.display=''; }
+  else { LabShared.dockQcardPopout('qcard','qcard-pop-btn'); if(popBtn) popBtn.style.display='none'; }
   if(state.mode==='lpm') renderLPM(body,qip);
   else if(state.mode==='bin') renderBin(body,qip);
   else if(state.mode==='ad') renderAD(body,qip);

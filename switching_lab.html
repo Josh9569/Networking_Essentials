@@ -53,8 +53,13 @@
     <button class="cbtn" onclick="setDiff('hard',this)">Hard</button>
   </div>
 
-  <div class="qcard">
-    <div class="qlbl" id="sc-title">Loading&hellip;</div>
+  <div class="qcard" id="qcard">
+    <div class="qcard-hdr">
+      <div class="qlbl" id="sc-title">Loading&hellip;</div>
+      <button type="button" class="qcard-pop-btn" id="qcard-pop-btn" title="Pop out instructions to a floating panel" aria-label="Pop out instructions to a floating panel" onclick="LabShared.toggleQcardPopout('qcard','qcard-pop-btn')">
+        <svg viewBox="0 0 24 24"><path d="M11 4H4v16h7M15 8l-4 4 4 4"/></svg>
+      </button>
+    </div>
     <div class="q-prompt" id="sc-instr" style="font-size:15px"></div>
     <div class="req-list" id="req-list"></div>
   </div>

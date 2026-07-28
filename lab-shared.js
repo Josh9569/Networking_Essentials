@@ -191,8 +191,41 @@
     return head + cp;
   }
 
+  /* ---------- instructions pop-out ----------
+     Toggles the top instructions .qcard between its normal inline spot and
+     a slim floating panel pinned to the left edge of the viewport, so a
+     learner can keep the objectives/checklist in view while scrolling down
+     to work the canvas/CLI. Purely a class toggle + icon swap — all the
+     actual layout work is CSS (.qcard.popped in styles.css). */
+  var POPOUT_SVG = '<svg viewBox="0 0 24 24"><path d="M11 4H4v16h7M15 8l-4 4 4 4"/></svg>';
+  var DOCK_SVG = '<svg viewBox="0 0 24 24"><path d="M11 4H4v16h7M13 8l4 4-4 4"/></svg>';
+  function toggleQcardPopout(qcardId, btnId) {
+    var qcard = document.getElementById(qcardId);
+    if (!qcard) return;
+    var popped = qcard.classList.toggle('popped');
+    var btn = document.getElementById(btnId);
+    if (btn) {
+      btn.innerHTML = popped ? DOCK_SVG : POPOUT_SVG;
+      btn.title = popped ? 'Dock instructions back inline' : 'Pop out instructions to a floating panel';
+      btn.setAttribute('aria-label', btn.title);
+    }
+  }
+  /* Called when a page navigates away from a "packet tracer" context (e.g.
+     routing_game.html switching to a non-lab topic) where popping out
+     wouldn't mean anything — silently docks it back if it was popped, and
+     resets the button icon so it isn't stuck showing "dock" next time this
+     context becomes relevant again. */
+  function dockQcardPopout(qcardId, btnId) {
+    var qcard = document.getElementById(qcardId);
+    if (qcard) qcard.classList.remove('popped');
+    var btn = document.getElementById(btnId);
+    if (btn) { btn.innerHTML = POPOUT_SVG; btn.title = 'Pop out instructions to a floating panel'; btn.setAttribute('aria-label', btn.title); }
+  }
+
   window.LabShared = {
     isValidIP: isValidIP,
+    toggleQcardPopout: toggleQcardPopout,
+    dockQcardPopout: dockQcardPopout,
     attachCanvasDrag: attachCanvasDrag,
     runPing: runPing,
     tabComplete: tabComplete,
