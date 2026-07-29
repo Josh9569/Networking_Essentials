@@ -168,6 +168,16 @@ function maskInt(cidr){ return cidr<=0?0:(cidr>=32?0xFFFFFFFF>>>0:(0xFFFFFFFF<<(
 function cidr2mask(cidr){ return int2ip(maskInt(cidr)); }
 function netIntOf(ipInt,cidr){ return (ipInt & maskInt(cidr))>>>0; }
 function bcastIntOf(netI,cidr){ const wc=cidr<=0?0xFFFFFFFF>>>0:(~maskInt(cidr))>>>0; return (netI|wc)>>>0; }
+/* Network/broadcast addresses aren't valid host addresses on real hardware
+   either — a router refuses to accept them on an interface, and no host
+   can use one as its own IP. /31 (point-to-point, RFC 3021) and /32 (a
+   single host route) have no reserved network/broadcast, so every address
+   is a valid "host" there. */
+function rlIsHostIp(ipStr,pfx){
+  if(pfx>=31) return true;
+  const ipInt=ip2int(ipStr), net=netIntOf(ipInt,pfx), bcast=bcastIntOf(net,pfx);
+  return ipInt!==net && ipInt!==bcast;
+}
 function toBin8(n){ return n.toString(2).padStart(8,'0'); }
 function randIpOctets(){ let o1; do{ o1=ri(1,223); }while(o1===127); return [o1,ri(0,255),ri(0,255),ri(0,255)]; }
 const NICE_MAJORS=[10,172,192,128,150,203,64,198];
@@ -606,6 +616,7 @@ function rlCli(d,line){
       if(!ip||!isValidIP(ip)) return '% Invalid IP address';
       const pfx=maskToCidr(mask);
       if(pfx==null) return '% Invalid subnet mask';
+      if(!rlIsHostIp(ip,pfx)) return '% '+ip+' is the network or broadcast address for '+mask+' — not a valid host address';
       d.ports[d.ci].ip=ip; d.ports[d.ci].pfx=pfx;
       return '';
     }
@@ -1410,6 +1421,7 @@ function rlRenderPcCfg(d,panel){
     <div class="pc-form"><span class="pc-form-lbl">IP Address</span>
       <input type="text" class="custom-ip-inp" value="${d.ip||''}" placeholder="e.g. 192.168.1.10" autocomplete="off" spellcheck="false" oninput="rlSetPcIp(${d.id},this.value)"><span class="pc-pfx">/${d.pfx}</span>
     </div>
+    <div class="svi-conflict" id="rl-pc-ip-err" style="display:none"></div>
     <div class="cfg-sec-lbl" style="margin-top:14px">Ping</div>
     <div class="pc-form">
       <label class="pc-form-lbl">Target IP</label>
@@ -1478,7 +1490,13 @@ function rlDelRoute(did,raw){
 }
 function rlSetPcIp(did,val){
   const d=rlById(did), s=val.trim();
-  if(!s) d.ip=null; else if(isValidIP(s)) d.ip=s;
+  const errEl=document.getElementById('rl-pc-ip-err');
+  if(errEl) errEl.style.display='none';
+  if(!s) d.ip=null;
+  else if(isValidIP(s)){
+    if(rlIsHostIp(s,d.pfx)) d.ip=s;
+    else if(errEl){ errEl.textContent=s+' is the network or broadcast address for /'+d.pfx+' — not a usable host address.'; errEl.style.display=''; }
+  }
   rlRenderCanvas();
 }
 
