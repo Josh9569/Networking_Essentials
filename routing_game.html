@@ -704,13 +704,28 @@ function summBitsToolHtml(){
 }
 /* Static (view-only) network diagram for Medium/Hard — same .lab-card/
    .lab-canvas/.dev/.port/.cable visual language as the IP Routing lab's
-   canvas (rlRenderCanvas), but hand-laid-out as a fixed left-to-right
-   chain instead of reusing rlPortPos's bottom-edge port math, which is
-   built for a free-drag canvas with arbitrary topology — this shape never
-   varies within a tier, so fixed side-to-side ports read cleaner than
-   forcing every cable through the bottom edge. RT_W/RT_H come from the
-   IP Routing lab section further down (function-hoisting keeps them
-   available here, same as isValidIP/maskToCidr already were).
+   canvas (rlRenderCanvas), but hand-laid-out as a fixed *vertical* chain
+   instead of reusing rlPortPos's bottom-edge port math, which is built
+   for a free-drag canvas with arbitrary topology — this shape never
+   varies within a tier. RT_W/RT_H come from the IP Routing lab section
+   further down (function-hoisting keeps them available here, same as
+   isValidIP/maskToCidr already were).
+
+   Routers stack top-to-bottom instead of left-to-right on purpose: a
+   viewport only has so much *width* to work with before zooming out far
+   enough to fit everything makes the (especially IPv6-length) address
+   labels unreadable, but height is nearly free — the page already
+   scrolls vertically, and the canvas viewport scrolls internally too.
+   Stacking the chain vertically turns the biggest width cost (the gap
+   between routers, sized to fit two long address labels) into a height
+   cost instead: a link's two labels now sit beside its own naturally
+   vertical run rather than needing to fit side-by-side in a horizontal
+   gap. Same reasoning moves BRANCH/HQ's own stub-network fans onto
+   'up'/'right' (near-vertical-biased directions, small horizontal
+   reach) instead of 'left' — measured effect: IPv6 Hard's native width
+   dropped from ~1640px to ~770px, so fit-to-width no longer has to
+   shrink text down to the point of being unreadable, which is what was
+   actually reported ("IPv6 is too far zoomed out").
 
    Every stub network and every link's addresses are labeled directly on
    the diagram (summTopoData below normalizes v4/v6's differently-shaped
@@ -718,22 +733,26 @@ function summBitsToolHtml(){
    alone is enough to answer the question, the text blocks above/below it
    are a redundant second way to read the same info, not a dependency.
    IPv6 addresses run 3-4x longer than IPv4's dotted-quads, so spacing is
-   isV6-aware throughout (bigger inter-box gaps, longer stub arms) rather
-   than one fixed layout for both — a layout sized for "205.72.168.230"
-   still overlaps badly with "2001:db8:cfc1:dc88:3e18:b8bf:2583:1".
+   isV6-aware throughout rather than one fixed layout for both — a layout
+   sized for "205.72.168.230" still overlaps badly with
+   "2001:db8:cfc1:dc88:3e18:b8bf:2583:1".
 
-   Content renders at a "native" size (data.w x data.h, often wider than
-   any real viewport, especially the IPv6 Hard case) inside a scrollable,
-   zoomable viewport rather than trying to force everything into a fixed
-   box — auto-layout alone can't guarantee zero overlap for arbitrarily
-   long random addresses, so summTopoFit()/summTopoZoom() are the escape
-   hatch: fit-to-width on render (so nothing starts off-screen), plus
-   manual +/-/reset zoom and native scrolling (overflow:auto) to pan, for
-   whatever the automatic spacing doesn't fully resolve on its own.
+   Content still renders at a "native" size (data.w x data.h) inside a
+   scrollable, zoomable viewport, since auto-layout can't *guarantee*
+   zero overlap for arbitrarily long random addresses even with the
+   above — summTopoFit()/summTopoZoom()/summTopoWheel() are the escape
+   hatch: fit-to-width on render (so nothing starts off-screen), mouse-
+   wheel zoom matching the IP Routing/switching labs' own canvas zoom
+   (see attachCanvasDrag's wheel handler in lab-shared.js — same
+   multiplicative 1.1 step, same transform:scale mechanism, just without
+   the device-drag half of that function since nothing here is
+   draggable), +/-/reset buttons for non-wheel input, and native
+   scrolling (overflow:auto) for whatever a zoomed-in view pushes outside
+   the visible area.
 
    Non-interactive (view-only) is still enforced, just not by blocking
-   *all* pointer events on the viewport anymore — it needs those now, to
-   receive scroll/wheel input. Instead: pointer-events:none lives on
+   *all* pointer events on the viewport — it needs those now, to receive
+   scroll/wheel input. Instead: pointer-events:none lives on
    #summ-topo-content (the inner element holding the actual devices/
    cables/labels), which .dev/.port correctly inherit since neither sets
    its own pointer-events; .cable is the one exception — it hard-codes
@@ -745,66 +764,66 @@ function summBitsToolHtml(){
    is clickable or draggable. */
 function summTopoData(kind,d,isV6){
   const lbl=n=>isV6?n.text:(n.network+'/'+n.prefix);
-  /* leftPad has to clear not just the box itself but BRANCH's leftward-
-     fanning stub labels too — text-anchor 'end' means those labels grow
-     further left the longer the string is, and IPv6 prefixes are long
-     enough that a snug leftPad clips them right off the left edge of the
-     canvas (verified in testing: leftPad=150 truncated every BRANCH stub
-     label under IPv6). 420 budgets for stub arm length + label offset +
-     a full uncompressed-ish address's rendered width with margin to
-     spare; v4's addresses are short enough that 130 is already generous. */
-  const gap=isV6?380:110, leftPad=isV6?420:210, y=isV6?200:170;
+  /* colX has to clear not just the box itself but a link's leftward-
+     growing address labels (text-anchor 'end') — IPv6 addresses are long
+     enough that a snug colX clips them off the left edge (this is the
+     same clipping bug 'up'/'left' stub labels had before, just now on
+     the link labels instead, since they moved beside a vertical link).
+     rightPad is only spent when a box actually has a 'right' stub (Hard's
+     HQ) — sized the same way, for the box's own single stub instead. */
+  const colX=isV6?240:110, rightPad=isV6?400:220, topPad=isV6?185:165, linkGap=isV6?95:60;
   if(kind==='medium'){
-    const hqX=leftPad, ispX=hqX+RT_W+gap;
+    const hqY=topPad, ispY=hqY+RT_H+linkGap;
     return {
-      w: ispX+RT_W+80, h: isV6?340:300,
+      w: colX+RT_W+rightPad, h: ispY+RT_H+30,
       boxes:[
-        {x:hqX,  y, name:'HQ',  stubDir:'up',   stubs:d.hqNets.map(lbl)},
-        {x:ispX, y, name:'ISP', stubDir:null,   stubs:[]}
+        {x:colX, y:hqY,  name:'HQ',  stubDir:'up',   stubs:d.hqNets.map(lbl)},
+        {x:colX, y:ispY, name:'ISP', stubDir:null,   stubs:[]}
       ],
       links:[
         {a:0,b:1, aLabel:isV6?d.link.aText:d.link.aIP, bLabel:isV6?d.link.bText:d.link.bIP, midLabel:isV6?null:d.link.netText}
       ]
     };
   }
-  const branchX=leftPad, hqX=branchX+RT_W+gap, ispX=hqX+RT_W+gap;
+  const branchY=topPad, hqY=branchY+RT_H+linkGap, ispY=hqY+RT_H+linkGap;
   return {
-    w: ispX+RT_W+80, h: isV6?360:320,
+    w: colX+RT_W+rightPad, h: ispY+RT_H+30,
     boxes:[
-      {x:branchX, y, name:'BRANCH', stubDir:'left', stubs:d.branchNets.map(lbl)},
-      {x:hqX,     y, name:'HQ',     stubDir:'up',   stubs:[lbl(d.hqNet)]},
-      {x:ispX,    y, name:'ISP',    stubDir:null,   stubs:[]}
+      {x:colX, y:branchY, name:'BRANCH', stubDir:'up',    stubs:d.branchNets.map(lbl)},
+      {x:colX, y:hqY,     name:'HQ',     stubDir:'right', stubs:[lbl(d.hqNet)]},
+      {x:colX, y:ispY,    name:'ISP',    stubDir:null,    stubs:[]}
     ],
     links:[
-      {a:1,b:2, aLabel:isV6?d.ispLink.aText:d.ispLink.aIP,       bLabel:isV6?d.ispLink.bText:d.ispLink.bIP,       midLabel:isV6?null:d.ispLink.netText},
-      {a:0,b:1, aLabel:isV6?d.branchLink.bText:d.branchLink.bIP, bLabel:isV6?d.branchLink.aText:d.branchLink.aIP, midLabel:isV6?null:d.branchLink.netText}
+      {a:0,b:1, aLabel:isV6?d.branchLink.bText:d.branchLink.bIP, bLabel:isV6?d.branchLink.aText:d.branchLink.aIP, midLabel:isV6?null:d.branchLink.netText},
+      {a:1,b:2, aLabel:isV6?d.ispLink.aText:d.ispLink.aIP,       bLabel:isV6?d.ispLink.bText:d.ispLink.bIP,       midLabel:isV6?null:d.ispLink.netText}
     ]
   };
 }
-/* Fans `count` stub lines out from a box's top-center ('up') or
-   left-center ('left') edge, each ending in a short perpendicular T-bar —
-   the same "stub network" symbol real topology diagrams (and this
-   trainer's earlier reference photos) use. Longer arms + wider spread for
-   IPv6 so adjacent stub labels land further apart. Each stub's arm is
-   also progressively longer by index (lenStep) — angle spread alone gives
-   neighboring tips only ~30px of horizontal separation, nowhere near
-   enough for ~100px-wide label text (verified: without this, 3 upward
-   stubs on the IPv4 Medium tier reliably produced 2 overlaps every single
-   generation), so successive stubs are pushed out to different distances
-   too, staggering labels onto effectively different rows instead of
-   relying on horizontal spacing that text width will always outrun.
-   Returns per-stub geometry: the line from the box edge to the stub tip,
-   the T-bar's two endpoints, and a label anchor point just beyond the
-   T-bar. */
+/* Fans `count` stub lines out from a box's top-center ('up'), left-center
+   ('left') or right-center ('right') edge, each ending in a short
+   perpendicular T-bar — the same "stub network" symbol real topology
+   diagrams (and this trainer's earlier reference photos) use. Longer arms
+   + wider spread for IPv6 so adjacent stub labels land further apart.
+   'up' additionally staggers each stub's arm progressively longer by
+   index (lenStep) — angle spread alone gives neighboring tips only ~30px
+   of horizontal separation, nowhere near enough for ~100px-wide label
+   text (verified: without this, 3 upward stubs on the IPv4 Medium tier
+   reliably produced 2 overlaps every single generation), so successive
+   stubs are pushed out to different distances too, staggering labels onto
+   effectively different rows instead of relying on horizontal spacing
+   that text width will always outrun. 'left'/'right' don't need it — they
+   already had enough natural separation without it (verified via the
+   automated layout check), and staggering them too just pushes later
+   stubs' labels past colX/rightPad's budget, reintroducing clipping on
+   the other axis instead. Returns per-stub geometry: the line from the
+   box edge to the stub tip, the T-bar's two endpoints, and a label anchor
+   point just beyond the T-bar. */
 function summStubGeom(box,dir,count,isV6){
-  const anchor = dir==='up' ? [box.x+RT_W/2, box.y] : [box.x, box.y+RT_H/2];
-  const baseDeg = dir==='up' ? -90 : 180;
+  const anchor = dir==='up' ? [box.x+RT_W/2, box.y]
+    : dir==='right' ? [box.x+RT_W, box.y+RT_H/2]
+    : [box.x, box.y+RT_H/2];
+  const baseDeg = dir==='up' ? -90 : dir==='right' ? 0 : 180;
   const spread = count<=1 ? 0 : (isV6?70:55);
-  /* lenStep only staggers the 'up' fan (HQ) — 'left' (BRANCH) already had
-     enough natural separation without it (verified via automated check),
-     and staggering it too just pushes later stubs' labels further left,
-     past leftPad's budget, reintroducing the clipping leftPad was sized
-     to prevent. */
   const baseLen = isV6?130:72, lenStep = dir==='up' ? (isV6?20:34) : 0, tbar=9, labelOff=isV6?18:15;
   const start=baseDeg-spread/2, step=count<=1?0:spread/(count-1);
   const out=[];
@@ -840,33 +859,29 @@ function summTopoHtml(kind,d,isV6){
       });
     }
   });
-  /* Address labels sit above every box on this row (min box y minus a
-     fixed margin) — not near the cable's own vertical midpoint, which
-     runs straight through the box's body and would print the label on
-     top of the router's own name/sub text. aLabel/bLabel/midLabel each
-     get their OWN row (rowY, rowY-14, rowY-28) rather than sharing one —
-     a link's gap is sized for the *typical* case, but a long enough
-     uncompressed IPv6 address on both ends can still add up to more than
-     the gap between the boxes, and two same-row labels anchored from
-     opposite ends of the link will run into each other in the middle
-     when that happens. Stacking removes the dependency on string length
-     entirely: two different text rows can't collide no matter how wide
-     either one renders. */
-  const rowY=Math.min(...data.boxes.map(b=>b.y))-16;
+  /* Links are vertical now (both boxes share the same x), so their two
+     address labels sit to the LEFT of the line, distributed along its
+     own natural length — aLabel near the top end, bLabel near the
+     bottom, midLabel (v4 only) in the middle — rather than needing an
+     artificial multi-row stack the way same-row horizontal labels did.
+     Vertical distribution can't collide regardless of how long either
+     string renders, the same guarantee the old row-stacking had, just
+     using space the link already occupies instead of extra rows above
+     the boxes. */
   data.links.forEach(lk=>{
     const A=data.boxes[lk.a], B=data.boxes[lk.b];
-    const ax=A.x+RT_W, ay=A.y+RT_H/2, bx=B.x, by=B.y+RT_H/2;
-    lines+=`<line class="cable" style="pointer-events:none" x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}"></line>`;
-    ports+=`<span class="port p-acc" style="left:${ax-7}px;top:${ay-7}px"></span><span class="port p-acc" style="left:${bx-7}px;top:${by-7}px"></span>`;
-    const inset=Math.max(16,(bx-ax)*0.08);
-    labels+=summTopoLbl(ax+inset, rowY, 'start', lk.aLabel);
-    labels+=summTopoLbl(bx-inset, rowY-14, 'end', lk.bLabel);
-    if(lk.midLabel) labels+=summTopoLbl((ax+bx)/2, rowY-28, 'middle', lk.midLabel);
+    const cx=A.x+RT_W/2, ay=A.y+RT_H, by=B.y;
+    lines+=`<line class="cable" style="pointer-events:none" x1="${cx}" y1="${ay}" x2="${cx}" y2="${by}"></line>`;
+    ports+=`<span class="port p-acc" style="left:${cx-7}px;top:${ay-7}px"></span><span class="port p-acc" style="left:${cx-7}px;top:${by-7}px"></span>`;
+    const xOff=isV6?20:16, yMargin=isV6?18:14;
+    labels+=summTopoLbl(cx-xOff, ay+yMargin, 'end', lk.aLabel);
+    labels+=summTopoLbl(cx-xOff, by-yMargin, 'end', lk.bLabel);
+    if(lk.midLabel) labels+=summTopoLbl(cx-xOff, (ay+by)/2, 'end', lk.midLabel);
   });
   const show=summGetPref('topo',true);
   return `<div class="lab-card" style="margin-bottom:1rem">
     <div class="lab-toolbar" style="${show?'':'margin-bottom:0'}">
-      <span style="font-size:12px;color:var(--text-s)">Network diagram (view-only — scroll/zoom to explore)</span>
+      <span style="font-size:12px;color:var(--text-s)">Network diagram (view-only — scroll, or wheel/buttons to zoom)</span>
       <div style="display:flex;gap:6px;align-items:center">
         <button class="rand-btn" onclick="summTopoZoom(-1)" title="Zoom out">&minus;</button>
         <button class="rand-btn" onclick="summTopoZoom(0)" title="Reset zoom">Reset</button>
@@ -875,7 +890,7 @@ function summTopoHtml(kind,d,isV6){
       </div>
     </div>
     <div id="summ-topo" style="display:${show?'':'none'}">
-      <div class="lab-canvas" id="summ-topo-vp" style="overflow:auto;resize:none;height:300px">
+      <div class="lab-canvas" id="summ-topo-vp" style="overflow:auto;resize:none;height:340px">
         <div id="summ-topo-content" data-w="${data.w}" data-h="${data.h}" style="position:relative;width:${data.w}px;height:${data.h}px;transform-origin:0 0;pointer-events:none">
           <svg style="position:absolute;inset:0;width:100%;height:100%;z-index:2">${lines}${labels}</svg>
           <div style="position:absolute;inset:0">${devHtml}${ports}</div>
@@ -888,15 +903,34 @@ let summTopoZ=1;
 /* Fit-to-width so the diagram never starts off-screen — called right
    after render (if the panel starts visible) and again whenever the
    panel is un-hidden, since the viewport may have been 0-wide (display:
-   none collapses layout) the last time this ran. Zooming further in than
-   "fit" is always available via the +/reset/- buttons; scrolling
-   (.lab-canvas's own overflow:auto) covers whatever a fit-to-width view
-   then pushes outside the visible area. */
+   none collapses layout) the last time this ran. Also (re)binds wheel-
+   zoom on the *fresh* #summ-topo-vp element every render creates — the
+   dataset flag guards against summToggleTopo() calling this again on the
+   *same*, still-live element (hide/show doesn't recreate the DOM, only
+   the render() dispatch that builds this markup does) and stacking a
+   second listener, which would double the zoom rate per wheel tick. */
 function summTopoFit(){
   const vp=document.getElementById('summ-topo-vp'), c=document.getElementById('summ-topo-content');
-  if(!vp||!c||!vp.clientWidth) return;
+  if(!vp||!c) return;
+  if(!vp.dataset.wheelBound){ vp.addEventListener('wheel', summTopoWheel, {passive:false}); vp.dataset.wheelBound='1'; }
+  if(!vp.clientWidth) return;
   summTopoZ=Math.min(1, vp.clientWidth/(+c.dataset.w));
   c.style.transform='scale('+summTopoZ+')';
+}
+/* Same mechanism as attachCanvasDrag's wheel handler in lab-shared.js
+   (multiplicative 1.1 step, transform:scale) — kept local rather than
+   routed through that shared helper since this diagram has no devices to
+   drag and no zoomWrap/getZoom/setZoom device-canvas contract to satisfy,
+   just the zoom gesture itself. Predominantly-horizontal wheel input
+   (shift+wheel, trackpad two-finger swipes) is left alone to fall through
+   as normal horizontal scrolling instead of being hijacked into zoom. */
+function summTopoWheel(e){
+  if(Math.abs(e.deltaX)>Math.abs(e.deltaY)) return;
+  e.preventDefault();
+  const f=e.deltaY<0?1.1:1/1.1;
+  summTopoZ=Math.max(0.25,Math.min(2.5,summTopoZ*f));
+  const c=document.getElementById('summ-topo-content');
+  if(c) c.style.transform='scale('+summTopoZ+')';
 }
 function summTopoZoom(dir){
   const c=document.getElementById('summ-topo-content');
