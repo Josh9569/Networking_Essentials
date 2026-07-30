@@ -510,10 +510,12 @@ function genSummEasy(){
 }
 /* A /30 point-to-point transit link between two routers — aIP/bIP are the
    block's two usable host addresses, each used as the "far side" next-hop
-   on the router that sits across the link from it. */
+   on the router that sits across the link from it. netText is the link's
+   own subnet, shown on the topology diagram (summTopoHtml) next to the
+   two host addresses. */
 function randP2PLink(){
   const netInt=netIntOf(ip2int(randIpOctets().join('.')),30);
-  return { aIP:int2ip((netInt+1)>>>0), bIP:int2ip((netInt+2)>>>0) };
+  return { aIP:int2ip((netInt+1)>>>0), bIP:int2ip((netInt+2)>>>0), netText:int2ip(netInt)+'/30' };
 }
 /* HQ has 3 directly-connected stub networks and a single link to ISP.
    Two routes required: the summary route on ISP for HQ's networks
@@ -615,7 +617,7 @@ function renderSumm(body,qip){
       ${d.hqNets.map(n=>`<div class="cli-block" style="margin-bottom:.5rem">${n.network}/${n.prefix}</div>`).join('')}
       <div class="cfg-sec-lbl" style="margin-top:.75rem">HQ &harr; ISP link</div>
       <div class="cli-block" style="margin-bottom:1rem">HQ: ${d.link.aIP}/30 &nbsp;&nbsp; ISP: ${d.link.bIP}/30</div>`;
-    body.innerHTML=`${summTopoHtml('medium',d)}${topo}${summBitsToolHtml()}${summRouteFieldsHtml(d.routes,'ip route <network> <mask> <next-hop>')}`;
+    body.innerHTML=`${summTopoHtml('medium',d,false)}${topo}${summBitsToolHtml()}${summRouteFieldsHtml(d.routes,'ip route <network> <mask> <next-hop>')}`;
     summBuildBits();
     setBtns('text');
     return;
@@ -630,7 +632,7 @@ function renderSumm(body,qip){
     <div class="cli-block" style="margin-bottom:.5rem">HQ: ${d.ispLink.aIP}/30 &nbsp;&nbsp; ISP: ${d.ispLink.bIP}/30</div>
     <div class="cfg-sec-lbl" style="margin-top:.75rem">HQ &harr; BRANCH link</div>
     <div class="cli-block" style="margin-bottom:1rem">HQ: ${d.branchLink.aIP}/30 &nbsp;&nbsp; BRANCH: ${d.branchLink.bIP}/30</div>`;
-  body.innerHTML=`${summTopoHtml('hard',d)}${topo}${summBitsToolHtml()}${summRouteFieldsHtml(d.routes,'ip route <network> <mask> <next-hop>')}`;
+  body.innerHTML=`${summTopoHtml('hard',d,false)}${topo}${summBitsToolHtml()}${summRouteFieldsHtml(d.routes,'ip route <network> <mask> <next-hop>')}`;
   summBuildBits();
   setBtns('text');
 }
@@ -707,47 +709,121 @@ function summBitsToolHtml(){
    forcing every cable through the bottom edge. RT_W/RT_H come from the
    IP Routing lab section further down (function-hoisting keeps them
    available here, same as isValidIP/maskToCidr already were).
-   pointer-events:none + resize:none on the canvas kill every hover/grab/
-   resize affordance .dev/.port/.cable/.lab-canvas normally have — this is
-   view-only, nothing here is clickable or draggable. */
-function summTopoBoxes(kind,d){
-  const y=90;
-  if(kind==='medium') return [
-    {x:20,  y, name:'HQ',     sub:d.hqNets.length+' stub network'+(d.hqNets.length===1?'':'s')},
-    {x:400, y, name:'ISP',    sub:'→ Internet'}
-  ];
-  return [
-    {x:20,  y, name:'BRANCH', sub:d.branchNets.length+' stub network'+(d.branchNets.length===1?'':'s')},
-    {x:290, y, name:'HQ',     sub:'1 stub network'},
-    {x:560, y, name:'ISP',    sub:'→ Internet'}
-  ];
+
+   Every stub network and every link's addresses are labeled directly on
+   the diagram (summTopoData below normalizes v4/v6's differently-shaped
+   data into one {boxes,links} shape first) — the goal is the diagram
+   alone is enough to answer the question, the text blocks above/below it
+   are a redundant second way to read the same info, not a dependency.
+
+   Non-interactive is enforced two ways: pointer-events:none + resize:none
+   on the whole .lab-canvas (kills .dev's grab cursor and .port's hover
+   scale-up, neither of which sets its own pointer-events so both properly
+   inherit "none"), AND an explicit inline pointer-events:none on every
+   individual <line class="cable">, because .cable itself hard-codes
+   `pointer-events: stroke` in styles.css (that's what makes cables
+   clickable/deletable on the real IP Routing canvas) — a class rule
+   otherwise beats an inherited value, so the container-level override
+   alone does NOT stop cables from lighting up on hover; only an inline
+   style on the line itself (higher specificity than any class) does. */
+function summTopoData(kind,d,isV6){
+  const lbl=n=>isV6?n.text:(n.network+'/'+n.prefix);
+  if(kind==='medium') return {
+    boxes:[
+      {x:20,  y:140, name:'HQ',  stubDir:'up',   stubs:d.hqNets.map(lbl)},
+      {x:400, y:140, name:'ISP', stubDir:null,   stubs:[]}
+    ],
+    links:[
+      {a:0,b:1, aLabel:isV6?d.link.aText:d.link.aIP, bLabel:isV6?d.link.bText:d.link.bIP, midLabel:isV6?null:d.link.netText}
+    ]
+  };
+  return {
+    boxes:[
+      {x:110, y:140, name:'BRANCH', stubDir:'left', stubs:d.branchNets.map(lbl)},
+      {x:340, y:140, name:'HQ',     stubDir:'up',   stubs:[lbl(d.hqNet)]},
+      {x:570, y:140, name:'ISP',    stubDir:null,   stubs:[]}
+    ],
+    links:[
+      {a:1,b:2, aLabel:isV6?d.ispLink.aText:d.ispLink.aIP,       bLabel:isV6?d.ispLink.bText:d.ispLink.bIP,       midLabel:isV6?null:d.ispLink.netText},
+      {a:0,b:1, aLabel:isV6?d.branchLink.bText:d.branchLink.bIP, bLabel:isV6?d.branchLink.aText:d.branchLink.aIP, midLabel:isV6?null:d.branchLink.netText}
+    ]
+  };
 }
-function summTopoHtml(kind,d){
-  const boxes=summTopoBoxes(kind,d);
-  const devHtml=boxes.map(b=>`<div class="dev router" style="left:${b.x}px;top:${b.y}px"><div class="dev-name">${b.name}</div><div class="dev-sub">${b.sub}</div></div>`).join('');
-  let lines='', ports='';
-  for(let i=0;i<boxes.length-1;i++){
-    const a=boxes[i], b=boxes[i+1];
-    const ax=a.x+RT_W, ay=a.y+RT_H/2, bx=b.x, by=b.y+RT_H/2;
-    lines+=`<line class="cable" x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}"></line>`;
-    ports+=`<span class="port p-acc" style="left:${ax-7}px;top:${ay-7}px"></span><span class="port p-acc" style="left:${bx-7}px;top:${by-7}px"></span>`;
+/* Fans `count` stub lines out from a box's top-center ('up') or
+   left-center ('left') edge, each ending in a short perpendicular T-bar —
+   the same "stub network" symbol real topology diagrams (and this
+   trainer's earlier reference photos) use. Returns per-stub geometry:
+   the line from the box edge to the stub tip, the T-bar's two endpoints,
+   and a label anchor point just beyond the T-bar. */
+function summStubGeom(box,dir,count){
+  const anchor = dir==='up' ? [box.x+RT_W/2, box.y] : [box.x, box.y+RT_H/2];
+  const baseDeg = dir==='up' ? -90 : 180;
+  const spread = count<=1 ? 0 : 50;
+  const len=72, tbar=9, labelOff=15;
+  const start=baseDeg-spread/2, step=count<=1?0:spread/(count-1);
+  const out=[];
+  for(let i=0;i<count;i++){
+    const deg=count<=1?baseDeg:start+step*i;
+    const rad=deg*Math.PI/180, pRad=rad+Math.PI/2;
+    const ex=anchor[0]+len*Math.cos(rad), ey=anchor[1]+len*Math.sin(rad);
+    out.push({
+      ax:anchor[0], ay:anchor[1], ex, ey,
+      t1x:ex+tbar*Math.cos(pRad), t1y:ey+tbar*Math.sin(pRad),
+      t2x:ex-tbar*Math.cos(pRad), t2y:ey-tbar*Math.sin(pRad),
+      lx:ex+labelOff*Math.cos(rad), ly:ey+labelOff*Math.sin(rad),
+      deg
+    });
   }
+  return out;
+}
+function summTopoLbl(x,y,anchor,text){
+  return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="${anchor}" dominant-baseline="middle" style="font-size:10px;font-family:var(--mono);fill:var(--text-s)">${text}</text>`;
+}
+function summTopoHtml(kind,d,isV6){
+  const data=summTopoData(kind,d,isV6);
+  let lines='', labels='', devHtml='', ports='';
+  data.boxes.forEach(b=>{
+    devHtml+=`<div class="dev router" style="left:${b.x}px;top:${b.y}px"><div class="dev-name">${b.name}</div><div class="dev-sub">router</div></div>`;
+    if(b.stubs.length){
+      summStubGeom(b,b.stubDir,b.stubs.length).forEach((g,i)=>{
+        lines+=`<line class="cable" style="pointer-events:none" x1="${g.ax}" y1="${g.ay}" x2="${g.ex}" y2="${g.ey}"></line>`;
+        lines+=`<line class="cable" style="pointer-events:none" x1="${g.t1x}" y1="${g.t1y}" x2="${g.t2x}" y2="${g.t2y}"></line>`;
+        const c=Math.cos(g.deg*Math.PI/180);
+        labels+=summTopoLbl(g.lx,g.ly, c>0.3?'start':c<-0.3?'end':'middle', b.stubs[i]);
+      });
+    }
+  });
+  data.links.forEach(lk=>{
+    const A=data.boxes[lk.a], B=data.boxes[lk.b];
+    const ax=A.x+RT_W, ay=A.y+RT_H/2, bx=B.x, by=B.y+RT_H/2;
+    lines+=`<line class="cable" style="pointer-events:none" x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}"></line>`;
+    ports+=`<span class="port p-acc" style="left:${ax-7}px;top:${ay-7}px"></span><span class="port p-acc" style="left:${bx-7}px;top:${by-7}px"></span>`;
+    labels+=summTopoLbl(ax+10, ay-10, 'start', lk.aLabel);
+    labels+=summTopoLbl(bx-10, by-10, 'end', lk.bLabel);
+    if(lk.midLabel) labels+=summTopoLbl((ax+bx)/2, (ay+by)/2-16, 'middle', lk.midLabel);
+  });
   const show=summGetPref('topo',true);
-  return `<button class="rand-btn" style="margin-bottom:.6rem" id="summ-topo-btn" onclick="summToggleTopo()">${show?'Hide':'Show'} Network Diagram</button>
-    <div class="lab-card" id="summ-topo" style="display:${show?'':'none'}">
-      <div class="lab-canvas" style="pointer-events:none;resize:none">
-        <svg style="position:absolute;inset:0;width:100%;height:100%;z-index:2">${lines}</svg>
+  return `<div class="lab-card" style="margin-bottom:1rem">
+    <div class="lab-toolbar" style="${show?'':'margin-bottom:0'}">
+      <span style="font-size:12px;color:var(--text-s)">Network diagram (view-only)</span>
+      <button class="rand-btn" id="summ-topo-btn" onclick="summToggleTopo()">${show?'Hide':'Show'}</button>
+    </div>
+    <div id="summ-topo" style="display:${show?'':'none'}">
+      <div class="lab-canvas" style="pointer-events:none;resize:none;height:280px">
+        <svg style="position:absolute;inset:0;width:100%;height:100%;z-index:2">${lines}${labels}</svg>
         <div style="position:absolute;inset:0">${devHtml}${ports}</div>
       </div>
-      <div class="lab-hint">View-only — just a visual aid, nothing here is clickable or draggable.</div>
-    </div>`;
+    </div>
+  </div>`;
 }
 function summToggleTopo(){
   const el=document.getElementById('summ-topo'), btn=document.getElementById('summ-topo-btn');
-  if(!el) return;
+  if(!el||!btn) return;
   const show=el.style.display==='none';
   el.style.display=show?'':'none';
-  if(btn) btn.textContent=(show?'Hide':'Show')+' Network Diagram';
+  btn.textContent=show?'Hide':'Show';
+  const bar=btn.closest('.lab-toolbar');
+  if(bar) bar.style.marginBottom=show?'':'0';
   summSetPref('topo',show);
 }
 /* Medium/Hard render N separate CLI-line routes instead of Easy's one big
@@ -959,7 +1035,7 @@ function renderSumm6(body,qip){
       ${d.hqNets.map(n=>`<div class="cli-block" style="margin-bottom:.5rem">${n.text}</div>`).join('')}
       <div class="cfg-sec-lbl" style="margin-top:.75rem">HQ &harr; ISP link</div>
       <div class="cli-block" style="margin-bottom:1rem">HQ: ${d.link.aText} &nbsp;&nbsp; ISP: ${d.link.bText}</div>`;
-    body.innerHTML=`${summTopoHtml('medium',d)}${topo}${summRouteFieldsHtml(d.routes,'ipv6 route <prefix>/<len> <next-hop>')}`;
+    body.innerHTML=`${summTopoHtml('medium',d,true)}${topo}${summRouteFieldsHtml(d.routes,'ipv6 route <prefix>/<len> <next-hop>')}`;
     setBtns('text');
     return;
   }
@@ -973,7 +1049,7 @@ function renderSumm6(body,qip){
     <div class="cli-block" style="margin-bottom:.5rem">HQ: ${d.ispLink.aText} &nbsp;&nbsp; ISP: ${d.ispLink.bText}</div>
     <div class="cfg-sec-lbl" style="margin-top:.75rem">HQ &harr; BRANCH link</div>
     <div class="cli-block" style="margin-bottom:1rem">HQ: ${d.branchLink.aText} &nbsp;&nbsp; BRANCH: ${d.branchLink.bText}</div>`;
-  body.innerHTML=`${summTopoHtml('hard',d)}${topo}${summRouteFieldsHtml(d.routes,'ipv6 route <prefix>/<len> <next-hop>')}`;
+  body.innerHTML=`${summTopoHtml('hard',d,true)}${topo}${summRouteFieldsHtml(d.routes,'ipv6 route <prefix>/<len> <next-hop>')}`;
   setBtns('text');
 }
 
