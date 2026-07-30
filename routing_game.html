@@ -37,6 +37,8 @@
     <button class="cbtn" id="tb-lpm" onclick="setTopic('lpm',this)">Longest Match</button>
     <button class="cbtn" id="tb-ad" onclick="setTopic('ad',this)">Admin Distance</button>
     <button class="cbtn" id="tb-route" onclick="setTopic('route',this)">IP Routing</button>
+    <button class="cbtn" id="tb-summ" onclick="setTopic('summ',this)">IP Summaries</button>
+    <button class="cbtn" id="tb-summ6" onclick="setTopic('summ6',this)">IPv6 Summaries</button>
   </div>
 
   <div class="diff-row">
@@ -314,8 +316,8 @@ function cliFullLine(e){
 
 /* ─── State ─────────────────────────────────────────────────────── */
 let state={ topic:'rand', diff:'easy', score:0, round:1, streak:0, done:false, mode:null, data:null, lastTopic:null, selectedId:null };
-const TOPICS=['read','bin','lpm','ad','route'];
-const TOPIC_LABEL={read:'Read The Table', bin:'Binary Match', lpm:'Longest Prefix Match', ad:'Administrative Distance', route:'IP Routing'};
+const TOPICS=['read','bin','lpm','ad','route','summ','summ6'];
+const TOPIC_LABEL={read:'Read The Table', bin:'Binary Match', lpm:'Longest Prefix Match', ad:'Administrative Distance', route:'IP Routing', summ:'IP Summaries', summ6:'IPv6 Summaries'};
 const POINTS={easy:3, medium:4, hard:6};
 
 function pickTopic(){
@@ -473,6 +475,271 @@ function genRead(diff){
   const src = isConnected ? RT_SOURCES[0] : choice(RT_SOURCES.filter(s=>s.code!=='C'));
   const ex=makeRouteExtras(src);
   return {connected:isConnected, source:src, network, prefix, iface:ex.iface, nextHop:ex.nextHop, metric:ex.metric};
+}
+
+/* ─── IP Summaries (topic: summ) ──────────────────────────────────
+   Given a handful of child networks, the learner writes the single static
+   route that summarizes all of them. Generation picks a random summary
+   prefix S and a child prefix C = S + depth, then places networks at
+   difficulty-many "slot" offsets within the S block — always including
+   slot 0 and the last slot, so the mathematically minimal covering block
+   is guaranteed to be exactly S (never accidentally smaller from the
+   sample just happening to leave the edges untouched). */
+const SUMM_DEPTH={easy:1, medium:2, hard:3};
+function genSumm(diff){
+  const depth=SUMM_DEPTH[diff];
+  const totalSlots=1<<depth;
+  const n=Math.min(diff==='easy'?2:diff==='medium'?3:5, totalSlots);
+  const S=ri(16,22);
+  const C=S+depth;
+  const slots=new Set([0,totalSlots-1]);
+  while(slots.size<n) slots.add(ri(0,totalSlots-1));
+  const slotArr=shuffle([...slots]);
+  const parentInt=netIntOf(niceRawInt(),S);
+  const childBit=32-C;
+  const networks=slotArr.map(slot=>{
+    const netInt=(parentInt|(slot<<childBit))>>>0;
+    return {netInt, prefix:C, network:int2ip(netInt)};
+  }).sort((a,b)=>a.netInt-b.netInt);
+  const nextHop=randIpOctets().join('.');
+  return {networks, correctNetInt:parentInt, correctPrefix:S, correctNet:int2ip(parentInt), correctMask:cidr2mask(S), nextHop};
+}
+/* Standalone (no router-session state needed, unlike rlCli's ip route
+   handler) — same abbreviation/whitespace tolerance as that parser, since
+   it's the same command in real IOS. */
+function summParseIpRoute(line){
+  const t=line.trim().replace(/\s+/g,' ');
+  if(!t) return null;
+  const w=t.toLowerCase().split(' ');
+  const M=(tok,cand)=>tok&&cand.startsWith(tok);
+  if(!(w[0]&&M(w[0],'ip'))) return null;
+  if(!(w[1]&&M(w[1],'route'))) return null;
+  const parts=t.split(' ');
+  const net=parts[2], mask=parts[3], nh=parts[4];
+  if(!net||!mask||!nh) return null;
+  if(!isValidIP(net)||!isValidIP(nh)) return null;
+  const pfx=maskToCidr(mask);
+  if(pfx==null) return null;
+  return {net, pfx, nh, netInt:netIntOf(ip2int(net),pfx)};
+}
+function renderSumm(body,qip){
+  const d=state.data;
+  document.getElementById('qprompt').innerHTML=`Write the single static route that summarizes all the networks below, forwarding everything to <strong>${d.nextHop}</strong>.`;
+  const list=d.networks.map(n=>`<div class="cli-block" style="margin-bottom:.5rem">${n.network}/${n.prefix}</div>`).join('');
+  body.innerHTML=`${list}
+    <button class="rand-btn" style="margin-bottom:1rem" id="summ-bits-btn" onclick="summToggleBits()">Show Bit Table</button>
+    <div class="tool-block" id="summ-bits" style="display:none">
+      <div class="tool-block-title">Interactive Bit Table</div>
+      <p class="tool-note">Click bits to toggle them on (1) or off (0) — use this to manually work out which leading bits the networks above share.</p>
+      <div class="bit-cells" id="sm-bt-cells"></div>
+      <div class="bt-readout">
+        <div><div class="bt-lbl">Decimal</div><div class="bt-val" id="sm-bt-dec">0</div></div>
+        <div><div class="bt-lbl">Binary</div><div class="bt-bin-val" id="sm-bt-bin">0000 0000</div></div>
+      </div>
+      <button class="btn btn-s" style="font-size:13px;padding:5px 14px;" onclick="summClearBits()">Clear</button>
+    </div>
+    <div class="afield large" id="f-ans">
+      <label>Summarized static route</label>
+      <input id="a-ans" placeholder="ip route <network> <mask> <next-hop>" autocomplete="off" spellcheck="false">
+      <div class="ahint" id="h-ans"></div>
+    </div>`;
+  summBuildBits();
+  setBtns('text');
+}
+/* ── Interactive bit table (ported from binary_game.html's #bt-cells tool;
+   ids prefixed sm- to avoid clashing with anything else in this file) ── */
+const SUMM_BV=[128,64,32,16,8,4,2,1];
+let summBits=new Array(8).fill(0);
+function summBuildBits(){
+  const c=document.getElementById('sm-bt-cells');
+  if(!c) return;
+  summBits=new Array(8).fill(0);
+  c.innerHTML='';
+  SUMM_BV.forEach((v,i)=>{
+    const cell=document.createElement('div');
+    cell.className='bit-cell'; cell.id='sm-bt-c-'+i;
+    cell.innerHTML='<div class="bit-weight">'+v+'</div><div class="bit-digit" id="sm-bt-d-'+i+'">0</div>';
+    cell.addEventListener('click',()=>summToggleBit(i));
+    c.appendChild(cell);
+  });
+  summRenderBits();
+}
+function summToggleBit(i){ summBits[i]=summBits[i]?0:1; summRenderBits(); }
+function summRenderBits(){
+  const dec=SUMM_BV.reduce((s,v,i)=>s+v*summBits[i],0);
+  const bin=summBits.join('');
+  const decEl=document.getElementById('sm-bt-dec'), binEl=document.getElementById('sm-bt-bin');
+  if(decEl) decEl.textContent=dec;
+  if(binEl) binEl.textContent=bin.slice(0,4)+' '+bin.slice(4);
+  SUMM_BV.forEach((_,i)=>{
+    const cellEl=document.getElementById('sm-bt-c-'+i), digEl=document.getElementById('sm-bt-d-'+i);
+    if(cellEl) cellEl.classList.toggle('on',summBits[i]===1);
+    if(digEl) digEl.textContent=summBits[i];
+  });
+}
+function summClearBits(){ summBits=new Array(8).fill(0); summRenderBits(); }
+function summToggleBits(){
+  const el=document.getElementById('summ-bits'), btn=document.getElementById('summ-bits-btn');
+  if(!el) return;
+  const show=el.style.display==='none';
+  el.style.display=show?'':'none';
+  if(btn) btn.textContent=show?'Hide Bit Table':'Show Bit Table';
+}
+
+/* ─── IPv6 Summaries (topic: summ6) ────────────────────────────────
+   Same idea as IP Summaries, over IPv6 prefixes instead — no bit table
+   here (IPv6 subnetting conventionally works in hex nibbles, not
+   individual bits, and this trainer's existing IPv6 tools are all
+   hex-based too). 128-bit addresses are represented as an array of eight
+   16-bit numbers throughout (rlV6* below) — plain JS bitwise operators
+   are only 32-bit safe, so there's no single-integer shortcut like the
+   IPv4 helpers use. */
+const SUMM6_CFG={easy:{n:2,depth:4}, medium:{n:3,depth:8}, hard:{n:5,depth:8}};
+function rlV6MaskGroups(groups,prefixLen){
+  const out=groups.slice();
+  for(let i=0;i<8;i++){
+    const gs=i*16, ge=gs+16;
+    if(prefixLen<=gs) out[i]=0;
+    else if(prefixLen<ge){ const keep=prefixLen-gs; out[i]=out[i]&((0xFFFF<<(16-keep))&0xFFFF); }
+  }
+  return out;
+}
+/* Sets bitLen bits starting at absolute bit position startBit (0 = the very
+   first bit of the address) to value, without disturbing any other bits. */
+function rlV6SetField(groups,startBit,bitLen,value){
+  const out=groups.slice();
+  for(let b=0;b<bitLen;b++){
+    const bitPos=startBit+b;
+    const gi=Math.floor(bitPos/16), bi=bitPos%16;
+    const bit=(value>>>(bitLen-1-b))&1;
+    const mask=1<<(15-bi);
+    if(bit) out[gi]|=mask; else out[gi]&=(~mask&0xFFFF);
+  }
+  return out;
+}
+function rlV6Compress(groups){
+  const p=groups.map(g=>g.toString(16));
+  let bS=-1,bL=0,i=0;
+  while(i<8){
+    if(p[i]==='0'){ const s=i; while(i<8&&p[i]==='0')i++; const l=i-s; if(l>bL){bS=s;bL=l;} }
+    else i++;
+  }
+  if(bL>=2){
+    const before=p.slice(0,bS).join(':'), after=p.slice(bS+bL).join(':');
+    if(before&&after) return before+'::'+after;
+    if(before) return before+'::';
+    if(after) return '::'+after;
+    return '::';
+  }
+  return p.join(':');
+}
+/* Accepts compressed or expanded input, any case — mirrors what a learner
+   would reasonably type, unlike ipv6_game.html's own strict single-string
+   comparison (see that file's checkAnswer). Returns an array of eight
+   16-bit numbers, or null if the input isn't a syntactically valid address. */
+function rlV6Parse(addr){
+  addr=addr.toLowerCase().trim();
+  if(addr==='::') return Array(8).fill(0);
+  let parts;
+  if(addr.includes('::')){
+    const sides=addr.split('::');
+    if(sides.length!==2) return null;
+    const L=sides[0]?sides[0].split(':'):[];
+    const R=sides[1]?sides[1].split(':'):[];
+    const z=8-L.length-R.length;
+    if(z<0) return null;
+    parts=[...L,...Array(z).fill('0'),...R];
+  } else parts=addr.split(':');
+  if(parts.length!==8) return null;
+  if(!parts.every(p=>/^[0-9a-f]{1,4}$/.test(p))) return null;
+  return parts.map(p=>parseInt(p,16));
+}
+function genSumm6(diff){
+  const cfg=SUMM6_CFG[diff];
+  const totalSlots=1<<cfg.depth;
+  const n=Math.min(cfg.n,totalSlots);
+  const S=choice([32,36,40,44,48,52]);
+  const C=S+cfg.depth;
+  const slots=new Set([0,totalSlots-1]);
+  while(slots.size<n) slots.add(ri(0,totalSlots-1));
+  const slotArr=shuffle([...slots]);
+  /* 2001:db8:: is the documentation prefix real IOS examples (and this
+     repo's own ipv6_game.html) already lean on — keeps generated addresses
+     looking like realistic examples instead of pure noise. */
+  const rawGroups=[0x2001,0x0db8,ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF)];
+  const parentGroups=rlV6MaskGroups(rawGroups,S);
+  const networks=slotArr.map(slot=>{
+    const groups=rlV6SetField(parentGroups,S,cfg.depth,slot);
+    return {groups, prefix:C, text:rlV6Compress(groups)+'/'+C};
+  }).sort((a,b)=>{ for(let i=0;i<8;i++){ if(a.groups[i]!==b.groups[i]) return a.groups[i]-b.groups[i]; } return 0; });
+  let nhGroups=[ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF)];
+  if(nhGroups.every(g=>g===0)) nhGroups[7]=1;
+  return {networks, correctGroups:parentGroups, correctPrefix:S, correctText:rlV6Compress(parentGroups)+'/'+S, nextHop:rlV6Compress(nhGroups), nextHopGroups:nhGroups};
+}
+function summ6ParseRoute(line){
+  const t=line.trim().replace(/\s+/g,' ');
+  if(!t) return null;
+  const w=t.toLowerCase().split(' ');
+  const M=(tok,cand)=>tok&&cand.startsWith(tok);
+  if(!(w[0]&&M(w[0],'ipv6'))) return null;
+  if(!(w[1]&&M(w[1],'route'))) return null;
+  const parts=t.split(' ');
+  const prefixArg=parts[2], nh=parts[3];
+  if(!prefixArg||!nh) return null;
+  const slash=prefixArg.indexOf('/');
+  if(slash<0) return null;
+  const addrPart=prefixArg.slice(0,slash), pfxPart=prefixArg.slice(slash+1);
+  if(!/^\d{1,3}$/.test(pfxPart)) return null;
+  const pfx=+pfxPart;
+  if(pfx<0||pfx>128) return null;
+  const groups=rlV6Parse(addrPart);
+  if(!groups) return null;
+  const nhGroups=rlV6Parse(nh);
+  if(!nhGroups) return null;
+  return {groups, pfx, nhGroups};
+}
+function renderSumm6(body,qip){
+  const d=state.data;
+  document.getElementById('qprompt').innerHTML=`Write the single static route that summarizes all the prefixes below, forwarding everything to <strong>${d.nextHop}</strong>.`;
+  const list=d.networks.map(n=>`<div class="cli-block" style="margin-bottom:.5rem">${n.text}</div>`).join('');
+  body.innerHTML=`${list}
+    <div class="afield large" id="f-ans">
+      <label>Summarized static route</label>
+      <input id="a-ans" placeholder="ipv6 route <prefix>/<len> <next-hop>" autocomplete="off" spellcheck="false">
+      <div class="ahint" id="h-ans"></div>
+    </div>`;
+  setBtns('text');
+}
+
+/* Grading for both summary topics — single binary right/wrong answer (no
+   partial credit, unlike readFields/gradeAgrid's multi-field grid), styled
+   through the same .afield/.ahint states that grid uses. Returns whether
+   the answer was correct (false when revealing, matching gradeAgrid's own
+   reveal contract). */
+function summGrade(reveal){
+  const d=state.data;
+  const inp=document.getElementById('a-ans'), fld=document.getElementById('f-ans'), hnt=document.getElementById('h-ans');
+  const correctText='ip route '+d.correctNet+' '+d.correctMask+' '+d.nextHop;
+  inp.disabled=true;
+  if(reveal){ fld.classList.add('show'); inp.value=correctText; hnt.textContent='Revealed'; return false; }
+  const parsed=summParseIpRoute(inp.value);
+  const ok=!!parsed && parsed.netInt===d.correctNetInt && parsed.pfx===d.correctPrefix && parsed.nh===d.nextHop;
+  if(ok){ fld.classList.add('ok'); hnt.textContent='✓ Correct'; }
+  else { fld.classList.add('bad'); hnt.textContent='Correct: '+correctText; }
+  return ok;
+}
+function arraysEq(a,b){ return a.length===b.length && a.every((v,i)=>v===b[i]); }
+function summ6Grade(reveal){
+  const d=state.data;
+  const inp=document.getElementById('a-ans'), fld=document.getElementById('f-ans'), hnt=document.getElementById('h-ans');
+  const correctText='ipv6 route '+d.correctText+' '+d.nextHop;
+  inp.disabled=true;
+  if(reveal){ fld.classList.add('show'); inp.value=correctText; hnt.textContent='Revealed'; return false; }
+  const parsed=summ6ParseRoute(inp.value);
+  const ok=!!parsed && parsed.pfx===d.correctPrefix && arraysEq(rlV6MaskGroups(parsed.groups,parsed.pfx),d.correctGroups) && arraysEq(parsed.nhGroups,d.nextHopGroups);
+  if(ok){ fld.classList.add('ok'); hnt.textContent='✓ Correct'; }
+  else { fld.classList.add('bad'); hnt.textContent='Correct: '+correctText; }
+  return ok;
 }
 
 /* ─── IP Routing Lab (topic: route) ───────────────────────────────
@@ -928,6 +1195,8 @@ function loadQ(){
   else if(t==='ad') state.data=genAD(state.diff);
   else if(t==='read') state.data=genRead(state.diff);
   else if(t==='route') state.data=genRoute(state.diff);
+  else if(t==='summ') state.data=genSumm(state.diff);
+  else if(t==='summ6') state.data=genSumm6(state.diff);
   render();
   updateChips();
 }
@@ -968,6 +1237,8 @@ function render(){
   else if(state.mode==='ad') renderAD(body,qip);
   else if(state.mode==='read') renderRead(body,qip);
   else if(state.mode==='route') renderRoute(body,qip);
+  else if(state.mode==='summ') renderSumm(body,qip);
+  else if(state.mode==='summ6') renderSumm6(body,qip);
 }
 
 /* ── Shared: routing table element ── */
@@ -1638,6 +1909,18 @@ function checkAll(){
     return;
   }
 
+  if(mode==='summ' || mode==='summ6'){
+    const win = mode==='summ' ? summGrade(false) : summ6Grade(false);
+    const pts = win ? POINTS[state.diff] : 0;
+    state.score+=pts;
+    state.streak = win ? state.streak+1 : 0;
+    state.round++;
+    fb.className='fbanner '+(win?'ok':'err');
+    fb.textContent = win ? `Correct! +${pts} pts. Streak: ${state.streak}` : `Not quite — see the correct route below. +0 pts.`;
+    finishRound();
+    return;
+  }
+
   // text-entry (read)
   const d=state.data;
   const fields=readFields(d), answers=readAnswers(d);
@@ -1692,6 +1975,9 @@ function revealAll(){
     const results=d.reqs.map(r=>r.test());
     rlRenderReqs(results);
     fb.textContent='Skipped. Review the requirement checklist above for what’s still needed. No points awarded.';
+  } else if(mode==='summ' || mode==='summ6'){
+    if(mode==='summ') summGrade(true); else summ6Grade(true);
+    fb.textContent='Answer revealed. No points awarded.';
   } else {
     const d=state.data;
     gradeAgrid(readFields(d),readAnswers(d),true);
@@ -1714,7 +2000,7 @@ function resetGame(){ state.score=0; state.round=1; state.streak=0; loadQ(); }
 
 function setTopic(t,btn){
   state.topic=t;
-  document.querySelectorAll('#tb-rand,#tb-read,#tb-bin,#tb-lpm,#tb-ad,#tb-route').forEach(b=>b.classList.remove('on'));
+  document.querySelectorAll('#tb-rand,#tb-read,#tb-bin,#tb-lpm,#tb-ad,#tb-route,#tb-summ,#tb-summ6').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
   loadQ();
 }
