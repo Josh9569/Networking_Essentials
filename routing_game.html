@@ -478,18 +478,22 @@ function genRead(diff){
 }
 
 /* ─── IP Summaries (topic: summ) ──────────────────────────────────
-   Given a handful of child networks, the learner writes the single static
-   route that summarizes all of them. Generation picks a random summary
-   prefix S and a child prefix C = S + depth, then places networks at
-   difficulty-many "slot" offsets within the S block — always including
-   slot 0 and the last slot, so the mathematically minimal covering block
-   is guaranteed to be exactly S (never accidentally smaller from the
-   sample just happening to leave the edges untouched). */
-const SUMM_DEPTH={easy:1, medium:2, hard:3};
-function genSumm(diff){
-  const depth=SUMM_DEPTH[diff];
-  const totalSlots=1<<depth;
-  const n=Math.min(diff==='easy'?2:diff==='medium'?3:5, totalSlots);
+   Easy is the flat "write the one summary route" exercise: given a
+   handful of child networks, write the single static route that
+   summarizes all of them. Medium/Hard step up to full mini-topologies
+   (single-router-to-ISP, then ISP-HQ-BRANCH chained) modeled on real
+   Packet Tracer labs, requiring 2 and 6 routes respectively — see
+   genSummMedium/genSummHard below.
+
+   All three tiers reuse the same slot trick for picking child networks:
+   pick a random summary prefix S and a child prefix C = S + depth, then
+   place networks at "slot" offsets within the S block — always including
+   slot 0 and the last slot (or, when every slot is used, that's moot —
+   see genSummHard), so the mathematically minimal covering block is
+   guaranteed to be exactly S (never accidentally smaller from the sample
+   just happening to leave the edges untouched). */
+function genSummEasy(){
+  const depth=2, totalSlots=4, n=3;
   const S=ri(16,22);
   const C=S+depth;
   const slots=new Set([0,totalSlots-1]);
@@ -502,7 +506,74 @@ function genSumm(diff){
     return {netInt, prefix:C, network:int2ip(netInt)};
   }).sort((a,b)=>a.netInt-b.netInt);
   const nextHop=randIpOctets().join('.');
-  return {networks, correctNetInt:parentInt, correctPrefix:S, correctNet:int2ip(parentInt), correctMask:cidr2mask(S), nextHop};
+  return {kind:'easy', networks, correctNetInt:parentInt, correctPrefix:S, correctNet:int2ip(parentInt), correctMask:cidr2mask(S), nextHop};
+}
+/* A /30 point-to-point transit link between two routers — aIP/bIP are the
+   block's two usable host addresses, each used as the "far side" next-hop
+   on the router that sits across the link from it. */
+function randP2PLink(){
+  const netInt=netIntOf(ip2int(randIpOctets().join('.')),30);
+  return { aIP:int2ip((netInt+1)>>>0), bIP:int2ip((netInt+2)>>>0) };
+}
+/* HQ has 3 directly-connected stub networks and a single link to ISP.
+   Two routes required: the summary route on ISP for HQ's networks
+   (next-hop = HQ's link IP) and the default route on HQ for the Internet
+   (next-hop = ISP's link IP). */
+function genSummMedium(){
+  const depth=2, totalSlots=4, n=3;
+  const S=ri(16,22), C=S+depth;
+  const slots=new Set([0,totalSlots-1]);
+  while(slots.size<n) slots.add(ri(0,totalSlots-1));
+  const slotArr=shuffle([...slots]);
+  const parentInt=netIntOf(niceRawInt(),S);
+  const childBit=32-C;
+  const hqNets=slotArr.map(slot=>{
+    const netInt=(parentInt|(slot<<childBit))>>>0;
+    return {netInt, prefix:C, network:int2ip(netInt)};
+  }).sort((a,b)=>a.netInt-b.netInt);
+  const link=randP2PLink();
+  const routes=[
+    {label:'Summary route on ISP', correctNetInt:parentInt, correctPrefix:S, correctNet:int2ip(parentInt), correctMask:cidr2mask(S), nextHop:link.aIP},
+    {label:'Default route on HQ', correctNetInt:0, correctPrefix:0, correctNet:'0.0.0.0', correctMask:'0.0.0.0', nextHop:link.bIP}
+  ];
+  return {kind:'medium', hqNets, link, routes};
+}
+/* ISP–HQ–BRANCH chain. HQ has 1 stub network, BRANCH has 3 — all 4 are
+   slots of the same summary block S (using every slot, so minimality is
+   automatic: every bit of the depth-many child bits is guaranteed to take
+   both 0 and 1 across all 4, no need for the edge-slot trick). Six routes
+   required: the ISP summary (covering all 4), HQ's default route, HQ's
+   three individual (non-summarized, on purpose — BRANCH's 3 networks
+   aren't required to be contiguous with each other) routes to BRANCH's
+   networks, and BRANCH's default route back through HQ. */
+function genSummHard(){
+  const depth=2, totalSlots=4;
+  const S=ri(16,22), C=S+depth;
+  const parentInt=netIntOf(niceRawInt(),S);
+  const childBit=32-C;
+  const allNets=Array.from({length:totalSlots},(_,slot)=>{
+    const netInt=(parentInt|(slot<<childBit))>>>0;
+    return {netInt, prefix:C, network:int2ip(netInt)};
+  });
+  shuffle(allNets);
+  const hqNet=allNets[0];
+  const branchNets=allNets.slice(1).sort((a,b)=>a.netInt-b.netInt);
+  const ispLink=randP2PLink();
+  const branchLink=randP2PLink();
+  const routes=[
+    {label:'Summary route on ISP', correctNetInt:parentInt, correctPrefix:S, correctNet:int2ip(parentInt), correctMask:cidr2mask(S), nextHop:ispLink.aIP},
+    {label:'Default route on HQ', correctNetInt:0, correctPrefix:0, correctNet:'0.0.0.0', correctMask:'0.0.0.0', nextHop:ispLink.bIP}
+  ];
+  branchNets.forEach(bn=>{
+    routes.push({label:`Route to ${bn.network}/${bn.prefix} on HQ`, correctNetInt:bn.netInt, correctPrefix:bn.prefix, correctNet:bn.network, correctMask:cidr2mask(bn.prefix), nextHop:branchLink.bIP});
+  });
+  routes.push({label:'Default route on BRANCH', correctNetInt:0, correctPrefix:0, correctNet:'0.0.0.0', correctMask:'0.0.0.0', nextHop:branchLink.aIP});
+  return {kind:'hard', hqNet, branchNets, ispLink, branchLink, routes};
+}
+function genSumm(diff){
+  if(diff==='medium') return genSummMedium();
+  if(diff==='hard') return genSummHard();
+  return genSummEasy();
 }
 /* Standalone (no router-session state needed, unlike rlCli's ip route
    handler) — same abbreviation/whitespace tolerance as that parser, since
@@ -524,25 +595,42 @@ function summParseIpRoute(line){
 }
 function renderSumm(body,qip){
   const d=state.data;
-  document.getElementById('qprompt').innerHTML=`Write the single static route that summarizes all the networks below, forwarding everything to <strong>${d.nextHop}</strong>.`;
-  const list=d.networks.map(n=>`<div class="cli-block" style="margin-bottom:.5rem">${n.network}/${n.prefix}</div>`).join('');
-  body.innerHTML=`${list}
-    <button class="rand-btn" style="margin-bottom:1rem" id="summ-bits-btn" onclick="summToggleBits()">Show Bit Table</button>
-    <div class="tool-block" id="summ-bits" style="display:none">
-      <div class="tool-block-title">Interactive Bit Table</div>
-      <p class="tool-note">Click bits to toggle them on (1) or off (0) — use this to manually work out which leading bits the networks above share.</p>
-      <div class="bit-cells" id="sm-bt-cells"></div>
-      <div class="bt-readout">
-        <div><div class="bt-lbl">Decimal</div><div class="bt-val" id="sm-bt-dec">0</div></div>
-        <div><div class="bt-lbl">Binary</div><div class="bt-bin-val" id="sm-bt-bin">0000 0000</div></div>
-      </div>
-      <button class="btn btn-s" style="font-size:13px;padding:5px 14px;" onclick="summClearBits()">Clear</button>
-    </div>
-    <div class="afield large" id="f-ans">
-      <label>Summarized static route</label>
-      <input id="a-ans" placeholder="ip route <network> <mask> <next-hop>" autocomplete="off" spellcheck="false">
-      <div class="ahint" id="h-ans"></div>
-    </div>`;
+  if(d.kind==='easy'){
+    document.getElementById('qprompt').innerHTML=`Write the single static route that summarizes all the networks below, forwarding everything to <strong>${d.nextHop}</strong>.`;
+    const list=d.networks.map(n=>`<div class="cli-block" style="margin-bottom:.5rem">${n.network}/${n.prefix}</div>`).join('');
+    body.innerHTML=`${list}${summBitsToolHtml()}
+      <div class="afield large" id="f-ans">
+        <label>Summarized static route</label>
+        <input id="a-ans" placeholder="ip route <network> <mask> <next-hop>" autocomplete="off" spellcheck="false">
+        <div class="ahint" id="h-ans"></div>
+      </div>`;
+    summBuildBits();
+    setBtns('text');
+    return;
+  }
+  if(d.kind==='medium'){
+    document.getElementById('qprompt').innerHTML=`HQ connects to ISP over a point-to-point link. Configure a <strong>summary</strong> static route on ISP for all of HQ's networks, and a <strong>default</strong> static route on HQ for the Internet.`;
+    const topo=`
+      <div class="cfg-sec-lbl">HQ's directly connected networks</div>
+      ${d.hqNets.map(n=>`<div class="cli-block" style="margin-bottom:.5rem">${n.network}/${n.prefix}</div>`).join('')}
+      <div class="cfg-sec-lbl" style="margin-top:.75rem">HQ &harr; ISP link</div>
+      <div class="cli-block" style="margin-bottom:1rem">HQ: ${d.link.aIP}/30 &nbsp;&nbsp; ISP: ${d.link.bIP}/30</div>`;
+    body.innerHTML=`${topo}${summBitsToolHtml()}${summRouteFieldsHtml(d.routes,'ip route <network> <mask> <next-hop>')}`;
+    summBuildBits();
+    setBtns('text');
+    return;
+  }
+  document.getElementById('qprompt').innerHTML=`ISP, HQ, and BRANCH are chained together. Configure a <strong>summary</strong> static route on ISP for everything behind HQ, a <strong>default</strong> route on HQ for the Internet, individual static routes on HQ for each of BRANCH's networks, and a <strong>default</strong> route on BRANCH for everything beyond it.`;
+  const topo=`
+    <div class="cfg-sec-lbl">HQ's directly connected network</div>
+    <div class="cli-block" style="margin-bottom:.5rem">${d.hqNet.network}/${d.hqNet.prefix}</div>
+    <div class="cfg-sec-lbl" style="margin-top:.75rem">BRANCH's directly connected networks</div>
+    ${d.branchNets.map(n=>`<div class="cli-block" style="margin-bottom:.5rem">${n.network}/${n.prefix}</div>`).join('')}
+    <div class="cfg-sec-lbl" style="margin-top:.75rem">HQ &harr; ISP link</div>
+    <div class="cli-block" style="margin-bottom:.5rem">HQ: ${d.ispLink.aIP}/30 &nbsp;&nbsp; ISP: ${d.ispLink.bIP}/30</div>
+    <div class="cfg-sec-lbl" style="margin-top:.75rem">HQ &harr; BRANCH link</div>
+    <div class="cli-block" style="margin-bottom:1rem">HQ: ${d.branchLink.aIP}/30 &nbsp;&nbsp; BRANCH: ${d.branchLink.bIP}/30</div>`;
+  body.innerHTML=`${topo}${summBitsToolHtml()}${summRouteFieldsHtml(d.routes,'ip route <network> <mask> <next-hop>')}`;
   summBuildBits();
   setBtns('text');
 }
@@ -585,6 +673,30 @@ function summToggleBits(){
   el.style.display=show?'':'none';
   if(btn) btn.textContent=show?'Hide Bit Table':'Show Bit Table';
 }
+function summBitsToolHtml(){
+  return `<button class="rand-btn" style="margin-bottom:1rem" id="summ-bits-btn" onclick="summToggleBits()">Show Bit Table</button>
+    <div class="tool-block" id="summ-bits" style="display:none">
+      <div class="tool-block-title">Interactive Bit Table</div>
+      <p class="tool-note">Click bits to toggle them on (1) or off (0) — use this to manually work out which leading bits the networks above share.</p>
+      <div class="bit-cells" id="sm-bt-cells"></div>
+      <div class="bt-readout">
+        <div><div class="bt-lbl">Decimal</div><div class="bt-val" id="sm-bt-dec">0</div></div>
+        <div><div class="bt-lbl">Binary</div><div class="bt-bin-val" id="sm-bt-bin">0000 0000</div></div>
+      </div>
+      <button class="btn btn-s" style="font-size:13px;padding:5px 14px;" onclick="summClearBits()">Clear</button>
+    </div>`;
+}
+/* Medium/Hard render N separate CLI-line routes instead of Easy's one big
+   field — same .afield/.ahint states, laid out in the existing .agrid
+   (the same 2-col grid Read Table's readFields()/gradeAgrid() use). */
+function summRouteFieldsHtml(routes, placeholder){
+  return `<div class="agrid" id="agrid">${routes.map((r,i)=>`
+    <div class="afield" id="f-r${i}">
+      <label>${r.label}</label>
+      <input id="a-r${i}" placeholder="${placeholder}" autocomplete="off" spellcheck="false">
+      <div class="ahint" id="h-r${i}"></div>
+    </div>`).join('')}</div>`;
+}
 
 /* ─── IPv6 Summaries (topic: summ6) ────────────────────────────────
    Same idea as IP Summaries, over IPv6 prefixes instead — no bit table
@@ -594,7 +706,6 @@ function summToggleBits(){
    16-bit numbers throughout (rlV6* below) — plain JS bitwise operators
    are only 32-bit safe, so there's no single-integer shortcut like the
    IPv4 helpers use. */
-const SUMM6_CFG={easy:{n:2,depth:4}, medium:{n:3,depth:8}, hard:{n:5,depth:8}};
 function rlV6MaskGroups(groups,prefixLen){
   const out=groups.slice();
   for(let i=0;i<8;i++){
@@ -654,27 +765,92 @@ function rlV6Parse(addr){
   if(!parts.every(p=>/^[0-9a-f]{1,4}$/.test(p))) return null;
   return parts.map(p=>parseInt(p,16));
 }
-function genSumm6(diff){
-  const cfg=SUMM6_CFG[diff];
-  const totalSlots=1<<cfg.depth;
-  const n=Math.min(cfg.n,totalSlots);
+/* Mirrors genSummEasy/Medium/Hard's IPv4 tiers (see the comment above those)
+   over 128-bit prefixes. 2001:db8:: is the documentation prefix real IOS
+   examples (and this repo's own ipv6_game.html) already lean on — keeps
+   generated addresses looking like realistic examples instead of pure
+   noise. depth=8 (vs. IPv4's depth=2) because IPv6 stub prefixes are
+   conventionally /64s off a /56-or-shorter site prefix, not tight-packed
+   /24s off a /22 — the wider depth keeps S/C looking like real allocations
+   without changing the slot-picking math at all. */
+function genSumm6Easy(){
+  const depth=8, totalSlots=1<<depth, n=3;
   const S=choice([32,36,40,44,48,52]);
-  const C=S+cfg.depth;
+  const C=S+depth;
   const slots=new Set([0,totalSlots-1]);
   while(slots.size<n) slots.add(ri(0,totalSlots-1));
   const slotArr=shuffle([...slots]);
-  /* 2001:db8:: is the documentation prefix real IOS examples (and this
-     repo's own ipv6_game.html) already lean on — keeps generated addresses
-     looking like realistic examples instead of pure noise. */
   const rawGroups=[0x2001,0x0db8,ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF)];
   const parentGroups=rlV6MaskGroups(rawGroups,S);
   const networks=slotArr.map(slot=>{
-    const groups=rlV6SetField(parentGroups,S,cfg.depth,slot);
+    const groups=rlV6SetField(parentGroups,S,depth,slot);
     return {groups, prefix:C, text:rlV6Compress(groups)+'/'+C};
   }).sort((a,b)=>{ for(let i=0;i<8;i++){ if(a.groups[i]!==b.groups[i]) return a.groups[i]-b.groups[i]; } return 0; });
   let nhGroups=[ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF)];
   if(nhGroups.every(g=>g===0)) nhGroups[7]=1;
-  return {networks, correctGroups:parentGroups, correctPrefix:S, correctText:rlV6Compress(parentGroups)+'/'+S, nextHop:rlV6Compress(nhGroups), nextHopGroups:nhGroups};
+  return {kind:'easy', networks, correctGroups:parentGroups, correctPrefix:S, correctText:rlV6Compress(parentGroups)+'/'+S, nextHop:rlV6Compress(nhGroups), nextHopGroups:nhGroups};
+}
+/* A same-prefix "point-to-point" pair of IPv6 addresses (last group ::1/::2)
+   for the two ends of a router-router link — mirrors randP2PLink's IPv4
+   /30 pair, just without a real subnetted block backing it (not needed —
+   nothing in this topic asks the learner to derive the link's own prefix,
+   only to use the two endpoint addresses as next-hops). */
+function randV6P2PLink(){
+  const base=[0x2001,0x0db8,ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),0];
+  const aGroups=base.slice(); aGroups[7]=1;
+  const bGroups=base.slice(); bGroups[7]=2;
+  return { aText:rlV6Compress(aGroups), bText:rlV6Compress(bGroups), aGroups, bGroups };
+}
+function genSumm6Medium(){
+  const depth=8, totalSlots=1<<depth, n=3;
+  const S=choice([32,36,40,44,48,52]), C=S+depth;
+  const slots=new Set([0,totalSlots-1]);
+  while(slots.size<n) slots.add(ri(0,totalSlots-1));
+  const slotArr=shuffle([...slots]);
+  const rawGroups=[0x2001,0x0db8,ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF)];
+  const parentGroups=rlV6MaskGroups(rawGroups,S);
+  const hqNets=slotArr.map(slot=>{
+    const groups=rlV6SetField(parentGroups,S,depth,slot);
+    return {groups, prefix:C, text:rlV6Compress(groups)+'/'+C};
+  }).sort((a,b)=>{ for(let i=0;i<8;i++){ if(a.groups[i]!==b.groups[i]) return a.groups[i]-b.groups[i]; } return 0; });
+  const link=randV6P2PLink();
+  const routes=[
+    {label:'Summary route on ISP', correctGroups:parentGroups, correctPrefix:S, correctText:rlV6Compress(parentGroups)+'/'+S, nextHop:link.aText, nextHopGroups:link.aGroups},
+    {label:'Default route on HQ', correctGroups:Array(8).fill(0), correctPrefix:0, correctText:'::/0', nextHop:link.bText, nextHopGroups:link.bGroups}
+  ];
+  return {kind:'medium', hqNets, link, routes};
+}
+function genSumm6Hard(){
+  const depth=8, totalSlots=1<<depth, n=4;
+  const S=choice([32,36,40,44,48,52]), C=S+depth;
+  const slots=new Set([0,totalSlots-1]);
+  while(slots.size<n) slots.add(ri(0,totalSlots-1));
+  const slotArr=shuffle([...slots]);
+  const rawGroups=[0x2001,0x0db8,ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF)];
+  const parentGroups=rlV6MaskGroups(rawGroups,S);
+  const allNets=slotArr.map(slot=>{
+    const groups=rlV6SetField(parentGroups,S,depth,slot);
+    return {groups, prefix:C, text:rlV6Compress(groups)+'/'+C};
+  });
+  shuffle(allNets);
+  const hqNet=allNets[0];
+  const branchNets=allNets.slice(1).sort((a,b)=>{ for(let i=0;i<8;i++){ if(a.groups[i]!==b.groups[i]) return a.groups[i]-b.groups[i]; } return 0; });
+  const ispLink=randV6P2PLink();
+  const branchLink=randV6P2PLink();
+  const routes=[
+    {label:'Summary route on ISP', correctGroups:parentGroups, correctPrefix:S, correctText:rlV6Compress(parentGroups)+'/'+S, nextHop:ispLink.aText, nextHopGroups:ispLink.aGroups},
+    {label:'Default route on HQ', correctGroups:Array(8).fill(0), correctPrefix:0, correctText:'::/0', nextHop:ispLink.bText, nextHopGroups:ispLink.bGroups}
+  ];
+  branchNets.forEach(bn=>{
+    routes.push({label:`Route to ${bn.text} on HQ`, correctGroups:bn.groups, correctPrefix:bn.prefix, correctText:bn.text, nextHop:branchLink.bText, nextHopGroups:branchLink.bGroups});
+  });
+  routes.push({label:'Default route on BRANCH', correctGroups:Array(8).fill(0), correctPrefix:0, correctText:'::/0', nextHop:branchLink.aText, nextHopGroups:branchLink.aGroups});
+  return {kind:'hard', hqNet, branchNets, ispLink, branchLink, routes};
+}
+function genSumm6(diff){
+  if(diff==='medium') return genSumm6Medium();
+  if(diff==='hard') return genSumm6Hard();
+  return genSumm6Easy();
 }
 function summ6ParseRoute(line){
   const t=line.trim().replace(/\s+/g,' ');
@@ -700,14 +876,40 @@ function summ6ParseRoute(line){
 }
 function renderSumm6(body,qip){
   const d=state.data;
-  document.getElementById('qprompt').innerHTML=`Write the single static route that summarizes all the prefixes below, forwarding everything to <strong>${d.nextHop}</strong>.`;
-  const list=d.networks.map(n=>`<div class="cli-block" style="margin-bottom:.5rem">${n.text}</div>`).join('');
-  body.innerHTML=`${list}
-    <div class="afield large" id="f-ans">
-      <label>Summarized static route</label>
-      <input id="a-ans" placeholder="ipv6 route <prefix>/<len> <next-hop>" autocomplete="off" spellcheck="false">
-      <div class="ahint" id="h-ans"></div>
-    </div>`;
+  if(d.kind==='easy'){
+    document.getElementById('qprompt').innerHTML=`Write the single static route that summarizes all the prefixes below, forwarding everything to <strong>${d.nextHop}</strong>.`;
+    const list=d.networks.map(n=>`<div class="cli-block" style="margin-bottom:.5rem">${n.text}</div>`).join('');
+    body.innerHTML=`${list}
+      <div class="afield large" id="f-ans">
+        <label>Summarized static route</label>
+        <input id="a-ans" placeholder="ipv6 route <prefix>/<len> <next-hop>" autocomplete="off" spellcheck="false">
+        <div class="ahint" id="h-ans"></div>
+      </div>`;
+    setBtns('text');
+    return;
+  }
+  if(d.kind==='medium'){
+    document.getElementById('qprompt').innerHTML=`HQ connects to ISP over a point-to-point link. Configure a <strong>summary</strong> static route on ISP for all of HQ's networks, and a <strong>default</strong> static route on HQ for the Internet.`;
+    const topo=`
+      <div class="cfg-sec-lbl">HQ's directly connected networks</div>
+      ${d.hqNets.map(n=>`<div class="cli-block" style="margin-bottom:.5rem">${n.text}</div>`).join('')}
+      <div class="cfg-sec-lbl" style="margin-top:.75rem">HQ &harr; ISP link</div>
+      <div class="cli-block" style="margin-bottom:1rem">HQ: ${d.link.aText} &nbsp;&nbsp; ISP: ${d.link.bText}</div>`;
+    body.innerHTML=`${topo}${summRouteFieldsHtml(d.routes,'ipv6 route <prefix>/<len> <next-hop>')}`;
+    setBtns('text');
+    return;
+  }
+  document.getElementById('qprompt').innerHTML=`ISP, HQ, and BRANCH are chained together. Configure a <strong>summary</strong> static route on ISP for everything behind HQ, a <strong>default</strong> route on HQ for the Internet, individual static routes on HQ for each of BRANCH's networks, and a <strong>default</strong> route on BRANCH for everything beyond it.`;
+  const topo=`
+    <div class="cfg-sec-lbl">HQ's directly connected network</div>
+    <div class="cli-block" style="margin-bottom:.5rem">${d.hqNet.text}</div>
+    <div class="cfg-sec-lbl" style="margin-top:.75rem">BRANCH's directly connected networks</div>
+    ${d.branchNets.map(n=>`<div class="cli-block" style="margin-bottom:.5rem">${n.text}</div>`).join('')}
+    <div class="cfg-sec-lbl" style="margin-top:.75rem">HQ &harr; ISP link</div>
+    <div class="cli-block" style="margin-bottom:.5rem">HQ: ${d.ispLink.aText} &nbsp;&nbsp; ISP: ${d.ispLink.bText}</div>
+    <div class="cfg-sec-lbl" style="margin-top:.75rem">HQ &harr; BRANCH link</div>
+    <div class="cli-block" style="margin-bottom:1rem">HQ: ${d.branchLink.aText} &nbsp;&nbsp; BRANCH: ${d.branchLink.bText}</div>`;
+  body.innerHTML=`${topo}${summRouteFieldsHtml(d.routes,'ipv6 route <prefix>/<len> <next-hop>')}`;
   setBtns('text');
 }
 
@@ -740,6 +942,38 @@ function summ6Grade(reveal){
   if(ok){ fld.classList.add('ok'); hnt.textContent='✓ Correct'; }
   else { fld.classList.add('bad'); hnt.textContent='Correct: '+correctText; }
   return ok;
+}
+/* Medium/Hard grading — same per-field partial credit as gradeAgrid, but
+   using summParseIpRoute/summ6ParseRoute's IOS-tolerant parsing instead of
+   gradeAgrid's exact-string compare, since each field here is a whole CLI
+   command rather than a single token. Returns the count of correct routes. */
+function summGradeRoutes(routes, reveal){
+  let correct=0;
+  routes.forEach((r,i)=>{
+    const inp=document.getElementById('a-r'+i), fld=document.getElementById('f-r'+i), hnt=document.getElementById('h-r'+i);
+    const correctText='ip route '+r.correctNet+' '+r.correctMask+' '+r.nextHop;
+    inp.disabled=true;
+    if(reveal){ fld.classList.add('show'); inp.value=correctText; hnt.textContent='Revealed'; return; }
+    const parsed=summParseIpRoute(inp.value);
+    const ok=!!parsed && parsed.netInt===r.correctNetInt && parsed.pfx===r.correctPrefix && parsed.nh===r.nextHop;
+    if(ok){ fld.classList.add('ok'); hnt.textContent='✓ Correct'; correct++; }
+    else { fld.classList.add('bad'); hnt.textContent='Correct: '+correctText; }
+  });
+  return correct;
+}
+function summ6GradeRoutes(routes, reveal){
+  let correct=0;
+  routes.forEach((r,i)=>{
+    const inp=document.getElementById('a-r'+i), fld=document.getElementById('f-r'+i), hnt=document.getElementById('h-r'+i);
+    const correctText='ipv6 route '+r.correctText+' '+r.nextHop;
+    inp.disabled=true;
+    if(reveal){ fld.classList.add('show'); inp.value=correctText; hnt.textContent='Revealed'; return; }
+    const parsed=summ6ParseRoute(inp.value);
+    const ok=!!parsed && parsed.pfx===r.correctPrefix && arraysEq(rlV6MaskGroups(parsed.groups,parsed.pfx),r.correctGroups) && arraysEq(parsed.nhGroups,r.nextHopGroups);
+    if(ok){ fld.classList.add('ok'); hnt.textContent='✓ Correct'; correct++; }
+    else { fld.classList.add('bad'); hnt.textContent='Correct: '+correctText; }
+  });
+  return correct;
 }
 
 /* ─── IP Routing Lab (topic: route) ───────────────────────────────
@@ -1910,13 +2144,29 @@ function checkAll(){
   }
 
   if(mode==='summ' || mode==='summ6'){
-    const win = mode==='summ' ? summGrade(false) : summ6Grade(false);
-    const pts = win ? POINTS[state.diff] : 0;
+    const d=state.data;
+    if(d.kind==='easy'){
+      const win = mode==='summ' ? summGrade(false) : summ6Grade(false);
+      const pts = win ? POINTS[state.diff] : 0;
+      state.score+=pts;
+      state.streak = win ? state.streak+1 : 0;
+      state.round++;
+      fb.className='fbanner '+(win?'ok':'err');
+      fb.textContent = win ? `Correct! +${pts} pts. Streak: ${state.streak}` : `Not quite — see the correct route below. +0 pts.`;
+      finishRound();
+      return;
+    }
+    const correct = mode==='summ' ? summGradeRoutes(d.routes,false) : summ6GradeRoutes(d.routes,false);
+    const total=d.routes.length;
+    const bonus=correct===total?2:0;
+    const pts=correct+bonus;
     state.score+=pts;
-    state.streak = win ? state.streak+1 : 0;
+    state.streak = correct===total ? state.streak+1 : 0;
     state.round++;
-    fb.className='fbanner '+(win?'ok':'err');
-    fb.textContent = win ? `Correct! +${pts} pts. Streak: ${state.streak}` : `Not quite — see the correct route below. +0 pts.`;
+    fb.className='fbanner '+(correct===total?'ok':correct>=Math.ceil(total*.6)?'warn':'err');
+    fb.textContent = correct===total
+      ? `Perfect! All ${total} routes correct. +${pts} pts (+2 bonus). Streak: ${state.streak}`
+      : `${correct}/${total} routes correct. +${pts} pt${pts!==1?'s':''}.`;
     finishRound();
     return;
   }
@@ -1976,8 +2226,14 @@ function revealAll(){
     rlRenderReqs(results);
     fb.textContent='Skipped. Review the requirement checklist above for what’s still needed. No points awarded.';
   } else if(mode==='summ' || mode==='summ6'){
-    if(mode==='summ') summGrade(true); else summ6Grade(true);
-    fb.textContent='Answer revealed. No points awarded.';
+    const d=state.data;
+    if(d.kind==='easy'){
+      if(mode==='summ') summGrade(true); else summ6Grade(true);
+      fb.textContent='Answer revealed. No points awarded.';
+    } else {
+      if(mode==='summ') summGradeRoutes(d.routes,true); else summ6GradeRoutes(d.routes,true);
+      fb.textContent='Answers revealed. No points awarded.';
+    }
   } else {
     const d=state.data;
     gradeAgrid(readFields(d),readAnswers(d),true);
