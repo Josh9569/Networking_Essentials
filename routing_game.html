@@ -1780,9 +1780,20 @@ function render(){
   else if(state.mode==='summ6') renderSumm6(body,qip);
 }
 
-/* ── Shared: routing table element ── */
-function rtTable(headers, rowsHtml){
-  return `<div class="rt-wrap"><table class="rt-table"><thead><tr>${headers.map(h=>`<th>${h}</th>`).join('')}</tr></thead><tbody>${rowsHtml}</tbody></table></div>`;
+/* ── Shared: routing table element ──
+   headers is normally an array of plain label strings (AD's usage) — a
+   header can instead be {label,width} to pin that column's width via
+   inline style. tableStyle is an optional extra style string for the
+   <table> itself; Longest Match uses both together (table-layout:fixed +
+   an explicit width per header) so a colspan'd cell's content — its
+   Explain box's <code> block, once opened, is far wider than any normal
+   row — can never make the browser recompute (and visibly shift) every
+   other row's column widths the way table-layout's default "auto" mode
+   does. AD has no such wide colspan content, so it passes neither and
+   keeps the original auto-layout behavior unchanged. */
+function rtTable(headers, rowsHtml, tableStyle){
+  const ths=headers.map(h=>typeof h==='object' ? `<th style="width:${h.width}">${h.label}</th>` : `<th>${h}</th>`).join('');
+  return `<div class="rt-wrap"><table class="rt-table"${tableStyle?` style="${tableStyle}"`:''}><thead><tr>${ths}</tr></thead><tbody>${rowsHtml}</tbody></table></div>`;
 }
 function srcCode(src){ return `<span class="rt-code src-${src.code[0]}">${src.code}</span>`; }
 
@@ -1842,7 +1853,7 @@ function renderLPM(body,qip){
     <tr class="rt-bin-row" id="binrow-${e.id}" style="display:${showBin?'':'none'}"><td colspan="3" style="padding:0"><div class="bin-card-bin">${binInputHtml('lpmbin-'+e.id)}</div></td></tr>`;
   });
   body.innerHTML = `<button class="rand-btn" id="lpm-bin-btn" style="margin-bottom:.6rem" onclick="lpmToggleBinRows()">${showBin?'Hide':'Show'} Binary Scratch Work</button>`
-    + rtTable(['Src','Network','Path'], rows);
+    + rtTable([{label:'Src',width:'10%'},{label:'Network',width:'27%'},{label:'Path',width:'63%'}], rows, 'table-layout:fixed');
   wireBinSingle('lpmbin-dest');
   d.entries.forEach(e=>wireBinSingle('lpmbin-'+e.id));
   setBtns('mcq');
@@ -2035,7 +2046,7 @@ function firstDiffBit(a,b,prefix){
 function getBinExplanation(e,destInt,correct){
   const destBin=trueBinStr(int2ip(destInt).split('.').map(Number));
   const candBin=trueBinStr(e.network.split('.').map(Number));
-  const code=`<code>Destination:&nbsp; ${destBin}<br>Candidate:&nbsp;&nbsp;&nbsp; ${candBin}/${e.prefix}</code>`;
+  const code=`<span style="font-family:var(--mono)">Destination:&nbsp; ${destBin}<br>Candidate:&nbsp;&nbsp;&nbsp; ${candBin}/${e.prefix}</span>`;
   if(!matchesEntry(destInt,e)){
     const diff=firstDiffBit(destInt,e.netInt,e.prefix);
     const octet=Math.floor(diff/8)+1, bitPos=(diff%8)+1;
