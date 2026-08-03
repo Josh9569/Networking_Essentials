@@ -790,6 +790,15 @@ sup  { font-size: .65em; vertical-align: super; }
    actually run, a small ✓/✗ underneath it showing the real verdict. */
 .req-list   { margin-top: .8rem; display: flex; flex-direction: column; gap: 6px; }
 .req-row    { display: flex; gap: 9px; font-size: 13.5px; color: var(--text-s); align-items: flex-start; padding: 7px 11px; border-radius: var(--r); border: 1px solid var(--border); background: var(--surface-s); }
+/* :has() scopes this to the checklist's own .req-row (the one holding a
+   .req-checkbox) rather than the bare .req-row selector above, which is
+   also — separately, unrelated to this checklist — used by vlsm_game.html
+   for a row of plain, non-interactive .req-chip pills; a plain .req-row
+   rule here would put a misleading pointer cursor on those too. Hover only
+   applies pre-grading (:not(.ok):not(.bad)) so it doesn't tint over the
+   real ok/bad verdict color once Check Requirements has run. */
+.req-row:has(.req-checkbox) { cursor: pointer; }
+.req-row:has(.req-checkbox):not(.ok):not(.bad):hover { background: var(--surface); }
 .req-check-col { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 14px; flex-shrink: 0; padding-top: 1px; }
 /* Custom-drawn rather than a bare native checkbox — appearance:none lets it
    pick up the theme's own border/surface/accent colors and an actual
@@ -824,8 +833,6 @@ sup  { font-size: .65em; vertical-align: super; }
 .port-table th     { background: var(--surface-s); padding: 5px 8px; text-align: left; font-weight: 500; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-s); border-bottom: 1px solid var(--border); }
 .port-table td     { padding: 5px 8px; border-bottom: 1px solid var(--border); }
 .port-table tr:last-child td { border-bottom: none; }
-.pt-row-click       { cursor: pointer; }
-.pt-row-click:hover td { background: var(--surface-s); }
 .pt-name           { font-family: var(--mono); font-weight: 500; color: var(--text); }
 .pt-conn           { font-family: var(--mono); font-size: 12px; color: var(--text-s); }
 .port-table select,

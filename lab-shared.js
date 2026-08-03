@@ -160,6 +160,17 @@
     Array.prototype.forEach.call(el.querySelectorAll('.req-checkbox'), function (cb) {
       cb.addEventListener('change', function () { checked[+cb.dataset.i] = cb.checked; });
     });
+    // Clicking anywhere in a row (not just the checkbox itself) toggles it —
+    // skip when the click landed on the checkbox directly, since its own
+    // change listener above already handles that; toggling again on top
+    // would flip it right back to where it started.
+    Array.prototype.forEach.call(el.querySelectorAll('.req-row'), function (row) {
+      row.addEventListener('click', function (e) {
+        if (e.target.tagName === 'INPUT') return;
+        var cb = row.querySelector('.req-checkbox');
+        if (cb) cb.click();
+      });
+    });
   }
 
   /* ---------- CLI tab-completion ----------
