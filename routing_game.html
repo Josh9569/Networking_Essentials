@@ -1838,8 +1838,8 @@ function renderLPM(body,qip){
       <td><span class="rt-indent indent-${depth}">${e.network}/${e.prefix}</span></td>
       <td>${cliPath(e)}</td>
     </tr>
-    <tr class="rt-bin-row" id="binrow-${e.id}" style="display:${showBin?'':'none'}"><td colspan="3"><div class="bin-card-bin">${binInputHtml('lpmbin-'+e.id)}</div></td></tr>
-    <tr><td colspan="3" style="padding:0"><div id="foot-lpm-${e.id}"></div></td></tr>`;
+    <tr><td colspan="3" style="padding:0"><div id="foot-lpm-${e.id}"></div></td></tr>
+    <tr class="rt-bin-row" id="binrow-${e.id}" style="display:${showBin?'':'none'}"><td colspan="3"><div class="bin-card-bin">${binInputHtml('lpmbin-'+e.id)}</div></td></tr>`;
   });
   body.innerHTML = `<button class="rand-btn" id="lpm-bin-btn" style="margin-bottom:.6rem" onclick="lpmToggleBinRows()">${showBin?'Hide':'Show'} Binary Scratch Work</button>`
     + rtTable(['Src','Network','Path'], rows);
@@ -1876,34 +1876,52 @@ function renderLpmExplainSlots(d){
     // Matches .rt-row.correct/.wrong's own background so the foot slot
     // reads as a continuation of that row's color, not a neutral strip
     // tacked on underneath it — same "combined" idea the border-merge
-    // above already applies to the border. Reveal never sets a wrong
+    // below already applies to the border. Reveal never sets a wrong
     // pick (state.selectedId is null), so only the correct row's foot
     // ever gets colored in that path, which is the right call — there's
     // no learner pick to mark wrong when the round was skipped.
     const footTd=foot.parentElement;
-    if(footTd){
-      if(e.id===d.correct.id) footTd.style.background='var(--ok-bg)';
-      else if(e.id===state.selectedId) footTd.style.background='var(--err-bg)';
-    }
+    let rowBg=null, rowFg=null;
+    if(e.id===d.correct.id){ rowBg='var(--ok-bg)'; rowFg='var(--ok-text)'; }
+    else if(e.id===state.selectedId){ rowBg='var(--err-bg)'; rowFg='var(--err-text)'; }
+    if(footTd && rowBg) footTd.style.background=rowBg;
+    /* The binary scratch box (.bin-card-bin) has its own independent
+       color — ok/bad for whether the *typed bits* matched, or .show
+       (amber) whenever the round was revealed, regardless of whether
+       this particular entry was even the right pick — which visibly
+       clashed with the row's own correct/wrong color (a correct, green
+       row could sit right above an amber "revealed" or red "wrong bits"
+       scratch box). For an entry that has a row color at all, that color
+       now wins here too, overriding gradeBinInput's own class-based
+       color entirely — the "Correct: ..." hint text underneath the input
+       still separately reports typing accuracy, so that signal isn't
+       lost, just no longer fighting the row's color for the background. */
+    const binRowEl=document.getElementById('binrow-'+e.id);
+    const binBox=binRowEl?binRowEl.querySelector('.bin-card-bin'):null;
+    if(binBox && rowBg){ binBox.style.background=rowBg; binBox.style.color=rowFg; }
   });
   lpmMergeFootBorders();
 }
 /* Once an entry's Explain slot is populated (post check/reveal), hides
-   the border on whichever row actually sits directly above it — the
-   binary scratch row if shown, otherwise the main pick row — so the
-   Explain button/box reads as part of that row instead of a visually
-   separate one stacked underneath it. Also re-run from
-   lpmToggleBinRows(), since toggling binary visibility *after* grading
-   changes which row is the one actually adjacent to the foot slot. */
+   the border below the main pick row — Explain always sits directly
+   under it now — and, only when the binary scratch row is actually
+   visible, the border below the Explain slot too, so the whole stack
+   (row -> Explain -> binary box) reads as one combined block instead of
+   Explain being an island between two separately-bordered pieces. When
+   binary is hidden, the Explain slot's own border stays put — otherwise
+   there'd be nothing separating this entry's Explain area from the next
+   entry's row. Re-run from lpmToggleBinRows() too, since toggling binary
+   visibility *after* grading changes whether that second border should
+   be merged or not. */
 function lpmMergeFootBorders(){
   const showBin=lpmGetPref('bin',false);
   document.querySelectorAll('[id^="foot-lpm-"]').forEach(foot=>{
     const id=foot.id.slice('foot-lpm-'.length);
     const graded=foot.innerHTML.trim()!=='';
-    const binRow=document.getElementById('binrow-'+id);
     const mainRow=document.getElementById('row-'+id);
-    if(binRow) binRow.querySelectorAll('td').forEach(td=>td.style.borderBottom=graded?'none':'');
-    if(mainRow) mainRow.querySelectorAll('td').forEach(td=>td.style.borderBottom=(graded&&!showBin)?'none':'');
+    const footTd=foot.closest('td');
+    if(mainRow) mainRow.querySelectorAll('td').forEach(td=>td.style.borderBottom=graded?'none':'');
+    if(footTd) footTd.style.borderBottom=(graded&&showBin)?'none':'';
   });
 }
 function gradeLpmBinRows(d,reveal){
