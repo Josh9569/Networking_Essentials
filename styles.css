@@ -165,6 +165,7 @@ sup  { font-size: .65em; vertical-align: super; }
 .cbtn       { padding: 5px 14px; border-radius: var(--r); border: 1px solid var(--border-m); background: transparent; cursor: pointer; font-size: 13px; font-family: var(--font); color: var(--text-s); transition: all .15s; }
 .cbtn:hover { background: var(--surface-s); color: var(--text); }
 .cbtn.on    { background: var(--info-bg); border-color: var(--info-bdr); color: var(--info-text); font-weight: 500; }
+.cbtn:disabled, .cbtn:disabled:hover { opacity: .28; cursor: not-allowed; background: transparent; color: var(--text-t); }
 
 /* ── Question card & IP Display ─────────────────────────────────────────────── */
 .qcard  { background: var(--surface); border: 1px solid var(--border); border-radius: var(--rl); padding: 1.25rem 1.5rem; margin-bottom: 1rem; }
@@ -789,6 +790,15 @@ sup  { font-size: .65em; vertical-align: super; }
    actually run, a small ✓/✗ underneath it showing the real verdict. */
 .req-list   { margin-top: .8rem; display: flex; flex-direction: column; gap: 6px; }
 .req-row    { display: flex; gap: 9px; font-size: 13.5px; color: var(--text-s); align-items: flex-start; padding: 7px 11px; border-radius: var(--r); border: 1px solid var(--border); background: var(--surface-s); }
+/* :has() scopes this to the checklist's own .req-row (the one holding a
+   .req-checkbox) rather than the bare .req-row selector above, which is
+   also — separately, unrelated to this checklist — used by vlsm_game.html
+   for a row of plain, non-interactive .req-chip pills; a plain .req-row
+   rule here would put a misleading pointer cursor on those too. Hover only
+   applies pre-grading (:not(.ok):not(.bad)) so it doesn't tint over the
+   real ok/bad verdict color once Check Requirements has run. */
+.req-row:has(.req-checkbox) { cursor: pointer; }
+.req-row:has(.req-checkbox):not(.ok):not(.bad):hover { background: var(--surface); }
 .req-check-col { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 14px; flex-shrink: 0; padding-top: 1px; }
 /* Custom-drawn rather than a bare native checkbox — appearance:none lets it
    pick up the theme's own border/surface/accent colors and an actual
