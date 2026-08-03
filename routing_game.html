@@ -1955,6 +1955,70 @@ function syncBinDivider(ipId, divId){
   if(ip && ip.classList.contains('correct')) div.classList.add('ok');
   else if(ip && ip.classList.contains('wrong')) div.classList.add('bad');
 }
+/* First bit position (0 = the very first/leftmost bit of the address)
+   where a and b disagree, only checked across the first `prefix` bits
+   (the network portion) — used to point at exactly where a non-matching
+   candidate's bits diverge from the destination, rather than just saying
+   "doesn't match". Returns -1 if every one of those bits agrees (i.e. it
+   does match). */
+function firstDiffBit(a,b,prefix){
+  for(let i=0;i<prefix;i++){
+    const bit=31-i;
+    if(((a>>>bit)&1)!==((b>>>bit)&1)) return i;
+  }
+  return -1;
+}
+/* Per-candidate "why" for Binary Match — same idea as subnet_trainer.html's
+   getExplanation()/toggleExpl() (see CLAUDE.md), grounded in the actual bit
+   comparison this topic is teaching rather than restating IP arithmetic:
+   every candidate's story is one of exactly three shapes — its network
+   bits don't all agree with the destination (doesn't match, regardless of
+   how deep its prefix looks), they agree but a longer match exists among
+   the other candidates (valid but superseded), or they agree and it's the
+   deepest match here (the actual answer). Computed fresh from real
+   netInt/prefix math rather than from which generator function produced
+   the candidate (nearMissEntry vs. extraMatchingEntry vs. a genuine chain
+   entry), so it stays correct even if the generators change later. */
+function getBinExplanation(c,d){
+  const destBin=trueBinStr(int2ip(d.dest).split('.').map(Number));
+  const candBin=trueBinStr(c.network.split('.').map(Number));
+  const code=`<code>Destination:&nbsp; ${destBin}<br>Candidate:&nbsp;&nbsp;&nbsp; ${candBin}/${c.prefix}</code>`;
+  if(!matchesEntry(d.dest,c)){
+    const diff=firstDiffBit(d.dest,c.netInt,c.prefix);
+    const octet=Math.floor(diff/8)+1, bitPos=(diff%8)+1;
+    return `${code}<br>Comparing only the first <strong>${c.prefix}</strong> bits (the /${c.prefix} network portion): they diverge at bit ${diff+1} — octet ${octet}, position ${bitPos} from the left of that octet. Since the network bits don't all agree, this candidate <strong>does not match</strong> the destination, regardless of how deep its prefix is.`;
+  }
+  if(c.id===d.correct.id){
+    return `${code}<br>All <strong>${c.prefix}</strong> network bits agree with the destination, so this candidate matches — and it's the <strong>deepest (longest) prefix</strong> among every candidate that matches here, so per the longest-prefix-match rule it's the one actually used.`;
+  }
+  return `${code}<br>All <strong>${c.prefix}</strong> network bits agree with the destination, so this candidate genuinely does match. But <strong>${d.correct.network}/${d.correct.prefix}</strong> also matches, at a longer /${d.correct.prefix} — longest prefix always wins, so that one is used instead of this one.`;
+}
+function toggleExpl(id){
+  const box=document.getElementById('expl-'+id);
+  if(box) box.classList.toggle('open');
+}
+/* Fills every candidate's foot slot (see renderBin) with an Explain button
+   plus its (initially collapsed, see .expl-box in styles.css) explanation
+   box — called from both checkAll and revealAll's 'bin' branches, since
+   every candidate has a "why" worth showing regardless of whether the
+   round was won, lost, or skipped. foot-bin-c<i> is a 4th flex child of
+   .bin-card itself (not a separate element below it) with an inline
+   flex-basis of 100% — .bin-card now has flex-wrap:wrap (styles.css) so
+   a full-width child like this wraps onto its own line instead of
+   fighting the ip/divider/binary row for space, while staying inside the
+   very same bordered/backgrounded card rather than becoming a second box
+   underneath it. The border-top on the slot itself is what visually
+   separates it from the row above, matching a single card with an
+   Explain row at the bottom rather than two stacked cards. */
+function renderBinExplainSlots(d){
+  d.candidates.forEach((c,i)=>{
+    const foot=document.getElementById('foot-bin-c'+i);
+    if(!foot) return;
+    foot.style.display='';
+    foot.innerHTML=`<button class="expl-btn" onclick="toggleExpl('bin-c${i}')">💡 Explain</button><div class="expl-box" id="expl-bin-c${i}"></div>`;
+    document.getElementById('expl-bin-c'+i).innerHTML=getBinExplanation(c,d);
+  });
+}
 function renderBin(body,qip){
   const d=state.data;
   document.getElementById('qprompt').textContent="Convert the destination AND every candidate route below into binary to help you compare them (this part isn't scored), then pick whichever candidate is the longest (best) match. Not every candidate necessarily matches at all.";
@@ -1973,6 +2037,7 @@ function renderBin(body,qip){
       <div class="bin-card-ip pick" id="pick-${c.id}" onclick="pickBin('${c.id}')">${c.network}/${c.prefix}</div>
       <div class="bin-card-div" id="div-bin-c${i}">|</div>
       <div class="bin-card-bin">${binInputHtml('bin-c'+i)}</div>
+      <div id="foot-bin-c${i}" style="display:none;flex:0 0 100%;border-top:1px solid var(--border-m);padding:8px 14px"></div>
     </div>`;
   });
   body.innerHTML=html;
@@ -2473,6 +2538,7 @@ function checkAll(){
     });
     syncBinDivider('ip-bin-dest','div-bin-dest');
     d.candidates.forEach((c,i)=>syncBinDivider('pick-'+c.id,'div-bin-c'+i));
+    renderBinExplainSlots(d);
     const pts = win ? POINTS[state.diff] : 0;
     state.score+=pts;
     state.streak = win ? state.streak+1 : 0;
@@ -2576,6 +2642,7 @@ function revealAll(){
     document.getElementById('pick-'+d.correct.id).classList.add('correct');
     syncBinDivider('ip-bin-dest','div-bin-dest');
     d.candidates.forEach((c,i)=>syncBinDivider('pick-'+c.id,'div-bin-c'+i));
+    renderBinExplainSlots(d);
     fb.textContent='Skipped. '+d.correct.network+'/'+d.correct.prefix+' is the longest match. No points awarded.';
   } else if(mode==='route'){
     /* Unlike the other topics there's no single "correct answer" to fill in
