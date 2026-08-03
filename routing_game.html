@@ -37,6 +37,8 @@
     <button class="cbtn" id="tb-lpm" onclick="setTopic('lpm',this)">Longest Match</button>
     <button class="cbtn" id="tb-ad" onclick="setTopic('ad',this)">Admin Distance</button>
     <button class="cbtn" id="tb-route" onclick="setTopic('route',this)">IP Routing</button>
+    <button class="cbtn" id="tb-summ" onclick="setTopic('summ',this)">IP Summaries</button>
+    <button class="cbtn" id="tb-summ6" onclick="setTopic('summ6',this)">IPv6 Summaries</button>
   </div>
 
   <div class="diff-row">
@@ -314,8 +316,8 @@ function cliFullLine(e){
 
 /* ─── State ─────────────────────────────────────────────────────── */
 let state={ topic:'rand', diff:'easy', score:0, round:1, streak:0, done:false, mode:null, data:null, lastTopic:null, selectedId:null };
-const TOPICS=['read','bin','lpm','ad','route'];
-const TOPIC_LABEL={read:'Read The Table', bin:'Binary Match', lpm:'Longest Prefix Match', ad:'Administrative Distance', route:'IP Routing'};
+const TOPICS=['read','bin','lpm','ad','route','summ','summ6'];
+const TOPIC_LABEL={read:'Read The Table', bin:'Binary Match', lpm:'Longest Prefix Match', ad:'Administrative Distance', route:'IP Routing', summ:'IP Summaries', summ6:'IPv6 Summaries'};
 const POINTS={easy:3, medium:4, hard:6};
 
 function pickTopic(){
@@ -473,6 +475,865 @@ function genRead(diff){
   const src = isConnected ? RT_SOURCES[0] : choice(RT_SOURCES.filter(s=>s.code!=='C'));
   const ex=makeRouteExtras(src);
   return {connected:isConnected, source:src, network, prefix, iface:ex.iface, nextHop:ex.nextHop, metric:ex.metric};
+}
+
+/* ─── IP Summaries (topic: summ) ──────────────────────────────────
+   Easy is the flat "write the one summary route" exercise: given a
+   handful of child networks, write the single static route that
+   summarizes all of them. Medium/Hard step up to full mini-topologies
+   (single-router-to-ISP, then ISP-HQ-BRANCH chained) modeled on real
+   Packet Tracer labs, requiring 2 and 6 routes respectively — see
+   genSummMedium/genSummHard below.
+
+   All three tiers reuse the same slot trick for picking child networks:
+   pick a random summary prefix S and a child prefix C = S + depth, then
+   place networks at "slot" offsets within the S block — always including
+   slot 0 and the last slot (or, when every slot is used, that's moot —
+   see genSummHard), so the mathematically minimal covering block is
+   guaranteed to be exactly S (never accidentally smaller from the sample
+   just happening to leave the edges untouched). */
+function genSummEasy(){
+  const depth=2, totalSlots=4, n=3;
+  const S=ri(16,22);
+  const C=S+depth;
+  const slots=new Set([0,totalSlots-1]);
+  while(slots.size<n) slots.add(ri(0,totalSlots-1));
+  const slotArr=shuffle([...slots]);
+  const parentInt=netIntOf(niceRawInt(),S);
+  const childBit=32-C;
+  const networks=slotArr.map(slot=>{
+    const netInt=(parentInt|(slot<<childBit))>>>0;
+    return {netInt, prefix:C, network:int2ip(netInt)};
+  }).sort((a,b)=>a.netInt-b.netInt);
+  const nextHop=randIpOctets().join('.');
+  return {kind:'easy', networks, correctNetInt:parentInt, correctPrefix:S, correctNet:int2ip(parentInt), correctMask:cidr2mask(S), nextHop};
+}
+/* A /30 point-to-point transit link between two routers — aIP/bIP are the
+   block's two usable host addresses, each used as the "far side" next-hop
+   on the router that sits across the link from it. netText is the link's
+   own subnet, shown on the topology diagram (summTopoHtml) next to the
+   two host addresses. */
+function randP2PLink(){
+  const netInt=netIntOf(ip2int(randIpOctets().join('.')),30);
+  return { aIP:int2ip((netInt+1)>>>0), bIP:int2ip((netInt+2)>>>0), netText:int2ip(netInt)+'/30' };
+}
+/* HQ has 3 directly-connected stub networks and a single link to ISP.
+   Two routes required: the summary route on ISP for HQ's networks
+   (next-hop = HQ's link IP) and the default route on HQ for the Internet
+   (next-hop = ISP's link IP). */
+function genSummMedium(){
+  const depth=2, totalSlots=4, n=3;
+  const S=ri(16,22), C=S+depth;
+  const slots=new Set([0,totalSlots-1]);
+  while(slots.size<n) slots.add(ri(0,totalSlots-1));
+  const slotArr=shuffle([...slots]);
+  const parentInt=netIntOf(niceRawInt(),S);
+  const childBit=32-C;
+  const hqNets=slotArr.map(slot=>{
+    const netInt=(parentInt|(slot<<childBit))>>>0;
+    return {netInt, prefix:C, network:int2ip(netInt)};
+  }).sort((a,b)=>a.netInt-b.netInt);
+  const link=randP2PLink();
+  const routes=[
+    {label:'Summary route on ISP', correctNetInt:parentInt, correctPrefix:S, correctNet:int2ip(parentInt), correctMask:cidr2mask(S), nextHop:link.aIP},
+    {label:'Default route on HQ', correctNetInt:0, correctPrefix:0, correctNet:'0.0.0.0', correctMask:'0.0.0.0', nextHop:link.bIP}
+  ];
+  return {kind:'medium', hqNets, link, routes};
+}
+/* ISP–HQ–BRANCH chain. HQ has 1 stub network, BRANCH has 3 — all 4 are
+   slots of the same summary block S (using every slot, so minimality is
+   automatic: every bit of the depth-many child bits is guaranteed to take
+   both 0 and 1 across all 4, no need for the edge-slot trick). Six routes
+   required: the ISP summary (covering all 4), HQ's default route, HQ's
+   three individual (non-summarized, on purpose — BRANCH's 3 networks
+   aren't required to be contiguous with each other) routes to BRANCH's
+   networks, and BRANCH's default route back through HQ. */
+function genSummHard(){
+  const depth=2, totalSlots=4;
+  const S=ri(16,22), C=S+depth;
+  const parentInt=netIntOf(niceRawInt(),S);
+  const childBit=32-C;
+  const allNets=Array.from({length:totalSlots},(_,slot)=>{
+    const netInt=(parentInt|(slot<<childBit))>>>0;
+    return {netInt, prefix:C, network:int2ip(netInt)};
+  });
+  shuffle(allNets);
+  const hqNet=allNets[0];
+  const branchNets=allNets.slice(1).sort((a,b)=>a.netInt-b.netInt);
+  const ispLink=randP2PLink();
+  const branchLink=randP2PLink();
+  const routes=[
+    {label:'Summary route on ISP', correctNetInt:parentInt, correctPrefix:S, correctNet:int2ip(parentInt), correctMask:cidr2mask(S), nextHop:ispLink.aIP},
+    {label:'Default route on HQ', correctNetInt:0, correctPrefix:0, correctNet:'0.0.0.0', correctMask:'0.0.0.0', nextHop:ispLink.bIP}
+  ];
+  branchNets.forEach(bn=>{
+    routes.push({label:`Route to ${bn.network}/${bn.prefix} on HQ`, correctNetInt:bn.netInt, correctPrefix:bn.prefix, correctNet:bn.network, correctMask:cidr2mask(bn.prefix), nextHop:branchLink.bIP});
+  });
+  routes.push({label:'Default route on BRANCH', correctNetInt:0, correctPrefix:0, correctNet:'0.0.0.0', correctMask:'0.0.0.0', nextHop:branchLink.aIP});
+  return {kind:'hard', hqNet, branchNets, ispLink, branchLink, routes};
+}
+function genSumm(diff){
+  if(diff==='medium') return genSummMedium();
+  if(diff==='hard') return genSummHard();
+  return genSummEasy();
+}
+/* Standalone (no router-session state needed, unlike rlCli's ip route
+   handler) — same abbreviation/whitespace tolerance as that parser, since
+   it's the same command in real IOS. */
+function summParseIpRoute(line){
+  const t=line.trim().replace(/\s+/g,' ');
+  if(!t) return null;
+  const w=t.toLowerCase().split(' ');
+  const M=(tok,cand)=>tok&&cand.startsWith(tok);
+  if(!(w[0]&&M(w[0],'ip'))) return null;
+  if(!(w[1]&&M(w[1],'route'))) return null;
+  const parts=t.split(' ');
+  const net=parts[2], mask=parts[3], nh=parts[4];
+  if(!net||!mask||!nh) return null;
+  if(!isValidIP(net)||!isValidIP(nh)) return null;
+  const pfx=maskToCidr(mask);
+  if(pfx==null) return null;
+  return {net, pfx, nh, netInt:netIntOf(ip2int(net),pfx)};
+}
+function renderSumm(body,qip){
+  const d=state.data;
+  if(d.kind==='easy'){
+    document.getElementById('qprompt').innerHTML=`Write the single static route that summarizes all the networks below, forwarding everything to <strong>${d.nextHop}</strong>.`;
+    const list=d.networks.map(n=>`<div class="cli-block" style="margin-bottom:.5rem">${n.network}/${n.prefix}</div>`).join('');
+    body.innerHTML=`${list}${summBitsToolHtml()}
+      <div class="afield large" id="f-ans">
+        <label>Summarized static route</label>
+        <input id="a-ans" placeholder="ip route <network> <mask> <next-hop>" autocomplete="off" spellcheck="false">
+        <div class="ahint" id="h-ans"></div>
+      </div>`;
+    summBuildBits();
+    setBtns('text');
+    return;
+  }
+  if(d.kind==='medium'){
+    document.getElementById('qprompt').innerHTML=`HQ connects to ISP over a point-to-point link. Configure a <strong>summary</strong> static route on ISP for all of HQ's networks, and a <strong>default</strong> static route on HQ for the Internet.`;
+    const topo=`
+      <div class="cfg-sec-lbl">HQ's directly connected networks</div>
+      ${d.hqNets.map(n=>`<div class="cli-block" style="margin-bottom:.5rem">${n.network}/${n.prefix}</div>`).join('')}
+      <div class="cfg-sec-lbl" style="margin-top:.75rem">HQ &harr; ISP link</div>
+      <div class="cli-block" style="margin-bottom:1rem">HQ: ${d.link.aIP}/30 &nbsp;&nbsp; ISP: ${d.link.bIP}/30</div>`;
+    body.innerHTML=`${summTopoHtml('medium',d,false)}${topo}${summBitsToolHtml()}${summRouteFieldsHtml(d.routes,'ip route <network> <mask> <next-hop>')}`;
+    summBuildBits();
+    summTopoFit();
+    setBtns('text');
+    return;
+  }
+  document.getElementById('qprompt').innerHTML=`ISP, HQ, and BRANCH are chained together. Configure a <strong>summary</strong> static route on ISP for everything behind HQ, a <strong>default</strong> route on HQ for the Internet, individual static routes on HQ for each of BRANCH's networks, and a <strong>default</strong> route on BRANCH for everything beyond it.`;
+  const topo=`
+    <div class="cfg-sec-lbl">HQ's directly connected network</div>
+    <div class="cli-block" style="margin-bottom:.5rem">${d.hqNet.network}/${d.hqNet.prefix}</div>
+    <div class="cfg-sec-lbl" style="margin-top:.75rem">BRANCH's directly connected networks</div>
+    ${d.branchNets.map(n=>`<div class="cli-block" style="margin-bottom:.5rem">${n.network}/${n.prefix}</div>`).join('')}
+    <div class="cfg-sec-lbl" style="margin-top:.75rem">HQ &harr; ISP link</div>
+    <div class="cli-block" style="margin-bottom:.5rem">HQ: ${d.ispLink.aIP}/30 &nbsp;&nbsp; ISP: ${d.ispLink.bIP}/30</div>
+    <div class="cfg-sec-lbl" style="margin-top:.75rem">HQ &harr; BRANCH link</div>
+    <div class="cli-block" style="margin-bottom:1rem">HQ: ${d.branchLink.aIP}/30 &nbsp;&nbsp; BRANCH: ${d.branchLink.bIP}/30</div>`;
+  body.innerHTML=`${summTopoHtml('hard',d,false)}${topo}${summBitsToolHtml()}${summRouteFieldsHtml(d.routes,'ip route <network> <mask> <next-hop>')}`;
+  summBuildBits();
+  summTopoFit();
+  setBtns('text');
+}
+/* ── Interactive bit table (ported from binary_game.html's #bt-cells tool;
+   ids prefixed sm- to avoid clashing with anything else in this file) ── */
+const SUMM_BV=[128,64,32,16,8,4,2,1];
+let summBits=new Array(8).fill(0);
+function summBuildBits(){
+  const c=document.getElementById('sm-bt-cells');
+  if(!c) return;
+  summBits=new Array(8).fill(0);
+  c.innerHTML='';
+  SUMM_BV.forEach((v,i)=>{
+    const cell=document.createElement('div');
+    cell.className='bit-cell'; cell.id='sm-bt-c-'+i;
+    cell.innerHTML='<div class="bit-weight">'+v+'</div><div class="bit-digit" id="sm-bt-d-'+i+'">0</div>';
+    cell.addEventListener('click',()=>summToggleBit(i));
+    c.appendChild(cell);
+  });
+  summRenderBits();
+}
+function summToggleBit(i){ summBits[i]=summBits[i]?0:1; summRenderBits(); }
+function summRenderBits(){
+  const dec=SUMM_BV.reduce((s,v,i)=>s+v*summBits[i],0);
+  const bin=summBits.join('');
+  const decEl=document.getElementById('sm-bt-dec'), binEl=document.getElementById('sm-bt-bin');
+  if(decEl) decEl.textContent=dec;
+  if(binEl) binEl.textContent=bin.slice(0,4)+' '+bin.slice(4);
+  SUMM_BV.forEach((_,i)=>{
+    const cellEl=document.getElementById('sm-bt-c-'+i), digEl=document.getElementById('sm-bt-d-'+i);
+    if(cellEl) cellEl.classList.toggle('on',summBits[i]===1);
+    if(digEl) digEl.textContent=summBits[i];
+  });
+}
+function summClearBits(){ summBits=new Array(8).fill(0); summRenderBits(); }
+function summToggleBits(){
+  const el=document.getElementById('summ-bits'), btn=document.getElementById('summ-bits-btn');
+  if(!el) return;
+  const show=el.style.display==='none';
+  el.style.display=show?'':'none';
+  if(btn) btn.textContent=(show?'Hide':'Show')+' Bit Table';
+  summSetPref('bits',show);
+}
+/* Persisted per-toggle prefs (bit table shown/hidden, network diagram
+   shown/hidden) — 'remembered even when leaving the tab', so localStorage
+   rather than the in-memory state object. Namespaced ne-summ-* to match
+   this codebase's other localStorage keys (ne-opts:*, ne-custom-theme). */
+function summGetPref(key,def){
+  try { const v=localStorage.getItem('ne-summ-'+key); return v===null?def:v==='1'; } catch(e){ return def; }
+}
+function summSetPref(key,val){
+  try { localStorage.setItem('ne-summ-'+key, val?'1':'0'); } catch(e){ /* storage unavailable */ }
+}
+function summBitsToolHtml(){
+  const show=summGetPref('bits',false);
+  return `<button class="rand-btn" style="margin-bottom:1rem" id="summ-bits-btn" onclick="summToggleBits()">${show?'Hide':'Show'} Bit Table</button>
+    <div class="tool-block" id="summ-bits" style="display:${show?'':'none'}">
+      <div class="tool-block-title">Interactive Bit Table</div>
+      <p class="tool-note">Click bits to toggle them on (1) or off (0) — use this to manually work out which leading bits the networks above share.</p>
+      <div class="bit-cells" id="sm-bt-cells"></div>
+      <div class="bt-readout">
+        <div><div class="bt-lbl">Decimal</div><div class="bt-val" id="sm-bt-dec">0</div></div>
+        <div><div class="bt-lbl">Binary</div><div class="bt-bin-val" id="sm-bt-bin">0000 0000</div></div>
+      </div>
+      <button class="btn btn-s" style="font-size:13px;padding:5px 14px;" onclick="summClearBits()">Clear</button>
+    </div>`;
+}
+/* Static (view-only) network diagram for Medium/Hard — same .lab-card/
+   .lab-canvas/.dev/.port/.cable visual language as the IP Routing lab's
+   canvas (rlRenderCanvas), but hand-laid-out per-family instead of reusing
+   rlPortPos's bottom-edge port math, which is built for a free-drag
+   canvas with arbitrary topology — this shape never varies within a tier.
+   RT_W/RT_H come from the IP Routing lab section further down (function-
+   hoisting keeps them available here, same as isValidIP/maskToCidr
+   already were).
+
+   IPv4 (summTopoDataH) stays a left-to-right router chain — that always
+   fit fine, IPv4 addresses are short. IPv6 (summTopoDataV) stacks
+   top-to-bottom instead: IPv6 addresses are long enough that a horizontal
+   layout's per-router gap (sized to fit two long labels side by side)
+   pushed native width past 1600px, and fitting *that* into any normal
+   viewport meant zooming out far enough that the text became unreadable
+   — the actual complaint. Stacking vertically turns that width cost into
+   a height cost instead (a link's two labels sit beside its own naturally
+   vertical run rather than needing to fit side-by-side in a gap), and
+   height is the cheap dimension: summTopoFit() below sizes the viewport
+   to content instead of the reverse, so a taller diagram just gets a
+   taller (auto-fit, still fully visible, still no scrolling) viewport
+   rather than forcing a smaller zoom the way extra *width* would.
+
+   Every stub network and every link's addresses are labeled directly on
+   the diagram (summTopoData normalizes v4/v6's differently-shaped
+   generator output into one {orient,boxes,links} shape) — the goal is the
+   diagram alone is enough to answer the question, the text blocks above/
+   below it are a redundant second way to read the same info, not a
+   dependency.
+
+   Content still renders at a "native" size (data.w x data.h) inside a
+   zoomable, pannable viewport, since neither layout can *guarantee* zero
+   overlap for arbitrarily long random addresses — summTopoFit() is the
+   escape hatch, and it's a real measurement, not a guess: it reads the
+   actual rendered bounding box of everything in the SVG (getBBox() on the
+   #summ-topo-g wrapper) rather than trusting data.w/data.h alone, then
+   picks a zoom level that guarantees the *whole* diagram fits inside a
+   capped-height viewport with no scrolling ever required by default —
+   "detect if content is going out of the box, put it somewhere else" is
+   implemented as "shrink the whole picture by exactly however much is
+   needed to fit," which is the one strategy that's *always* correct
+   regardless of how long a given random address turns out to render,
+   rather than repositioning individual labels (which only ever reduces
+   the chance of a collision, never eliminates it for unbounded string
+   lengths). Zooming in further than the fit level, and panning around
+   the result, is still available — summTopoWheel() (mouse wheel, same
+   multiplicative-1.1-step mechanism as attachCanvasDrag's wheel handler
+   in lab-shared.js) and summTopoBindDrag() (left-click-drag, same
+   mousedown/mousemove/mouseup shape attachCanvasDrag uses to drag a
+   device, just panning the camera here since there's nothing to select
+   or move) — for a closer look at any one part once the default
+   fit-everything view isn't detailed enough.
+
+   Non-interactive (view-only) *content* is still enforced even though the
+   viewport itself needs real pointer events now (for drag/wheel input):
+   pointer-events:none lives on #summ-topo-content, which .dev/.port
+   correctly inherit since neither sets its own pointer-events. .cable is
+   the one exception — it hard-codes `pointer-events: stroke` in
+   styles.css (what makes cables clickable/deletable on the real IP
+   Routing canvas), and a class rule always beats an inherited value, so
+   every <line class="cable"> here also carries its own inline
+   pointer-events:none (inline beats class regardless of specificity).
+   Net effect: dragging/scrolling the viewport pans/zooms the camera,
+   nothing drawn inside it is ever clickable, draggable, or editable. */
+function summTopoDataH(kind,d){
+  const lbl=n=>n.network+'/'+n.prefix;
+  const gap=110, leftPad=210, y=170;
+  if(kind==='medium'){
+    const hqX=leftPad, ispX=hqX+RT_W+gap;
+    return {
+      orient:'h', w: ispX+RT_W+80, h: 300,
+      boxes:[
+        {x:hqX,  y, name:'HQ',  stubDir:'up',   stubs:d.hqNets.map(lbl)},
+        {x:ispX, y, name:'ISP', stubDir:null,   stubs:[]}
+      ],
+      links:[
+        {a:0,b:1, aLabel:d.link.aIP, bLabel:d.link.bIP, midLabel:d.link.netText}
+      ]
+    };
+  }
+  const branchX=leftPad, hqX=branchX+RT_W+gap, ispX=hqX+RT_W+gap;
+  return {
+    orient:'h', w: ispX+RT_W+80, h: 320,
+    boxes:[
+      {x:branchX, y, name:'BRANCH', stubDir:'left', stubs:d.branchNets.map(lbl)},
+      {x:hqX,     y, name:'HQ',     stubDir:'up',   stubs:[lbl(d.hqNet)]},
+      {x:ispX,    y, name:'ISP',    stubDir:null,   stubs:[]}
+    ],
+    links:[
+      {a:1,b:2, aLabel:d.ispLink.aIP,    bLabel:d.ispLink.bIP,    midLabel:d.ispLink.netText},
+      {a:0,b:1, aLabel:d.branchLink.bIP, bLabel:d.branchLink.aIP, midLabel:d.branchLink.netText}
+    ]
+  };
+}
+function summTopoDataV(kind,d){
+  const lbl=n=>n.text;
+  const colX=240, rightPad=400, topPad=185, linkGap=95;
+  if(kind==='medium'){
+    const hqY=topPad, ispY=hqY+RT_H+linkGap;
+    return {
+      orient:'v', w: colX+RT_W+rightPad, h: ispY+RT_H+30,
+      boxes:[
+        {x:colX, y:hqY,  name:'HQ',  stubDir:'up',   stubs:d.hqNets.map(lbl)},
+        {x:colX, y:ispY, name:'ISP', stubDir:null,   stubs:[]}
+      ],
+      links:[
+        {a:0,b:1, aLabel:d.link.aText, bLabel:d.link.bText, midLabel:null}
+      ]
+    };
+  }
+  const branchY=topPad, hqY=branchY+RT_H+linkGap, ispY=hqY+RT_H+linkGap;
+  return {
+    orient:'v', w: colX+RT_W+rightPad, h: ispY+RT_H+30,
+    boxes:[
+      {x:colX, y:branchY, name:'BRANCH', stubDir:'up',    stubs:d.branchNets.map(lbl)},
+      {x:colX, y:hqY,     name:'HQ',     stubDir:'right', stubs:[lbl(d.hqNet)]},
+      {x:colX, y:ispY,    name:'ISP',    stubDir:null,    stubs:[]}
+    ],
+    links:[
+      {a:0,b:1, aLabel:d.branchLink.bText, bLabel:d.branchLink.aText, midLabel:null},
+      {a:1,b:2, aLabel:d.ispLink.aText,    bLabel:d.ispLink.bText,    midLabel:null}
+    ]
+  };
+}
+function summTopoData(kind,d,isV6){ return isV6 ? summTopoDataV(kind,d) : summTopoDataH(kind,d); }
+/* Fans `count` stub lines out from a box's top-center ('up'), left-center
+   ('left') or right-center ('right') edge, each ending in a short
+   perpendicular T-bar — the same "stub network" symbol real topology
+   diagrams (and this trainer's earlier reference photos) use. Longer arms
+   + wider spread for IPv6 so adjacent stub labels land further apart.
+   'up' additionally staggers each stub's arm progressively longer by
+   index (lenStep) — angle spread alone gives neighboring tips only ~30px
+   of horizontal separation, nowhere near enough for ~100px-wide label
+   text (verified: without this, 3 upward stubs on the IPv4 Medium tier
+   reliably produced 2 overlaps every single generation), so successive
+   stubs are pushed out to different distances too, staggering labels onto
+   effectively different rows instead of relying on horizontal spacing
+   that text width will always outrun. 'left'/'right' don't need it — they
+   already had enough natural separation without it (verified via the
+   automated layout check), and staggering them too just pushes later
+   stubs' labels past the layout's own side-padding budget, reintroducing
+   clipping on the other axis instead. Returns per-stub geometry: the line
+   from the box edge to the stub tip, the T-bar's two endpoints, and a
+   label anchor point just beyond the T-bar. */
+function summStubGeom(box,dir,count,isV6){
+  const anchor = dir==='up' ? [box.x+RT_W/2, box.y]
+    : dir==='right' ? [box.x+RT_W, box.y+RT_H/2]
+    : [box.x, box.y+RT_H/2];
+  const baseDeg = dir==='up' ? -90 : dir==='right' ? 0 : 180;
+  const spread = count<=1 ? 0 : (isV6?70:55);
+  const baseLen = isV6?130:72, lenStep = dir==='up' ? (isV6?20:34) : 0, tbar=9, labelOff=isV6?18:15;
+  const start=baseDeg-spread/2, step=count<=1?0:spread/(count-1);
+  const out=[];
+  for(let i=0;i<count;i++){
+    const deg=count<=1?baseDeg:start+step*i;
+    const len=baseLen+i*lenStep;
+    const rad=deg*Math.PI/180, pRad=rad+Math.PI/2;
+    const ex=anchor[0]+len*Math.cos(rad), ey=anchor[1]+len*Math.sin(rad);
+    out.push({
+      ax:anchor[0], ay:anchor[1], ex, ey,
+      t1x:ex+tbar*Math.cos(pRad), t1y:ey+tbar*Math.sin(pRad),
+      t2x:ex-tbar*Math.cos(pRad), t2y:ey-tbar*Math.sin(pRad),
+      lx:ex+labelOff*Math.cos(rad), ly:ey+labelOff*Math.sin(rad),
+      deg
+    });
+  }
+  return out;
+}
+function summTopoLbl(x,y,anchor,text){
+  return `<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" text-anchor="${anchor}" dominant-baseline="middle" style="font-size:10px;font-family:var(--mono);fill:var(--text-s)">${text}</text>`;
+}
+function summTopoHtml(kind,d,isV6){
+  const data=summTopoData(kind,d,isV6);
+  let lines='', labels='', devHtml='', ports='';
+  data.boxes.forEach(b=>{
+    devHtml+=`<div class="dev router" style="left:${b.x}px;top:${b.y}px"><div class="dev-name">${b.name}</div><div class="dev-sub">router</div></div>`;
+    if(b.stubs.length){
+      summStubGeom(b,b.stubDir,b.stubs.length,isV6).forEach((g,i)=>{
+        lines+=`<line class="cable" style="pointer-events:none" x1="${g.ax}" y1="${g.ay}" x2="${g.ex}" y2="${g.ey}"></line>`;
+        lines+=`<line class="cable" style="pointer-events:none" x1="${g.t1x}" y1="${g.t1y}" x2="${g.t2x}" y2="${g.t2y}"></line>`;
+        const c=Math.cos(g.deg*Math.PI/180);
+        labels+=summTopoLbl(g.lx,g.ly, c>0.3?'start':c<-0.3?'end':'middle', b.stubs[i]);
+      });
+    }
+  });
+  if(data.orient==='h'){
+    /* Horizontal chain (IPv4): address labels sit above every box on this
+       row (min box y minus a fixed margin), each of aLabel/bLabel/
+       midLabel on its OWN row (rowY, rowY-14, rowY-28) — a link's gap is
+       sized for the typical case, but two same-row labels anchored from
+       opposite ends of a link can still meet in the middle if both
+       happen to render long, so stacking removes the dependency on
+       string length entirely instead of trying to out-guess it. */
+    const rowY=Math.min(...data.boxes.map(b=>b.y))-16;
+    data.links.forEach(lk=>{
+      const A=data.boxes[lk.a], B=data.boxes[lk.b];
+      const ax=A.x+RT_W, ay=A.y+RT_H/2, bx=B.x, by=B.y+RT_H/2;
+      lines+=`<line class="cable" style="pointer-events:none" x1="${ax}" y1="${ay}" x2="${bx}" y2="${by}"></line>`;
+      ports+=`<span class="port p-acc" style="left:${ax-7}px;top:${ay-7}px"></span><span class="port p-acc" style="left:${bx-7}px;top:${by-7}px"></span>`;
+      const inset=Math.max(16,(bx-ax)*0.08);
+      labels+=summTopoLbl(ax+inset, rowY, 'start', lk.aLabel);
+      labels+=summTopoLbl(bx-inset, rowY-14, 'end', lk.bLabel);
+      if(lk.midLabel) labels+=summTopoLbl((ax+bx)/2, rowY-28, 'middle', lk.midLabel);
+    });
+  } else {
+    /* Vertical chain (IPv6): both boxes on a link share the same x, so
+       its two address labels sit to the LEFT of the line, distributed
+       along its own natural length (aLabel near the top end, bLabel near
+       the bottom) instead of needing an artificial multi-row stack —
+       vertical distribution can't collide regardless of how long either
+       string renders, the same guarantee, just using space the link
+       already occupies instead of extra rows above the boxes. */
+    data.links.forEach(lk=>{
+      const A=data.boxes[lk.a], B=data.boxes[lk.b];
+      const cx=A.x+RT_W/2, ay=A.y+RT_H, by=B.y;
+      lines+=`<line class="cable" style="pointer-events:none" x1="${cx}" y1="${ay}" x2="${cx}" y2="${by}"></line>`;
+      ports+=`<span class="port p-acc" style="left:${cx-7}px;top:${ay-7}px"></span><span class="port p-acc" style="left:${cx-7}px;top:${by-7}px"></span>`;
+      const xOff=20, yMargin=18;
+      labels+=summTopoLbl(cx-xOff, ay+yMargin, 'end', lk.aLabel);
+      labels+=summTopoLbl(cx-xOff, by-yMargin, 'end', lk.bLabel);
+    });
+  }
+  const show=summGetPref('topo',true);
+  return `<div class="lab-card" style="margin-bottom:1rem">
+    <div class="lab-toolbar" style="${show?'':'margin-bottom:0'}">
+      <span style="font-size:12px;color:var(--text-s)">Network diagram (view-only — drag to pan, scroll/buttons to zoom)</span>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button class="rand-btn" onclick="summTopoZoom(-1)" title="Zoom out">&minus;</button>
+        <button class="rand-btn" onclick="summTopoZoom(0)" title="Reset zoom">Reset</button>
+        <button class="rand-btn" onclick="summTopoZoom(1)" title="Zoom in">+</button>
+        <button class="rand-btn" id="summ-topo-btn" onclick="summToggleTopo()">${show?'Hide':'Show'}</button>
+      </div>
+    </div>
+    <div id="summ-topo" style="display:${show?'':'none'}">
+      <div class="lab-canvas" id="summ-topo-vp" style="overflow:hidden;resize:none;height:200px">
+        <div id="summ-topo-content" data-w="${data.w}" data-h="${data.h}" style="position:relative;width:${data.w}px;height:${data.h}px;transform-origin:0 0;pointer-events:none">
+          <svg style="position:absolute;inset:0;width:100%;height:100%;z-index:2"><g id="summ-topo-g">${lines}${labels}</g></svg>
+          <div style="position:absolute;inset:0">${devHtml}${ports}</div>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+const SUMM_TOPO_MAXH=520;
+let summTopoZ=1, summTopoPan={x:0,y:0};
+function summTopoApplyTransform(){
+  const c=document.getElementById('summ-topo-content');
+  if(c) c.style.transform='translate('+summTopoPan.x+'px,'+summTopoPan.y+'px) scale('+summTopoZ+')';
+}
+/* Fits the diagram to its viewport on every fresh render (and again
+   whenever the panel is un-hidden, since a display:none viewport reads
+   clientWidth===0 the last time this ran) — the "detect if content is
+   going out of the box" step described in the big comment above
+   summTopoData. getBBox() on #summ-topo-g gives the true rendered extent
+   of every line/label the SVG actually drew, which is more trustworthy
+   than the data.w/data.h estimate alone (that estimate is what's used to
+   size the *canvas* devices/ports sit on, and has been verified against
+   thousands of random trials, but "verified against trials" isn't the
+   same guarantee as "measured the real thing"); boxes/ports are plain
+   HTML siblings so they're not part of that measurement, but their
+   positions are always within data.w/data.h by construction, so taking
+   the max of both signals safely covers everything on the diagram.
+   zoom is picked so BOTH dimensions fit — width against the viewport's
+   actual available width, height against SUMM_TOPO_MAXH — and the
+   viewport's own height is then set to exactly match the zoomed content
+   (never the MAXH cap itself unless the content needed all of it), so
+   there's never empty space or a scrollbar for the default view: this is
+   what guarantees "everything visible at a glance, no scrolling", not
+   the specific spacing constants above (those just make it so zoom
+   rarely has to go far below 100% to achieve it). */
+function summTopoFit(){
+  const vp=document.getElementById('summ-topo-vp'), c=document.getElementById('summ-topo-content'), g=document.getElementById('summ-topo-g');
+  if(!vp||!c) return;
+  if(!vp.dataset.wheelBound){ vp.addEventListener('wheel', summTopoWheel, {passive:false}); vp.dataset.wheelBound='1'; }
+  if(!vp.dataset.dragBound){ summTopoBindDrag(vp); vp.dataset.dragBound='1'; }
+  if(!vp.clientWidth) return;
+  c.style.transform='scale(1)';
+  let contentW=+c.dataset.w, contentH=+c.dataset.h;
+  if(g){
+    try{ const b=g.getBBox(); contentW=Math.max(contentW,b.x+b.width); contentH=Math.max(contentH,b.y+b.height); }catch(e){ /* getBBox can throw on a not-yet-laid-out SVG in some browsers */ }
+  }
+  summTopoZ=Math.min(1, vp.clientWidth/contentW, SUMM_TOPO_MAXH/contentH);
+  summTopoPan={x:0,y:0};
+  vp.style.height=(contentH*summTopoZ)+'px';
+  summTopoApplyTransform();
+}
+/* Same mechanism as attachCanvasDrag's wheel handler in lab-shared.js
+   (multiplicative 1.1 step, transform:scale) — kept local rather than
+   routed through that shared helper since this diagram has no devices to
+   drag and no zoomWrap/getZoom/setZoom device-canvas contract to satisfy,
+   just the zoom gesture itself. Predominantly-horizontal wheel input
+   (shift+wheel, trackpad two-finger swipes) is left alone to fall through
+   as normal horizontal scrolling instead of being hijacked into zoom. */
+function summTopoWheel(e){
+  if(Math.abs(e.deltaX)>Math.abs(e.deltaY)) return;
+  e.preventDefault();
+  const f=e.deltaY<0?1.1:1/1.1;
+  summTopoZ=Math.max(0.25,Math.min(2.5,summTopoZ*f));
+  summTopoApplyTransform();
+}
+/* Left-click-drag pans the view — same mousedown/mousemove/mouseup shape
+   attachCanvasDrag uses to drag a device around the IP Routing canvas,
+   just panning the camera (translate on #summ-topo-content) instead of
+   moving a device, since there's nothing here to select or move.
+   #summ-topo-content is pointer-events:none, so a mousedown anywhere over
+   the diagram — even directly on top of a router box or cable — falls
+   through to this viewport underneath rather than "hitting" that content,
+   which is exactly why dragging pans the whole view no matter where the
+   drag starts, instead of needing empty canvas space to grab. */
+function summTopoBindDrag(vp){
+  let dragging=false, sx=0, sy=0, ox=0, oy=0;
+  vp.style.cursor='grab';
+  vp.addEventListener('mousedown', function(e){
+    dragging=true; sx=e.clientX; sy=e.clientY; ox=summTopoPan.x; oy=summTopoPan.y;
+    vp.style.cursor='grabbing';
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove', function(e){
+    if(!dragging) return;
+    summTopoPan={x:ox+(e.clientX-sx), y:oy+(e.clientY-sy)};
+    summTopoApplyTransform();
+  });
+  window.addEventListener('mouseup', function(){
+    if(dragging){ dragging=false; vp.style.cursor='grab'; }
+  });
+}
+function summTopoZoom(dir){
+  if(dir===0){ summTopoFit(); return; }
+  summTopoZ=Math.max(0.25,Math.min(2.5,summTopoZ+dir*0.2));
+  summTopoApplyTransform();
+}
+function summToggleTopo(){
+  const el=document.getElementById('summ-topo'), btn=document.getElementById('summ-topo-btn');
+  if(!el||!btn) return;
+  const show=el.style.display==='none';
+  el.style.display=show?'':'none';
+  btn.textContent=show?'Hide':'Show';
+  const bar=btn.closest('.lab-toolbar');
+  if(bar) bar.style.marginBottom=show?'':'0';
+  summSetPref('topo',show);
+  if(show) summTopoFit();
+}
+/* Medium/Hard render N separate CLI-line routes instead of Easy's one big
+   field — same .afield/.ahint states, laid out in the existing .agrid
+   (the same 2-col grid Read Table's readFields()/gradeAgrid() use). */
+function summRouteFieldsHtml(routes, placeholder){
+  return `<div class="agrid" id="agrid">${routes.map((r,i)=>`
+    <div class="afield" id="f-r${i}">
+      <label>${r.label}</label>
+      <input id="a-r${i}" placeholder="${placeholder}" autocomplete="off" spellcheck="false">
+      <div class="ahint" id="h-r${i}"></div>
+    </div>`).join('')}</div>`;
+}
+
+/* ─── IPv6 Summaries (topic: summ6) ────────────────────────────────
+   Same idea as IP Summaries, over IPv6 prefixes instead — no bit table
+   here (IPv6 subnetting conventionally works in hex nibbles, not
+   individual bits, and this trainer's existing IPv6 tools are all
+   hex-based too). 128-bit addresses are represented as an array of eight
+   16-bit numbers throughout (rlV6* below) — plain JS bitwise operators
+   are only 32-bit safe, so there's no single-integer shortcut like the
+   IPv4 helpers use. */
+function rlV6MaskGroups(groups,prefixLen){
+  const out=groups.slice();
+  for(let i=0;i<8;i++){
+    const gs=i*16, ge=gs+16;
+    if(prefixLen<=gs) out[i]=0;
+    else if(prefixLen<ge){ const keep=prefixLen-gs; out[i]=out[i]&((0xFFFF<<(16-keep))&0xFFFF); }
+  }
+  return out;
+}
+/* Sets bitLen bits starting at absolute bit position startBit (0 = the very
+   first bit of the address) to value, without disturbing any other bits. */
+function rlV6SetField(groups,startBit,bitLen,value){
+  const out=groups.slice();
+  for(let b=0;b<bitLen;b++){
+    const bitPos=startBit+b;
+    const gi=Math.floor(bitPos/16), bi=bitPos%16;
+    const bit=(value>>>(bitLen-1-b))&1;
+    const mask=1<<(15-bi);
+    if(bit) out[gi]|=mask; else out[gi]&=(~mask&0xFFFF);
+  }
+  return out;
+}
+function rlV6Compress(groups){
+  const p=groups.map(g=>g.toString(16));
+  let bS=-1,bL=0,i=0;
+  while(i<8){
+    if(p[i]==='0'){ const s=i; while(i<8&&p[i]==='0')i++; const l=i-s; if(l>bL){bS=s;bL=l;} }
+    else i++;
+  }
+  if(bL>=2){
+    const before=p.slice(0,bS).join(':'), after=p.slice(bS+bL).join(':');
+    if(before&&after) return before+'::'+after;
+    if(before) return before+'::';
+    if(after) return '::'+after;
+    return '::';
+  }
+  return p.join(':');
+}
+/* Accepts compressed or expanded input, any case — mirrors what a learner
+   would reasonably type, unlike ipv6_game.html's own strict single-string
+   comparison (see that file's checkAnswer). Returns an array of eight
+   16-bit numbers, or null if the input isn't a syntactically valid address. */
+function rlV6Parse(addr){
+  addr=addr.toLowerCase().trim();
+  if(addr==='::') return Array(8).fill(0);
+  let parts;
+  if(addr.includes('::')){
+    const sides=addr.split('::');
+    if(sides.length!==2) return null;
+    const L=sides[0]?sides[0].split(':'):[];
+    const R=sides[1]?sides[1].split(':'):[];
+    const z=8-L.length-R.length;
+    if(z<0) return null;
+    parts=[...L,...Array(z).fill('0'),...R];
+  } else parts=addr.split(':');
+  if(parts.length!==8) return null;
+  if(!parts.every(p=>/^[0-9a-f]{1,4}$/.test(p))) return null;
+  return parts.map(p=>parseInt(p,16));
+}
+/* Mirrors genSummEasy/Medium/Hard's IPv4 tiers (see the comment above those)
+   over 128-bit prefixes. 2001:db8:: is the documentation prefix real IOS
+   examples (and this repo's own ipv6_game.html) already lean on — keeps
+   generated addresses looking like realistic examples instead of pure
+   noise. depth=8 (vs. IPv4's depth=2) because IPv6 stub prefixes are
+   conventionally /64s off a /56-or-shorter site prefix, not tight-packed
+   /24s off a /22 — the wider depth keeps S/C looking like real allocations
+   without changing the slot-picking math at all. */
+function genSumm6Easy(){
+  const depth=8, totalSlots=1<<depth, n=3;
+  const S=choice([32,36,40,44,48,52]);
+  const C=S+depth;
+  const slots=new Set([0,totalSlots-1]);
+  while(slots.size<n) slots.add(ri(0,totalSlots-1));
+  const slotArr=shuffle([...slots]);
+  const rawGroups=[0x2001,0x0db8,ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF)];
+  const parentGroups=rlV6MaskGroups(rawGroups,S);
+  const networks=slotArr.map(slot=>{
+    const groups=rlV6SetField(parentGroups,S,depth,slot);
+    return {groups, prefix:C, text:rlV6Compress(groups)+'/'+C};
+  }).sort((a,b)=>{ for(let i=0;i<8;i++){ if(a.groups[i]!==b.groups[i]) return a.groups[i]-b.groups[i]; } return 0; });
+  let nhGroups=[ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF)];
+  if(nhGroups.every(g=>g===0)) nhGroups[7]=1;
+  return {kind:'easy', networks, correctGroups:parentGroups, correctPrefix:S, correctText:rlV6Compress(parentGroups)+'/'+S, nextHop:rlV6Compress(nhGroups), nextHopGroups:nhGroups};
+}
+/* A same-prefix "point-to-point" pair of IPv6 addresses (last group ::1/::2)
+   for the two ends of a router-router link — mirrors randP2PLink's IPv4
+   /30 pair, just without a real subnetted block backing it (not needed —
+   nothing in this topic asks the learner to derive the link's own prefix,
+   only to use the two endpoint addresses as next-hops). */
+function randV6P2PLink(){
+  const base=[0x2001,0x0db8,ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),0];
+  const aGroups=base.slice(); aGroups[7]=1;
+  const bGroups=base.slice(); bGroups[7]=2;
+  return { aText:rlV6Compress(aGroups), bText:rlV6Compress(bGroups), aGroups, bGroups };
+}
+function genSumm6Medium(){
+  const depth=8, totalSlots=1<<depth, n=3;
+  const S=choice([32,36,40,44,48,52]), C=S+depth;
+  const slots=new Set([0,totalSlots-1]);
+  while(slots.size<n) slots.add(ri(0,totalSlots-1));
+  const slotArr=shuffle([...slots]);
+  const rawGroups=[0x2001,0x0db8,ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF)];
+  const parentGroups=rlV6MaskGroups(rawGroups,S);
+  const hqNets=slotArr.map(slot=>{
+    const groups=rlV6SetField(parentGroups,S,depth,slot);
+    return {groups, prefix:C, text:rlV6Compress(groups)+'/'+C};
+  }).sort((a,b)=>{ for(let i=0;i<8;i++){ if(a.groups[i]!==b.groups[i]) return a.groups[i]-b.groups[i]; } return 0; });
+  const link=randV6P2PLink();
+  const routes=[
+    {label:'Summary route on ISP', correctGroups:parentGroups, correctPrefix:S, correctText:rlV6Compress(parentGroups)+'/'+S, nextHop:link.aText, nextHopGroups:link.aGroups},
+    {label:'Default route on HQ', correctGroups:Array(8).fill(0), correctPrefix:0, correctText:'::/0', nextHop:link.bText, nextHopGroups:link.bGroups}
+  ];
+  return {kind:'medium', hqNets, link, routes};
+}
+function genSumm6Hard(){
+  const depth=8, totalSlots=1<<depth, n=4;
+  const S=choice([32,36,40,44,48,52]), C=S+depth;
+  const slots=new Set([0,totalSlots-1]);
+  while(slots.size<n) slots.add(ri(0,totalSlots-1));
+  const slotArr=shuffle([...slots]);
+  const rawGroups=[0x2001,0x0db8,ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF),ri(0,0xFFFF)];
+  const parentGroups=rlV6MaskGroups(rawGroups,S);
+  const allNets=slotArr.map(slot=>{
+    const groups=rlV6SetField(parentGroups,S,depth,slot);
+    return {groups, prefix:C, text:rlV6Compress(groups)+'/'+C};
+  });
+  shuffle(allNets);
+  const hqNet=allNets[0];
+  const branchNets=allNets.slice(1).sort((a,b)=>{ for(let i=0;i<8;i++){ if(a.groups[i]!==b.groups[i]) return a.groups[i]-b.groups[i]; } return 0; });
+  const ispLink=randV6P2PLink();
+  const branchLink=randV6P2PLink();
+  const routes=[
+    {label:'Summary route on ISP', correctGroups:parentGroups, correctPrefix:S, correctText:rlV6Compress(parentGroups)+'/'+S, nextHop:ispLink.aText, nextHopGroups:ispLink.aGroups},
+    {label:'Default route on HQ', correctGroups:Array(8).fill(0), correctPrefix:0, correctText:'::/0', nextHop:ispLink.bText, nextHopGroups:ispLink.bGroups}
+  ];
+  branchNets.forEach(bn=>{
+    routes.push({label:`Route to ${bn.text} on HQ`, correctGroups:bn.groups, correctPrefix:bn.prefix, correctText:bn.text, nextHop:branchLink.bText, nextHopGroups:branchLink.bGroups});
+  });
+  routes.push({label:'Default route on BRANCH', correctGroups:Array(8).fill(0), correctPrefix:0, correctText:'::/0', nextHop:branchLink.aText, nextHopGroups:branchLink.aGroups});
+  return {kind:'hard', hqNet, branchNets, ispLink, branchLink, routes};
+}
+function genSumm6(diff){
+  if(diff==='medium') return genSumm6Medium();
+  if(diff==='hard') return genSumm6Hard();
+  return genSumm6Easy();
+}
+function summ6ParseRoute(line){
+  const t=line.trim().replace(/\s+/g,' ');
+  if(!t) return null;
+  const w=t.toLowerCase().split(' ');
+  const M=(tok,cand)=>tok&&cand.startsWith(tok);
+  if(!(w[0]&&M(w[0],'ipv6'))) return null;
+  if(!(w[1]&&M(w[1],'route'))) return null;
+  const parts=t.split(' ');
+  const prefixArg=parts[2], nh=parts[3];
+  if(!prefixArg||!nh) return null;
+  const slash=prefixArg.indexOf('/');
+  if(slash<0) return null;
+  const addrPart=prefixArg.slice(0,slash), pfxPart=prefixArg.slice(slash+1);
+  if(!/^\d{1,3}$/.test(pfxPart)) return null;
+  const pfx=+pfxPart;
+  if(pfx<0||pfx>128) return null;
+  const groups=rlV6Parse(addrPart);
+  if(!groups) return null;
+  const nhGroups=rlV6Parse(nh);
+  if(!nhGroups) return null;
+  return {groups, pfx, nhGroups};
+}
+function renderSumm6(body,qip){
+  const d=state.data;
+  if(d.kind==='easy'){
+    document.getElementById('qprompt').innerHTML=`Write the single static route that summarizes all the prefixes below, forwarding everything to <strong>${d.nextHop}</strong>.`;
+    const list=d.networks.map(n=>`<div class="cli-block" style="margin-bottom:.5rem">${n.text}</div>`).join('');
+    body.innerHTML=`${list}
+      <div class="afield large" id="f-ans">
+        <label>Summarized static route</label>
+        <input id="a-ans" placeholder="ipv6 route <prefix>/<len> <next-hop>" autocomplete="off" spellcheck="false">
+        <div class="ahint" id="h-ans"></div>
+      </div>`;
+    setBtns('text');
+    return;
+  }
+  if(d.kind==='medium'){
+    document.getElementById('qprompt').innerHTML=`HQ connects to ISP over a point-to-point link. Configure a <strong>summary</strong> static route on ISP for all of HQ's networks, and a <strong>default</strong> static route on HQ for the Internet.`;
+    const topo=`
+      <div class="cfg-sec-lbl">HQ's directly connected networks</div>
+      ${d.hqNets.map(n=>`<div class="cli-block" style="margin-bottom:.5rem">${n.text}</div>`).join('')}
+      <div class="cfg-sec-lbl" style="margin-top:.75rem">HQ &harr; ISP link</div>
+      <div class="cli-block" style="margin-bottom:1rem">HQ: ${d.link.aText} &nbsp;&nbsp; ISP: ${d.link.bText}</div>`;
+    body.innerHTML=`${summTopoHtml('medium',d,true)}${topo}${summRouteFieldsHtml(d.routes,'ipv6 route <prefix>/<len> <next-hop>')}`;
+    summTopoFit();
+    setBtns('text');
+    return;
+  }
+  document.getElementById('qprompt').innerHTML=`ISP, HQ, and BRANCH are chained together. Configure a <strong>summary</strong> static route on ISP for everything behind HQ, a <strong>default</strong> route on HQ for the Internet, individual static routes on HQ for each of BRANCH's networks, and a <strong>default</strong> route on BRANCH for everything beyond it.`;
+  const topo=`
+    <div class="cfg-sec-lbl">HQ's directly connected network</div>
+    <div class="cli-block" style="margin-bottom:.5rem">${d.hqNet.text}</div>
+    <div class="cfg-sec-lbl" style="margin-top:.75rem">BRANCH's directly connected networks</div>
+    ${d.branchNets.map(n=>`<div class="cli-block" style="margin-bottom:.5rem">${n.text}</div>`).join('')}
+    <div class="cfg-sec-lbl" style="margin-top:.75rem">HQ &harr; ISP link</div>
+    <div class="cli-block" style="margin-bottom:.5rem">HQ: ${d.ispLink.aText} &nbsp;&nbsp; ISP: ${d.ispLink.bText}</div>
+    <div class="cfg-sec-lbl" style="margin-top:.75rem">HQ &harr; BRANCH link</div>
+    <div class="cli-block" style="margin-bottom:1rem">HQ: ${d.branchLink.aText} &nbsp;&nbsp; BRANCH: ${d.branchLink.bText}</div>`;
+  body.innerHTML=`${summTopoHtml('hard',d,true)}${topo}${summRouteFieldsHtml(d.routes,'ipv6 route <prefix>/<len> <next-hop>')}`;
+  summTopoFit();
+  setBtns('text');
+}
+
+/* Grading for both summary topics — single binary right/wrong answer (no
+   partial credit, unlike readFields/gradeAgrid's multi-field grid), styled
+   through the same .afield/.ahint states that grid uses. Returns whether
+   the answer was correct (false when revealing, matching gradeAgrid's own
+   reveal contract). */
+function summGrade(reveal){
+  const d=state.data;
+  const inp=document.getElementById('a-ans'), fld=document.getElementById('f-ans'), hnt=document.getElementById('h-ans');
+  const correctText='ip route '+d.correctNet+' '+d.correctMask+' '+d.nextHop;
+  inp.disabled=true;
+  if(reveal){ fld.classList.add('show'); inp.value=correctText; hnt.textContent='Revealed'; return false; }
+  const parsed=summParseIpRoute(inp.value);
+  const ok=!!parsed && parsed.netInt===d.correctNetInt && parsed.pfx===d.correctPrefix && parsed.nh===d.nextHop;
+  if(ok){ fld.classList.add('ok'); hnt.textContent='✓ Correct'; }
+  else { fld.classList.add('bad'); hnt.textContent='Correct: '+correctText; }
+  return ok;
+}
+function arraysEq(a,b){ return a.length===b.length && a.every((v,i)=>v===b[i]); }
+function summ6Grade(reveal){
+  const d=state.data;
+  const inp=document.getElementById('a-ans'), fld=document.getElementById('f-ans'), hnt=document.getElementById('h-ans');
+  const correctText='ipv6 route '+d.correctText+' '+d.nextHop;
+  inp.disabled=true;
+  if(reveal){ fld.classList.add('show'); inp.value=correctText; hnt.textContent='Revealed'; return false; }
+  const parsed=summ6ParseRoute(inp.value);
+  const ok=!!parsed && parsed.pfx===d.correctPrefix && arraysEq(rlV6MaskGroups(parsed.groups,parsed.pfx),d.correctGroups) && arraysEq(parsed.nhGroups,d.nextHopGroups);
+  if(ok){ fld.classList.add('ok'); hnt.textContent='✓ Correct'; }
+  else { fld.classList.add('bad'); hnt.textContent='Correct: '+correctText; }
+  return ok;
+}
+/* Medium/Hard grading — same per-field partial credit as gradeAgrid, but
+   using summParseIpRoute/summ6ParseRoute's IOS-tolerant parsing instead of
+   gradeAgrid's exact-string compare, since each field here is a whole CLI
+   command rather than a single token. Returns the count of correct routes. */
+function summGradeRoutes(routes, reveal){
+  let correct=0;
+  routes.forEach((r,i)=>{
+    const inp=document.getElementById('a-r'+i), fld=document.getElementById('f-r'+i), hnt=document.getElementById('h-r'+i);
+    const correctText='ip route '+r.correctNet+' '+r.correctMask+' '+r.nextHop;
+    inp.disabled=true;
+    if(reveal){ fld.classList.add('show'); inp.value=correctText; hnt.textContent='Revealed'; return; }
+    const parsed=summParseIpRoute(inp.value);
+    const ok=!!parsed && parsed.netInt===r.correctNetInt && parsed.pfx===r.correctPrefix && parsed.nh===r.nextHop;
+    if(ok){ fld.classList.add('ok'); hnt.textContent='✓ Correct'; correct++; }
+    else { fld.classList.add('bad'); hnt.textContent='Correct: '+correctText; }
+  });
+  return correct;
+}
+function summ6GradeRoutes(routes, reveal){
+  let correct=0;
+  routes.forEach((r,i)=>{
+    const inp=document.getElementById('a-r'+i), fld=document.getElementById('f-r'+i), hnt=document.getElementById('h-r'+i);
+    const correctText='ipv6 route '+r.correctText+' '+r.nextHop;
+    inp.disabled=true;
+    if(reveal){ fld.classList.add('show'); inp.value=correctText; hnt.textContent='Revealed'; return; }
+    const parsed=summ6ParseRoute(inp.value);
+    const ok=!!parsed && parsed.pfx===r.correctPrefix && arraysEq(rlV6MaskGroups(parsed.groups,parsed.pfx),r.correctGroups) && arraysEq(parsed.nhGroups,r.nextHopGroups);
+    if(ok){ fld.classList.add('ok'); hnt.textContent='✓ Correct'; correct++; }
+    else { fld.classList.add('bad'); hnt.textContent='Correct: '+correctText; }
+  });
+  return correct;
 }
 
 /* ─── IP Routing Lab (topic: route) ───────────────────────────────
@@ -928,6 +1789,8 @@ function loadQ(){
   else if(t==='ad') state.data=genAD(state.diff);
   else if(t==='read') state.data=genRead(state.diff);
   else if(t==='route') state.data=genRoute(state.diff);
+  else if(t==='summ') state.data=genSumm(state.diff);
+  else if(t==='summ6') state.data=genSumm6(state.diff);
   render();
   updateChips();
 }
@@ -968,6 +1831,8 @@ function render(){
   else if(state.mode==='ad') renderAD(body,qip);
   else if(state.mode==='read') renderRead(body,qip);
   else if(state.mode==='route') renderRoute(body,qip);
+  else if(state.mode==='summ') renderSumm(body,qip);
+  else if(state.mode==='summ6') renderSumm6(body,qip);
 }
 
 /* ── Shared: routing table element ── */
@@ -1181,7 +2046,7 @@ function renderRead(body,qip){
   readFields(d).forEach(f=>{
     const div=document.createElement('div');
     div.className='afield'; div.id='f-'+f.id;
-    div.innerHTML=`<label>${f.label}<span class="tip-ic" tabindex="0" data-tip="${rlEsc(f.tip)}">?</span></label><input id="a-${f.id}" placeholder="${f.placeholder}" autocomplete="off"><div class="ahint" id="h-${f.id}"></div>`;
+    div.innerHTML=`<label>${f.label}<span class="tip-ic" tabindex="-1" data-tip="${rlEsc(f.tip)}">?</span></label><input id="a-${f.id}" placeholder="${f.placeholder}" autocomplete="off"><div class="ahint" id="h-${f.id}"></div>`;
     grid.appendChild(div);
   });
   body.appendChild(grid);
@@ -1638,6 +2503,34 @@ function checkAll(){
     return;
   }
 
+  if(mode==='summ' || mode==='summ6'){
+    const d=state.data;
+    if(d.kind==='easy'){
+      const win = mode==='summ' ? summGrade(false) : summ6Grade(false);
+      const pts = win ? POINTS[state.diff] : 0;
+      state.score+=pts;
+      state.streak = win ? state.streak+1 : 0;
+      state.round++;
+      fb.className='fbanner '+(win?'ok':'err');
+      fb.textContent = win ? `Correct! +${pts} pts. Streak: ${state.streak}` : `Not quite — see the correct route below. +0 pts.`;
+      finishRound();
+      return;
+    }
+    const correct = mode==='summ' ? summGradeRoutes(d.routes,false) : summ6GradeRoutes(d.routes,false);
+    const total=d.routes.length;
+    const bonus=correct===total?2:0;
+    const pts=correct+bonus;
+    state.score+=pts;
+    state.streak = correct===total ? state.streak+1 : 0;
+    state.round++;
+    fb.className='fbanner '+(correct===total?'ok':correct>=Math.ceil(total*.6)?'warn':'err');
+    fb.textContent = correct===total
+      ? `Perfect! All ${total} routes correct. +${pts} pts (+2 bonus). Streak: ${state.streak}`
+      : `${correct}/${total} routes correct. +${pts} pt${pts!==1?'s':''}.`;
+    finishRound();
+    return;
+  }
+
   // text-entry (read)
   const d=state.data;
   const fields=readFields(d), answers=readAnswers(d);
@@ -1692,6 +2585,15 @@ function revealAll(){
     const results=d.reqs.map(r=>r.test());
     rlRenderReqs(results);
     fb.textContent='Skipped. Review the requirement checklist above for what’s still needed. No points awarded.';
+  } else if(mode==='summ' || mode==='summ6'){
+    const d=state.data;
+    if(d.kind==='easy'){
+      if(mode==='summ') summGrade(true); else summ6Grade(true);
+      fb.textContent='Answer revealed. No points awarded.';
+    } else {
+      if(mode==='summ') summGradeRoutes(d.routes,true); else summ6GradeRoutes(d.routes,true);
+      fb.textContent='Answers revealed. No points awarded.';
+    }
   } else {
     const d=state.data;
     gradeAgrid(readFields(d),readAnswers(d),true);
@@ -1714,7 +2616,7 @@ function resetGame(){ state.score=0; state.round=1; state.streak=0; loadQ(); }
 
 function setTopic(t,btn){
   state.topic=t;
-  document.querySelectorAll('#tb-rand,#tb-read,#tb-bin,#tb-lpm,#tb-ad,#tb-route').forEach(b=>b.classList.remove('on'));
+  document.querySelectorAll('#tb-rand,#tb-read,#tb-bin,#tb-lpm,#tb-ad,#tb-route,#tb-summ,#tb-summ6').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
   loadQ();
 }
