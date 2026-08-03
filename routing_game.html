@@ -2001,12 +2001,20 @@ function toggleExpl(id){
    plus its (initially collapsed, see .expl-box in styles.css) explanation
    box — called from both checkAll and revealAll's 'bin' branches, since
    every candidate has a "why" worth showing regardless of whether the
-   round was won, lost, or skipped. */
+   round was won, lost, or skipped. The box gets its own background/
+   border/padding inline (on top of .expl-box's own display:none/.open
+   toggle, unaffected by this) so once opened it reads as a clearly
+   separate row of its own underneath the candidate's card, the same
+   boxed-content look .bin-card/.tool-block/.cli-block already share —
+   .expl-box's default styling (a thin dashed top rule, no real
+   background) is subtle enough there to work fine sitting directly
+   inside a .afield in subnet_trainer.html, but reads as barely-there
+   floating text below a whole .bin-card here. */
 function renderBinExplainSlots(d){
   d.candidates.forEach((c,i)=>{
     const foot=document.getElementById('foot-bin-c'+i);
     if(!foot) return;
-    foot.innerHTML=`<button class="expl-btn" style="margin-top:.6rem" onclick="toggleExpl('bin-c${i}')">💡 Explain</button><div class="expl-box" id="expl-bin-c${i}"></div>`;
+    foot.innerHTML=`<button class="expl-btn" style="margin-top:.6rem" onclick="toggleExpl('bin-c${i}')">💡 Explain</button><div class="expl-box" id="expl-bin-c${i}" style="margin:.6rem 0 0;padding:.85rem 1rem;border:1px solid var(--border);border-radius:var(--r);background:var(--surface-s)"></div>`;
     document.getElementById('expl-bin-c'+i).innerHTML=getBinExplanation(c,d);
   });
 }
