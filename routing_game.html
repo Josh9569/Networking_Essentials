@@ -1871,7 +1871,7 @@ function renderLpmExplainSlots(d){
   d.entries.forEach(e=>{
     const foot=document.getElementById('foot-lpm-'+e.id);
     if(!foot) return;
-    foot.innerHTML=`<button class="expl-btn" style="margin:8px 12px" onclick="toggleExpl('lpm-${e.id}')">💡 Explain</button><div class="expl-box" id="expl-lpm-${e.id}" style="margin-left:12px;margin-right:12px"></div>`;
+    foot.innerHTML=`<button class="expl-btn" style="margin:0 12px 8px" onclick="toggleExpl('lpm-${e.id}')">💡 Explain</button><div class="expl-box" id="expl-lpm-${e.id}" style="margin-left:12px;margin-right:12px"></div>`;
     document.getElementById('expl-lpm-'+e.id).innerHTML=getBinExplanation(e,d.destInt,d.correct);
   });
   lpmMergeFootBorders();
