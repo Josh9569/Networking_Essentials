@@ -1873,6 +1873,18 @@ function renderLpmExplainSlots(d){
     if(!foot) return;
     foot.innerHTML=`<button class="expl-btn" style="margin:0 12px 8px" onclick="toggleExpl('lpm-${e.id}')">💡 Explain</button><div class="expl-box" id="expl-lpm-${e.id}" style="margin-left:12px;margin-right:12px"></div>`;
     document.getElementById('expl-lpm-'+e.id).innerHTML=getBinExplanation(e,d.destInt,d.correct);
+    // Matches .rt-row.correct/.wrong's own background so the foot slot
+    // reads as a continuation of that row's color, not a neutral strip
+    // tacked on underneath it — same "combined" idea the border-merge
+    // above already applies to the border. Reveal never sets a wrong
+    // pick (state.selectedId is null), so only the correct row's foot
+    // ever gets colored in that path, which is the right call — there's
+    // no learner pick to mark wrong when the round was skipped.
+    const footTd=foot.parentElement;
+    if(footTd){
+      if(e.id===d.correct.id) footTd.style.background='var(--ok-bg)';
+      else if(e.id===state.selectedId) footTd.style.background='var(--err-bg)';
+    }
   });
   lpmMergeFootBorders();
 }
