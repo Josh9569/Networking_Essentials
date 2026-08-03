@@ -33,7 +33,6 @@
     <span>Topic:</span>
     <button class="cbtn on" id="tb-rand" onclick="setTopic('rand',this)">Random</button>
     <button class="cbtn" id="tb-read" onclick="setTopic('read',this)">Read Table</button>
-    <button class="cbtn" id="tb-bin" onclick="setTopic('bin',this)">Binary Match</button>
     <button class="cbtn" id="tb-lpm" onclick="setTopic('lpm',this)">Longest Match</button>
     <button class="cbtn" id="tb-ad" onclick="setTopic('ad',this)">Admin Distance</button>
     <button class="cbtn" id="tb-route" onclick="setTopic('route',this)">IP Routing</button>
@@ -316,8 +315,8 @@ function cliFullLine(e){
 
 /* ─── State ─────────────────────────────────────────────────────── */
 let state={ topic:'rand', diff:'easy', score:0, round:1, streak:0, done:false, mode:null, data:null, lastTopic:null, selectedId:null };
-const TOPICS=['read','bin','lpm','ad','route','summ','summ6'];
-const TOPIC_LABEL={read:'Read The Table', bin:'Binary Match', lpm:'Longest Prefix Match', ad:'Administrative Distance', route:'IP Routing', summ:'IP Summaries', summ6:'IPv6 Summaries'};
+const TOPICS=['read','lpm','ad','route','summ','summ6'];
+const TOPIC_LABEL={read:'Read The Table', lpm:'Longest Prefix Match', ad:'Administrative Distance', route:'IP Routing', summ:'IP Summaries', summ6:'IPv6 Summaries'};
 const POINTS={easy:3, medium:4, hard:6};
 
 function pickTopic(){
@@ -335,9 +334,9 @@ function genLPM(diff){
   else { onlyDefault=Math.random()<0.2; nestedPrefixes=onlyDefault?[]:[8,16,24,choice([25,26,27,28,29,30])]; }
 
   const destInt = onlyDefault ? ip2int(randIpOctets().join('.')) : niceRawInt();
-  // Same near-miss-trap / decoy-can-win variety as Binary Match (see
-  // nearMissEntry()/extraMatchingEntry()) so the correct answer isn't always
-  // just "whichever chain entry looks deepest". Left off for the onlyDefault
+  // Near-miss-trap / decoy-can-win variety (see nearMissEntry()/
+  // extraMatchingEntry()) so the correct answer isn't always just
+  // "whichever chain entry looks deepest". Left off for the onlyDefault
   // scenario, where the whole point is that nothing specific matches.
   const trapChance = diff==='easy' ? 0 : diff==='medium' ? 0.5 : 0.45;
   const decoyMatchChance = onlyDefault ? 0 : diff==='medium' ? 0.35 : diff==='hard' ? 0.3 : 0;
@@ -369,58 +368,6 @@ function genLPM(diff){
   entries=hierarchicalOrder(entries);
   const correct=bestMatch(destInt,entries);
   return {destInt,entries,correct};
-}
-
-/* ─── Generators: Binary Match ──────────────────────────────────── */
-/* Difficulty scales how many candidate routes are in play. Easy is a single
-   matching entry plus one decoy — just "does this match at all". Medium
-   introduces genuine parent/child nesting (a shallow parent prefix and a
-   deeper child prefix that both match) plus a decoy. Hard at least doubles
-   medium's total: four nested levels (grandparent → parent → child →
-   grandchild) plus two decoys. Every candidate — matching or not — gets its
-   own binary entry box; the decoys still have to be reasoned about, which is
-   what makes the harder levels genuinely harder rather than just longer. */
-function genBin(diff){
-  const prefixSteps = diff==='easy' ? [24] : diff==='medium' ? [16,24] : [8,16,24,28];
-  const decoyCount = diff==='easy' ? 1 : diff==='medium' ? 1 : 2;
-  // Chance that a non-shallowest chain level gets swapped for a near-miss
-  // trap instead of the true containing network — see nearMissEntry(). The
-  // shallowest level is always kept genuine so there's always a guaranteed
-  // fallback correct answer.
-  const trapChance = diff==='easy' ? 0 : diff==='medium' ? 0.5 : 0.45;
-  // Chance that a "decoy" slot is instead a genuinely matching entry deeper
-  // than everything else so far — i.e. the decoy itself turns out to be the
-  // correct answer, not just the obvious parent/child chain. Left at 0 for
-  // easy to keep that tier's single real entry unambiguous, per the ladder
-  // design (easy stays simple everywhere in this topic).
-  const decoyMatchChance = diff==='medium' ? 0.35 : diff==='hard' ? 0.3 : 0;
-
-  const raw=niceRawInt();
-  const deep=prefixSteps[prefixSteps.length-1];
-  const netDeep=netIntOf(raw,deep);
-  const block=Math.pow(2,32-deep);
-  const offset = block<=2 ? 0 : ri(1,block-2);
-  const dest=(netDeep+offset)>>>0;
-
-  let candidates = prefixSteps.map((p,idx)=>
-    (idx>0 && Math.random()<trapChance) ? nearMissEntry(dest,p) : makeEntry(dest,p,{})
-  );
-  let bestSoFar=Math.max(...candidates.filter(c=>matchesEntry(dest,c)).map(c=>c.prefix));
-  for(let i=0;i<decoyCount;i++){
-    if(decoyMatchChance>0 && bestSoFar<30 && Math.random()<decoyMatchChance){
-      const entry=extraMatchingEntry(dest,bestSoFar);
-      candidates.push(entry);
-      bestSoFar=entry.prefix;
-    } else {
-      candidates.push(randomNonMatchingEntry(dest,[16,20,24,28],()=>({})));
-    }
-  }
-  // Hierarchically ordered (not just sorted by prefix) so every child renders
-  // directly under its true parent — see hierarchicalOrder() for why a plain
-  // prefix sort can interleave unrelated chains and imply the wrong parent.
-  candidates=hierarchicalOrder(candidates);
-  const correct=bestMatch(dest,candidates);
-  return {dest,candidates,correct};
 }
 
 /* ─── Generators: Administrative Distance ───────────────────────── */
@@ -1785,7 +1732,6 @@ function loadQ(){
   const t=pickTopic();
   state.mode=t;
   if(t==='lpm') state.data=genLPM(state.diff);
-  else if(t==='bin') state.data=genBin(state.diff);
   else if(t==='ad') state.data=genAD(state.diff);
   else if(t==='read') state.data=genRead(state.diff);
   else if(t==='route') state.data=genRoute(state.diff);
@@ -1827,7 +1773,6 @@ function render(){
   if(state.mode==='route'){ if(popBtn) popBtn.style.display=''; }
   else { LabShared.dockQcardPopout('qcard','qcard-pop-btn'); if(popBtn) popBtn.style.display='none'; }
   if(state.mode==='lpm') renderLPM(body,qip);
-  else if(state.mode==='bin') renderBin(body,qip);
   else if(state.mode==='ad') renderAD(body,qip);
   else if(state.mode==='read') renderRead(body,qip);
   else if(state.mode==='route') renderRoute(body,qip);
@@ -1841,29 +1786,97 @@ function rtTable(headers, rowsHtml){
 }
 function srcCode(src){ return `<span class="rt-code src-${src.code[0]}">${src.code}</span>`; }
 
-/* ─── Render: Longest Prefix Match ─────────────────────────────── */
+/* ─── Render: Longest Prefix Match ─────────────────────────────────
+   Absorbed the old standalone "Binary Match" topic (see CLAUDE.md) —
+   its candidate-generation was already identical to genLPM's (same
+   makeEntry/nearMissEntry/bestMatch/hierarchicalOrder machinery), so the
+   only genuinely distinct thing it offered was the optional, ungraded
+   binary-conversion scratch input and the per-candidate Explain button.
+   Both are folded in here instead of duplicated across two topics. */
+function lpmGetPref(key,def){
+  try { const v=localStorage.getItem('ne-lpm-'+key); return v===null?def:v==='1'; } catch(e){ return def; }
+}
+function lpmSetPref(key,val){
+  try { localStorage.setItem('ne-lpm-'+key, val?'1':'0'); } catch(e){ /* storage unavailable */ }
+}
 function renderLPM(body,qip){
   const d=state.data;
   document.getElementById('qprompt').textContent='A packet arrives destined for the address below. Click the routing table entry that will actually forward it, then submit.';
   qip.style.display=''; qip.innerHTML=int2ip(d.destInt);
 
-  const rows=d.entries.map(e=>{
+  const showBin=lpmGetPref('bin',false);
+  /* Each entry's binary scratch row is a plain sibling <tr> (colspan across
+     every column) right under its own row — never scored, purely working
+     space, same typing mechanic (wireBinSingle/binInputHtml) the old
+     Binary Match topic used. The empty explain-foot <tr> underneath that
+     is always present (zero height until checkAll/revealAll fills it via
+     renderLpmExplainSlots) rather than only existing when showBin is on —
+     Explain doesn't depend on whether the learner wanted binary practice
+     this round.
+     .bin-card-bin (the flex column layout the input+hint want) goes on a
+     <div> *inside* the <td>, never on the <td> itself — display:flex
+     directly on a colspan'd table cell breaks the colspan in every
+     browser tested (the cell renders at a single column's width instead
+     of spanning all three, leaving the rest of the row visibly blank and
+     throwing off the header's own column widths once any row's real
+     content is wider than that shrunken cell). The explain-foot <td> gets
+     padding:0 for the same reason its emptiness needs to actually be
+     zero height, not "empty content inside the table's normal 9px/12px
+     cell padding" — a real gap even with nothing in it. */
+  /* Labeled explicitly ("Destination in binary") since, unlike every entry's
+     own scratch row which sits directly under that entry's own visible
+     network/prefix row, the destination has no row of its own in this
+     table at all (its IP is up in qip, above the whole table) — without a
+     label this row read as misplaced/orphaned rather than obviously being
+     the destination's. */
+  let rows=`<tr class="rt-bin-row" style="display:${showBin?'':'none'}"><td colspan="3"><div class="bin-card-bin"><div class="qlbl" style="margin-bottom:.4rem">Destination in binary</div>${binInputHtml('lpmbin-dest')}</div></td></tr>`;
+  d.entries.forEach(e=>{
     const depth=Math.min(nestDepth(e,d.entries),3);
-    return `
+    rows+=`
     <tr class="rt-row pick" id="row-${e.id}" onclick="pickLPM('${e.id}')">
       <td>${srcCode(e.source)}</td>
       <td><span class="rt-indent indent-${depth}">${e.network}/${e.prefix}</span></td>
       <td>${cliPath(e)}</td>
-    </tr>`;
-  }).join('');
-  body.innerHTML = rtTable(['Src','Network','Path'], rows);
+    </tr>
+    <tr class="rt-bin-row" style="display:${showBin?'':'none'}"><td colspan="3"><div class="bin-card-bin">${binInputHtml('lpmbin-'+e.id)}</div></td></tr>
+    <tr><td colspan="3" style="padding:0"><div id="foot-lpm-${e.id}"></div></td></tr>`;
+  });
+  body.innerHTML = `<button class="rand-btn" id="lpm-bin-btn" style="margin-bottom:.6rem" onclick="lpmToggleBinRows()">${showBin?'Hide':'Show'} Binary Scratch Work</button>`
+    + rtTable(['Src','Network','Path'], rows);
+  wireBinSingle('lpmbin-dest');
+  d.entries.forEach(e=>wireBinSingle('lpmbin-'+e.id));
   setBtns('mcq');
+}
+function lpmToggleBinRows(){
+  const btn=document.getElementById('lpm-bin-btn');
+  if(!btn) return;
+  const show=!lpmGetPref('bin',false);
+  lpmSetPref('bin',show);
+  document.querySelectorAll('.rt-bin-row').forEach(r=>r.style.display=show?'':'none');
+  btn.textContent=(show?'Hide':'Show')+' Binary Scratch Work';
 }
 function pickLPM(id){
   if(state.done) return;
   state.selectedId=id;
   document.querySelectorAll('.rt-row').forEach(r=>r.classList.remove('sel'));
   document.getElementById('row-'+id).classList.add('sel');
+}
+/* Fills every entry's foot slot with an Explain button plus its (initially
+   collapsed, see .expl-box in styles.css) explanation box — called from
+   both checkAll and revealAll's 'lpm' branch, since every entry has a
+   "why" worth showing regardless of whether the round was won, lost, or
+   skipped (same rationale as the old renderBinExplainSlots it replaces). */
+function renderLpmExplainSlots(d){
+  d.entries.forEach(e=>{
+    const foot=document.getElementById('foot-lpm-'+e.id);
+    if(!foot) return;
+    foot.innerHTML=`<button class="expl-btn" style="margin:8px 12px" onclick="toggleExpl('lpm-${e.id}')">💡 Explain</button><div class="expl-box" id="expl-lpm-${e.id}" style="margin-left:12px;margin-right:12px"></div>`;
+    document.getElementById('expl-lpm-'+e.id).innerHTML=getBinExplanation(e,d.destInt,d.correct);
+  });
+}
+function gradeLpmBinRows(d,reveal){
+  gradeBinInput('lpmbin-dest', int2ip(d.destInt).split('.').map(Number), reveal);
+  d.entries.forEach(e=>gradeBinInput('lpmbin-'+e.id, e.network.split('.').map(Number), reveal));
 }
 
 /* ─── Render: Binary Match ──────────────────────────────────────── */
@@ -1941,24 +1954,10 @@ function gradeBinInput(id, octets, reveal){
   wrap.classList.add('bad');
   hint.textContent='Correct: '+trueStr;
 }
-/* Colors the "|" divider to match the IP side only — the binary side is just
-   working/scratch space and was never scored, so coloring the divider off of
-   it too read as inconsistent. Rows where the IP itself isn't being marked
-   (the destination row is never picked; a candidate that's neither correct
-   nor the wrong pick) leave the divider neutral even though their binary
-   field still gets its own color. */
-function syncBinDivider(ipId, divId){
-  const ip=document.getElementById(ipId);
-  const div=document.getElementById(divId);
-  if(!div) return;
-  div.classList.remove('ok','bad','show');
-  if(ip && ip.classList.contains('correct')) div.classList.add('ok');
-  else if(ip && ip.classList.contains('wrong')) div.classList.add('bad');
-}
 /* First bit position (0 = the very first/leftmost bit of the address)
    where a and b disagree, only checked across the first `prefix` bits
    (the network portion) — used to point at exactly where a non-matching
-   candidate's bits diverge from the destination, rather than just saying
+   entry's bits diverge from the destination, rather than just saying
    "doesn't match". Returns -1 if every one of those bits agrees (i.e. it
    does match). */
 function firstDiffBit(a,b,prefix){
@@ -1968,88 +1967,44 @@ function firstDiffBit(a,b,prefix){
   }
   return -1;
 }
-/* Per-candidate "why" for Binary Match — same idea as subnet_trainer.html's
-   getExplanation()/toggleExpl() (see CLAUDE.md), grounded in the actual bit
-   comparison this topic is teaching rather than restating IP arithmetic:
-   every candidate's story is one of exactly three shapes — its network
-   bits don't all agree with the destination (doesn't match, regardless of
-   how deep its prefix looks), they agree but a longer match exists among
-   the other candidates (valid but superseded), or they agree and it's the
-   deepest match here (the actual answer). Computed fresh from real
-   netInt/prefix math rather than from which generator function produced
-   the candidate (nearMissEntry vs. extraMatchingEntry vs. a genuine chain
-   entry), so it stays correct even if the generators change later. */
-function getBinExplanation(c,d){
-  const destBin=trueBinStr(int2ip(d.dest).split('.').map(Number));
-  const candBin=trueBinStr(c.network.split('.').map(Number));
-  const code=`<code>Destination:&nbsp; ${destBin}<br>Candidate:&nbsp;&nbsp;&nbsp; ${candBin}/${c.prefix}</code>`;
-  if(!matchesEntry(d.dest,c)){
-    const diff=firstDiffBit(d.dest,c.netInt,c.prefix);
+/* Per-entry "why" for Longest Match's Explain button — same idea as
+   subnet_trainer.html's getExplanation()/toggleExpl() (see CLAUDE.md),
+   grounded in the actual bit comparison this topic is teaching rather
+   than restating IP arithmetic: every entry's story is one of exactly
+   three shapes — its network bits don't all agree with the destination
+   (doesn't match, regardless of how deep its prefix looks), they agree
+   but a longer match exists among the other entries (valid but
+   superseded), or they agree and it's the deepest match here (the actual
+   answer). Computed fresh from real netInt/prefix math rather than from
+   which generator function produced the entry (nearMissEntry vs.
+   extraMatchingEntry vs. a genuine chain entry), so it stays correct even
+   if the generators change later. Takes destInt/correct explicitly
+   (rather than the whole state.data object) so it works for any {network,
+   prefix, netInt, id} entry regardless of which topic's data shape it
+   came from. */
+function getBinExplanation(e,destInt,correct){
+  const destBin=trueBinStr(int2ip(destInt).split('.').map(Number));
+  const candBin=trueBinStr(e.network.split('.').map(Number));
+  const code=`<code>Destination:&nbsp; ${destBin}<br>Candidate:&nbsp;&nbsp;&nbsp; ${candBin}/${e.prefix}</code>`;
+  if(!matchesEntry(destInt,e)){
+    const diff=firstDiffBit(destInt,e.netInt,e.prefix);
     const octet=Math.floor(diff/8)+1, bitPos=(diff%8)+1;
-    return `${code}<br>Comparing only the first <strong>${c.prefix}</strong> bits (the /${c.prefix} network portion): they diverge at bit ${diff+1} — octet ${octet}, position ${bitPos} from the left of that octet. Since the network bits don't all agree, this candidate <strong>does not match</strong> the destination, regardless of how deep its prefix is.`;
+    return `${code}<br>Comparing only the first <strong>${e.prefix}</strong> bits (the /${e.prefix} network portion): they diverge at bit ${diff+1} — octet ${octet}, position ${bitPos} from the left of that octet. Since the network bits don't all agree, this candidate <strong>does not match</strong> the destination, regardless of how deep its prefix is.`;
   }
-  if(c.id===d.correct.id){
-    return `${code}<br>All <strong>${c.prefix}</strong> network bits agree with the destination, so this candidate matches — and it's the <strong>deepest (longest) prefix</strong> among every candidate that matches here, so per the longest-prefix-match rule it's the one actually used.`;
+  if(e.id===correct.id){
+    if(e.prefix===0){
+      return `${code}<br>A /0 has no network bits at all, so it matches <strong>every</strong> destination by definition — that's what makes it the default route. It's only ever used when nothing more specific matches, which is the case here.`;
+    }
+    return `${code}<br>All <strong>${e.prefix}</strong> network bits agree with the destination, so this candidate matches — and it's the <strong>deepest (longest) prefix</strong> among every candidate that matches here, so per the longest-prefix-match rule it's the one actually used.`;
   }
-  return `${code}<br>All <strong>${c.prefix}</strong> network bits agree with the destination, so this candidate genuinely does match. But <strong>${d.correct.network}/${d.correct.prefix}</strong> also matches, at a longer /${d.correct.prefix} — longest prefix always wins, so that one is used instead of this one.`;
+  if(e.prefix===0){
+    return `${code}<br>A /0 (the default route) matches every destination by definition. But <strong>${correct.network}/${correct.prefix}</strong> also matches, and any specific prefix always outranks the default route, so that one is used instead of this one.`;
+  }
+  return `${code}<br>All <strong>${e.prefix}</strong> network bits agree with the destination, so this candidate genuinely does match. But <strong>${correct.network}/${correct.prefix}</strong> also matches, at a longer /${correct.prefix} — longest prefix always wins, so that one is used instead of this one.`;
 }
 function toggleExpl(id){
   const box=document.getElementById('expl-'+id);
   if(box) box.classList.toggle('open');
-}
-/* Fills every candidate's foot slot (see renderBin) with an Explain button
-   plus its (initially collapsed, see .expl-box in styles.css) explanation
-   box — called from both checkAll and revealAll's 'bin' branches, since
-   every candidate has a "why" worth showing regardless of whether the
-   round was won, lost, or skipped. foot-bin-c<i> is a 4th flex child of
-   .bin-card itself (not a separate element below it) with an inline
-   flex-basis of 100% — .bin-card now has flex-wrap:wrap (styles.css) so
-   a full-width child like this wraps onto its own line instead of
-   fighting the ip/divider/binary row for space, while staying inside the
-   very same bordered/backgrounded card rather than becoming a second box
-   underneath it. The border-top on the slot itself is what visually
-   separates it from the row above, matching a single card with an
-   Explain row at the bottom rather than two stacked cards. */
-function renderBinExplainSlots(d){
-  d.candidates.forEach((c,i)=>{
-    const foot=document.getElementById('foot-bin-c'+i);
-    if(!foot) return;
-    foot.style.display='';
-    foot.innerHTML=`<button class="expl-btn" onclick="toggleExpl('bin-c${i}')">💡 Explain</button><div class="expl-box" id="expl-bin-c${i}"></div>`;
-    document.getElementById('expl-bin-c'+i).innerHTML=getBinExplanation(c,d);
-  });
-}
-function renderBin(body,qip){
-  const d=state.data;
-  document.getElementById('qprompt').textContent="Convert the destination AND every candidate route below into binary to help you compare them (this part isn't scored), then pick whichever candidate is the longest (best) match. Not every candidate necessarily matches at all.";
-  qip.style.display='none';
-
-  let html=`<div class="qlbl" style="margin-bottom:.5rem">Destination in binary</div>`;
-  html+=`<div class="bin-card">
-    <div class="bin-card-ip" id="ip-bin-dest">${int2ip(d.dest)}</div>
-    <div class="bin-card-div" id="div-bin-dest">|</div>
-    <div class="bin-card-bin">${binInputHtml('bin-dest')}</div>
-  </div>`;
-  html+=`<div class="qlbl" style="margin:1.1rem 0 .5rem">Candidate routes &mdash; convert each, then pick the longest match (children are indented under their parent)</div>`;
-  d.candidates.forEach((c,i)=>{
-    const depth=Math.min(nestDepth(c,d.candidates),3);
-    html+=`<div class="bin-card indent-${depth}">
-      <div class="bin-card-ip pick" id="pick-${c.id}" onclick="pickBin('${c.id}')">${c.network}/${c.prefix}</div>
-      <div class="bin-card-div" id="div-bin-c${i}">|</div>
-      <div class="bin-card-bin">${binInputHtml('bin-c'+i)}</div>
-      <div id="foot-bin-c${i}" style="display:none;flex:0 0 100%;border-top:1px solid var(--border-m);padding:8px 14px"></div>
-    </div>`;
-  });
-  body.innerHTML=html;
-  wireBinSingle('bin-dest');
-  d.candidates.forEach((c,i)=>wireBinSingle('bin-c'+i));
-  setBtns('mcq');
-}
-function pickBin(id){
-  if(state.done) return;
-  state.selectedId=id;
-  document.querySelectorAll('.bin-card-ip.pick').forEach(b=>b.classList.remove('sel'));
-  document.getElementById('pick-'+id).classList.add('sel');
 }
 
 /* ─── Render: Administrative Distance ───────────────────────────── */
@@ -2512,6 +2467,7 @@ function checkAll(){
     document.getElementById('row-'+correctId).classList.add('correct');
     const win = state.selectedId===correctId;
     if(!win) document.getElementById('row-'+state.selectedId).classList.add('wrong');
+    if(mode==='lpm'){ gradeLpmBinRows(d,false); renderLpmExplainSlots(d); }
     const pts = win ? POINTS[state.diff] : 0;
     state.score+=pts;
     state.streak = win ? state.streak+1 : 0;
@@ -2520,33 +2476,6 @@ function checkAll(){
     fb.textContent = win
       ? `Correct! ${lpmAdExplain(mode,d,correctId)} +${pts} pts. Streak: ${state.streak}`
       : `Not quite. ${lpmAdExplain(mode,d,correctId)} +0 pts.`;
-    finishRound();
-    return;
-  }
-
-  if(mode==='bin'){
-    const d=state.data;
-    if(!state.selectedId){ fb.className='fbanner warn'; fb.textContent='Pick the longest match first.'; fb.style.display='block'; return; }
-    gradeBinInput('bin-dest', int2ip(d.dest).split('.').map(Number), false);
-    d.candidates.forEach((c,i)=>gradeBinInput('bin-c'+i, c.network.split('.').map(Number), false));
-    document.querySelectorAll('.bin-card-ip.pick').forEach(b=>b.classList.add('locked'));
-    const win = state.selectedId===d.correct.id;
-    d.candidates.forEach(c=>{
-      const btn=document.getElementById('pick-'+c.id);
-      if(c.id===d.correct.id) btn.classList.add('correct');
-      else if(c.id===state.selectedId) btn.classList.add('wrong');
-    });
-    syncBinDivider('ip-bin-dest','div-bin-dest');
-    d.candidates.forEach((c,i)=>syncBinDivider('pick-'+c.id,'div-bin-c'+i));
-    renderBinExplainSlots(d);
-    const pts = win ? POINTS[state.diff] : 0;
-    state.score+=pts;
-    state.streak = win ? state.streak+1 : 0;
-    state.round++;
-    fb.className='fbanner '+(win?'ok':'err');
-    fb.textContent = win
-      ? `Correct! ${d.correct.network}/${d.correct.prefix} is the longest match. +${pts} pts. Streak: ${state.streak}`
-      : `Not quite — ${d.correct.network}/${d.correct.prefix} is the longest match. +0 pts.`;
     finishRound();
     return;
   }
@@ -2633,17 +2562,8 @@ function revealAll(){
     const d=state.data;
     document.querySelectorAll('.rt-row').forEach(r=>r.classList.remove('pick','sel'));
     document.getElementById('row-'+d.correct.id).classList.add('correct');
+    if(mode==='lpm'){ gradeLpmBinRows(d,true); renderLpmExplainSlots(d); }
     fb.textContent='Skipped. '+lpmAdExplain(mode,d,d.correct.id)+' No points awarded.';
-  } else if(mode==='bin'){
-    const d=state.data;
-    gradeBinInput('bin-dest', int2ip(d.dest).split('.').map(Number), true);
-    d.candidates.forEach((c,i)=>gradeBinInput('bin-c'+i, c.network.split('.').map(Number), true));
-    document.querySelectorAll('.bin-card-ip.pick').forEach(b=>b.classList.add('locked'));
-    document.getElementById('pick-'+d.correct.id).classList.add('correct');
-    syncBinDivider('ip-bin-dest','div-bin-dest');
-    d.candidates.forEach((c,i)=>syncBinDivider('pick-'+c.id,'div-bin-c'+i));
-    renderBinExplainSlots(d);
-    fb.textContent='Skipped. '+d.correct.network+'/'+d.correct.prefix+' is the longest match. No points awarded.';
   } else if(mode==='route'){
     /* Unlike the other topics there's no single "correct answer" to fill in
        here (many valid IP/route choices all work) — reveal just shows the
@@ -2683,7 +2603,7 @@ function resetGame(){ state.score=0; state.round=1; state.streak=0; loadQ(); }
 
 function setTopic(t,btn){
   state.topic=t;
-  document.querySelectorAll('#tb-rand,#tb-read,#tb-bin,#tb-lpm,#tb-ad,#tb-route,#tb-summ,#tb-summ6').forEach(b=>b.classList.remove('on'));
+  document.querySelectorAll('#tb-rand,#tb-read,#tb-lpm,#tb-ad,#tb-route,#tb-summ,#tb-summ6').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
   loadQ();
 }
