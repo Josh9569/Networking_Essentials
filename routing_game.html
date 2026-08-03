@@ -1829,7 +1829,7 @@ function renderLPM(body,qip){
      table at all (its IP is up in qip, above the whole table) — without a
      label this row read as misplaced/orphaned rather than obviously being
      the destination's. */
-  let rows=`<tr class="rt-bin-row" style="display:${showBin?'':'none'}"><td colspan="3"><div class="bin-card-bin"><div class="qlbl" style="margin-bottom:.4rem">Destination in binary</div>${binInputHtml('lpmbin-dest')}</div></td></tr>`;
+  let rows=`<tr class="rt-bin-row" style="display:${showBin?'':'none'}"><td colspan="3" style="padding:0"><div class="bin-card-bin"><div class="qlbl" style="margin-bottom:.4rem">Destination in binary</div>${binInputHtml('lpmbin-dest')}</div></td></tr>`;
   d.entries.forEach(e=>{
     const depth=Math.min(nestDepth(e,d.entries),3);
     rows+=`
@@ -1839,7 +1839,7 @@ function renderLPM(body,qip){
       <td>${cliPath(e)}</td>
     </tr>
     <tr><td colspan="3" style="padding:0"><div id="foot-lpm-${e.id}"></div></td></tr>
-    <tr class="rt-bin-row" id="binrow-${e.id}" style="display:${showBin?'':'none'}"><td colspan="3"><div class="bin-card-bin">${binInputHtml('lpmbin-'+e.id)}</div></td></tr>`;
+    <tr class="rt-bin-row" id="binrow-${e.id}" style="display:${showBin?'':'none'}"><td colspan="3" style="padding:0"><div class="bin-card-bin">${binInputHtml('lpmbin-'+e.id)}</div></td></tr>`;
   });
   body.innerHTML = `<button class="rand-btn" id="lpm-bin-btn" style="margin-bottom:.6rem" onclick="lpmToggleBinRows()">${showBin?'Hide':'Show'} Binary Scratch Work</button>`
     + rtTable(['Src','Network','Path'], rows);
