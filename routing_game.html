@@ -2001,20 +2001,21 @@ function toggleExpl(id){
    plus its (initially collapsed, see .expl-box in styles.css) explanation
    box — called from both checkAll and revealAll's 'bin' branches, since
    every candidate has a "why" worth showing regardless of whether the
-   round was won, lost, or skipped. The box gets its own background/
-   border/padding inline (on top of .expl-box's own display:none/.open
-   toggle, unaffected by this) so once opened it reads as a clearly
-   separate row of its own underneath the candidate's card, the same
-   boxed-content look .bin-card/.tool-block/.cli-block already share —
-   .expl-box's default styling (a thin dashed top rule, no real
-   background) is subtle enough there to work fine sitting directly
-   inside a .afield in subnet_trainer.html, but reads as barely-there
-   floating text below a whole .bin-card here. */
+   round was won, lost, or skipped. foot-bin-c<i> is a 4th flex child of
+   .bin-card itself (not a separate element below it) with an inline
+   flex-basis of 100% — .bin-card now has flex-wrap:wrap (styles.css) so
+   a full-width child like this wraps onto its own line instead of
+   fighting the ip/divider/binary row for space, while staying inside the
+   very same bordered/backgrounded card rather than becoming a second box
+   underneath it. The border-top on the slot itself is what visually
+   separates it from the row above, matching a single card with an
+   Explain row at the bottom rather than two stacked cards. */
 function renderBinExplainSlots(d){
   d.candidates.forEach((c,i)=>{
     const foot=document.getElementById('foot-bin-c'+i);
     if(!foot) return;
-    foot.innerHTML=`<button class="expl-btn" style="margin-top:.6rem" onclick="toggleExpl('bin-c${i}')">💡 Explain</button><div class="expl-box" id="expl-bin-c${i}" style="margin:.6rem 0 0;padding:.85rem 1rem;border:1px solid var(--border);border-radius:var(--r);background:var(--surface-s)"></div>`;
+    foot.style.display='';
+    foot.innerHTML=`<button class="expl-btn" onclick="toggleExpl('bin-c${i}')">💡 Explain</button><div class="expl-box" id="expl-bin-c${i}"></div>`;
     document.getElementById('expl-bin-c'+i).innerHTML=getBinExplanation(c,d);
   });
 }
@@ -2032,13 +2033,11 @@ function renderBin(body,qip){
   html+=`<div class="qlbl" style="margin:1.1rem 0 .5rem">Candidate routes &mdash; convert each, then pick the longest match (children are indented under their parent)</div>`;
   d.candidates.forEach((c,i)=>{
     const depth=Math.min(nestDepth(c,d.candidates),3);
-    html+=`<div class="indent-${depth}" style="margin-bottom:1rem">
-      <div class="bin-card" style="margin-bottom:0">
-        <div class="bin-card-ip pick" id="pick-${c.id}" onclick="pickBin('${c.id}')">${c.network}/${c.prefix}</div>
-        <div class="bin-card-div" id="div-bin-c${i}">|</div>
-        <div class="bin-card-bin">${binInputHtml('bin-c'+i)}</div>
-      </div>
-      <div id="foot-bin-c${i}"></div>
+    html+=`<div class="bin-card indent-${depth}">
+      <div class="bin-card-ip pick" id="pick-${c.id}" onclick="pickBin('${c.id}')">${c.network}/${c.prefix}</div>
+      <div class="bin-card-div" id="div-bin-c${i}">|</div>
+      <div class="bin-card-bin">${binInputHtml('bin-c'+i)}</div>
+      <div id="foot-bin-c${i}" style="display:none;flex:0 0 100%;border-top:1px solid var(--border-m);padding:8px 14px"></div>
     </div>`;
   });
   body.innerHTML=html;

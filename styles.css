@@ -945,7 +945,7 @@ sup  { font-size: .65em; vertical-align: super; }
    itself is unscored/ungraded working space; only colored after Check/Reveal
    so the learner can see whether their own conversion was right — it never
    affects the pick's score. */
-.bin-card           { display: flex; align-items: stretch; background: var(--surface); border: 1px solid var(--border-m); border-radius: var(--rl); overflow: hidden; margin-bottom: 1rem; transition: margin .15s; }
+.bin-card           { display: flex; flex-wrap: wrap; align-items: stretch; background: var(--surface); border: 1px solid var(--border-m); border-radius: var(--rl); overflow: hidden; margin-bottom: 1rem; transition: margin .15s; }
 .bin-card:last-child { margin-bottom: 0; }
 .bin-card-ip        { display: flex; align-items: center; padding: 10px 14px; font-family: var(--mono); font-size: 15px; font-weight: 500; color: var(--text); white-space: nowrap; flex-shrink: 0; min-width: 150px; }
 .bin-card-ip.pick   { cursor: pointer; transition: background .12s, color .12s; }
