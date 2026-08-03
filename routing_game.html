@@ -1838,7 +1838,7 @@ function renderLPM(body,qip){
       <td><span class="rt-indent indent-${depth}">${e.network}/${e.prefix}</span></td>
       <td>${cliPath(e)}</td>
     </tr>
-    <tr class="rt-bin-row" style="display:${showBin?'':'none'}"><td colspan="3"><div class="bin-card-bin">${binInputHtml('lpmbin-'+e.id)}</div></td></tr>
+    <tr class="rt-bin-row" id="binrow-${e.id}" style="display:${showBin?'':'none'}"><td colspan="3"><div class="bin-card-bin">${binInputHtml('lpmbin-'+e.id)}</div></td></tr>
     <tr><td colspan="3" style="padding:0"><div id="foot-lpm-${e.id}"></div></td></tr>`;
   });
   body.innerHTML = `<button class="rand-btn" id="lpm-bin-btn" style="margin-bottom:.6rem" onclick="lpmToggleBinRows()">${showBin?'Hide':'Show'} Binary Scratch Work</button>`
@@ -1854,6 +1854,7 @@ function lpmToggleBinRows(){
   lpmSetPref('bin',show);
   document.querySelectorAll('.rt-bin-row').forEach(r=>r.style.display=show?'':'none');
   btn.textContent=(show?'Hide':'Show')+' Binary Scratch Work';
+  lpmMergeFootBorders();
 }
 function pickLPM(id){
   if(state.done) return;
@@ -1872,6 +1873,25 @@ function renderLpmExplainSlots(d){
     if(!foot) return;
     foot.innerHTML=`<button class="expl-btn" style="margin:8px 12px" onclick="toggleExpl('lpm-${e.id}')">💡 Explain</button><div class="expl-box" id="expl-lpm-${e.id}" style="margin-left:12px;margin-right:12px"></div>`;
     document.getElementById('expl-lpm-'+e.id).innerHTML=getBinExplanation(e,d.destInt,d.correct);
+  });
+  lpmMergeFootBorders();
+}
+/* Once an entry's Explain slot is populated (post check/reveal), hides
+   the border on whichever row actually sits directly above it — the
+   binary scratch row if shown, otherwise the main pick row — so the
+   Explain button/box reads as part of that row instead of a visually
+   separate one stacked underneath it. Also re-run from
+   lpmToggleBinRows(), since toggling binary visibility *after* grading
+   changes which row is the one actually adjacent to the foot slot. */
+function lpmMergeFootBorders(){
+  const showBin=lpmGetPref('bin',false);
+  document.querySelectorAll('[id^="foot-lpm-"]').forEach(foot=>{
+    const id=foot.id.slice('foot-lpm-'.length);
+    const graded=foot.innerHTML.trim()!=='';
+    const binRow=document.getElementById('binrow-'+id);
+    const mainRow=document.getElementById('row-'+id);
+    if(binRow) binRow.querySelectorAll('td').forEach(td=>td.style.borderBottom=graded?'none':'');
+    if(mainRow) mainRow.querySelectorAll('td').forEach(td=>td.style.borderBottom=(graded&&!showBin)?'none':'');
   });
 }
 function gradeLpmBinRows(d,reveal){
