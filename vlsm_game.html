@@ -207,7 +207,7 @@ function genVLSM(){
       ipCls=detectIPClass(parentIPNum);
     } else {
       /* Auto: pick class + auto-size parent */
-      const cc=(_customCls||'random')==='random'?['A','B','C'][ri(0,2)]:(_customCls||'random');
+      const cc=customCls==='random'?['A','B','C'][ri(0,2)]:customCls;
       ipCls=cc;
       const total=blocks.reduce((s,v)=>s+v,0);
       let pb=3; while(Math.pow(2,pb)<total) pb++;
