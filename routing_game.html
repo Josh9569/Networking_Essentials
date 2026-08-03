@@ -412,10 +412,18 @@ function genAD(diff){
   return {network,prefix,entries,correct};
 }
 
-/* ─── Generators: Read The Table ────────────────────────────────── */
+/* ─── Generators: Read The Table ──────────────────────────────────
+   No meaningful difficulty tiers here (see CLAUDE.md) — reading what
+   each column of a route line means doesn't get harder with a longer
+   prefix the way longest-prefix-match reasoning does, so this always
+   draws from the full prefix pool the old hard tier used, regardless of
+   state.diff (the Easy/Medium/Hard buttons are disabled while this topic
+   is selected — see syncDiffButtons). `diff` is intentionally unused,
+   kept only so loadQ()'s uniform genX(state.diff) call convention still
+   works. */
 function genRead(diff){
   const raw=niceRawInt();
-  const prefix=choice(diff==='easy'?[24]:diff==='medium'?[16,24,28]:[16,20,24,26,28,30]);
+  const prefix=choice([16,20,24,26,28,30]);
   const netInt=netIntOf(raw,prefix);
   const network=int2ip(netInt);
   const isConnected=Math.random()<0.25;
@@ -2319,12 +2327,28 @@ function rlEsc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;
 function rlPortTableHtml(d){
   let html=`<table class="port-table"><thead><tr><th>Interface</th><th>IP Address</th><th>Mask</th><th style="width:40px">Up</th></tr></thead><tbody>`;
   d.ports.forEach((p,i)=>{
-    html+=`<tr><td class="pt-name">${p.name}</td>
+    html+=`<tr class="pt-row-click" onclick="rlToggleRowUp(event,${d.id},${i})"><td class="pt-name">${p.name}</td>
       <td><input type="text" class="pt-wide" value="${p.ip||''}" placeholder="e.g. 10.0.0.1" onchange="rlSetIfIp(${d.id},${i},this.value)"></td>
       <td><input type="text" class="pt-wide" value="${p.pfx!=null?cidr2mask(p.pfx):''}" placeholder="255.255.255.0" onchange="rlSetIfMask(${d.id},${i},this.value)"></td>
       <td><input type="checkbox" ${p.up?'checked':''} onchange="rlSetIfUp(${d.id},${i},this.checked)"></td></tr>`;
   });
   return html+'</tbody></table>';
+}
+/* Clicking anywhere in a port row toggles its Up checkbox, not just the
+   checkbox itself — except when the click actually landed on an <input>
+   (the IP/mask text fields, which should just focus for editing, or the
+   checkbox itself, whose own onchange already handles it — toggling
+   again here on top of that would flip it right back). Reads the
+   checkbox's current state and calls the same rlSetIfUp the checkbox's
+   own onchange calls, rather than mutating .checked directly — rlSetIfUp
+   drives the change through the real "shutdown"/"no shutdown" CLI
+   commands (rlEchoCli) and re-renders the panel, so a manual .checked
+   flip here would just get overwritten anyway. */
+function rlToggleRowUp(e,did,i){
+  if(e.target.tagName==='INPUT') return;
+  const cb=e.currentTarget.querySelector('input[type="checkbox"]');
+  if(!cb) return;
+  rlSetIfUp(did,i,!cb.checked);
 }
 function rlRouteFormHtml(d){
   let html=`<div class="vm-add">
@@ -2666,7 +2690,18 @@ function setTopic(t,btn){
   state.topic=t;
   document.querySelectorAll('#tb-rand,#tb-read,#tb-lpm,#tb-ad,#tb-route,#tb-summ,#tb-summ6').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
+  syncDiffButtons();
   loadQ();
+}
+/* Read Table has no real difficulty tiers (genRead ignores state.diff
+   entirely — see its comment), so the Easy/Medium/Hard buttons are
+   greyed out and unclickable whenever that topic is directly selected.
+   Random is excluded on purpose — it still needs difficulty to apply to
+   whichever *other* topic a given round lands on, even during a round
+   where Random happens to land on Read Table specifically. */
+function syncDiffButtons(){
+  const dis=state.topic==='read';
+  document.querySelectorAll('#db-easy,#db-medium,#db-hard').forEach(b=>b.disabled=dis);
 }
 function setDiff(d,btn){
   state.diff=d;

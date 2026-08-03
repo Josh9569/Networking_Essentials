@@ -165,6 +165,7 @@ sup  { font-size: .65em; vertical-align: super; }
 .cbtn       { padding: 5px 14px; border-radius: var(--r); border: 1px solid var(--border-m); background: transparent; cursor: pointer; font-size: 13px; font-family: var(--font); color: var(--text-s); transition: all .15s; }
 .cbtn:hover { background: var(--surface-s); color: var(--text); }
 .cbtn.on    { background: var(--info-bg); border-color: var(--info-bdr); color: var(--info-text); font-weight: 500; }
+.cbtn:disabled, .cbtn:disabled:hover { opacity: .28; cursor: not-allowed; background: transparent; color: var(--text-t); }
 
 /* ── Question card & IP Display ─────────────────────────────────────────────── */
 .qcard  { background: var(--surface); border: 1px solid var(--border); border-radius: var(--rl); padding: 1.25rem 1.5rem; margin-bottom: 1rem; }
@@ -823,6 +824,8 @@ sup  { font-size: .65em; vertical-align: super; }
 .port-table th     { background: var(--surface-s); padding: 5px 8px; text-align: left; font-weight: 500; font-size: 10.5px; text-transform: uppercase; letter-spacing: .05em; color: var(--text-s); border-bottom: 1px solid var(--border); }
 .port-table td     { padding: 5px 8px; border-bottom: 1px solid var(--border); }
 .port-table tr:last-child td { border-bottom: none; }
+.pt-row-click       { cursor: pointer; }
+.pt-row-click:hover td { background: var(--surface-s); }
 .pt-name           { font-family: var(--mono); font-weight: 500; color: var(--text); }
 .pt-conn           { font-family: var(--mono); font-size: 12px; color: var(--text-s); }
 .port-table select,
