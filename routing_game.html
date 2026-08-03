@@ -2046,7 +2046,7 @@ function renderRead(body,qip){
   readFields(d).forEach(f=>{
     const div=document.createElement('div');
     div.className='afield'; div.id='f-'+f.id;
-    div.innerHTML=`<label>${f.label}<span class="tip-ic" tabindex="0" data-tip="${rlEsc(f.tip)}">?</span></label><input id="a-${f.id}" placeholder="${f.placeholder}" autocomplete="off"><div class="ahint" id="h-${f.id}"></div>`;
+    div.innerHTML=`<label>${f.label}<span class="tip-ic" tabindex="-1" data-tip="${rlEsc(f.tip)}">?</span></label><input id="a-${f.id}" placeholder="${f.placeholder}" autocomplete="off"><div class="ahint" id="h-${f.id}"></div>`;
     grid.appendChild(div);
   });
   body.appendChild(grid);
