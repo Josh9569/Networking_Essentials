@@ -441,7 +441,7 @@ sup  { font-size: .65em; vertical-align: super; }
 
 /* question value display */
 .q-val      { font-family: var(--mono); font-size: 38px; font-weight: 500; color: var(--text); letter-spacing: .04em; margin-bottom: 8px; }
-.q-val.bin  { letter-spacing: .18em; font-size: 30px; }
+.q-val.bin  { letter-spacing: .18em; }
 .q-hint     { font-size: 13px; color: var(--text-s); }
 
 /* single-answer layout overrides */
@@ -695,8 +695,7 @@ sup  { font-size: .65em; vertical-align: super; }
 .conv-row        { display: flex; align-items: center; gap: 8px; margin-bottom: .65rem; flex-wrap: wrap; }
 .conv-row > span { font-size: 13px; color: var(--text-s); min-width: 44px; }
 
-/* hex value display — blue tint to distinguish from plain decimal */
-.q-val.hex  { color: var(--info-text); letter-spacing: .1em; }
+.q-val.hex  { letter-spacing: .1em; }
 
 /* hex reference table */
 .hex-ref-table    { width: 100%; border-collapse: collapse; font-family: var(--mono); font-size: 13px; }
