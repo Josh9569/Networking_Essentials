@@ -170,6 +170,20 @@ sup  { font-size: .65em; vertical-align: super; }
 /* ── Question card & IP Display ─────────────────────────────────────────────── */
 .qcard  { background: var(--surface); border: 1px solid var(--border); border-radius: var(--rl); padding: 1.25rem 1.5rem; margin-bottom: 1rem; }
 .qlbl   { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-t); margin-bottom: .4rem; }
+/* A .qlbl section heading that collapses whatever sits under it — pair it
+   with .qlbl on a <button>. Chevron points up while the section is open and
+   flips down when it's collapsed, the same rotate-on-state idiom .opt-btn
+   uses for the Options menu. Reusable on any page: the button owns the
+   heading, the page owns what gets hidden. */
+/* Resets only what a <button> needs resetting — font-family (the UA's `font`
+   shorthand wipes it, and .qlbl doesn't set one), background, border,
+   padding. Deliberately NOT font-size/letter-spacing/text-transform/color:
+   those come from .qlbl on the same element, and `inherit` here would take
+   the parent's values instead, quietly undoing the heading's own styling. */
+.sec-toggle       { display: flex; align-items: center; gap: 6px; background: transparent; border: none; padding: 0; cursor: pointer; font-family: inherit; }
+.sec-toggle:hover { color: var(--text-s); }
+.sec-toggle svg   { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; transition: transform .2s; transform: rotate(180deg); }
+.sec-toggle.collapsed svg { transform: rotate(0deg); }
 
 /* Instructions pop-out (packet-tracer labs only — switching_lab.html always,
    routing_game.html only while on its IP Routing topic). Same .qcard, same
@@ -181,27 +195,82 @@ sup  { font-size: .65em; vertical-align: super; }
 .qcard-pop-btn:hover { background: var(--surface-s); color: var(--info-text); }
 .qcard-pop-btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .qcard.popped {
-  position: fixed; top: 84px; width: 260px;
+  position: fixed; top: 84px;
   /* Pinned beside .wrap's own left edge (.wrap is max-width:840px,
      margin:0 auto — this mirrors that centering math), not the raw
      viewport edge, so it sits close to the content it's about instead of
-     stranded out at the side of an ultra-wide window. */
-  left: calc(max(16px, (100vw - 840px) / 2) - 280px);
+     stranded out at the side of an ultra-wide window.
+
+     Anchored by its RIGHT edge rather than its left, because the panel is
+     content-sized: growing a left-anchored panel pushes its right edge
+     into the page content it's meant to sit beside, while growing a
+     right-anchored one expands away into the empty gutter. This is the
+     distance from the viewport's right edge to 20px short of .wrap's left
+     edge. */
+  right: calc(100vw - max(16px, (100vw - 840px) / 2) + 20px);
+  /* Sized to fit its own content instead of a fixed width: stays at the
+     usual 260px while everything fits, and widens — up to a hard ceiling,
+     and never past the gutter it lives in — when it doesn't, rather than
+     making the learner scroll a floating panel sideways. IP Routing's
+     addressing table is what pushes it: four columns of addresses don't
+     fit 260px, but they do fit ~500. Past the ceiling, content wraps as
+     before. */
+  width: max-content;
+  min-width: 260px;
+  max-width: min(520px, calc(max(16px, (100vw - 840px) / 2) - 52px));
   max-height: calc(100vh - 100px); overflow-y: auto;
+  /* Reserve the vertical scrollbar's width up front. Without this, the
+     content is measured, width:max-content settles on that, and *then* the
+     scrollbar appears and takes ~15px back out of the content box — the
+     panel ends up scrolling sideways by exactly a scrollbar's width. */
+  scrollbar-gutter: stable;
   z-index: 45; box-shadow: 0 10px 30px rgba(0,0,0,.20);
   padding: .85rem 1rem;
+}
+/* Two columns of checklist rows in a panel this narrow would be two
+   cramped columns, not two readable ones — the .two-col breakpoint is on
+   the viewport, which says nothing about the width of this particular
+   container. Confined to the width where the panel actually floats: at or
+   below 1600px .popped is inert (the panel docks back inline, see below)
+   but the class is still on the element, and an unconditional rule here
+   would outrank the .two-col breakpoint on specificity and force one
+   column on a docked card at any width. */
+@media (min-width: 1600px) {
+  .qcard.popped .two-col { grid-template-columns: 1fr; }
+  /* The addressing table is the widest thing in the panel, and the gutter
+     it has to fit inside is finite — so the floating copy is set denser
+     (the same trick .q-prompt/.req-row already use here) rather than left
+     to overflow. Shrinking what the content *needs* is what lets
+     width:max-content settle below the cap instead of hitting it and
+     scrolling sideways anyway. */
+  .qcard.popped .rt-table    { font-size: 11.5px; }
+  .qcard.popped .rt-table th { padding: 5px 7px; font-size: 9.5px; }
+  .qcard.popped .rt-table td { padding: 5px 7px; }
+  /* Last resort against sideways scroll: let an address break mid-token in
+     the floating panel. Only bites when the table genuinely cannot fit the
+     gutter (Hard's six-interface table on a ~1600px screen) — max-content
+     sizing still gives every column its full width whenever there's room,
+     so this changes nothing in the cases that already fit. */
+  .qcard.popped .rt-table td { overflow-wrap: anywhere; }
+  .qcard.popped .req-note    { font-size: 11px; }
+  .qcard.popped .mono-inl    { padding: 0 3px; }
 }
 .qcard.popped .q-prompt   { font-size: 13.5px; margin-bottom: 8px; }
 .qcard.popped .ipdisp     { font-size: 18px; }
 .qcard.popped .req-list   { margin-top: .6rem; gap: 5px; }
 .qcard.popped .req-row    { padding: 6px 8px; font-size: 12px; gap: 7px; }
 .qcard.popped .req-reason { font-size: 11px; }
-/* Not enough spare width beside a centered 840px .wrap for a 260px panel +
-   gap to clear the page content below that (needs ~1440px of viewport) —
-   dock it back inline instead of letting it overlap. */
-@media (max-width: 1440px) {
+/* Not enough spare width beside a centered 840px .wrap for a usable panel +
+   gap to clear the page content below this — dock it back inline instead of
+   letting it overlap. The threshold is set by what the panel has to hold:
+   ~340px for IP Routing's addressing table, + a 20px gap + a 16px screen
+   margin on each side of the 840px .wrap ≈ 1590px. It used to be 1440,
+   sized for a 260px-wide text-only panel; below ~1590 the table gets
+   squeezed to the panel's min-width and starts breaking header words
+   mid-syllable, which is worse than simply docking. */
+@media (max-width: 1599px) {
   .qcard-pop-btn { display: none !important; }
-  .qcard.popped  { position: static; width: auto; max-height: none; overflow-y: visible; box-shadow: none; padding: 1.25rem 1.5rem; }
+  .qcard.popped  { position: static; right: auto; width: auto; min-width: 0; max-width: none; max-height: none; overflow-y: visible; box-shadow: none; padding: 1.25rem 1.5rem; }
   .qcard.popped .q-prompt, .qcard.popped .req-row, .qcard.popped .req-reason, .qcard.popped .ipdisp { font-size: revert; }
 }
 .ipdisp    { font-family: var(--mono); font-size: 26px; font-weight: 500; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin-bottom: 8px; }
@@ -818,7 +887,39 @@ sup  { font-size: .65em; vertical-align: super; }
 .req-row.ok  { color: var(--ok-text); }
 .req-row.bad { border-color: var(--err-bdr); background: var(--err-bg); }
 .req-row.bad { color: var(--err-text); }
-.req-reason { font-size: 12px; margin-top: 3px; opacity: .85; }
+/* A row's text sits BESIDE its checkbox, never under it. The bare .req-row
+   rule above never sets flex-wrap, so it inherits `flex-wrap: wrap` from
+   vlsm_game.html's unrelated .req-row (its row of .req-chip pills, which
+   genuinely does need to wrap) — invisible at full width, since nothing
+   ever runs out of room there, but the moment a row is half-width (two
+   columns) every long row drops its text onto its own line below the
+   checkbox. Scoped with :has(.req-checkbox) for the same reason the cursor
+   rule above is: an unscoped fix would stop vlsm's chips wrapping. */
+.req-row:has(.req-checkbox)     { flex-wrap: nowrap; }
+.req-row:has(.req-checkbox) > div { flex: 1 1 0; min-width: 0; overflow-wrap: break-word; }
+/* Graded rows carry far more text than un-graded ones — and in two columns
+   that text wraps far more often — so the reason line is left legible
+   rather than being the smallest, faintest, most-wrapped text on the page. */
+.req-reason { font-size: 12px; margin-top: 4px; line-height: 1.45; }
+/* Group heading inside a checklist (Cabling / Addressing / …). */
+.req-group  { margin-top: .5rem; }
+.req-group:first-child { margin-top: .2rem; }
+
+/* ── TWO-COLUMN LIST ────────────────────────────────────────────────
+   Reusable on any page, CSS only — no JS and nothing to wire up: put
+   .two-col on a vertical list container to lay it out in two columns, and
+   .two-col-full on any child that must still span the whole width (a group
+   heading; renderReqList already emits its headings with that class, so a
+   checklist gets it for free). Placed after .req-list above so it wins the
+   display swap on equal specificity. Exactly two columns, never three —
+   auto-fit with a min track happily fits a third at these widths, which is
+   where a graded row's reason text stops being comfortably readable. Below
+   760px there isn't room for two readable columns either, so it drops to
+   one; that's the layout adapting to the viewport, not a user-facing
+   one-column mode. */
+.two-col      { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; align-items: stretch; }
+.two-col-full { grid-column: 1 / -1; }
+@media (max-width: 760px) { .two-col { grid-template-columns: 1fr; } }
 
 /* config panel */
 .cfg-panel   { background: var(--surface); border: 1px solid var(--border); border-radius: var(--rl); padding: 1rem 1.25rem; margin-bottom: 1rem; }
@@ -1035,7 +1136,7 @@ sup  { font-size: .65em; vertical-align: super; }
 .tool-block .rb-port, .tool-block .cmd-table code, .tool-block .bit-cell,
 .tool-block .pow-cell, .tool-block .mn-sel-btn, .tool-block .mn-stats-toggle,
 .qcard .type-btn, .qcard .opt-card, .qcard .layer-btn, .qcard .mono-inl,
-.qcard .req-chip, .qcard .req-row, .qcard .rand-btn,
+.qcard .req-chip, .qcard .req-row, .qcard .rand-btn, .qcard .rt-table,
 .game-card .tag, .game-card .card-footer,
 .cfg-panel .vm-inp, .cfg-panel .ping-out, .cfg-panel .cli-note,
 .cfg-panel .port-table th, .cfg-panel .port-table select, .cfg-panel .port-table input,

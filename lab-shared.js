@@ -144,12 +144,42 @@
       reqCheckState = { reqs: reqs, checked: reqs.map(function () { return false; }) };
     }
     var checked = reqCheckState.checked;
-    el.innerHTML = reqs.map(function (r, i) {
+    /* Rows are rendered in first-seen-group order rather than array order, so
+       a page whose reqs[] interleaves groups (switching_lab's do — its
+       arrays are written in the order the concepts are taught, not grouped)
+       still gets each heading exactly once instead of the same heading
+       repeating further down. Every row keeps its ORIGINAL index for
+       results/checkbox state, so grading and tick state are untouched by the
+       reordering; only the visual order changes. Reqs with no group all fall
+       into one bucket and keep their array order, so an ungrouped list
+       renders exactly as before. */
+    var buckets = [], bucketOf = {};
+    reqs.forEach(function (r, i) {
+      var g = r.group || '';
+      if (!(g in bucketOf)) { bucketOf[g] = buckets.length; buckets.push([]); }
+      buckets[bucketOf[g]].push(i);
+    });
+    var order = [];
+    buckets.forEach(function (idxs) { order = order.concat(idxs); });
+
+    var lastGroup = null;
+    el.innerHTML = order.map(function (i) {
+      var r = reqs[i];
       var res = results ? results[i] : null;
       var cls = res ? (res.ok ? 'ok' : 'bad') : '';
       var reason = (res && !res.ok && res.reason) ? '<div class="req-reason">' + esc(res.reason) + '</div>' : '';
       var resultIc = res ? ('<span class="req-result-ic ' + (res.ok ? 'ok' : 'bad') + '">' + (res.ok ? '✓' : '✗') + '</span>') : '';
-      return '<div class="req-row ' + cls + '">' +
+      /* Optional heading whenever a req names a different group than the one
+         before it (Cabling / Addressing / …). Reqs with no group produce no
+         headings at all, so a list that never sets one renders exactly as it
+         did before this existed. .two-col-full keeps a heading spanning the
+         whole width when the list is in two columns; it's inert otherwise. */
+      var head = '';
+      if (r.group && r.group !== lastGroup) {
+        head = '<div class="qlbl req-group two-col-full">' + esc(r.group) + '</div>';
+        lastGroup = r.group;
+      }
+      return head + '<div class="req-row ' + cls + '">' +
         '<span class="req-check-col">' +
           '<input type="checkbox" class="req-checkbox" data-i="' + i + '"' + (checked[i] ? ' checked' : '') + '>' +
           resultIc +
