@@ -61,6 +61,8 @@
       </button>
     </div>
     <div class="q-prompt" id="sc-instr" style="font-size:15px"></div>
+    <button type="button" class="qlbl sec-toggle" id="sw-tasks-btn" style="margin-top:1rem;display:none"
+      aria-expanded="true" aria-controls="req-list" onclick="swToggleTasks()">Tasks<svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></button>
     <div class="req-list" id="req-list"></div>
   </div>
 
@@ -1312,11 +1314,11 @@ function namesReq(list){
   return {ok:true};
 }
 function groupNamesReq(groups,vids,names,swOf){
-  return {desc:'Every VLAN is created and named on the switches that carry its PCs',
+  return {group:'VLANs',desc:'Every VLAN is created and named on the switches that carry its PCs',
     test(){ return namesReq(groups.map((g,i)=>[switchesOfGroup(g,swOf),vids[i],names[i]])); }};
 }
 function groupAssignReq(groups,vids){
-  return {desc:'Every PC sits on an access port in its own VLAN',
+  return {group:'VLANs',desc:'Every PC sits on an access port in its own VLAN',
     test(){
       for(let i=0;i<groups.length;i++){
         const r=vlanReq(groups[i],vids[i]);
@@ -1326,7 +1328,7 @@ function groupAssignReq(groups,vids){
     }};
 }
 function groupReachReq(groups){
-  return {desc:'PCs that share a VLAN can communicate',
+  return {group:'Verify',desc:'PCs that share a VLAN can communicate',
     test(){
       for(const g of groups) for(let i=1;i<g.length;i++)
         if(!reach(g[0],g[i]))
@@ -1335,7 +1337,7 @@ function groupReachReq(groups){
     }};
 }
 function groupIpReachReq(groups){
-  return {desc:'Same-subnet PCs can ping each other (L2 + L3)',
+  return {group:'Verify',desc:'Same-subnet PCs can ping each other (L2 + L3)',
     test(){
       for(const g of groups) for(let i=1;i<g.length;i++)
         if(!ipReach(g[0],g[i]))
@@ -1344,14 +1346,14 @@ function groupIpReachReq(groups){
     }};
 }
 function isoPairReq(a,b){
-  return {desc:`${a.name} canNOT reach ${b.name} at Layer 2 (separate VLANs)`,
+  return {group:'Verify',desc:`${a.name} canNOT reach ${b.name} at Layer 2 (separate VLANs)`,
     test(){ return reach(a,b)
       ?{ok:false,reason:`${a.name} can still reach ${b.name} — their VLANs must differ`}
       :{ok:true}; }};
 }
 function ipsReq(entries, allPcs){
   const who=entries.map(e=>e.pc.name).join(', ');
-  return {desc:entries.length===1
+  return {group:'Addressing',desc:entries.length===1
       ? `${who} has a valid, unused host IP in 192.168.${entries[0].o3}.0/24`
       : `${who} each get a valid, unused host IP in their VLAN's subnet`,
     test(){
@@ -1370,7 +1372,7 @@ function ipsReq(entries, allPcs){
     }};
 }
 function sviReqFor(sw,v,allPcs){
-  return {desc:`${sw.name} has a management IP (SVI) on VLAN ${v} in 192.168.${v}.0/24`,
+  return {group:'Addressing',desc:`${sw.name} has a management IP (SVI) on VLAN ${v} in 192.168.${v}.0/24`,
     test(){
       if(sw.ip==null||sw.ipVlan==null)
         return{ok:false,reason:`${sw.name} has no management IP — "interface vlan ${v}" then "ip address ..."`};
@@ -1387,7 +1389,7 @@ function sviReqFor(sw,v,allPcs){
     }};
 }
 function crossPingReq(a,b){
-  return {desc:`Cross-subnet ping works via the router (${a.name} \u2192 ${b.name})`,
+  return {group:'Verify',desc:`Cross-subnet ping works via the router (${a.name} \u2192 ${b.name})`,
     test(){ return routedReach(a,b)?{ok:true}
       :{ok:false,reason:`${a.name} cannot reach ${b.name} through the router — both VLANs need a path to the router\u2019s trunk`}; }};
 }
@@ -1419,7 +1421,7 @@ function nativeReq(sA,sB,expected){
   return{ok:true};
 }
 function routerReq(){
-  return {desc:'The router is connected to a switch on a trunk port',
+  return {group:'Trunking',desc:'The router is connected to a switch on a trunk port',
     test(){
       const r=devices.find(d=>d.type==='router');
       if(!r)return{ok:false,reason:'No router in the topology'};
@@ -1455,7 +1457,7 @@ function bundleGroupOf(sw,other){
   return (c.a.d===sw.id?sw.ports[c.a.i]:sw.ports[c.b.i]).ch;
 }
 function bundleTrunkReq(pairs,minEnds){
-  return {desc:'Every backbone port (bundle members and links) is in trunk mode',
+  return {group:'Trunking',desc:'Every backbone port (bundle members and links) is in trunk mode',
     test(){
       const ends=[];
       for(const [a,b] of pairs)
@@ -1493,10 +1495,10 @@ function buildVlanScenario(D){
       title:'VLAN Assignment',
       instr:`Cable all four PCs to SW1, create both VLANs with their names, then assign: ${membStr(groups,vids,names,false)}.`,
       reqs:[
-        {desc:'All four PCs are cabled to SW1',
+        {group:'Cabling',desc:'All four PCs are cabled to SW1',
           test(){ const miss=pcs.filter(p=>!cableBetween(p,sw));
             return miss.length?{ok:false,reason:miss.map(p=>p.name).join(', ')+' not cabled to SW1'}:{ok:true}; }},
-        {desc:`VLAN ${v1} is named ${n1} and VLAN ${v2} is named ${n2}`,
+        {group:'VLANs',desc:`VLAN ${v1} is named ${n1} and VLAN ${v2} is named ${n2}`,
           test(){ return namesReq([[[sw],v1,n1],[[sw],v2,n2]]); }},
         groupAssignReq(groups,vids),
         groupReachReq(groups),
@@ -1577,7 +1579,7 @@ function buildTrunkScenario(D){
       title:'Inter-Switch Trunking',
       instr:`Create and name both VLANs where their PCs live, assign: ${membStr(groups,vids,names,false)}. Then cable SW1 to SW2 and trunk the link so every VLAN can cross it.`,
       reqs:[
-        {desc:'SW1 and SW2 are linked and both ends are trunks', test(){ return trunkLinkReq(s1,s2); }},
+        {group:'Trunking',desc:'SW1 and SW2 are linked and both ends are trunks', test(){ return trunkLinkReq(s1,s2); }},
         groupNamesReq(groups,vids,names,swOf),
         groupAssignReq(groups,vids),
         groupReachReq(groups),
@@ -1597,8 +1599,8 @@ function buildTrunkScenario(D){
       title:'Trunking a Three-Switch Chain',
       instr:`Traffic must cross SW2 to travel the chain. Create and name each VLAN on the switches that carry its PCs, assign: ${membStr(groups,vids,names,false)}. Then cable and trunk <em>both</em> inter-switch links.`,
       reqs:[
-        {desc:'SW1\u2013SW2 link exists and is trunked on both ends', test(){ return trunkLinkReq(s1,s2); }},
-        {desc:'SW2\u2013SW3 link exists and is trunked on both ends', test(){ return trunkLinkReq(s2,s3); }},
+        {group:'Trunking',desc:'SW1\u2013SW2 link exists and is trunked on both ends', test(){ return trunkLinkReq(s1,s2); }},
+        {group:'Trunking',desc:'SW2\u2013SW3 link exists and is trunked on both ends', test(){ return trunkLinkReq(s2,s3); }},
         groupNamesReq(groups,vids,names,swOf),
         groupAssignReq(groups,vids),
         groupReachReq(groups),
@@ -1621,9 +1623,9 @@ function buildTrunkScenario(D){
     instr:`${npc} PCs, three VLANs: ${membStr(groups,vids,names,false)}. Create and name each VLAN on the switches that carry its PCs, assign the ports, then cable and trunk both inter-switch links. `+
       `These switches are still defaulting to native VLAN 1, which is a VLAN-hopping risk \u2014 move the native VLAN on <em>both</em> backbone links to VLAN <strong>${nativeVid}</strong> with <span class="mono-inl">switchport trunk native vlan ${nativeVid}</span> (must match on both ends of each link).`,
     reqs:[
-      {desc:'Both inter-switch links exist and are trunked',
+      {group:'Trunking',desc:'Both inter-switch links exist and are trunked',
         test(){ const r=trunkLinkReq(s1,s2); if(!r.ok)return r; return trunkLinkReq(s2,s3); }},
-      {desc:`Both backbone links have their native VLAN moved to VLAN ${nativeVid} on both ends`,
+      {group:'Trunking',desc:`Both backbone links have their native VLAN moved to VLAN ${nativeVid} on both ends`,
         test(){ const r=nativeReq(s1,s2,nativeVid); if(!r.ok)return r; return nativeReq(s2,s3,nativeVid); }},
       groupNamesReq(groups,vids,names,swOf),
       groupAssignReq(groups,vids),
@@ -1640,7 +1642,7 @@ function buildEtherScenario(D){
       title:'EtherChannel Bundle',
       instr:'Two parallel links already join SW1 and SW2. Bundle them into a single EtherChannel (any group number, matching within each switch) and set every member port to trunk mode.',
       reqs:[
-        {desc:'Both switches bundle their two member ports into one channel-group',
+        {group:'EtherChannel',desc:'Both switches bundle their two member ports into one channel-group',
           test(){ return bundleReq(s1,s2,'SW1\u2013SW2'); }},
         bundleTrunkReq([[s1,s2]]),
       ]};
@@ -1658,7 +1660,7 @@ function buildEtherScenario(D){
       title:'EtherChannel Carrying a VLAN',
       instr:`Bundle the two SW1\u2013SW2 links into one EtherChannel, trunk the member ports, then create VLAN ${v1} <strong>${n1}</strong> on both switches and put ${pcs[0].name} and ${pcs[1].name} in it so they can talk over the bundle.`,
       reqs:[
-        {desc:'Both switches bundle their two member ports into one channel-group',
+        {group:'EtherChannel',desc:'Both switches bundle their two member ports into one channel-group',
           test(){ return bundleReq(s1,s2,'SW1\u2013SW2'); }},
         bundleTrunkReq([[s1,s2]]),
         groupNamesReq(groups,[v1],[n1],swOf),
@@ -1677,11 +1679,11 @@ function buildEtherScenario(D){
     title:'Dual EtherChannel Backbone',
     instr:`Run <strong>two cables</strong> between SW1 and SW2 and <strong>two cables</strong> between SW2 and SW3 using the free ports. Bundle each pair into an EtherChannel — SW2\u2019s two bundles must use <em>different</em> group numbers — trunk every member port, then create ${membStr(groups,vids,names,false)} end to end.`,
     reqs:[
-      {desc:'Two links between SW1 &amp; SW2, bundled consistently on both switches',
+      {group:'EtherChannel',desc:'Two links between SW1 &amp; SW2, bundled consistently on both switches',
         test(){ return bundleReq(s1,s2,'SW1\u2013SW2'); }},
-      {desc:'Two links between SW2 &amp; SW3, bundled consistently on both switches',
+      {group:'EtherChannel',desc:'Two links between SW2 &amp; SW3, bundled consistently on both switches',
         test(){ return bundleReq(s2,s3,'SW2\u2013SW3'); }},
-      {desc:'SW2\u2019s two bundles use different group numbers',
+      {group:'EtherChannel',desc:'SW2\u2019s two bundles use different group numbers',
         test(){ const a=bundleGroupOf(s2,s1), b=bundleGroupOf(s2,s3);
           if(a===0||b===0)return{ok:false,reason:'Both SW2 bundles must be cabled and configured first'};
           return a!==b?{ok:true}:{ok:false,reason:`Both bundles use group ${a} — SW2 would merge all four ports into one channel`}; }},
@@ -1814,7 +1816,7 @@ function buildComboScenario(D){
       title:'Everything — Bundle, Trunk &amp; VLANs',
       instr:`Two parallel links join the switches: bundle them into one EtherChannel and trunk the member ports. Then create and name both VLANs where their PCs live and assign: ${membStr(groups,vids,names,false)}.`,
       reqs:[
-        {desc:'The two links form one consistent EtherChannel',
+        {group:'EtherChannel',desc:'The two links form one consistent EtherChannel',
           test(){ return bundleReq(s1,s2,'SW1\u2013SW2'); }},
         bundleTrunkReq([[s1,s2]]),
         groupNamesReq(groups,vids,names,swOf),
@@ -1846,9 +1848,9 @@ function buildComboScenario(D){
       title:'Everything — Dual-Path Backbone',
       instr:`${bundlePair[0].name} and ${bundlePair[1].name} share two pre-cabled links: bundle and trunk them. Then cable a single link between ${singlePair[0].name} and ${singlePair[1].name} and trunk it. Finally create, name and assign: ${membStr(groups,vids,names,false)}.`,
       reqs:[
-        {desc:`${bundlePair[0].name}\u2013${bundlePair[1].name} links form one consistent EtherChannel`,
+        {group:'EtherChannel',desc:`${bundlePair[0].name}\u2013${bundlePair[1].name} links form one consistent EtherChannel`,
           test(){ return bundleReq(bundlePair[0],bundlePair[1],bundlePair[0].name+'\u2013'+bundlePair[1].name); }},
-        {desc:`${singlePair[0].name}\u2013${singlePair[1].name} link exists and is trunked on both ends`,
+        {group:'Trunking',desc:`${singlePair[0].name}\u2013${singlePair[1].name} link exists and is trunked on both ends`,
           test(){ return trunkLinkReq(singlePair[0],singlePair[1]); }},
         bundleTrunkReq([bundlePair]),
         groupNamesReq(groups,vids,names,swOf),
@@ -1898,11 +1900,11 @@ function buildComboScenario(D){
       `Membership by subnet: ${membStr(groups,vids,names,true)}. Assign the missing IPs (${missing.map(p=>p.name).join(', ')}), give <strong>${svSw.name}</strong> a management SVI in 192.168.${svV}.0/24, and connect the router on a trunked port to route between subnets. `+
       `<br><br>${specTable}<br><br>These switches are still at the STP default priority \u2014 using <span class="mono-inl">spanning-tree vlan 1 root primary</span> / <span class="mono-inl">root secondary</span> (or an explicit <span class="mono-inl">priority &lt;n&gt;</span>), make <strong>${stpTarget.name}</strong> the root bridge and <strong>${stpSecondary.name}</strong> the backup root.`,
     reqs:[
-      {desc:`${bundlePair[0].name}\u2013${bundlePair[1].name} has two links in one consistent EtherChannel`,
+      {group:'EtherChannel',desc:`${bundlePair[0].name}\u2013${bundlePair[1].name} has two links in one consistent EtherChannel`,
         test(){ return bundleReq(bundlePair[0],bundlePair[1],bundlePair[0].name+'\u2013'+bundlePair[1].name); }},
-      {desc:`${singlePair[0].name}\u2013${singlePair[1].name} link exists and is trunked on both ends`,
+      {group:'Trunking',desc:`${singlePair[0].name}\u2013${singlePair[1].name} link exists and is trunked on both ends`,
         test(){ return trunkLinkReq(singlePair[0],singlePair[1]); }},
-      {desc:`${singlePair[0].name}\u2013${singlePair[1].name}'s native VLAN is moved to VLAN ${nativeVid} on both ends`,
+      {group:'Trunking',desc:`${singlePair[0].name}\u2013${singlePair[1].name}'s native VLAN is moved to VLAN ${nativeVid} on both ends`,
         test(){ return nativeReq(singlePair[0],singlePair[1],nativeVid); }},
       bundleTrunkReq([bundlePair],4),
       groupNamesReq(groups,vids,names,swOf),
@@ -1913,13 +1915,13 @@ function buildComboScenario(D){
       groupIpReachReq(groups),
       crossPingReq(cA,cB),
       isoPairReq(groups[ii][0],groups[ij][0]),
-      {desc:`${stpTarget.name} (the newest/fastest switch) is the STP root bridge`,
+      {group:'Spanning Tree',desc:`${stpTarget.name} (the newest/fastest switch) is the STP root bridge`,
         test(){
           const stp=computeSTP();
           if(stp&&stp.root===stpTarget) return {ok:true};
           return {ok:false,reason:`The current root is ${stp?stp.root.name:'undetermined'} \u2014 lower ${stpTarget.name}'s priority (e.g. "spanning-tree vlan 1 root primary")`};
         }},
-      {desc:`${stpSecondary.name} is configured as the backup root (worse than ${stpTarget.name}, but better than everything else)`,
+      {group:'Spanning Tree',desc:`${stpSecondary.name} is configured as the backup root (worse than ${stpTarget.name}, but better than everything else)`,
         test(){
           if(stpSecondary.priority<=stpTarget.priority)
             return {ok:false,reason:`${stpSecondary.name}'s priority must stay higher than ${stpTarget.name}'s so it doesn't compete for root`};
@@ -1963,6 +1965,35 @@ function newScenario(){
 /* ═══ Requirements UI ═════════════════════════════════════════════════════ */
 function renderReqs(results){
   LabShared.renderReqList('req-list', scenario?scenario.reqs:null, results);
+  swSyncTasksUI();
+}
+
+/* ── Tasks heading: categories + two columns + show/hide ──────────────────
+   Everything except the STP topic gets the grouped, two-column checklist the
+   IP Routing lab uses. STP is deliberately left plain: its click-the-port
+   scenarios carry no reqs at all, and its config variant is two lines that
+   gain nothing from headings or a second column. Sandbox has no scenario, so
+   nothing shows either. The show/hide state is persisted (a reading
+   preference, like the routing trainer's own ne-route-tasks) rather than
+   reset per scenario. */
+function swTasksShown(){
+  try{ return localStorage.getItem('ne-sw-tasks')!=='0'; }catch(e){ return true; }
+}
+function swSyncTasksUI(){
+  const list=document.getElementById('req-list'), btn=document.getElementById('sw-tasks-btn');
+  if(!list||!btn) return;
+  const grouped = !!(scenario && scenario.reqs && scenario.reqs.length && scenario.type!=='stp');
+  list.classList.toggle('two-col', grouped);
+  btn.style.display = grouped ? '' : 'none';
+  if(!grouped){ list.style.display=''; return; }   // never leave STP's list hidden
+  const shown=swTasksShown();
+  list.style.display = shown?'':'none';
+  btn.classList.toggle('collapsed',!shown);
+  btn.setAttribute('aria-expanded',String(shown));
+}
+function swToggleTasks(){
+  try{ localStorage.setItem('ne-sw-tasks', swTasksShown()?'0':'1'); }catch(e){}
+  swSyncTasksUI();
 }
 
 /* ═══ Checking / answering ════════════════════════════════════════════════ */
@@ -2119,6 +2150,7 @@ function initSandbox(){
   document.getElementById('sc-title').textContent='Sandbox';
   document.getElementById('sc-instr').innerHTML='Free build mode — add switches and PCs, cable them up, and configure anything. Enable the <strong>Topology Analyzer</strong> in Options to inspect STP roles and reachability.';
   document.getElementById('req-list').innerHTML='';
+  swSyncTasksUI();
   document.getElementById('chkbtn').style.display='none';
   document.getElementById('skipbtn').style.display='none';
   document.getElementById('nxtbtn').style.display='none';

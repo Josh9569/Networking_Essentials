@@ -56,7 +56,8 @@
     </div>
     <div class="q-prompt" id="qprompt">Loading&hellip;</div>
     <div class="ipdisp" id="qip" style="display:none"></div>
-    <div class="req-list" id="req-list"></div>
+    <div id="qspec"></div>
+    <div class="req-list two-col" id="req-list"></div>
   </div>
 
   <div class="fbanner" id="fb"></div>
@@ -567,11 +568,11 @@ function renderSumm(body,qip){
   }
   if(d.kind==='medium'){
     document.getElementById('qprompt').innerHTML=`HQ connects to ISP over a point-to-point link. Configure a <strong>summary</strong> static route on ISP for all of HQ's networks, and a <strong>default</strong> static route on HQ for the Internet.`;
-    const topo=`
-      <div class="cfg-sec-lbl">HQ's directly connected networks</div>
-      ${d.hqNets.map(n=>`<div class="cli-block" style="margin-bottom:.5rem">${n.network}/${n.prefix}</div>`).join('')}
-      <div class="cfg-sec-lbl" style="margin-top:.75rem">HQ &harr; ISP link</div>
-      <div class="cli-block" style="margin-bottom:1rem">HQ: ${d.link.aIP}/30 &nbsp;&nbsp; ISP: ${d.link.bIP}/30</div>`;
+    const topo=`<div class="two-col" style="margin-bottom:1rem">
+      <div class="cfg-sec-lbl two-col-full">HQ's directly connected networks</div>
+      ${d.hqNets.map(n=>`<div class="cli-block">${n.network}/${n.prefix}</div>`).join('')}
+      <div class="cfg-sec-lbl two-col-full" style="margin-top:.25rem">HQ &harr; ISP link</div>
+      <div class="cli-block two-col-full">HQ: ${d.link.aIP}/30 &nbsp;&nbsp; ISP: ${d.link.bIP}/30</div></div>`;
     body.innerHTML=`${summTopoHtml('medium',d,false)}${topo}${summBitsToolHtml()}${summRouteFieldsHtml(d.routes,'ip route <network> <mask> <next-hop>')}`;
     summBuildBits();
     summTopoFit();
@@ -579,15 +580,15 @@ function renderSumm(body,qip){
     return;
   }
   document.getElementById('qprompt').innerHTML=`ISP, HQ, and BRANCH are chained together. Configure a <strong>summary</strong> static route on ISP for everything behind HQ, a <strong>default</strong> route on HQ for the Internet, individual static routes on HQ for each of BRANCH's networks, and a <strong>default</strong> route on BRANCH for everything beyond it.`;
-  const topo=`
-    <div class="cfg-sec-lbl">HQ's directly connected network</div>
-    <div class="cli-block" style="margin-bottom:.5rem">${d.hqNet.network}/${d.hqNet.prefix}</div>
-    <div class="cfg-sec-lbl" style="margin-top:.75rem">BRANCH's directly connected networks</div>
-    ${d.branchNets.map(n=>`<div class="cli-block" style="margin-bottom:.5rem">${n.network}/${n.prefix}</div>`).join('')}
-    <div class="cfg-sec-lbl" style="margin-top:.75rem">HQ &harr; ISP link</div>
-    <div class="cli-block" style="margin-bottom:.5rem">HQ: ${d.ispLink.aIP}/30 &nbsp;&nbsp; ISP: ${d.ispLink.bIP}/30</div>
-    <div class="cfg-sec-lbl" style="margin-top:.75rem">HQ &harr; BRANCH link</div>
-    <div class="cli-block" style="margin-bottom:1rem">HQ: ${d.branchLink.aIP}/30 &nbsp;&nbsp; BRANCH: ${d.branchLink.bIP}/30</div>`;
+  const topo=`<div class="two-col" style="margin-bottom:1rem">
+    <div class="cfg-sec-lbl two-col-full">HQ's directly connected network</div>
+    <div class="cli-block">${d.hqNet.network}/${d.hqNet.prefix}</div>
+    <div class="cfg-sec-lbl two-col-full" style="margin-top:.25rem">BRANCH's directly connected networks</div>
+    ${d.branchNets.map(n=>`<div class="cli-block">${n.network}/${n.prefix}</div>`).join('')}
+    <div class="cfg-sec-lbl two-col-full" style="margin-top:.25rem">HQ &harr; ISP link</div>
+    <div class="cli-block two-col-full">HQ: ${d.ispLink.aIP}/30 &nbsp;&nbsp; ISP: ${d.ispLink.bIP}/30</div>
+    <div class="cfg-sec-lbl two-col-full" style="margin-top:.25rem">HQ &harr; BRANCH link</div>
+    <div class="cli-block two-col-full">HQ: ${d.branchLink.aIP}/30 &nbsp;&nbsp; BRANCH: ${d.branchLink.bIP}/30</div></div>`;
   body.innerHTML=`${summTopoHtml('hard',d,false)}${topo}${summBitsToolHtml()}${summRouteFieldsHtml(d.routes,'ip route <network> <mask> <next-hop>')}`;
   summBuildBits();
   summTopoFit();
@@ -1203,26 +1204,26 @@ function renderSumm6(body,qip){
   }
   if(d.kind==='medium'){
     document.getElementById('qprompt').innerHTML=`HQ connects to ISP over a point-to-point link. Configure a <strong>summary</strong> static route on ISP for all of HQ's networks, and a <strong>default</strong> static route on HQ for the Internet.`;
-    const topo=`
-      <div class="cfg-sec-lbl">HQ's directly connected networks</div>
-      ${d.hqNets.map(n=>`<div class="cli-block" style="margin-bottom:.5rem">${n.text}</div>`).join('')}
-      <div class="cfg-sec-lbl" style="margin-top:.75rem">HQ &harr; ISP link</div>
-      <div class="cli-block" style="margin-bottom:1rem">HQ: ${d.link.aText} &nbsp;&nbsp; ISP: ${d.link.bText}</div>`;
+    const topo=`<div class="two-col" style="margin-bottom:1rem">
+      <div class="cfg-sec-lbl two-col-full">HQ's directly connected networks</div>
+      ${d.hqNets.map(n=>`<div class="cli-block">${n.text}</div>`).join('')}
+      <div class="cfg-sec-lbl two-col-full" style="margin-top:.25rem">HQ &harr; ISP link</div>
+      <div class="cli-block two-col-full">HQ: ${d.link.aText} &nbsp;&nbsp; ISP: ${d.link.bText}</div></div>`;
     body.innerHTML=`${summTopoHtml('medium',d,true)}${topo}${summRouteFieldsHtml(d.routes,'ipv6 route <prefix>/<len> <next-hop>')}`;
     summTopoFit();
     setBtns('text');
     return;
   }
   document.getElementById('qprompt').innerHTML=`ISP, HQ, and BRANCH are chained together. Configure a <strong>summary</strong> static route on ISP for everything behind HQ, a <strong>default</strong> route on HQ for the Internet, individual static routes on HQ for each of BRANCH's networks, and a <strong>default</strong> route on BRANCH for everything beyond it.`;
-  const topo=`
-    <div class="cfg-sec-lbl">HQ's directly connected network</div>
-    <div class="cli-block" style="margin-bottom:.5rem">${d.hqNet.text}</div>
-    <div class="cfg-sec-lbl" style="margin-top:.75rem">BRANCH's directly connected networks</div>
-    ${d.branchNets.map(n=>`<div class="cli-block" style="margin-bottom:.5rem">${n.text}</div>`).join('')}
-    <div class="cfg-sec-lbl" style="margin-top:.75rem">HQ &harr; ISP link</div>
-    <div class="cli-block" style="margin-bottom:.5rem">HQ: ${d.ispLink.aText} &nbsp;&nbsp; ISP: ${d.ispLink.bText}</div>
-    <div class="cfg-sec-lbl" style="margin-top:.75rem">HQ &harr; BRANCH link</div>
-    <div class="cli-block" style="margin-bottom:1rem">HQ: ${d.branchLink.aText} &nbsp;&nbsp; BRANCH: ${d.branchLink.bText}</div>`;
+  const topo=`<div class="two-col" style="margin-bottom:1rem">
+    <div class="cfg-sec-lbl two-col-full">HQ's directly connected network</div>
+    <div class="cli-block">${d.hqNet.text}</div>
+    <div class="cfg-sec-lbl two-col-full" style="margin-top:.25rem">BRANCH's directly connected networks</div>
+    ${d.branchNets.map(n=>`<div class="cli-block">${n.text}</div>`).join('')}
+    <div class="cfg-sec-lbl two-col-full" style="margin-top:.25rem">HQ &harr; ISP link</div>
+    <div class="cli-block two-col-full">HQ: ${d.ispLink.aText} &nbsp;&nbsp; ISP: ${d.ispLink.bText}</div>
+    <div class="cfg-sec-lbl two-col-full" style="margin-top:.25rem">HQ &harr; BRANCH link</div>
+    <div class="cli-block two-col-full">HQ: ${d.branchLink.aText} &nbsp;&nbsp; BRANCH: ${d.branchLink.bText}</div></div>`;
   body.innerHTML=`${summTopoHtml('hard',d,true)}${topo}${summRouteFieldsHtml(d.routes,'ipv6 route <prefix>/<len> <next-hop>')}`;
   summTopoFit();
   setBtns('text');
@@ -1614,9 +1615,18 @@ function rlResolvePing(srcPc,dstStr){
 
 /* ── Requirement-factory helpers (same {desc,test()} shape as switching_lab's
    reqs[], ported in since routing_game.html had no checklist UI before). ── */
+/* Tags each requirement with the phase of the job it belongs to (Cabling /
+   Addressing / Routing / Verify) so renderReqList puts a heading above the
+   first one of each. Returns them flat — reqs[] stays a plain 1:1 list, since
+   checkAll/revealAll grade it by index against the rendered rows. */
+function rlGroup(name){
+  const rs=Array.prototype.slice.call(arguments,1);
+  rs.forEach(r=>{ r.group=name; });
+  return rs;
+}
 function rlIfaceReq(router,portIdx,expectedNetInt,expectedPfx){
   const p=router.ports[portIdx];
-  return {desc:`${router.name} ${p.name} has a valid IP in ${int2ip(expectedNetInt)}/${expectedPfx} and is up (no shutdown)`,
+  return {desc:`Address ${router.name} ${p.name} in <span class="mono-inl">${int2ip(expectedNetInt)}/${expectedPfx}</span> and bring it up (no shutdown)`,
     test(){
       if(!p.ip) return {ok:false,reason:`${router.name} ${p.name} has no IP address configured`};
       if(!isValidIP(p.ip)) return {ok:false,reason:`${router.name} ${p.name}'s IP is invalid`};
@@ -1630,7 +1640,7 @@ function rlIfaceReq(router,portIdx,expectedNetInt,expectedPfx){
     }};
 }
 function rlPcIpReq(pc,netInt,pfx){
-  return {desc:`${pc.name} has a valid host IP in ${int2ip(netInt)}/${pfx}`,
+  return {desc:`Give ${pc.name} a host address in <span class="mono-inl">${int2ip(netInt)}/${pfx}</span>`,
     test(){
       if(!pc.ip||!isValidIP(pc.ip)) return {ok:false,reason:`${pc.name} has no valid IP`};
       const ipInt=ip2int(pc.ip);
@@ -1640,7 +1650,7 @@ function rlPcIpReq(pc,netInt,pfx){
     }};
 }
 function rlCableReq(devA,labelA,devB,labelB){
-  return {desc:`${labelA} is cabled to ${labelB}`,
+  return {desc:`Cable ${labelA} to ${labelB}`,
     test(){ return rlCableBetween(devA,devB) ? {ok:true} : {ok:false,reason:`${labelA} and ${labelB} are not cabled yet`}; }};
 }
 /* A real ping needs the echo REPLY to route back too, not just the request
@@ -1648,7 +1658,7 @@ function rlCableReq(devA,labelA,devB,labelB){
    interface-only static route that happens to break just the return path)
    doesn't slip through as "working". */
 function rlPingReq(pcA,pcB){
-  return {desc:`${pcA.name} can ping ${pcB.name}`,
+  return {desc:`<b>${pcA.name}</b> can ping <b>${pcB.name}</b>`,
     test(){
       if(!pcA.ip) return {ok:false,reason:`${pcA.name} needs a valid IP before you can ping`};
       if(!pcB.ip) return {ok:false,reason:`${pcB.name} needs a valid IP before you can ping it`};
@@ -1659,8 +1669,24 @@ function rlPingReq(pcA,pcB){
       return {ok:true};
     }};
 }
+/* "This router can reach that network" — satisfied by a static route, a
+   default route, or a connected one, since any of the three is a legitimate
+   way to solve it. Deliberately looser than rlFullySpecReq below (which
+   demands a particular *form* of route, and only where the topology really
+   requires it): the routing task is to make the network reachable, not to
+   type one exact command. Asks the router's own table the same way a packet
+   would — rlRoutingTable + bestMatch, so it stays honest if either changes. */
+function rlRouteReq(router,netInt,pfx,what){
+  return {desc:`${router.name} can reach <span class="mono-inl">${int2ip(netInt)}/${pfx}</span>${what?' ('+what+')':''}`,
+    test(){
+      const probe=(pfx<31?netInt+1:netInt)>>>0;
+      const winner=bestMatch(probe, rlRoutingTable(router));
+      if(!winner) return {ok:false,reason:`${router.name} has no route to ${int2ip(netInt)}/${pfx} — add a static or default route`};
+      return {ok:true};
+    }};
+}
 function rlFullySpecReq(router,expectedNetInt,expectedPfx){
-  return {desc:`${router.name} uses a fully specified static route (exit interface AND next-hop) to reach ${int2ip(expectedNetInt)}/${expectedPfx}`,
+  return {desc:`Give ${router.name} a <b>fully specified</b> static route to <span class="mono-inl">${int2ip(expectedNetInt)}/${expectedPfx}</span> — exit interface <em>and</em> next-hop`,
     test(){
       const match=router.staticRoutes.find(r=>r.netInt===expectedNetInt&&r.prefix===expectedPfx);
       if(!match) return {ok:false,reason:`${router.name} has no static route to ${int2ip(expectedNetInt)}/${expectedPfx} yet`};
@@ -1670,12 +1696,24 @@ function rlFullySpecReq(router,expectedNetInt,expectedPfx){
     }};
 }
 
-/* ── Scenario generator ── */
+/* ── Scenario generator ──
+   Returns the brief as data, not prose: a one-line goal, an addressing table
+   (the same Device/Interface/Address/Connects-to table a real Packet Tracer
+   lab hands you), one line of context the table can't express, and the reqs
+   themselves grouped into the phases you'd work through. The table carries
+   both the cabling and the addressing, which is what makes a walk-through
+   paragraph unnecessary — everything the learner has to type is in it.
+
+   Addresses are written in CIDR throughout. The router CLI still parses a
+   dotted mask (maskToCidr, in both the "ip address" and "ip route" branches
+   above — real IOS is the same), so anything that quotes a literal command
+   stays dotted; only the brief is CIDR. */
 function genRoute(diff){
   rlResetTopo();
-  const reqs=[]; let title, instr;
+  const reqs=[]; let title, goal, note, addr=[];
   const lanSubnet=()=>netIntOf(niceRawInt(),24);
   const wanSubnet=()=>netIntOf(niceRawInt(),30);
+  const anyHost=netInt=>`any host in ${int2ip(netInt)}/24`;
 
   if(diff==='easy'){
     const r1=rlAddRouter(255,25);
@@ -1683,13 +1721,22 @@ function genRoute(diff){
     const netA=lanSubnet(), netB=lanSubnet();
     const ipA=int2ip(netA+1), ipB=int2ip(netB+1);
     title='IP Routing — Directly Connected Networks';
-    instr=`Cable both PCs to ${r1.name}. Give ${r1.name} ${r1.ports[0].name} the address <span class="mono-inl">${ipA} 255.255.255.0</span> and ${r1.name} ${r1.ports[1].name} the address <span class="mono-inl">${ipB} 255.255.255.0</span> (don't forget <span class="mono-inl">no shutdown</span> on each). Then give ${pc1.name} any host address in ${int2ip(netA)}/24 and ${pc2.name} any host address in ${int2ip(netB)}/24 — both networks are directly connected to ${r1.name}, so no static routes are needed.`;
+    goal=`Get <b>${pc1.name}</b> and <b>${pc2.name}</b> talking through <b>${r1.name}</b>.`;
+    note=`Both LANs are directly connected to ${r1.name} — no static routes needed.`;
+    addr=[
+      [r1.name, r1.ports[0].name, ipA+'/24', pc1.name],
+      [r1.name, r1.ports[1].name, ipB+'/24', pc2.name],
+      [pc1.name, 'NIC', anyHost(netA), r1.name+' '+r1.ports[0].name],
+      [pc2.name, 'NIC', anyHost(netB), r1.name+' '+r1.ports[1].name]
+    ];
     reqs.push(
-      rlCableReq(pc1,pc1.name,r1,r1.name+' '+r1.ports[0].name),
-      rlCableReq(pc2,pc2.name,r1,r1.name+' '+r1.ports[1].name),
-      rlIfaceReq(r1,0,netA,24), rlIfaceReq(r1,1,netB,24),
-      rlPcIpReq(pc1,netA,24), rlPcIpReq(pc2,netB,24),
-      rlPingReq(pc1,pc2)
+      ...rlGroup('Cabling',
+        rlCableReq(pc1,pc1.name,r1,r1.name+' '+r1.ports[0].name),
+        rlCableReq(pc2,pc2.name,r1,r1.name+' '+r1.ports[1].name)),
+      ...rlGroup('Addressing',
+        rlIfaceReq(r1,0,netA,24), rlIfaceReq(r1,1,netB,24),
+        rlPcIpReq(pc1,netA,24), rlPcIpReq(pc2,netB,24)),
+      ...rlGroup('Verify', rlPingReq(pc1,pc2))
     );
   } else if(diff==='medium'){
     const r1=rlAddRouter(50,25), r2=rlAddRouter(460,25);
@@ -1698,15 +1745,29 @@ function genRoute(diff){
     const ipA=int2ip(netA+1), ipB=int2ip(netB+1);
     const wIp1=int2ip(netW+1), wIp2=int2ip(netW+2);
     title='IP Routing — Static Routes Across Two Routers';
-    instr=`Cable ${pc1.name} to ${r1.name} ${r1.ports[0].name}, ${pc2.name} to ${r2.name} ${r2.ports[0].name}, and ${r1.name} ${r1.ports[1].name} to ${r2.name} ${r2.ports[1].name} for the WAN link. Address the LANs: ${r1.name} ${r1.ports[0].name} = <span class="mono-inl">${ipA} 255.255.255.0</span>, ${r2.name} ${r2.ports[0].name} = <span class="mono-inl">${ipB} 255.255.255.0</span>. Address the WAN link: ${r1.name} ${r1.ports[1].name} = <span class="mono-inl">${wIp1} 255.255.255.252</span>, ${r2.name} ${r2.ports[1].name} = <span class="mono-inl">${wIp2} 255.255.255.252</span>. "no shutdown" every interface, then give ${pc1.name} a host IP in ${int2ip(netA)}/24 and ${pc2.name} a host IP in ${int2ip(netB)}/24. Neither router knows the other's LAN yet — add a static (or default) route on each, e.g. <span class="mono-inl">ip route ${int2ip(netB)} 255.255.255.0 ${wIp2}</span> on ${r1.name}.`;
+    goal=`Get <b>${pc1.name}</b> and <b>${pc2.name}</b> talking across the <b>${r1.name}–${r2.name}</b> WAN link.`;
+    note=`Neither router knows the other's LAN yet — each needs a static (or default) route across the WAN, e.g. <span class="mono-inl">ip route ${int2ip(netB)} 255.255.255.0 ${wIp2}</span> on ${r1.name}.`;
+    addr=[
+      [r1.name, r1.ports[0].name, ipA+'/24', pc1.name],
+      [r1.name, r1.ports[1].name, wIp1+'/30', r2.name+' '+r2.ports[1].name+' (WAN)'],
+      [r2.name, r2.ports[0].name, ipB+'/24', pc2.name],
+      [r2.name, r2.ports[1].name, wIp2+'/30', r1.name+' '+r1.ports[1].name+' (WAN)'],
+      [pc1.name, 'NIC', anyHost(netA), r1.name+' '+r1.ports[0].name],
+      [pc2.name, 'NIC', anyHost(netB), r2.name+' '+r2.ports[0].name]
+    ];
     reqs.push(
-      rlCableReq(pc1,pc1.name,r1,r1.name+' '+r1.ports[0].name),
-      rlCableReq(pc2,pc2.name,r2,r2.name+' '+r2.ports[0].name),
-      rlCableReq(r1,r1.name+' '+r1.ports[1].name,r2,r2.name+' '+r2.ports[1].name),
-      rlIfaceReq(r1,0,netA,24), rlIfaceReq(r2,0,netB,24),
-      rlIfaceReq(r1,1,netW,30), rlIfaceReq(r2,1,netW,30),
-      rlPcIpReq(pc1,netA,24), rlPcIpReq(pc2,netB,24),
-      rlPingReq(pc1,pc2)
+      ...rlGroup('Cabling',
+        rlCableReq(pc1,pc1.name,r1,r1.name+' '+r1.ports[0].name),
+        rlCableReq(pc2,pc2.name,r2,r2.name+' '+r2.ports[0].name),
+        rlCableReq(r1,r1.name+' '+r1.ports[1].name,r2,r2.name+' '+r2.ports[1].name)),
+      ...rlGroup('Addressing',
+        rlIfaceReq(r1,0,netA,24), rlIfaceReq(r2,0,netB,24),
+        rlIfaceReq(r1,1,netW,30), rlIfaceReq(r2,1,netW,30),
+        rlPcIpReq(pc1,netA,24), rlPcIpReq(pc2,netB,24)),
+      ...rlGroup('Routing',
+        rlRouteReq(r1,netB,24,r2.name+"'s LAN"),
+        rlRouteReq(r2,netA,24,r1.name+"'s LAN")),
+      ...rlGroup('Verify', rlPingReq(pc1,pc2))
     );
   } else {
     const r1=rlAddRouter(20,25), r2=rlAddRouter(270,25), r3=rlAddRouter(590,25);
@@ -1716,22 +1777,41 @@ function genRoute(diff){
     const ipA=int2ip(netA+1), ipC=int2ip(netC+1);
     const w1a=int2ip(netW1+1), w1b=int2ip(netW1+2), w2a=int2ip(netW2+1), w2b=int2ip(netW2+2);
     title='IP Routing — Multi-Hop Static Routing';
-    instr=`Cable ${pc1.name}–${r1.name} ${r1.ports[0].name}, ${pc3.name}–${r3.name} ${r3.ports[0].name}, ${r1.name} ${r1.ports[1].name}–${r2.name} ${r2.ports[0].name} directly, and ${r2.name} ${r2.ports[1].name}–${sw1.name}–${r3.name} ${r3.ports[1].name} (both routers cable into the switch, not to each other). Address every link: ${r1.name} ${r1.ports[0].name}=<span class="mono-inl">${ipA} 255.255.255.0</span>, ${r3.name} ${r3.ports[0].name}=<span class="mono-inl">${ipC} 255.255.255.0</span>, ${r1.name} ${r1.ports[1].name}=<span class="mono-inl">${w1a} 255.255.255.252</span>, ${r2.name} ${r2.ports[0].name}=<span class="mono-inl">${w1b} 255.255.255.252</span>, ${r2.name} ${r2.ports[1].name}=<span class="mono-inl">${w2a} 255.255.255.252</span>, ${r3.name} ${r3.ports[1].name}=<span class="mono-inl">${w2b} 255.255.255.252</span>. "no shutdown" everything, then give ${pc1.name}/${pc3.name} host IPs in their own LANs. ${r2.name} is only directly connected to the two WAN links, not either LAN, so all three routers need static (or default) routes: ${r1.name} and ${r3.name} to reach the far LAN two hops away, and ${r2.name} to reach both LANs so it can forward between them. ${sw1.name} makes the ${r2.name}–${r3.name} link a multi-access segment rather than point-to-point — an exit-interface-only route there is ambiguous, so <strong>${r3.name}'s route back to ${r1.name}'s LAN must be fully specified</strong> (exit interface AND next-hop), e.g. <span class="mono-inl">ip route ${int2ip(netA)} 255.255.255.0 ${r3.ports[1].name} ${w2a}</span>.`;
+    goal=`Get <b>${pc1.name}</b> (behind ${r1.name}) talking to <b>${pc3.name}</b> (behind ${r3.name}), two hops away.`;
+    note=`${r2.name} has no LAN of its own — it only forwards. The ${r2.name}–${r3.name} link runs through ${sw1.name}, a multi-access segment rather than a point-to-point link, so an exit-interface-only route there is ambiguous: ${r3.name}'s route back must be fully specified, e.g. <span class="mono-inl">ip route ${int2ip(netA)} 255.255.255.0 ${r3.ports[1].name} ${w2a}</span>.`;
+    addr=[
+      [r1.name, r1.ports[0].name, ipA+'/24', pc1.name],
+      [r1.name, r1.ports[1].name, w1a+'/30', r2.name+' '+r2.ports[0].name+' (WAN 1)'],
+      [r2.name, r2.ports[0].name, w1b+'/30', r1.name+' '+r1.ports[1].name+' (WAN 1)'],
+      [r2.name, r2.ports[1].name, w2a+'/30', sw1.name+' '+sw1.ports[0].name+' (WAN 2)'],
+      [r3.name, r3.ports[0].name, ipC+'/24', pc3.name],
+      [r3.name, r3.ports[1].name, w2b+'/30', sw1.name+' '+sw1.ports[1].name+' (WAN 2)'],
+      [pc1.name, 'NIC', anyHost(netA), r1.name+' '+r1.ports[0].name],
+      [pc3.name, 'NIC', anyHost(netC), r3.name+' '+r3.ports[0].name],
+      [sw1.name, sw1.ports[0].name+'–'+sw1.ports[1].name, '— unmanaged, no addressing',
+        r2.name+' '+r2.ports[1].name+', '+r3.name+' '+r3.ports[1].name]
+    ];
     reqs.push(
-      rlCableReq(pc1,pc1.name,r1,r1.name+' '+r1.ports[0].name),
-      rlCableReq(pc3,pc3.name,r3,r3.name+' '+r3.ports[0].name),
-      rlCableReq(r1,r1.name+' '+r1.ports[1].name,r2,r2.name+' '+r2.ports[0].name),
-      rlCableReq(r2,r2.name+' '+r2.ports[1].name,sw1,sw1.name+' '+sw1.ports[0].name),
-      rlCableReq(sw1,sw1.name+' '+sw1.ports[1].name,r3,r3.name+' '+r3.ports[1].name),
-      rlIfaceReq(r1,0,netA,24), rlIfaceReq(r3,0,netC,24),
-      rlIfaceReq(r1,1,netW1,30), rlIfaceReq(r2,0,netW1,30),
-      rlIfaceReq(r2,1,netW2,30), rlIfaceReq(r3,1,netW2,30),
-      rlPcIpReq(pc1,netA,24), rlPcIpReq(pc3,netC,24),
-      rlFullySpecReq(r3,netA,24),
-      rlPingReq(pc1,pc3)
+      ...rlGroup('Cabling',
+        rlCableReq(pc1,pc1.name,r1,r1.name+' '+r1.ports[0].name),
+        rlCableReq(pc3,pc3.name,r3,r3.name+' '+r3.ports[0].name),
+        rlCableReq(r1,r1.name+' '+r1.ports[1].name,r2,r2.name+' '+r2.ports[0].name),
+        rlCableReq(r2,r2.name+' '+r2.ports[1].name,sw1,sw1.name+' '+sw1.ports[0].name),
+        rlCableReq(sw1,sw1.name+' '+sw1.ports[1].name,r3,r3.name+' '+r3.ports[1].name)),
+      ...rlGroup('Addressing',
+        rlIfaceReq(r1,0,netA,24), rlIfaceReq(r3,0,netC,24),
+        rlIfaceReq(r1,1,netW1,30), rlIfaceReq(r2,0,netW1,30),
+        rlIfaceReq(r2,1,netW2,30), rlIfaceReq(r3,1,netW2,30),
+        rlPcIpReq(pc1,netA,24), rlPcIpReq(pc3,netC,24)),
+      ...rlGroup('Routing',
+        rlRouteReq(r1,netC,24,r3.name+"'s LAN, two hops away"),
+        rlRouteReq(r2,netA,24,r1.name+"'s LAN"),
+        rlRouteReq(r2,netC,24,r3.name+"'s LAN"),
+        rlFullySpecReq(r3,netA,24)),
+      ...rlGroup('Verify', rlPingReq(pc1,pc3))
     );
   }
-  return {title,instr,reqs};
+  return {title,goal,note,addr,reqs};
 }
 
 /* ─── Round control ──────────────────────────────────────────────── */
@@ -1771,6 +1851,7 @@ function render(){
   const qip=document.getElementById('qip'); qip.style.display='none'; qip.style.fontSize='';
   const body=document.getElementById('qbody');
   body.innerHTML='';
+  document.getElementById('qspec').innerHTML='';
   document.getElementById('req-list').innerHTML='';
   /* The pop-out button only makes sense on the packet-tracer-style IP
      Routing topic — everywhere else there's no canvas/CLI to keep visible
@@ -2152,8 +2233,41 @@ function renderRead(body,qip){
    the LabShared.attachCanvasDrag call below and rlRenderReqs(). #req-list
    itself lives in the page's static .qcard (next to #qprompt), same as
    switching_lab's #req-list sits next to #sc-instr — not injected here. */
+/* The brief: goal line, addressing table, one line of context, then the
+   Tasks heading that the checklist in #req-list below belongs to. The table
+   is a plain .rt-table (same one Read Table/Longest Match use) rendered into
+   the qcard's own #qspec, which render() clears for every other topic. */
+function rlBriefHtml(d){
+  const rows=d.addr.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('');
+  return `<div class="qlbl" style="margin-top:1rem">Addressing Table<span class="tip-ic" tabindex="-1" data-tip="Addresses are written in CIDR. The router CLI still takes a dotted mask — /24 = 255.255.255.0, /30 = 255.255.255.252.">?</span></div>
+    <table class="rt-table" style="margin-top:.35rem">
+      <tr><th>Device</th><th>Interface</th><th>Address</th><th>Connects to</th></tr>${rows}
+    </table>
+    <div class="req-note">${d.note}</div>
+    <button type="button" class="qlbl sec-toggle" id="rl-tasks-btn" style="margin-top:1rem"
+      aria-expanded="${rlTasksShown()}" aria-controls="req-list"
+      onclick="rlToggleTasks()">Tasks<svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></button>`;
+}
+/* Show/hide for the task checklist, persisted like the topic's other UI
+   prefs (summGetPref/lpmGetPref) rather than reset per question — someone
+   who has the brief memorised and just wants the canvas shouldn't have to
+   re-collapse it every round. */
+function rlTasksShown(){
+  try{ return localStorage.getItem('ne-route-tasks')!=='0'; }catch(e){ return true; }
+}
+function rlApplyTasksPref(){
+  const shown=rlTasksShown();
+  const list=document.getElementById('req-list'), btn=document.getElementById('rl-tasks-btn');
+  if(list) list.style.display=shown?'':'none';
+  if(btn){ btn.classList.toggle('collapsed',!shown); btn.setAttribute('aria-expanded',String(shown)); }
+}
+function rlToggleTasks(){
+  try{ localStorage.setItem('ne-route-tasks', rlTasksShown()?'0':'1'); }catch(e){}
+  rlApplyTasksPref();
+}
 function renderRoute(body,qip){
-  document.getElementById('qprompt').innerHTML=state.data.instr;
+  document.getElementById('qprompt').innerHTML='<b>Goal:</b> '+state.data.goal;
+  document.getElementById('qspec').innerHTML=rlBriefHtml(state.data);
   qip.style.display='none';
   body.innerHTML=`
     <div class="lab-card">
@@ -2501,6 +2615,7 @@ document.addEventListener('keydown', e=>{
 function rlRenderReqs(results){
   if(!state.data||!state.data.reqs) return;
   LabShared.renderReqList('req-list', state.data.reqs, results, rlEsc);
+  rlApplyTasksPref();
 }
 
 /* ─── Grading: generic text-field agrid (read) ──────────────────── */
