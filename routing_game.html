@@ -2209,6 +2209,29 @@ function osApplyWorkPref(){
   if(btn){ btn.classList.toggle('collapsed',!shown); btn.setAttribute('aria-expanded',String(shown)); }
 }
 
+/* Adds up whatever the learner typed into that path's hop boxes and shows it
+   as a running sum. It is a calculator, not a hint: it totals *their*
+   figures, right or wrong, so working out each hop's cost is still the
+   exercise — and it deliberately doesn't fill the Total box in for them,
+   since re-entering the number is the last chance to notice a mistyped hop.
+   Dimmed until every hop has a value, so a partial sum can't be mistaken
+   for a finished one. */
+function osSumWork(i){
+  const d=state.data, out=document.getElementById('os-sum-'+i);
+  if(!d||!d.paths[i]||!out) return;
+  const vals=[];
+  d.paths[i].hops.forEach(function(h,j){
+    const el=document.getElementById('os-hop-'+i+'-'+j);
+    const v=el?el.value.trim():'';
+    if(v!==''&&!isNaN(+v)) vals.push(+v);
+  });
+  const sum=vals.reduce(function(a,b){ return a+b; },0);
+  out.innerHTML = vals.length
+    ? (vals.length>1 ? vals.join(' + ')+' = <b>'+sum+'</b>' : '<b>'+sum+'</b>')
+    : '&mdash;';
+  out.style.opacity = vals.length===d.paths[i].hops.length ? '1' : '.55';
+}
+
 function osTableHtml(d){
   let rows='';
   d.paths.forEach(function(p,i){
@@ -2217,9 +2240,15 @@ function osTableHtml(d){
         '<div style="font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--text-t);margin-bottom:4px">'+h.lbl+'</div>'+
         '<div style="display:flex;align-items:center;gap:7px">'+
           '<span style="font-size:11.5px;color:var(--text-s);min-width:62px">'+h.bw+'</span>'+
-          '<input class="vm-inp" style="width:50px" id="os-hop-'+i+'-'+j+'" autocomplete="off" spellcheck="false" placeholder="?">'+
+          '<input class="vm-inp" style="width:50px" id="os-hop-'+i+'-'+j+'" autocomplete="off" spellcheck="false" '+
+            'placeholder="?" oninput="osSumWork('+i+')">'+
         '</div></div>';
-    }).join('');
+    }).join('')+
+    '<div style="flex:0 0 auto;display:flex;align-items:center;gap:9px;padding:7px 11px;'+
+      'border:1px dashed var(--border-m);border-radius:var(--r);background:var(--surface)">'+
+      '<span style="font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--text-t)">Your total</span>'+
+      '<span id="os-sum-'+i+'" style="font-family:var(--mono);font-size:13px;color:var(--text)">&mdash;</span>'+
+    '</div>';
     rows+='<tr id="os-row-'+i+'">'+
         '<td><b>via '+p.via+'</b>'+(p.kind?'<div style="font-size:11px;color:var(--text-t);margin-top:2px">'+p.kind+'</div>':'')+'</td>'+
         '<td><input class="vm-inp" id="os-tot-'+i+'" autocomplete="off" spellcheck="false" placeholder="total"></td>'+
