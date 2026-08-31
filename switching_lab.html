@@ -1934,6 +1934,12 @@ function buildComboScenario(D){
 }
 
 /* ── main generator ── */
+/* Same idea as routing_game's TOPIC_REF: the reference each topic most
+   wants at the top. Keyed off the scenario's own type rather than the topic
+   button, so a Random round promotes the reference for whatever it landed
+   on. Sandbox has no scenario, so it falls back to canonical order. */
+const TOPIC_REF={vlan:'vlanref', trunk:'vlanref', ether:'cmdref', stp:'stpref', combo:'cmdref'};
+
 function newScenario(){
   resetTopo(); done=false;
   const base = topic==='rand' ? pick(['vlan','trunk','ether','stp','all']) : topic;
@@ -1945,6 +1951,7 @@ function newScenario(){
 
   document.getElementById('sc-title').innerHTML=scenario.title;
   document.getElementById('sc-instr').innerHTML=scenario.instr;
+  if(window.setPreferredTool) setPreferredTool(TOPIC_REF[scenario.type]);
   renderReqs(null);
   qsel=null;
   const cb=document.getElementById('chkbtn');
@@ -2151,6 +2158,7 @@ function initSandbox(){
   document.getElementById('sc-instr').innerHTML='Free build mode — add switches and PCs, cable them up, and configure anything. Enable the <strong>Topology Analyzer</strong> in Options to inspect STP roles and reachability.';
   document.getElementById('req-list').innerHTML='';
   swSyncTasksUI();
+  if(window.setPreferredTool) setPreferredTool(null);
   document.getElementById('chkbtn').style.display='none';
   document.getElementById('skipbtn').style.display='none';
   document.getElementById('nxtbtn').style.display='none';
