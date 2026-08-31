@@ -384,8 +384,18 @@ const OS_BW=[
   {label:'100 Mbps',  kbps:100000},
   {label:'1 Gbps',    kbps:1000000}
 ];
-const OS_SLOW=OS_BW.filter(b=>b.kbps<=45000);
-const OS_FAST=OS_BW.filter(b=>b.kbps>=100000);
+/* Every hop draws its own bandwidth, so a path is never characterised by a
+   single link speed. That matters: while both hops of a path shared one
+   bandwidth, "find the 100 Mbps-or-faster path" solved every round without
+   any arithmetic. A 1 Gbps first hop followed by a 56 Kbps second hop now
+   loses badly to two ordinary Fast Ethernet links, so the first hop tells
+   you nothing on its own. The sub-T1 speeds are drawn rarely — their costs
+   (1785, 1562) are correct and worth meeting, but a steady diet of them
+   makes the sums tedious rather than instructive. */
+const OS_COMMON=[OS_BW[2],OS_BW[3],OS_BW[4],OS_BW[5],OS_BW[6],OS_BW[7]];
+const OS_RARE=[OS_BW[0],OS_BW[1]];
+const OS_UNIT=[OS_BW[6],OS_BW[7]];   /* both cost 1 at the default reference */
+function osRandBw(){ return Math.random()<0.12 ? choice(OS_RARE) : choice(OS_COMMON); }
 function osCost(bw){ return Math.max(1, Math.floor(100000/bw.kbps)); }
 function osHop(lbl,bw,costOverride){
   return {lbl, bw:bw.label, cost:(costOverride==null?osCost(bw):costOverride), override:costOverride!=null};
@@ -395,32 +405,73 @@ function osNet(){ return ri(10,203)+'.'+ri(0,254)+'.'+ri(0,254)+'.0/24'; }
 function osBigNet(){ return ri(10,172)+'.'+ri(0,254)+'.0.0/16'; }
 function osBare(n){ return n.split('/')[0]; }
 function osTotal(p){ p.total=p.hops.reduce(function(a,h){return a+h.cost;},0); return p; }
+function osWinners(paths){
+  const best=Math.min.apply(null,paths.map(function(p){ return p.total; }));
+  return paths.filter(function(p){ return p.total===best; }).map(function(p){ return p.via; });
+}
+/* True when "just pick the fastest first hop" happens to land on the right
+   answer. osBuild rejection-samples against this so the shortcut works on
+   exactly 1-in-N rounds — the same odds as guessing blindly between the N
+   paths. Simply making it fail most of the time would be no better than the
+   bug it replaces: at 25% on a two-path round, "never pick the fastest"
+   would win 75% of the time. The heuristic has to be worth nothing in both
+   directions. */
+function osFirstHopGivesItAway(d){
+  const min=Math.min.apply(null,d.paths.map(function(p){ return p.hops[0].cost; }));
+  const fast=d.paths.filter(function(p){ return p.hops[0].cost===min; })
+    .map(function(p){ return p.via; }).sort().join(',');
+  return fast===d.answer.slice().sort().join(',');
+}
+function osBuild(gen){
+  let first=null, target=null;
+  for(let i=0;i<80;i++){
+    const d=gen();
+    if(!d) continue;
+    if(!first) first=d;
+    /* The intra-vs-inter variant is decided by route type, not by cost, so
+       there is no cost heuristic to balance — leave it alone. */
+    if(d.trap==='intra') return d;
+    if(target===null) target = Math.random() < 1/d.paths.length;
+    if(osFirstHopGivesItAway(d)===target) return d;
+  }
+  return first;
+}
 
-/* ── Easy: one area, three parallel paths. Sometimes two of them tie, which
-   is the point — OSPF installs both and load-balances rather than picking a
-   winner, and a Gigabit link is no cheaper than Fast Ethernet by default. */
+/* ── Easy: one area, three parallel paths, each hop its own bandwidth.
+   About half the rounds are built to tie, which is the point — OSPF installs
+   both and load-balances, and a Gigabit link is no cheaper than Fast
+   Ethernet at the default reference bandwidth. */
 function genOspfEasy(){
   const dest=osNet(), src=osNet();
   const tie=Math.random()<0.5;
   const names=shuffle(['R2','R4','R5','R6']).slice(0,3);
-  const tail=choice(OS_FAST);
-  let bws;
-  if(tie){
-    bws=[choice(OS_FAST), choice(OS_FAST), choice(OS_SLOW)];
-  } else {
-    const cheap=choice(OS_FAST);
-    const mid=choice(OS_SLOW.filter(b=>b.kbps>=10000));
-    const dear=choice(OS_SLOW.filter(b=>b.kbps<10000));
-    bws=[cheap, mid, dear];
+  const tail=osRandBw();
+
+  function mk(via,b1,b2){
+    return osTotal({via, hops:[osHop('R1&rarr;'+via,b1), osHop(via+'&rarr;R3',b2), osHop('R3&rarr;'+osBare(dest),tail)]});
   }
-  const paths=shuffle(bws).map(function(bw,i){
-    const via=names[i];
-    return osTotal({via, hops:[
-      osHop('R1&rarr;'+via,bw), osHop(via+'&rarr;R3',bw), osHop('R3&rarr;'+osBare(dest),tail)
-    ]});
-  });
-  const best=Math.min.apply(null,paths.map(p=>p.total));
-  const answer=paths.filter(p=>p.total===best).map(p=>p.via);
+  let paths=null;
+  for(let attempt=0; attempt<60 && !paths; attempt++){
+    let cand;
+    if(tie){
+      /* Two paths that differ only in a link whose two candidate speeds both
+         cost 1 — the tie is real and the reason for it is the lesson. */
+      const shared=osRandBw();
+      const swapFirst=Math.random()<0.5;
+      const u=shuffle(OS_UNIT.slice());
+      cand=swapFirst
+        ? [mk(names[0],u[0],shared), mk(names[1],u[1],shared), mk(names[2],osRandBw(),osRandBw())]
+        : [mk(names[0],shared,u[0]), mk(names[1],shared,u[1]), mk(names[2],osRandBw(),osRandBw())];
+      if(cand[2].total<=cand[0].total) continue;          /* decoy must lose */
+    } else {
+      cand=[mk(names[0],osRandBw(),osRandBw()), mk(names[1],osRandBw(),osRandBw()), mk(names[2],osRandBw(),osRandBw())];
+      if(osWinners(cand).length!==1) continue;            /* want one winner */
+    }
+    paths=cand;
+  }
+  if(!paths) return null;
+  const answer=osWinners(paths);
+
   return {
     kind:'easy',
     prompt:'Which neighbour does <b>R1</b> use to reach <span class="mono-inl">'+dest+'</span>?',
@@ -445,22 +496,24 @@ function genOspfEasy(){
       {from:'R1',dir:'left',text:src},
       {from:'R3',dir:'right',text:dest,bw:tail.label}
     ],
-    clickable:paths.map(p=>p.via),
+    clickable:paths.map(function(p){ return p.via; }),
     paths:paths, answer:answer, ecmp:answer.length>1
   };
 }
 
 /* ── Medium: two areas, one ABR. The cost across the boundary isn't
    recalculated — you add your cost to reach the ABR to the cost the ABR
-   advertised in its Type 3. */
+   advertised in its Type 3. Both legs of both paths are independent, so the
+   winner is computed, never assumed. */
 function genOspfMedium(){
   const dest=osBigNet();
-  const slow=choice([OS_BW[2],OS_BW[3]]), fast=choice(OS_FAST);
   const adv=ri(6,25);
+  const a1=osRandBw(), a2=osRandBw(), b1=osRandBw(), b2=osRandBw();
   const paths=[
-    osTotal({via:'R4',hops:[osHop('R1&rarr;R4',slow),osHop('R4&rarr;R6 (ABR)',slow),osAdvHop('R6',adv)]}),
-    osTotal({via:'R5',hops:[osHop('R1&rarr;R5',fast),osHop('R5&rarr;R6 (ABR)',fast),osAdvHop('R6',adv)]})
+    osTotal({via:'R4',hops:[osHop('R1&rarr;R4',a1),osHop('R4&rarr;R6 (ABR)',a2),osAdvHop('R6',adv)]}),
+    osTotal({via:'R5',hops:[osHop('R1&rarr;R5',b1),osHop('R5&rarr;R6 (ABR)',b2),osAdvHop('R6',adv)]})
   ];
+  if(paths[0].total===paths[1].total) return null;
   return {
     kind:'medium',
     prompt:'<b>R1</b> is in <b>Area 1</b>. Which neighbour does it use to reach <span class="mono-inl">'+dest+'</span> in <b>Area 0</b>?',
@@ -474,10 +527,10 @@ function genOspfMedium(){
       {id:'R7',x:560,y:296}
     ],
     links:[
-      {a:'R1',b:'R4',bw:slow.label,dx:-14,dy:-10},
-      {a:'R4',b:'R6',bw:slow.label,dx:14,dy:-10},
-      {a:'R1',b:'R5',bw:fast.label,dx:-14,dy:14},
-      {a:'R5',b:'R6',bw:fast.label,dx:14,dy:14},
+      {a:'R1',b:'R4',bw:a1.label,dx:-14,dy:-10},
+      {a:'R4',b:'R6',bw:a2.label,dx:14,dy:-10},
+      {a:'R1',b:'R5',bw:b1.label,dx:-14,dy:14},
+      {a:'R5',b:'R6',bw:b2.label,dx:14,dy:14},
       {a:'R6',b:'R7',bw:'',dashed:true}
     ],
     stubs:[{from:'R7',dir:'right',text:dest,len:120}],
@@ -486,22 +539,21 @@ function genOspfMedium(){
       {x:664,y:154,text:'into Area 1 — Type 3, cost '+adv,anchor:'middle'}
     ],
     clickable:['R4','R5'],
-    paths:paths, answer:['R5'], interArea:true
+    paths:paths, answer:osWinners(paths), interArea:true
   };
 }
 
-/* ── Hard A: three areas, two ABRs. Neither half decides it on its own —
-   the fast link leads to the ABR advertising the worse cost. */
+/* ── Hard A: three areas, two ABRs. Both links are drawn independently, so
+   neither the link speed nor the advertised cost decides it on its own. */
 function genOspfHardTwoAbr(){
   const dest=osBigNet();
-  const fast=choice(OS_FAST), slow=choice([OS_BW[2],OS_BW[3]]);
-  const advFar=ri(4,9);
-  const advNear=osCost(slow)+advFar-ri(1,3);
+  const l1=osRandBw(), l2=osRandBw();
+  const adv1=ri(4,40), adv2=ri(4,40);
   const paths=[
-    osTotal({via:'R4',hops:[osHop('R1&rarr;R4 (ABR)',fast),osAdvHop('R4',advNear)]}),
-    osTotal({via:'R5',hops:[osHop('R1&rarr;R5 (ABR)',slow),osAdvHop('R5',advFar)]})
+    osTotal({via:'R4',hops:[osHop('R1&rarr;R4 (ABR)',l1),osAdvHop('R4',adv1)]}),
+    osTotal({via:'R5',hops:[osHop('R1&rarr;R5 (ABR)',l2),osAdvHop('R5',adv2)]})
   ];
-  const win=paths[0].total<paths[1].total?'R4':'R5';
+  if(paths[0].total===paths[1].total) return null;
   return {
     kind:'hard', variant:'twoabr',
     prompt:'<b>R1</b> is in <b>Area 1</b>. Which neighbour does it use to reach <span class="mono-inl">'+dest+'</span>, which lives in <b>Area 2</b>?',
@@ -521,8 +573,8 @@ function genOspfHardTwoAbr(){
       {id:'R8',x:580,y:200,sub:'ABR'}
     ],
     links:[
-      {a:'R1',b:'R4',bw:fast.label,dx:-16,dy:-8},
-      {a:'R1',b:'R5',bw:slow.label,dx:-16,dy:12},
+      {a:'R1',b:'R4',bw:l1.label,dx:-16,dy:-8},
+      {a:'R1',b:'R5',bw:l2.label,dx:-16,dy:12},
       {a:'R4',b:'R6',bw:'',dashed:true},
       {a:'R5',b:'R7',bw:'',dashed:true},
       {a:'R6',b:'R7',bw:'',dashed:true},
@@ -531,28 +583,31 @@ function genOspfHardTwoAbr(){
     ],
     stubs:[{from:'R8',dir:'right',text:dest,len:110}],
     annotations:[
-      {x:206,y:46,text:'Type 3: '+dest+' cost '+advNear,anchor:'middle'},
-      {x:206,y:392,text:'Type 3: '+dest+' cost '+advFar,anchor:'middle'},
+      {x:206,y:46,text:'Type 3: '+dest+' cost '+adv1,anchor:'middle'},
+      {x:206,y:392,text:'Type 3: '+dest+' cost '+adv2,anchor:'middle'},
       {x:414,y:230,text:'backbone — costs not visible',anchor:'middle'},
       {x:414,y:244,text:'from Area 1',anchor:'middle'}
     ],
     clickable:['R4','R5'],
-    paths:paths, answer:[win], interArea:true, multiArea:true
+    paths:paths, answer:osWinners(paths), interArea:true, multiArea:true
   };
 }
 
 /* ── Hard B: the same prefix reachable intra-area and inter-area. Route type
-   is compared before metric, so the dearer intra-area route still wins. */
+   is compared before metric, so the dearer intra-area route still wins —
+   which only teaches anything while the intra path really is the dearer one,
+   hence the check before returning. */
 function genOspfHardIntra(){
   const dest=osBigNet();
-  const lan=choice([OS_BW[4],OS_BW[5]]), tail=choice([OS_BW[2],OS_BW[3]]), fast=choice(OS_FAST);
+  const h1=osRandBw(), h2=osRandBw(), tail=osRandBw(), fast=osRandBw();
   const adv=ri(8,22);
   const paths=[
     osTotal({via:'R8',kind:'intra-area (O)',hops:[
-      osHop('R1&rarr;R8',lan), osHop('R8&rarr;R9',lan), osHop('R9&rarr;'+osBare(dest),tail)]}),
+      osHop('R1&rarr;R8',h1), osHop('R8&rarr;R9',h2), osHop('R9&rarr;'+osBare(dest),tail)]}),
     osTotal({via:'R6',kind:'inter-area (O IA)',hops:[
       osHop('R1&rarr;R6 (ABR)',fast), osAdvHop('R6',adv)]})
   ];
+  if(paths[0].total<=paths[1].total) return null;
   return {
     kind:'hard', variant:'intra',
     prompt:'<b>R1</b> is in <b>Area 1</b>. Which neighbour does it use to reach <span class="mono-inl">'+dest+'</span>?',
@@ -567,8 +622,8 @@ function genOspfHardIntra(){
       {id:'R7',x:610,y:180}
     ],
     links:[
-      {a:'R1',b:'R8',bw:lan.label,dx:-6,dy:16},
-      {a:'R8',b:'R9',bw:lan.label,dy:18},
+      {a:'R1',b:'R8',bw:h1.label,dx:-6,dy:16},
+      {a:'R8',b:'R9',bw:h2.label,dy:18},
       {a:'R1',b:'R6',bw:fast.label,dx:-10,dy:-8},
       {a:'R6',b:'R7',bw:'',dashed:true}
     ],
@@ -584,18 +639,24 @@ function genOspfHardIntra(){
 
 /* ── Hard C: an "ip ospf cost" override on one of R1's own interfaces. The
    diagram still shows bandwidth, which is now a lie — the only way to find
-   the real cost is the CLI, which is why this variant is Hard-only. */
+   the real cost is the CLI, which is why this variant is Hard-only. The
+   override has to be what beats that path, so the round is rejected unless
+   the path would have won or tied without it. */
 function genOspfHardOverride(){
   const dest=osNet();
-  const tail=choice(OS_FAST);
+  const tail=osRandBw();
   const names=shuffle(['R2','R4','R5']);
-  const fastA=choice(OS_FAST), fastB=choice(OS_FAST), slow=choice(OS_SLOW.filter(b=>b.kbps>=10000));
-  const ovr=ri(25,80);
+  const ovr=ri(25,90);
+  const a1=osRandBw(), a2=osRandBw(), b1=osRandBw(), b2=osRandBw(), c1=osRandBw(), c2=osRandBw();
   const paths=[
-    osTotal({via:names[0],hops:[osHop('R1&rarr;'+names[0],fastA),osHop(names[0]+'&rarr;R3',fastA),osHop('R3&rarr;'+osBare(dest),tail)]}),
-    osTotal({via:names[1],hops:[osHop('R1&rarr;'+names[1],fastB,ovr),osHop(names[1]+'&rarr;R3',fastB),osHop('R3&rarr;'+osBare(dest),tail)]}),
-    osTotal({via:names[2],hops:[osHop('R1&rarr;'+names[2],slow),osHop(names[2]+'&rarr;R3',slow),osHop('R3&rarr;'+osBare(dest),tail)]})
+    osTotal({via:names[0],hops:[osHop('R1&rarr;'+names[0],a1),osHop(names[0]+'&rarr;R3',a2),osHop('R3&rarr;'+osBare(dest),tail)]}),
+    osTotal({via:names[1],hops:[osHop('R1&rarr;'+names[1],b1,ovr),osHop(names[1]+'&rarr;R3',b2),osHop('R3&rarr;'+osBare(dest),tail)]}),
+    osTotal({via:names[2],hops:[osHop('R1&rarr;'+names[2],c1),osHop(names[2]+'&rarr;R3',c2),osHop('R3&rarr;'+osBare(dest),tail)]})
   ];
+  const winners=osWinners(paths);
+  if(winners.length!==1 || winners[0]===names[1]) return null;
+  const withoutOverride=osCost(b1)+paths[1].hops[1].cost+paths[1].hops[2].cost;
+  if(withoutOverride>Math.min(paths[0].total,paths[2].total)) return null;
   return {
     kind:'hard', variant:'override',
     prompt:'Which neighbour does <b>R1</b> use to reach <span class="mono-inl">'+dest+'</span>?',
@@ -608,24 +669,24 @@ function genOspfHardOverride(){
       {id:'R3',x:590,y:168}
     ],
     links:[
-      {a:'R1',b:names[0],bw:fastA.label,dx:-14,dy:-10},
-      {a:names[0],b:'R3',bw:fastA.label,dx:14,dy:-10},
-      {a:'R1',b:names[1],bw:fastB.label,dy:-9},
-      {a:names[1],b:'R3',bw:fastB.label,dy:-9},
-      {a:'R1',b:names[2],bw:slow.label,dx:-14,dy:14},
-      {a:names[2],b:'R3',bw:slow.label,dx:14,dy:14}
+      {a:'R1',b:names[0],bw:a1.label,dx:-14,dy:-10},
+      {a:names[0],b:'R3',bw:a2.label,dx:14,dy:-10},
+      {a:'R1',b:names[1],bw:b1.label,dy:-9},
+      {a:names[1],b:'R3',bw:b2.label,dy:-9},
+      {a:'R1',b:names[2],bw:c1.label,dx:-14,dy:14},
+      {a:names[2],b:'R3',bw:c2.label,dx:14,dy:14}
     ],
     stubs:[{from:'R3',dir:'right',text:dest,bw:tail.label}],
     clickable:names,
-    paths:paths, answer:[names[0]], trap:'override',
-    ovr:{neighbour:names[1], cost:ovr, bw:fastB}
+    paths:paths, answer:winners, trap:'override',
+    ovr:{neighbour:names[1], cost:ovr}
   };
 }
 
 function genOspf(diff){
-  if(diff==='easy') return genOspfEasy();
-  if(diff==='medium') return genOspfMedium();
-  return choice([genOspfHardTwoAbr,genOspfHardIntra,genOspfHardOverride])();
+  if(diff==='easy') return osBuild(genOspfEasy);
+  if(diff==='medium') return osBuild(genOspfMedium);
+  return osBuild(choice([genOspfHardTwoAbr,genOspfHardIntra,genOspfHardOverride]));
 }
 
 /* ─── Generators: Longest Prefix Match ─────────────────────────── */
