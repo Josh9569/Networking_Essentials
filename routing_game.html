@@ -2409,10 +2409,27 @@ function osRenderTerm(){
   }).join('');
   log.scrollTop=log.scrollHeight;
 }
+/* Tab-completion keyword tree, walked by the shared LabShared.tabComplete —
+   the same one RL_KW feeds for the IP Routing CLI. Only the show commands
+   this terminal actually answers are in it, so tabbing through it doubles as
+   a list of what's available. The "| section ospf" tail of "show run" isn't
+   a keyword: tabComplete returns the input untouched once it walks off the
+   tree, so typing the pipe by hand still works. */
+const OS_KW={
+  show:{ ip:{ ospf:{ interface:{} }, protocols:{} }, run:{}, interfaces:{} }
+};
 function osWireTerm(){
   const input=document.getElementById('os-term-in');
   if(!input) return;
   input.addEventListener('keydown', function(e){
+    if(e.key==='Tab'){
+      e.preventDefault();
+      input.value=LabShared.tabComplete(OS_KW, input.value, function(cands){
+        osCliLog.push(cands.join('   '));
+        osRenderTerm();
+      });
+      return;
+    }
     if(e.key!=='Enter') return;
     const cmd=input.value;
     osCliLog.push('R1# '+cmd);
