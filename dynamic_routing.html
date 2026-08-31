@@ -34,6 +34,7 @@
     <button class="cbtn on" id="tb-rand" onclick="setTopic('rand',this)">Random</button>
     <button class="cbtn" id="tb-ospf" onclick="setTopic('ospf',this)">OSPF Cost</button>
     <button class="cbtn" id="tb-lsa" onclick="setTopic('lsa',this)">OSPF LSAs</button>
+    <button class="cbtn" id="tb-rip" onclick="setTopic('rip',this)">RIP</button>
   </div>
 
   <div class="diff-row">
@@ -81,6 +82,10 @@
           <span class="opt-row-label">LSA Type Reference</span>
           <div class="tog"><input type="checkbox" id="tog-lsa" checked><span class="tog-track"></span></div>
         </label>
+        <label class="opt-row" onclick="toggleTool('rip')">
+          <span class="opt-row-label">RIP Reference</span>
+          <div class="tog"><input type="checkbox" id="tog-rip" checked><span class="tog-track"></span></div>
+        </label>
       </div>
     </div>
   </div>
@@ -101,6 +106,21 @@
           <tr><td>Fast Ethernet</td><td>100 Mbps</td><td>1</td></tr>
           <tr><td>Gigabit Ethernet</td><td>1 Gbps</td><td>1</td></tr>
           <tr><td>10 Gigabit Ethernet</td><td>10 Gbps</td><td>1</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="tool-block" id="t-rip">
+      <div class="tool-block-title">RIP Reference</div>
+      <p class="tool-note">RIP's metric is <strong>hop count</strong> and nothing else &mdash; bandwidth, delay and link type never enter into it. A router adds 1 to whatever metric it was advertised, <strong>16 means unreachable</strong>, and so the network can be at most 15 hops across. Equal metrics are load-balanced, up to four paths by default. Administrative distance is 120.</p>
+      <table class="ref-table">
+        <thead><tr><th></th><th>RIPv1</th><th>RIPv2</th></tr></thead>
+        <tbody>
+          <tr><td>Subnet mask in updates</td><td>No &mdash; classful</td><td>Yes &mdash; classless</td></tr>
+          <tr><td>VLSM / discontiguous networks</td><td>Not supported</td><td>Supported with <span class="mono-inl">no auto-summary</span></td></tr>
+          <tr><td>Auto-summary at classful boundary</td><td>Always</td><td>On by default, can be disabled</td></tr>
+          <tr><td>Updates sent to</td><td class="cidr-col">255.255.255.255</td><td class="cidr-col">224.0.0.9</td></tr>
+          <tr><td>Authentication</td><td>None</td><td>Plain text or MD5</td></tr>
         </tbody>
       </table>
     </div>
@@ -143,12 +163,12 @@ function choice(arr){ return arr[ri(0,arr.length-1)]; }
 function shuffle(arr){ for(let i=arr.length-1;i>0;i--){ const j=ri(0,i); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
 function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
-const TOPICS=['ospf','lsa'];
-const TOPIC_LABEL={ospf:'OSPF Cost', lsa:'OSPF LSAs'};
+const TOPICS=['ospf','lsa','rip'];
+const TOPIC_LABEL={ospf:'OSPF Cost', lsa:'OSPF LSAs', rip:'RIP'};
 const POINTS={easy:3, medium:4, hard:6};
 /* Which reference each topic most wants at hand — options.js floats it to
    the top of both the menu and the column. */
-const TOPIC_REF={ospf:'cost', lsa:'lsa'};
+const TOPIC_REF={ospf:'cost', lsa:'lsa', rip:'rip'};
 
 /* The Version row is per-topic: OSPFv2/v3 changes what an LSA is called and
    adds two types, but changes nothing at all about cost arithmetic, so the
@@ -156,7 +176,8 @@ const TOPIC_REF={ospf:'cost', lsa:'lsa'};
    nothing. RIP topics will slot in here as v1/v2 when they land. */
 const VERSIONS={
   ospf:{opts:[], labels:['OSPFv2','OSPFv3'], note:'version does not affect cost'},
-  lsa:{opts:['v2','v3'], labels:['OSPFv2','OSPFv3']}
+  lsa:{opts:['v2','v3'], labels:['OSPFv2','OSPFv3']},
+  rip:{opts:['v1','v2'], labels:['RIPv1','RIPv2']}
 };
 
 let state={ topic:'rand', diff:'easy', ver:'v2', score:0, round:1, streak:0,
@@ -270,7 +291,7 @@ function genOspfEasy(){
       {id:paths[0].via,x:360,y:24},
       {id:paths[1].via,x:360,y:168},
       {id:paths[2].via,x:360,y:300},
-      {id:'R3',x:590,y:168}
+      {id:'R3',x:545,y:168}
     ],
     links:[
       {a:'R1',b:paths[0].via,bw:paths[0].hops[0].bw,dx:-14,dy:-10},
@@ -312,7 +333,7 @@ function genOspfMedium(){
       {id:'R4',x:290,y:36},
       {id:'R5',x:290,y:296},
       {id:'R6',x:502,y:168,sub:'ABR'},
-      {id:'R7',x:560,y:296}
+      {id:'R7',x:520,y:296}
     ],
     links:[
       {a:'R1',b:'R4',bw:a1.label,dx:-14,dy:-10},
@@ -358,7 +379,7 @@ function genOspfHardTwoAbr(){
       {id:'R5',x:160,y:320,sub:'ABR'},
       {id:'R6',x:350,y:60},
       {id:'R7',x:350,y:320},
-      {id:'R8',x:580,y:200,sub:'ABR'}
+      {id:'R8',x:545,y:200,sub:'ABR'}
     ],
     links:[
       {a:'R1',b:'R4',bw:l1.label,dx:-16,dy:-8},
@@ -454,7 +475,7 @@ function genOspfHardOverride(){
       {id:names[0],x:360,y:24},
       {id:names[1],x:360,y:168},
       {id:names[2],x:360,y:300},
-      {id:'R3',x:590,y:168}
+      {id:'R3',x:545,y:168}
     ],
     links:[
       {a:'R1',b:names[0],bw:a1.label,dx:-14,dy:-10},
@@ -1239,6 +1260,279 @@ function lsaGrade(reveal){
   finishRound();
 }
 
+/* ═══ RIP (topic: rip) ═══════════════════════════════════════════════
+   The counterpoint to OSPF Cost, and deliberately so: RIP counts routers
+   and is blind to bandwidth, so the round that a cost-trained learner most
+   wants to solve by adding link speeds is the one that punishes it. Same
+   reading-drill shape as the other topics — no protocol engine, no config.
+
+   Three shapes, one per tier:
+     hops  — a real topology; fewest routers wins, bandwidth is a decoy
+     adv   — neighbours advertise metrics; installed = advertised + 1, and
+             16 is infinity
+     class — RIPv1's classful updates against RIPv2's, which is the only
+             place in this repo where a version genuinely changes an answer */
+
+function ripBw(){ return choice([OS_BW[0],OS_BW[2],OS_BW[4],OS_BW[6],OS_BW[7]]); }
+
+/* ── Easy: hop count, with bandwidth as the distractor. One path is short
+   over terrible links, another is long over gigabit — RIP takes the short
+   one every time, because a hop is a hop. */
+function genRipHops(){
+  const dest=osNet();
+  const lens=shuffle([2,3,4]);
+  /* The fewest-hop path gets the worst links often enough that reading
+     bandwidth actively misleads rather than merely failing to help. */
+  const speeds=shuffle([OS_BW[0],OS_BW[7],OS_BW[4]]);
+  const rows=[
+    {y:40,  names:['RA','RB','RC']},
+    {y:180, names:['RD','RE','RF']},
+    {y:320, names:['RG','RH','RI']}
+  ];
+  const boxes=[{id:'R1',x:30,y:180,sub:'source'},{id:'RZ',x:540,y:180}];
+  const links=[], paths=[];
+  lens.forEach(function(len,i){
+    const row=rows[i], mids=row.names.slice(0,len-1);
+    const span=480/len;
+    mids.forEach(function(m,j){
+      boxes.push({id:m,x:Math.round(60+span*(j+1)),y:row.y});
+    });
+    const chain=['R1'].concat(mids,['RZ']);
+    for(let k=0;k<chain.length-1;k++){
+      links.push({a:chain[k],b:chain[k+1],bw:speeds[i].label,dy:row.y<180?-10:(row.y>180?16:-9)});
+    }
+    paths.push({via:mids[0], hops:len, bw:speeds[i].label});
+  });
+  const best=Math.min.apply(null,paths.map(function(p){ return p.hops; }));
+  return {
+    kind:'rip', qtype:'hops', ver:state.ver, legend:'next hop',
+    prompt:'Which neighbour does <b>R1</b> use to reach <span class="mono-inl">'+dest+'</span>?',
+    note:'Every path ends at RZ, which owns the destination network.',
+    canvasH:410,
+    boxes:boxes, links:links,
+    stubs:[{from:'RZ',dir:'right',text:dest,len:110}],
+    clickable:paths.map(function(p){ return p.via; }),
+    paths:paths, answer:paths.filter(function(p){ return p.hops===best; }).map(function(p){ return p.via; }),
+    _rip:{best:best}
+  };
+}
+
+/* ── Medium: neighbours advertise a metric and the router adds one. 16 is
+   infinity — a neighbour advertising 15 is offering an unusable route, not
+   a poor one — and genuine ties are load-balanced, not broken. */
+function genRipAdv(){
+  const dest=osNet();
+  const names=shuffle(['R2','R3','R4','R5']).slice(0,3);
+  const variant=choice(['tie','infinity','plain']);
+  let adv;
+  if(variant==='tie'){
+    const m=ri(2,8);
+    adv=[m,m,ri(m+1,12)];
+    adv=shuffle(adv);
+  } else if(variant==='infinity'){
+    adv=[15,ri(4,11),ri(4,11)];
+    while(adv[1]===adv[2]) adv[2]=ri(4,11);
+    adv=shuffle(adv);
+  } else {
+    adv=shuffle([ri(1,4),ri(5,8),ri(9,13)]);
+  }
+  const usable=adv.map(function(m){ return m+1; });
+  const live=usable.filter(function(m){ return m<16; });
+  const best=live.length?Math.min.apply(null,live):null;
+  const answer=[];
+  names.forEach(function(n,i){ if(usable[i]===best) answer.push(n); });
+
+  const pos=[[330,40],[330,180],[330,320]];
+  const boxes=[{id:'R1',x:60,y:180,sub:'source'},{id:'RZ',x:520,y:180}];
+  const links=[], annotations=[];
+  names.forEach(function(n,i){
+    boxes.push({id:n,x:pos[i][0],y:pos[i][1]});
+    links.push({a:'R1',b:n,bw:''});
+    links.push({a:n,b:'RZ',bw:''});
+    annotations.push({x:pos[i][0]+46,y:pos[i][1]-10,
+      text:n+' advertises metric '+adv[i],anchor:'middle'});
+  });
+  return {
+    kind:'rip', qtype:'adv', ver:state.ver, legend:'next hop',
+    prompt:'Each neighbour advertises <span class="mono-inl">'+dest+'</span> with the metric shown. Which does <b>R1</b> use?',
+    note:'More than one answer may be correct.',
+    canvasH:410,
+    boxes:boxes, links:links, annotations:annotations,
+    stubs:[{from:'RZ',dir:'right',text:dest,len:110}],
+    clickable:names.slice(),
+    answer:answer, adv:adv, names:names.slice(),
+    _rip:{variant:variant, usable:usable, best:best}
+  };
+}
+
+/* ── Hard: classful vs classless updates. RIPv1 carries no subnet mask, so
+   it summarises to the classful boundary whenever an update crosses into a
+   different major network — and here both halves of 172.16.0.0 do exactly
+   that, from opposite directions, which is the classic discontiguous
+   network failure. RIPv2 with no auto-summary carries the masks and works. */
+function genRipClassful(){
+  const major=choice([
+    {net:'172.16', cls:'B', sum:'172.16.0.0/16', a:'172.16.1.0/24', b:'172.16.2.0/24'},
+    {net:'10',     cls:'A', sum:'10.0.0.0/8',    a:'10.1.1.0/24',   b:'10.2.2.0/24'}
+  ]);
+  const linkNet = major.cls==='A' ? '192.168.12.0/30' : '10.0.12.0/30';
+  const v1 = state.ver==='v1';
+  const chips=[
+    {id:'sum', label:major.sum},
+    {id:'a',   label:major.a},
+    {id:'b',   label:major.b}
+  ];
+  const answer = v1 ? ['sum'] : ['a','b'];
+  return {
+    kind:'rip', qtype:'class', ver:state.ver, legend:'the router in question',
+    prompt:'Which routes does <b>R2</b> end up with for '+(major.cls==='A'?'the 10.0.0.0':'the 172.16.0.0')+' space?',
+    note: v1
+      ? 'RIPv1 updates carry no subnet mask, so a router summarises to the classful boundary whenever an update leaves its own major network. R1 and R3 both sit on '+linkNet+'.'
+      : 'RIPv2 is running with <span class="mono-inl">no auto-summary</span>, so updates carry their masks. R1 and R3 both sit on '+linkNet+'.',
+    canvasH:380,
+    boxes:[
+      {id:'R1',x:170,y:170},
+      {id:'R2',x:370,y:170,sub:'you are here',w:130},
+      {id:'R3',x:545,y:170}
+    ],
+    links:[{a:'R1',b:'R2',bw:linkNet,dy:-10},{a:'R2',b:'R3',bw:linkNet,dy:-10}],
+    stubs:[
+      {from:'R1',dir:'left',text:major.a,len:120},
+      {from:'R3',dir:'right',text:major.b,len:120}
+    ],
+    clickable:[],
+    chips:chips, answer:answer,
+    _rip:{major:major, v1:v1}
+  };
+}
+
+function genRip(diff){
+  if(diff==='easy') return genRipHops();
+  if(diff==='medium') return genRipAdv();
+  return genRipClassful();
+}
+
+/* ── Render ── */
+let ripPickedChips=[];
+function ripChipsHtml(d){
+  return '<div class="qlbl" style="margin-top:1rem">Routes in R2&rsquo;s table</div>'+
+    '<div class="cls-row" style="margin-top:.35rem">'+
+    d.chips.map(function(c){
+      return '<button type="button" class="cbtn" id="rip-chip-'+c.id+'" onclick="ripToggleChip(\''+c.id+'\')">'+
+        c.label+'</button>';
+    }).join('')+'</div>';
+}
+function ripToggleChip(id){
+  if(state.done) return;
+  const i=ripPickedChips.indexOf(id);
+  if(i>=0) ripPickedChips.splice(i,1); else ripPickedChips.push(id);
+  const el=document.getElementById('rip-chip-'+id);
+  if(el) el.classList.toggle('on', ripPickedChips.indexOf(id)>=0);
+}
+function renderRip(body,qip){
+  const d=state.data;
+  osPicked=[]; ripPickedChips=[];
+  document.getElementById('qprompt').innerHTML=d.prompt;
+  document.getElementById('qspec').innerHTML = d.note ? '<div class="req-note">'+d.note+'</div>' : '';
+  qip.style.display='none';
+  body.innerHTML=osDiagramHtml(d)+(d.qtype==='class'?ripChipsHtml(d):'');
+  const hint=document.getElementById('os-hint');
+  if(hint) hint.textContent = d.qtype==='class'
+    ? 'Pick every route R2 installs.'
+    : 'Click the neighbour R1 forwards through'+(d.answer.length>1?' — pick every neighbour that ties.':'.');
+  setBtns('mcq');
+}
+
+function ripExplain(d){
+  if(d.qtype==='hops'){
+    const rows=d.paths.map(function(p){
+      return '<span style="font-family:var(--mono)">via '+p.via+' &middot; '+p.hops+' hops &middot; '+p.bw+' links</span>'+
+        (d.answer.indexOf(p.via)>=0?' &larr; <b>installed</b>':'');
+    }).join('<br>');
+    return rows+'<br><br>RIP’s metric is <b>hop count and nothing else</b> — it never looks at bandwidth. '+
+      'The '+d._rip.best+'-hop path wins even when its links are the slowest on the diagram, which is exactly '+
+      'why RIP falls over on networks with mixed link speeds and why OSPF’s cost metric exists.';
+  }
+  if(d.qtype==='adv'){
+    const rows=d.names.map(function(n,i){
+      const u=d.adv[i]+1;
+      return '<span style="font-family:var(--mono)">'+n+' advertises '+d.adv[i]+' &rarr; R1 installs '+
+        (u>=16?'<b>16 = unreachable</b>':u)+'</span>'+(d.answer.indexOf(n)>=0?' &larr; <b>best</b>':'');
+    }).join('<br>');
+    let s=rows+'<br><br>A router adds <b>1</b> to the metric it was advertised. ';
+    if(d._rip.variant==='infinity') s+='A neighbour advertising <b>15</b> is offering a route that becomes '+
+      '<b>16</b> on arrival, and 16 is RIP’s infinity — not a bad route, an unusable one. That is the whole '+
+      'reason RIP’s diameter is capped at 15 hops.';
+    else if(d._rip.variant==='tie') s+='Two neighbours tie, so RIP installs <b>both</b> and load-balances across '+
+      'them — up to four equal-cost paths by default, the same way OSPF does with equal costs.';
+    else s+='Lowest wins, and there is nothing else to weigh: no bandwidth, no delay, no tie to break.';
+    return s;
+  }
+  const m=d._rip.major;
+  if(d._rip.v1){
+    return 'RIPv1 carries <b>no subnet mask</b>, so when an update crosses out of its own major network it is '+
+      'summarised to the classful boundary. R1 advertises <span class="mono-inl">'+m.sum+'</span> rather than '+
+      '<span class="mono-inl">'+m.a+'</span>, and R3 advertises <span class="mono-inl">'+m.sum+
+      '</span> rather than <span class="mono-inl">'+m.b+'</span>.<br><br>R2 therefore learns <b>the same '+
+      'network from both directions</b> with the same metric, and load-balances into both — half the traffic for '+
+      m.a+' is sent to R3, which does not have it. This is the classic <b>discontiguous network</b> failure: two '+
+      'pieces of one major network separated by a different major network. RIPv1 cannot represent it, and no '+
+      'amount of configuration fixes it.';
+  }
+  return 'RIPv2 updates carry the subnet mask, and with <span class="mono-inl">no auto-summary</span> nothing is '+
+    'summarised at the boundary — so R2 learns <span class="mono-inl">'+m.a+'</span> and <span class="mono-inl">'+
+    m.b+'</span> as the separate /24s they are, each pointing the right way.<br><br>Leave auto-summary on and '+
+    'RIPv2 behaves like v1 here: both routers would advertise <span class="mono-inl">'+m.sum+'</span> and the '+
+    'discontiguous network would break in exactly the same way. Carrying masks is what makes the fix possible, '+
+    'not automatic.';
+}
+
+function ripGrade(reveal){
+  const d=state.data;
+  state.done=true;
+  let win=false;
+  if(d.qtype==='class'){
+    const want=d.answer.slice().sort().join(','), got=ripPickedChips.slice().sort().join(',');
+    win = !reveal && want===got;
+    d.chips.forEach(function(c){
+      const el=document.getElementById('rip-chip-'+c.id);
+      if(!el) return;
+      const should=d.answer.indexOf(c.id)>=0, picked=ripPickedChips.indexOf(c.id)>=0;
+      el.classList.remove('on');
+      el.style.borderColor = should ? 'var(--ok-bdr)' : (picked?'var(--err-bdr)':'');
+      el.style.background  = should ? 'var(--ok-bg)'  : (picked?'var(--err-bg)':'');
+      el.style.color       = should ? 'var(--ok-text)': (picked?'var(--err-text)':'');
+    });
+  } else {
+    const want=d.answer.slice().sort().join(','), got=osPicked.slice().sort().join(',');
+    win = !reveal && want===got;
+    osRedrawDiagram();
+  }
+
+  const body=document.getElementById('qbody');
+  const lbl=document.createElement('div');
+  lbl.className='qlbl'; lbl.style.marginTop='1rem'; lbl.textContent='Why';
+  const box=document.createElement('div');
+  box.className='expl-box open';
+  box.style.cssText='margin-top:0;padding-top:0;border-top:none';
+  box.innerHTML=ripExplain(d);
+  body.appendChild(lbl); body.appendChild(box);
+
+  const pts = win ? POINTS[state.diff] : 0;
+  state.score+=pts;
+  state.streak = win ? state.streak+1 : 0;
+  state.round++;
+  const answerTxt = d.qtype==='class'
+    ? d.answer.map(function(id){ return d.chips.filter(function(c){ return c.id===id; })[0].label; }).join(', ')
+    : d.answer.join(', ');
+  const fb=document.getElementById('fb');
+  fb.style.display='block';
+  if(reveal){ fb.className='fbanner warn'; fb.innerHTML='Answer: <b>'+answerTxt+'</b>.'; }
+  else if(win){ fb.className='fbanner ok'; fb.innerHTML='Correct — <b>'+answerTxt+'</b>. +'+pts+' pts. Streak: '+state.streak; }
+  else { fb.className='fbanner err'; fb.innerHTML='Not quite. The answer is <b>'+answerTxt+'</b>. +0 pts.'; }
+  finishRound();
+}
+
 /* ─── Round control ─────────────────────────────────────────────── */
 function pickTopic(){
   if(state.topic!=='rand') return state.topic;
@@ -1251,7 +1545,7 @@ function loadQ(){
   const t=pickTopic();
   state.mode=t;
   syncVersionButtons();
-  state.data = t==='ospf' ? genOspf(state.diff) : genLsa(state.diff);
+  state.data = t==='ospf' ? genOspf(state.diff) : (t==='lsa' ? genLsa(state.diff) : genRip(state.diff));
   render();
   updateChips();
 }
@@ -1275,15 +1569,16 @@ function render(){
   document.getElementById('qspec').innerHTML='';
   if(window.setPreferredTool) setPreferredTool(TOPIC_REF[state.mode]);
   if(state.mode==='ospf') renderOspf(body,qip);
-  else renderLsa(body,qip);
+  else if(state.mode==='lsa') renderLsa(body,qip);
+  else renderRip(body,qip);
 }
 function checkAll(){
   if(state.done) return;
-  if(state.mode==='ospf') osGrade(false); else lsaGrade(false);
+  if(state.mode==='ospf') osGrade(false); else if(state.mode==='lsa') lsaGrade(false); else ripGrade(false);
 }
 function revealAll(){
   if(state.done) return;
-  if(state.mode==='ospf') osGrade(true); else lsaGrade(true);
+  if(state.mode==='ospf') osGrade(true); else if(state.mode==='lsa') lsaGrade(true); else ripGrade(true);
 }
 function finishRound(){
   state.done=true;
@@ -1298,7 +1593,7 @@ function resetGame(){ state.score=0; state.round=1; state.streak=0; loadQ(); }
 /* ─── Controls ──────────────────────────────────────────────────── */
 function setTopic(t,btn){
   state.topic=t;
-  document.querySelectorAll('#tb-rand,#tb-ospf,#tb-lsa').forEach(b=>b.classList.remove('on'));
+  document.querySelectorAll('#tb-rand,#tb-ospf,#tb-lsa,#tb-rip').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
   loadQ();
 }
@@ -1346,7 +1641,7 @@ function toggleTool(id){
   const cb=document.getElementById('tog-'+id);
   cb.checked=!cb.checked;
   document.getElementById('t-'+id).style.display=cb.checked?'':'none';
-  const any=['cost','lsa'].some(t=>document.getElementById('tog-'+t).checked);
+  const any=['cost','lsa','rip'].some(t=>document.getElementById('tog-'+t).checked);
   document.getElementById('toolsec').style.display=any?'':'none';
   if(window.saveOptionsState) saveOptionsState();
 }
