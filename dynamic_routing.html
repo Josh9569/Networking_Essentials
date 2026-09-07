@@ -17,7 +17,7 @@
   <div class="hdr">
     <div>
       <div class="hdr-title">Dynamic Routing Trainer</div>
-      <div class="hdr-sub">OSPF cost, LSAs &amp; databases</div>
+      <div class="hdr-sub">OSPF cost &amp; LSAs, RIP drills &amp; lab</div>
     </div>
     <div class="hdr-right">
       <div class="chips">
@@ -35,6 +35,7 @@
     <button class="cbtn" id="tb-ospf" onclick="setTopic('ospf',this)">OSPF Cost</button>
     <button class="cbtn" id="tb-lsa" onclick="setTopic('lsa',this)">OSPF LSAs</button>
     <button class="cbtn" id="tb-rip" onclick="setTopic('rip',this)">RIP</button>
+    <button class="cbtn" id="tb-riplab" onclick="setTopic('riplab',this)">RIP Lab</button>
   </div>
 
   <div class="diff-row">
@@ -55,6 +56,7 @@
     <div class="q-prompt" id="qprompt">Loading&hellip;</div>
     <div class="ipdisp" id="qip" style="display:none"></div>
     <div id="qspec"></div>
+    <div class="req-list two-col" id="req-list"></div>
   </div>
 
   <div class="fbanner" id="fb"></div>
@@ -85,6 +87,10 @@
         <label class="opt-row" onclick="toggleTool('rip')">
           <span class="opt-row-label">RIP Reference</span>
           <div class="tog"><input type="checkbox" id="tog-rip" checked><span class="tog-track"></span></div>
+        </label>
+        <label class="opt-row" onclick="toggleTool('ripcmd')">
+          <span class="opt-row-label">RIP Command Reference</span>
+          <div class="tog"><input type="checkbox" id="tog-ripcmd" checked><span class="tog-track"></span></div>
         </label>
       </div>
     </div>
@@ -125,6 +131,28 @@
       </table>
     </div>
 
+    <div class="tool-block" id="t-ripcmd">
+      <div class="tool-block-title">RIP Command Reference</div>
+      <p class="tool-note">Everything the lab needs, in the order you would type it. <span class="mono-inl">network</span> takes a <strong>classful</strong> address &mdash; IOS rounds whatever you type down to its major network, then runs RIP on every interface whose address falls inside it. One statement can therefore cover several interfaces at once.</p>
+      <table class="ref-table">
+        <thead><tr><th>Command</th><th>Mode</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td class="mono-inl">router rip</td><td>config</td><td>Start the RIP process and enter router-configuration mode</td></tr>
+          <tr><td class="mono-inl">version 2</td><td>config-router</td><td>Send and receive RIPv2. v1 and v2 do not interoperate</td></tr>
+          <tr><td class="mono-inl">network 10.0.0.0</td><td>config-router</td><td>Run RIP on every interface in that major network, and advertise it</td></tr>
+          <tr><td class="mono-inl">no auto-summary</td><td>config-router</td><td>Stop summarising to the classful prefix at a major-network boundary. Needs version 2 &mdash; v1 carries no masks, so it has no choice</td></tr>
+          <tr><td class="mono-inl">passive-interface Gi0/0</td><td>config-router</td><td>Stop sending updates out that interface. It still receives, and the network is still advertised to others</td></tr>
+          <tr><td class="mono-inl">ip address <em>ip mask</em></td><td>config-if</td><td>Address the interface (dotted mask, not CIDR)</td></tr>
+          <tr><td class="mono-inl">no shutdown</td><td>config-if</td><td>Bring the interface up</td></tr>
+          <tr><td class="mono-inl">show ip route</td><td>exec</td><td>The routing table. RIP routes show as <span class="mono-inl">R</span> with <span class="mono-inl">[120/<em>hops</em>]</span></td></tr>
+          <tr><td class="mono-inl">show ip protocols</td><td>exec</td><td>Version, whether auto-summary is in effect, which interfaces run RIP, and the networks advertised</td></tr>
+          <tr><td class="mono-inl">show ip interface brief</td><td>exec</td><td>Address and up/down state of every interface</td></tr>
+          <tr><td class="mono-inl">show run</td><td>exec</td><td>The configuration as it currently stands</td></tr>
+        </tbody>
+      </table>
+      <p class="tool-note"><strong>Tab</strong> completes a command; <strong>&uarr;</strong> and <strong>&darr;</strong> walk the history.</p>
+    </div>
+
     <div class="tool-block" id="t-lsa">
       <div class="tool-block-title">LSA Type Reference</div>
       <p class="tool-note">Who originates each LSA, and how far it floods. The rules are identical in OSPFv2 and OSPFv3 &mdash; v3 renumbers the types and adds two of its own.</p>
@@ -163,12 +191,12 @@ function choice(arr){ return arr[ri(0,arr.length-1)]; }
 function shuffle(arr){ for(let i=arr.length-1;i>0;i--){ const j=ri(0,i); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
 function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
-const TOPICS=['ospf','lsa','rip'];
-const TOPIC_LABEL={ospf:'OSPF Cost', lsa:'OSPF LSAs', rip:'RIP'};
+const TOPICS=['ospf','lsa','rip','riplab'];
+const TOPIC_LABEL={ospf:'OSPF Cost', lsa:'OSPF LSAs', rip:'RIP', riplab:'RIP Lab'};
 const POINTS={easy:3, medium:4, hard:6};
 /* Which reference each topic most wants at hand — options.js floats it to
    the top of both the menu and the column. */
-const TOPIC_REF={ospf:'cost', lsa:'lsa', rip:'rip'};
+const TOPIC_REF={ospf:'cost', lsa:'lsa', rip:'rip', riplab:'ripcmd'};
 
 /* The Version row is per-topic: OSPFv2/v3 changes what an LSA is called and
    adds two types, but changes nothing at all about cost arithmetic, so the
@@ -177,7 +205,12 @@ const TOPIC_REF={ospf:'cost', lsa:'lsa', rip:'rip'};
 const VERSIONS={
   ospf:{opts:[], labels:['OSPFv2','OSPFv3'], note:'version does not affect cost'},
   lsa:{opts:['v2','v3'], labels:['OSPFv2','OSPFv3']},
-  rip:{opts:['v1','v2'], labels:['RIPv1','RIPv2']}
+  rip:{opts:['v1','v2'], labels:['RIPv1','RIPv2']},
+  /* The lab greys the row out on purpose: which version is running is not
+     given to you there, it is something you configure — "version 2" is one
+     of the graded tasks, and on Hard it is half the fix. Offering it as a
+     control would hand over the answer. */
+  riplab:{opts:[], labels:['RIPv1','RIPv2'], note:'set the version in the CLI'}
 };
 
 let state={ topic:'rand', diff:'easy', ver:'v2', score:0, round:1, streak:0,
@@ -1533,7 +1566,1303 @@ function ripGrade(reveal){
   finishRound();
 }
 
+
+/* ═══ RIP Lab ══════════════════════════════════════════════════════
+   The packet-tracer half of the RIP topic: you cable, address and
+   configure the routers, and a real distance-vector engine works out what
+   each one ends up learning. Where the RIP drill hands you a finished
+   topology and asks what RIP would decide, the lab makes you produce the
+   conditions and shows you the decision as a consequence.
+
+   Everything here is rp*-prefixed. The device/CLI/canvas shape is
+   deliberately the same as routing_game.html's IP Routing lab (rl*), but
+   the two are separate models rather than one shared one, for the same
+   reason switching_lab and routing_game are: the interesting half is the
+   network model, and RIP's is a converging protocol rather than a static
+   table. What genuinely doesn't depend on the model — canvas dragging, the
+   ping animation, the requirements checklist, tab completion, box sizes —
+   still comes from lab-shared.js, same as both other labs. */
+
+/* ── IP math ── */
+function ip2int(ip){ const p=ip.split('.').map(Number); return((p[0]<<24)|(p[1]<<16)|(p[2]<<8)|p[3])>>>0; }
+function int2ip(n){ return[(n>>>24)&255,(n>>>16)&255,(n>>>8)&255,n&255].join('.'); }
+function maskInt(cidr){ return cidr<=0?0:(cidr>=32?0xFFFFFFFF>>>0:(0xFFFFFFFF<<(32-cidr))>>>0); }
+function cidr2mask(cidr){ return int2ip(maskInt(cidr)); }
+function netIntOf(ipInt,cidr){ return (ipInt & maskInt(cidr))>>>0; }
+function bcastIntOf(netI,cidr){ const wc=cidr<=0?0xFFFFFFFF>>>0:(~maskInt(cidr))>>>0; return (netI|wc)>>>0; }
+const isValidIP = LabShared.isValidIP;
+function maskToCidr(maskStr){
+  if(!isValidIP(maskStr)) return null;
+  const n=ip2int(maskStr)>>>0;
+  let cidr=0, seenZero=false;
+  for(let i=31;i>=0;i--){
+    const bit=(n>>>i)&1;
+    if(bit===1){ if(seenZero) return null; cidr++; }
+    else seenZero=true;
+  }
+  return cidr;
+}
+function rpIsHostIp(ipStr,pfx){
+  if(pfx>=31) return true;
+  const ipInt=ip2int(ipStr), net=netIntOf(ipInt,pfx);
+  return ipInt!==net && ipInt!==bcastIntOf(net,pfx);
+}
+/* The classful (major) network an address belongs to. This is the whole
+   reason RIP behaves the way it does: "network" statements are classful,
+   and auto-summary fires at the boundary between two majors. */
+function rpClassfulPfx(ipInt){ const o1=(ipInt>>>24)&255; return o1<128?8:(o1<192?16:24); }
+function rpMajorOf(ipInt){ return netIntOf(ipInt, rpClassfulPfx(ipInt)); }
+function rpKey(netInt,pfx){ return netInt+'/'+pfx; }
+
+/* ── Devices ── */
+const RP_PORTN=3, RP_SW_PORTN=4, RP_W=128, RP_H=60;
+const RP_INFINITY=16;
+let rpDevices=[], rpCables=[], rpNid=1, rpCid=1, rpSelected=null, rpPending=null;
+let rpRtCount=0, rpPcCount=0, rpSwCount=0;
+
+function rpResetTopo(){
+  rpDevices=[]; rpCables=[]; rpNid=1; rpCid=1; rpSelected=null; rpPending=null;
+  rpRtCount=0; rpPcCount=0; rpSwCount=0;
+  rpInvalidate();
+}
+function rpById(id){ return rpDevices.find(function(d){ return d.id===id; }); }
+function rpAddRouter(x,y){
+  rpRtCount++;
+  const d={ id:rpNid++, type:'router', name:'R'+rpRtCount, x:x, y:y,
+    ports:Array.from({length:RP_PORTN},function(_,i){ return {name:'Gi0/'+i, ip:null, pfx:null, up:false}; }),
+    /* The RIP process itself. networks[] holds classful network ints, the
+       way "network 172.16.0.0" really behaves — IOS silently rounds
+       whatever you type down to its major network, and this does too. */
+    rip:{on:false, version:1, autoSummary:true, networks:[], passive:[]},
+    cm:'exec', ci:null, log:[], hist:[], hi:0 };
+  rpDevices.push(d); return d;
+}
+function rpAddPC(x,y){
+  rpPcCount++;
+  const d={ id:rpNid++, type:'pc', name:'PC'+rpPcCount, x:x, y:y, ip:null, pfx:24 };
+  rpDevices.push(d); return d;
+}
+function rpAddSwitch(x,y){
+  rpSwCount++;
+  const d={ id:rpNid++, type:'switch', name:'SW'+rpSwCount, x:x, y:y,
+    ports:Array.from({length:RP_SW_PORTN},function(_,i){ return {name:'Fa0/'+(i+1)}; }) };
+  rpDevices.push(d); return d;
+}
+function rpAddCable(dA,iA,dB,iB){ rpCables.push({id:rpCid++, a:{d:dA,i:iA}, b:{d:dB,i:iB}}); rpInvalidate(); }
+function rpPortCable(dev,i){ return rpCables.find(function(c){ return (c.a.d===dev&&c.a.i===i)||(c.b.d===dev&&c.b.i===i); }); }
+function rpOtherEnd(c,devId){ return c.a.d===devId?c.b:c.a; }
+function rpCableBetween(devA,devB){
+  return rpCables.find(function(c){
+    return (rpById(c.a.d)===devA&&rpById(c.b.d)===devB)||(rpById(c.a.d)===devB&&rpById(c.b.d)===devA);
+  });
+}
+/* Everything reachable at Layer 2 out of one port, hopping through any
+   chain of switches — same flooding model as the IP Routing lab. */
+function rpL2Neighbors(startDevId,startPortIdx){
+  const out=[], seenSw=new Set(), queue=[{d:startDevId,i:startPortIdx}];
+  while(queue.length){
+    const cur=queue.shift();
+    const c=rpPortCable(cur.d,cur.i);
+    if(!c) continue;
+    const o=rpOtherEnd(c,cur.d), od=rpById(o.d);
+    if(od.type==='switch'){
+      if(seenSw.has(od.id)) continue;
+      seenSw.add(od.id);
+      od.ports.forEach(function(p,idx){ if(idx!==o.i) queue.push({d:od.id,i:idx}); });
+    } else out.push({dev:od, port:o.i});
+  }
+  return out;
+}
+
+/* ═══ The distance-vector engine ═══════════════════════════════════
+   Bellman-Ford, run to convergence, with the four RIP behaviours that
+   actually decide the outcome of these labs:
+
+     · a route's metric is the neighbour's metric + 1, and 16 is infinity
+       (unreachable, not merely expensive) — so it is never installed;
+     · split horizon: a route is never advertised back out the interface it
+       was learned on;
+     · auto-summary: crossing from one major network into another, the
+       advertisement is summarised to the classful prefix — the single
+       behaviour the discontiguous-network lab is built around;
+     · v1 and v2 don't interoperate, so a version mismatch exchanges
+       nothing at all rather than exchanging something broken.
+
+   Connected routes are not part of this; they always win on administrative
+   distance (0 vs 120) and are added by rpRoutingTable afterwards. */
+
+/* An interface participates in RIP when it is up, addressed, and covered by
+   one of the process's classful network statements. */
+function rpRipIfaces(r){
+  if(!r.rip.on) return [];
+  const out=[];
+  r.ports.forEach(function(p,i){
+    if(!p.ip||!p.up) return;
+    const major=rpMajorOf(ip2int(p.ip));
+    if(r.rip.networks.indexOf(major)>=0) out.push(i);
+  });
+  return out;
+}
+function rpIsPassive(r,i){ return r.rip.passive.indexOf(i)>=0; }
+/* v1 has no "no auto-summary" — it carries no masks at all, so it can only
+   ever summarise at a boundary. Asking for it under v1 is accepted and
+   ignored, exactly as on real hardware. */
+function rpSummarises(r){ return r.rip.version===1 || r.rip.autoSummary; }
+
+/* What router r puts in the update it sends out interface i. Metrics here
+   are r's own; the receiver adds 1. */
+function rpAdvertise(r, i, learned){
+  const outPort=r.ports[i];
+  const outMajor=rpMajorOf(ip2int(outPort.ip));
+  const raw=[];
+  rpRipIfaces(r).forEach(function(j){
+    const p=r.ports[j];
+    raw.push({netInt:netIntOf(ip2int(p.ip),p.pfx), prefix:p.pfx, metric:0});
+  });
+  (learned[r.id]||[]).forEach(function(e){
+    /* Split horizon — a route learned through this very interface is not
+       advertised back out of it. */
+    if(e.via.some(function(v){ return v.iface===i; })) return;
+    raw.push({netInt:e.netInt, prefix:e.prefix, metric:e.metric});
+  });
+
+  const merged=new Map();
+  raw.forEach(function(e){
+    let netInt=e.netInt, prefix=e.prefix;
+    if(rpSummarises(r) && rpMajorOf(netInt)!==outMajor){
+      prefix=rpClassfulPfx(netInt);
+      netInt=netIntOf(netInt,prefix);
+    }
+    const k=rpKey(netInt,prefix);
+    const prev=merged.get(k);
+    if(!prev||e.metric<prev.metric) merged.set(k,{netInt:netInt, prefix:prefix, metric:e.metric});
+  });
+  return Array.from(merged.values());
+}
+
+/* A router's own connected networks, as the engine sees them — used to stop
+   a learned route ever displacing a connected one. */
+function rpConnectedKeys(r){
+  const s=new Set();
+  r.ports.forEach(function(p){ if(p.ip&&p.up) s.add(rpKey(netIntOf(ip2int(p.ip),p.pfx),p.pfx)); });
+  return s;
+}
+
+/* Runs the protocol to convergence and returns {routerId: [route,...]},
+   each route {netInt, prefix, metric, via:[{nextHop, iface}]}. via holds
+   more than one entry when RIP has equal-cost paths (up to 4, as on real
+   hardware). */
+function rpConverge(){
+  const routers=rpDevices.filter(function(d){ return d.type==='router'; });
+  let learned={};
+  routers.forEach(function(r){ learned[r.id]=[]; });
+
+  for(let pass=0; pass<RP_INFINITY+2; pass++){
+    const next={};
+    let changed=false;
+    routers.forEach(function(r){
+      const connected=rpConnectedKeys(r);
+      const best=new Map();
+      rpRipIfaces(r).forEach(function(i){
+        const myPort=r.ports[i];
+        const myNet=netIntOf(ip2int(myPort.ip),myPort.pfx);
+        rpL2Neighbors(r.id,i).forEach(function(nb){
+          const n=nb.dev;
+          if(n.type!=='router'||!n.rip.on) return;
+          /* v1 and v2 don't talk to each other. */
+          if(n.rip.version!==r.rip.version) return;
+          const np=n.ports[nb.port];
+          if(!np.ip||!np.up) return;
+          /* The neighbour has to be running RIP on the interface facing us,
+             and not be passive on it — passive still receives, but sends
+             nothing. */
+          if(rpRipIfaces(n).indexOf(nb.port)<0) return;
+          if(rpIsPassive(n,nb.port)) return;
+          if(netIntOf(ip2int(np.ip),myPort.pfx)!==myNet) return;
+          rpAdvertise(n, nb.port, learned).forEach(function(e){
+            const metric=e.metric+1;
+            if(metric>=RP_INFINITY) return;
+            const k=rpKey(e.netInt,e.prefix);
+            if(connected.has(k)) return;
+            const cur=best.get(k);
+            if(!cur||metric<cur.metric) best.set(k,{netInt:e.netInt, prefix:e.prefix, metric:metric, via:[{nextHop:np.ip, iface:i}]});
+            else if(metric===cur.metric && cur.via.length<4 &&
+                    !cur.via.some(function(v){ return v.nextHop===np.ip; })) cur.via.push({nextHop:np.ip, iface:i});
+          });
+        });
+      });
+      const arr=Array.from(best.values()).sort(function(a,b){ return a.netInt-b.netInt||a.prefix-b.prefix; });
+      next[r.id]=arr;
+      if(JSON.stringify(arr)!==JSON.stringify(learned[r.id])) changed=true;
+    });
+    learned=next;
+    if(!changed) break;
+  }
+  return learned;
+}
+/* Recomputed lazily and thrown away on every config change, so the tables
+   can never quietly disagree with the configuration that produced them —
+   the topologies are small enough that converging from scratch is free. */
+let rpRipCache=null;
+function rpRip(){ if(!rpRipCache) rpRipCache=rpConverge(); return rpRipCache; }
+function rpInvalidate(){ rpRipCache=null; }
+
+/* Connected first, then everything RIP learned. */
+function rpRoutingTable(r){
+  const table=[];
+  r.ports.forEach(function(p){
+    if(p.ip&&p.up){
+      const netInt=netIntOf(ip2int(p.ip),p.pfx);
+      table.push({code:'C', netInt:netInt, prefix:p.pfx, ad:0, metric:0, iface:p.name, nextHop:null, _port:p});
+    }
+  });
+  (rpRip()[r.id]||[]).forEach(function(e){
+    e.via.forEach(function(v){
+      table.push({code:'R', netInt:e.netInt, prefix:e.prefix, ad:120, metric:e.metric,
+                  iface:r.ports[v.iface].name, nextHop:v.nextHop, _ifaceIdx:v.iface});
+    });
+  });
+  return table;
+}
+function rpBestMatch(dstInt, table){
+  let best=null;
+  table.forEach(function(e){
+    if(((dstInt & maskInt(e.prefix))>>>0)!==e.netInt) return;
+    if(!best||e.prefix>best.prefix) best=e;
+  });
+  return best;
+}
+/* Every equal-best entry, not just one — a packet handed to a router with
+   two equal-cost RIP routes really can leave by either, which is precisely
+   what makes the discontiguous-network lab fail before it is fixed. */
+function rpAllBest(dstInt, table){
+  const b=rpBestMatch(dstInt,table);
+  if(!b) return [];
+  return table.filter(function(e){ return e.prefix===b.prefix && e.netInt===b.netInt; });
+}
+
+/* ── Reachability ──
+   Hop-chasing by longest-prefix match, the same shape as the IP Routing
+   lab's, with one deliberate difference: when a router has several
+   equal-cost RIP paths it really does load-balance across all of them, so
+   EVERY one has to arrive for the ping to be called working. That is not
+   pedantry — it is the entire failure mode of the discontiguous-network
+   lab, where auto-summary leaves the middle router with two equally good
+   routes to one summarised /16 and only one of them leads anywhere useful.
+   Declaring that "reachable" because a path exists would hide the bug the
+   lab is about. */
+function rpResolvePing(srcPc, dstStr){
+  if(!srcPc.ip||!isValidIP(srcPc.ip)) return {ok:false, reason:srcPc.name+' has no valid IP'};
+  if(!dstStr||!isValidIP(dstStr)) return {ok:false, reason:'Invalid destination address'};
+  const c=rpPortCable(srcPc.id,0);
+  if(!c) return {ok:false, reason:srcPc.name+' is not cabled to anything'};
+  const nbs=rpL2Neighbors(srcPc.id,0).filter(function(n){ return n.dev.type==='router'; });
+  if(!nbs.length) return {ok:false, reason:srcPc.name+' has no router on its segment'};
+  const gw=nbs[0].dev, gwPort=gw.ports[nbs[0].port];
+  if(!gwPort.ip||!gwPort.up) return {ok:false, reason:gw.name+' '+gwPort.name+" isn't addressed and up yet"};
+  if(netIntOf(ip2int(srcPc.ip),gwPort.pfx)!==netIntOf(ip2int(gwPort.ip),gwPort.pfx))
+    return {ok:false, reason:srcPc.name+"'s IP isn't in the same subnet as "+gw.name+' '+gwPort.name};
+  return rpForward(gw, ip2int(dstStr), dstStr, new Set(), 0);
+}
+function rpPcWithIp(ipStr){ return rpDevices.find(function(d){ return d.type==='pc'&&d.ip===ipStr; }); }
+function rpRouterPortWithIp(ipStr){
+  for(const d of rpDevices){
+    if(d.type!=='router') continue;
+    const i=d.ports.findIndex(function(p){ return p.ip===ipStr&&p.up; });
+    if(i>=0) return {router:d, port:d.ports[i], idx:i};
+  }
+  return null;
+}
+function rpForward(router, dstInt, dstStr, visited, depth){
+  if(depth>10) return {ok:false, reason:'Too many hops — the packet is looping'};
+  if(visited.has(router.id)) return {ok:false, reason:'Routing loop detected at '+router.name};
+  visited.add(router.id);
+
+  const table=rpRoutingTable(router);
+  const paths=rpAllBest(dstInt, table);
+  if(!paths.length) return {ok:false, reason:router.name+' has no route to '+dstStr};
+
+  for(const w of paths){
+    if(w.code==='C'){
+      const dest=rpPcWithIp(dstStr);
+      const idx=router.ports.indexOf(w._port);
+      const onSeg = dest
+        ? rpL2Neighbors(router.id,idx).some(function(n){ return n.dev===dest; })
+        : (w._port.ip===dstStr);
+      if(!onSeg) return {ok:false, reason:dstStr+' is not actually reachable out of '+router.name+' '+w.iface};
+      continue;
+    }
+    const hit=rpRouterPortWithIp(w.nextHop);
+    if(!hit) return {ok:false, reason:'Next hop '+w.nextHop+' is not a live router interface'};
+    /* Each equal-cost path gets its own copy of the visited set: two
+       different next-hops are two different journeys, and one of them
+       passing through a router the other also used is not a loop. */
+    const r=rpForward(hit.router, dstInt, dstStr, new Set(visited), depth+1);
+    if(!r.ok){
+      return paths.length>1
+        ? {ok:false, reason:router.name+' load-balances across '+paths.length+' equal-cost routes to '+
+             int2ip(w.netInt)+'/'+w.prefix+', and the one via '+w.nextHop+' fails: '+r.reason}
+        : r;
+    }
+  }
+  return {ok:true};
+}
+
+/* ── CLI ──
+   Same mode-nested-context engine as the other two labs (d.cm exec/conf/if,
+   plus 'rip' for router-configuration mode), so the helper form and the
+   typed terminal can never disagree — both funnel through rpCli. */
+function rpParseIfName(text){
+  const m=String(text).toLowerCase().replace(/\s+/g,'').match(/^(gi|gigabitethernet)0\/(\d+)$/);
+  if(!m) return -1;
+  const n=+m[2];
+  return (n>=0&&n<RP_PORTN) ? n : -1;
+}
+const RP_KW={
+  enable:{}, configure:{terminal:{}}, end:{}, exit:{}, clear:{},
+  show:{ip:{route:{}, protocols:{}, interface:{brief:{}}}, run:{}},
+  interface:{},
+  shutdown:{},
+  ip:{address:{}},
+  router:{rip:{}},
+  version:{},
+  network:{},
+  'auto-summary':{},
+  'passive-interface':{},
+  no:{shutdown:{}, ip:{address:{}}, 'auto-summary':{}, 'passive-interface':{}, router:{rip:{}}, version:{}, network:{}}
+};
+function rpCli(d, line){
+  const t=line.trim().replace(/\s+/g,' ');
+  if(!t) return '';
+  const w=t.toLowerCase().split(' ');
+  const M=function(tok,cand){ return tok&&cand.indexOf(tok)===0; };
+  rpInvalidate();
+
+  if(M(w[0],'enable')){ d.cm='exec'; d.ci=null; return ''; }
+  if(M(w[0],'configure')||w[0]==='conf'){ d.cm='conf'; d.ci=null; return ''; }
+  if(M(w[0],'end')){ d.cm='exec'; d.ci=null; return ''; }
+  if(M(w[0],'exit')){ d.cm = (d.cm==='if'||d.cm==='rip') ? 'conf' : 'exec'; d.ci=null; return ''; }
+  if(w[0]==='cls'||M(w[0],'clear')){ d.log.length=0; return ''; }
+
+  if(M(w[0],'show')||w[0]==='sh'){
+    if(w[1]&&M(w[1],'ip')&&w[2]&&M(w[2],'route')) return rpShowRoute(d);
+    if(w[1]&&M(w[1],'ip')&&w[2]&&M(w[2],'protocols')) return rpShowProtocols(d);
+    if(w[1]&&M(w[1],'ip')&&w[2]&&M(w[2],'interface')) return rpShowIfBrief(d);
+    if(w[1]&&M(w[1],'run')) return rpShowRun(d);
+    return '% Unknown show command — try "show ip route", "show ip protocols", "show ip interface brief" or "show run"';
+  }
+
+  if(M(w[0],'interface')||w[0]==='int'){
+    const idx=rpParseIfName(t.slice(t.indexOf(' ')+1));
+    if(idx<0) return '% Invalid interface — try "interface Gi0/0"';
+    d.cm='if'; d.ci=idx; return '';
+  }
+  if(M(w[0],'router')&&w[1]&&M(w[1],'rip')){
+    if(d.cm!=='conf'&&d.cm!=='rip'&&d.cm!=='if') return '% Enter configuration mode first ("configure terminal")';
+    d.rip.on=true; d.cm='rip'; d.ci=null; return '';
+  }
+  if(w[0]==='no'&&M(w[1],'router')&&w[2]&&M(w[2],'rip')){
+    d.rip={on:false, version:1, autoSummary:true, networks:[], passive:[]};
+    d.cm='conf'; return '';
+  }
+
+  if(d.cm==='if'){
+    const p=d.ports[d.ci];
+    if(w[0]==='no'&&w[1]&&M(w[1],'shutdown')){ p.up=true; return ''; }
+    if(M(w[0],'shutdown')){ p.up=false; return ''; }
+    if(w[0]==='no'&&w[1]&&M(w[1],'ip')&&w[2]&&M(w[2],'address')){ p.ip=null; p.pfx=null; return ''; }
+    if(M(w[0],'ip')&&w[1]&&M(w[1],'address')){
+      const parts=t.split(' ');
+      const ip=parts[2], mask=parts[3];
+      if(!ip||!isValidIP(ip)) return '% Invalid IP address';
+      const pfx=maskToCidr(mask);
+      if(pfx==null) return '% Invalid subnet mask';
+      if(!rpIsHostIp(ip,pfx)) return '% '+ip+' is the network or broadcast address for '+mask+' — not a valid host address';
+      p.ip=ip; p.pfx=pfx;
+      return '';
+    }
+  }
+
+  if(d.cm==='rip'){
+    if(M(w[0],'version')){
+      const v=+w[1];
+      if(v!==1&&v!==2) return '% Invalid version — RIP is version 1 or 2';
+      d.rip.version=v; return '';
+    }
+    if(w[0]==='no'&&M(w[1],'version')){ d.rip.version=1; return ''; }
+    /* IOS accepts any address here and stores the major network it falls
+       in, which is why "network 172.16.1.0" and "network 172.16.0.0" are
+       the same statement — a genuine source of confusion worth modelling
+       rather than rejecting. */
+    if(M(w[0],'network')){
+      const a=t.split(' ')[1];
+      if(!a||!isValidIP(a)) return '% Invalid network address';
+      const major=rpMajorOf(ip2int(a));
+      if(d.rip.networks.indexOf(major)<0) d.rip.networks.push(major);
+      return '';
+    }
+    if(w[0]==='no'&&M(w[1],'network')){
+      const a=t.split(' ')[2];
+      if(!a||!isValidIP(a)) return '% Invalid network address';
+      const major=rpMajorOf(ip2int(a));
+      d.rip.networks=d.rip.networks.filter(function(n){ return n!==major; });
+      return '';
+    }
+    if(w[0]==='no'&&M(w[1],'auto-summary')){
+      d.rip.autoSummary=false;
+      return d.rip.version===1 ? '% Note: RIPv1 carries no subnet masks, so it summarises at classful boundaries regardless. Set "version 2" for this to take effect.' : '';
+    }
+    if(M(w[0],'auto-summary')){ d.rip.autoSummary=true; return ''; }
+    if(M(w[0],'passive-interface')){
+      const idx=rpParseIfName(t.slice(t.indexOf(' ')+1));
+      if(idx<0) return '% Invalid interface — try "passive-interface Gi0/0"';
+      if(d.rip.passive.indexOf(idx)<0) d.rip.passive.push(idx);
+      return '';
+    }
+    if(w[0]==='no'&&M(w[1],'passive-interface')){
+      const idx=rpParseIfName(t.slice(t.indexOf(' ',t.indexOf(' ')+1)+1));
+      if(idx<0) return '% Invalid interface';
+      d.rip.passive=d.rip.passive.filter(function(n){ return n!==idx; });
+      return '';
+    }
+  }
+
+  return '% Invalid input detected';
+}
+function rpPromptFor(d){
+  return d.name+(d.cm==='conf'?'(config)#':d.cm==='if'?'(config-if)#':d.cm==='rip'?'(config-router)#':'#');
+}
+function rpEchoCli(d, cmds){
+  cmds.forEach(function(c){
+    d.log.push(rpPromptFor(d)+' '+c);
+    const out=rpCli(d,c);
+    if(out) out.split('\n').forEach(function(l){ d.log.push(l); });
+  });
+}
+
+/* ── show output ── */
+function rpShowRoute(d){
+  const t=rpRoutingTable(d);
+  if(!t.length) return 'No routes.';
+  const lines=['Codes: C - connected, R - RIP',''];
+  t.slice().sort(function(a,b){ return a.netInt-b.netInt||a.prefix-b.prefix; }).forEach(function(e){
+    lines.push(e.code==='C'
+      ? 'C    '+int2ip(e.netInt)+'/'+e.prefix+' is directly connected, '+e.iface
+      : 'R    '+int2ip(e.netInt)+'/'+e.prefix+' [120/'+e.metric+'] via '+e.nextHop+', '+e.iface);
+  });
+  return lines.join('\n');
+}
+function rpShowProtocols(d){
+  if(!d.rip.on) return '(no routing protocol is running)';
+  const ifs=rpRipIfaces(d);
+  const lines=['Routing Protocol is "rip"'];
+  lines.push('  Sending updates every 30 seconds');
+  lines.push('  Default version control: send version '+d.rip.version+', receive version '+d.rip.version);
+  lines.push('  Automatic network summarization is '+(rpSummarises(d)?'in effect':'not in effect'));
+  lines.push('  Interface             Send  Recv');
+  ifs.forEach(function(i){
+    lines.push('    '+(d.ports[i].name+'                    ').slice(0,20)+'  '+
+      (rpIsPassive(d,i)?'  -  ':'  '+d.rip.version+'  ')+'  '+d.rip.version+(rpIsPassive(d,i)?'    (passive)':''));
+  });
+  if(!ifs.length) lines.push('    (no interfaces are running RIP)');
+  lines.push('  Routing for Networks:');
+  if(!d.rip.networks.length) lines.push('    (none)');
+  d.rip.networks.forEach(function(n){ lines.push('    '+int2ip(n)); });
+  lines.push('  Distance: (default is 120)');
+  return lines.join('\n');
+}
+function rpShowIfBrief(d){
+  const lines=['Interface              IP-Address      Status                Protocol'];
+  d.ports.forEach(function(p){
+    lines.push((p.name+'                      ').slice(0,23)+
+      ((p.ip||'unassigned')+'                ').slice(0,16)+
+      (p.up?'up                    up':'administratively down down'));
+  });
+  return lines.join('\n');
+}
+function rpShowRun(d){
+  const lines=['!'];
+  d.ports.forEach(function(p){
+    lines.push('interface '+p.name);
+    lines.push(p.ip ? ' ip address '+p.ip+' '+cidr2mask(p.pfx) : ' no ip address');
+    if(!p.up) lines.push(' shutdown');
+    lines.push('!');
+  });
+  if(d.rip.on){
+    lines.push('router rip');
+    if(d.rip.version===2) lines.push(' version 2');
+    d.rip.passive.forEach(function(i){ lines.push(' passive-interface '+d.ports[i].name); });
+    d.rip.networks.forEach(function(n){ lines.push(' network '+int2ip(n)); });
+    if(!d.rip.autoSummary) lines.push(' no auto-summary');
+    lines.push('!');
+  }
+  return lines.join('\n');
+}
+
+/* ── Requirement factories ──
+   Same {desc, test()} shape the other two labs use, so LabShared's
+   renderReqList grades them identically. group tags are assigned in the
+   factories rather than at each call site, so a scenario can never forget
+   one. */
+function rpGroup(name){
+  const rs=Array.prototype.slice.call(arguments,1);
+  rs.forEach(function(r){ r.group=name; });
+  return rs;
+}
+function rpMono(s){ return '<span class="mono-inl">'+s+'</span>'; }
+function rpCidr(netInt,pfx){ return int2ip(netInt)+'/'+pfx; }
+
+function rpCableReq(devA,labelA,devB,labelB){
+  const r={desc:'Cable '+labelA+' to '+labelB,
+    test:function(){ return rpCableBetween(devA,devB)?{ok:true}:{ok:false,reason:labelA+' and '+labelB+' are not cabled yet'}; }};
+  r.group='Cabling'; return r;
+}
+function rpIfaceReq(router,portIdx,netInt,pfx){
+  const p=router.ports[portIdx];
+  const r={desc:'Address '+router.name+' '+p.name+' in '+rpMono(rpCidr(netInt,pfx))+' and bring it up',
+    test:function(){
+      if(!p.ip) return {ok:false, reason:router.name+' '+p.name+' has no IP address yet'};
+      if(!isValidIP(p.ip)) return {ok:false, reason:router.name+' '+p.name+"'s IP is not valid"};
+      if(p.pfx!==pfx||netIntOf(ip2int(p.ip),pfx)!==netInt)
+        return {ok:false, reason:router.name+' '+p.name+' must be in '+rpCidr(netInt,pfx)+' — it is currently '+p.ip+'/'+p.pfx};
+      if(!rpIsHostIp(p.ip,pfx)) return {ok:false, reason:p.ip+' is the network or broadcast address for that subnet'};
+      if(!p.up) return {ok:false, reason:router.name+' '+p.name+' is administratively down — "no shutdown" it'};
+      return {ok:true};
+    }};
+  r.group='Addressing'; return r;
+}
+function rpPcIpReq(pc,netInt,pfx){
+  const r={desc:'Give '+pc.name+' a host address in '+rpMono(rpCidr(netInt,pfx)),
+    test:function(){
+      if(!pc.ip||!isValidIP(pc.ip)) return {ok:false, reason:pc.name+' has no valid IP'};
+      const i=ip2int(pc.ip);
+      if(netIntOf(i,pfx)!==netInt) return {ok:false, reason:pc.name+' must be in '+rpCidr(netInt,pfx)};
+      if(!rpIsHostIp(pc.ip,pfx)) return {ok:false, reason:pc.name+"'s IP can't be the network or broadcast address"};
+      return {ok:true};
+    }};
+  r.group='Addressing'; return r;
+}
+/* "Run RIP, at this version, with auto-summary in this state." One
+   requirement rather than three, because on real hardware they are one
+   decision — and the reason string names whichever half is missing. */
+function rpProcessReq(router, version, noAuto){
+  const bits=['Start RIP on '+router.name+' ('+rpMono('router rip')+')'];
+  if(version===2) bits.push('set '+rpMono('version 2'));
+  if(noAuto) bits.push('turn off '+rpMono('auto-summary'));
+  const r={desc:bits.join(', '),
+    test:function(){
+      if(!router.rip.on) return {ok:false, reason:'No RIP process on '+router.name+' yet — "router rip"'};
+      if(version&&router.rip.version!==version)
+        return {ok:false, reason:router.name+' is running RIPv'+router.rip.version+', not RIPv'+version};
+      if(noAuto&&router.rip.autoSummary)
+        return {ok:false, reason:router.name+' still has automatic summarization on — "no auto-summary"'};
+      return {ok:true};
+    }};
+  r.group='RIP'; return r;
+}
+/* network statements are classful, so this asks for the major networks, not
+   the subnets — which is the point being taught: one "network 10.0.0.0"
+   covers every 10.x interface on the router at once. */
+function rpNetworkReq(router, majors){
+  const names=majors.map(function(m){ return rpMono(int2ip(m)); }).join(' and ');
+  const r={desc:'Advertise '+names+' on '+router.name+' ('+rpMono('network')+')',
+    test:function(){
+      if(!router.rip.on) return {ok:false, reason:'No RIP process on '+router.name+' yet'};
+      const missing=majors.filter(function(m){ return router.rip.networks.indexOf(m)<0; });
+      if(missing.length) return {ok:false, reason:router.name+' is not advertising '+missing.map(int2ip).join(' or ')+' yet'};
+      const off=[];
+      router.ports.forEach(function(p,i){
+        if(!p.ip||!p.up) return;
+        if(majors.indexOf(rpMajorOf(ip2int(p.ip)))>=0 && rpRipIfaces(router).indexOf(i)<0) off.push(p.name);
+      });
+      if(off.length) return {ok:false, reason:router.name+' '+off.join(', ')+' should be running RIP but is not — check the address and that the interface is up'};
+      return {ok:true};
+    }};
+  r.group='RIP'; return r;
+}
+function rpPassiveReq(router, portIdx, why){
+  const p=router.ports[portIdx];
+  const r={desc:'Make '+router.name+' '+p.name+' '+rpMono('passive-interface')+(why?' — '+why:''),
+    test:function(){
+      if(!router.rip.on) return {ok:false, reason:'No RIP process on '+router.name+' yet'};
+      if(!rpIsPassive(router,portIdx)) return {ok:false, reason:router.name+' is still sending RIP updates out '+p.name+' — "passive-interface '+p.name+'"'};
+      if(rpRipIfaces(router).indexOf(portIdx)<0) return {ok:false, reason:p.name+"'s network still needs to be advertised — passive stops the updates, it doesn't stop the network being routed"};
+      return {ok:true};
+    }};
+  r.group='RIP'; return r;
+}
+/* A route the protocol has to have produced — not a command the learner has
+   to have typed. Asks the converged table the same question a packet would,
+   so any configuration that genuinely works satisfies it. */
+function rpLearnedReq(router, netInt, pfx, metric){
+  const r={desc:router.name+' learns '+rpMono(rpCidr(netInt,pfx))+' from RIP'+(metric!=null?' with metric '+rpMono(metric):''),
+    test:function(){
+      const hit=(rpRip()[router.id]||[]).find(function(e){ return e.netInt===netInt&&e.prefix===pfx; });
+      if(!hit){
+        const loose=(rpRip()[router.id]||[]).find(function(e){ return netIntOf(netInt,e.prefix)===e.netInt; });
+        return {ok:false, reason:loose
+          ? router.name+' has '+rpCidr(loose.netInt,loose.prefix)+' rather than '+rpCidr(netInt,pfx)+' — that is the summarised form'
+          : router.name+' has no RIP route to '+rpCidr(netInt,pfx)+' yet'};
+      }
+      if(metric!=null&&hit.metric!==metric)
+        return {ok:false, reason:router.name+' has it at metric '+hit.metric+', not '+metric+' — count the routers between here and there'};
+      return {ok:true};
+    }};
+  r.group='Verify'; return r;
+}
+/* The discontiguous-network check: the specific subnets present AND the
+   classful summary absent. Having both is the broken state, so testing only
+   for the /24s would pass a topology that still doesn't work. */
+function rpNoSummaryReq(router, specifics, summaryNet, summaryPfx){
+  const r={desc:router.name+' holds '+specifics.map(function(s){ return rpMono(rpCidr(s.netInt,s.pfx)); }).join(' and ')+
+      ' separately — not one summarised '+rpMono(rpCidr(summaryNet,summaryPfx)),
+    test:function(){
+      const tbl=rpRip()[router.id]||[];
+      if(tbl.some(function(e){ return e.netInt===summaryNet&&e.prefix===summaryPfx; }))
+        return {ok:false, reason:router.name+' still has the summarised '+rpCidr(summaryNet,summaryPfx)+
+          ' — with auto-summary on, both sides advertise the same classful network and '+router.name+
+          ' cannot tell them apart. Turn it off (and use version 2, which carries the masks).'};
+      const missing=specifics.filter(function(s){ return !tbl.some(function(e){ return e.netInt===s.netInt&&e.prefix===s.pfx; }); });
+      if(missing.length) return {ok:false, reason:router.name+' has not learned '+missing.map(function(s){ return rpCidr(s.netInt,s.pfx); }).join(' or ')+' yet'};
+      return {ok:true};
+    }};
+  r.group='Verify'; return r;
+}
+/* Both directions — an echo reply has to route home too. */
+function rpPingReq(a,b){
+  const r={desc:'<b>'+a.name+'</b> can ping <b>'+b.name+'</b>',
+    test:function(){
+      if(!a.ip) return {ok:false, reason:a.name+' needs a valid IP first'};
+      if(!b.ip) return {ok:false, reason:b.name+' needs a valid IP first'};
+      const there=rpResolvePing(a,b.ip);
+      if(!there.ok) return {ok:false, reason:there.reason};
+      const back=rpResolvePing(b,a.ip);
+      if(!back.ok) return {ok:false, reason:'The reply cannot get back from '+b.name+' to '+a.name+' — '+back.reason};
+      return {ok:true};
+    }};
+  r.group='Verify'; return r;
+}
+
+/* ── Scenario generators ──
+   The brief is data, not prose (same decision as the IP Routing lab): a
+   one-line goal, the addressing table, one line the table can't express,
+   and the grouped checklist. */
+function rpSetPort(r,i,ip,pfx){ r.ports[i].ip=ip; r.ports[i].pfx=pfx; r.ports[i].up=true; }
+function rpHost(netInt,n){ return int2ip((netInt+n)>>>0); }
+/* Two distinct class-C LANs and two distinct /30 WAN links, so no round
+   can accidentally make two different networks look like one. */
+function rpPickLans(n, third){
+  const out=[];
+  while(out.length<n){
+    const v=ri(1,254);
+    if(out.indexOf(v)<0) out.push(v);
+  }
+  return out.map(function(v){ return ip2int('192.168.'+v+'.0'); });
+}
+function rpPickWans(n){
+  const out=[], seen=[];
+  while(out.length<n){
+    const b=ri(1,254), c=ri(1,254);
+    const key=b+'.'+c;
+    if(seen.indexOf(key)>=0) continue;
+    seen.push(key);
+    out.push(ip2int('10.'+b+'.'+c+'.0'));
+  }
+  return out;
+}
+
+/* ── Easy: RIPv2 between two sites.
+   Everything physical is already done — the whole job is the routing
+   protocol, so nothing else competes for attention. */
+function genRipLabEasy(){
+  rpResetTopo();
+  const pc1=rpAddPC(60,60), r1=rpAddRouter(230,140), r2=rpAddRouter(470,140), pc2=rpAddPC(660,60);
+  const lans=rpPickLans(2), wan=rpPickWans(1)[0];
+
+  rpAddCable(pc1.id,0, r1.id,0);
+  rpAddCable(r1.id,1, r2.id,1);
+  rpAddCable(r2.id,0, pc2.id,0);
+  rpSetPort(r1,0, rpHost(lans[0],1), 24);
+  rpSetPort(r1,1, rpHost(wan,1), 30);
+  rpSetPort(r2,1, rpHost(wan,2), 30);
+  rpSetPort(r2,0, rpHost(lans[1],1), 24);
+  pc1.ip=rpHost(lans[0],10); pc2.ip=rpHost(lans[1],10);
+  rpInvalidate();
+
+  return {
+    kind:'easy', helper:true,
+    title:'RIPv2 between two sites',
+    goal:'Both sites are cabled and addressed. Configure RIPv2 on '+r1.name+' and '+r2.name+' so each site learns the other’s LAN, and prove it with a ping.',
+    note:'A RIP <span class="mono-inl">network</span> statement is classful — it names the major network, and RIP then runs on every interface whose address falls inside it. Each router here sits in two major networks, so each needs two statements.',
+    addr:[
+      [pc1.name,'NIC',pc1.ip+'/24',r1.name+' Gi0/0'],
+      [r1.name,'Gi0/0',r1.ports[0].ip+'/24',pc1.name],
+      [r1.name,'Gi0/1',r1.ports[1].ip+'/30',r2.name+' Gi0/1'],
+      [r2.name,'Gi0/1',r2.ports[1].ip+'/30',r1.name+' Gi0/1'],
+      [r2.name,'Gi0/0',r2.ports[0].ip+'/24',pc2.name],
+      [pc2.name,'NIC',pc2.ip+'/24',r2.name+' Gi0/0']
+    ],
+    reqs:[].concat(
+      rpGroup('RIP',
+        rpProcessReq(r1,2,false),
+        rpNetworkReq(r1,[lans[0], rpMajorOf(wan)]),
+        rpProcessReq(r2,2,false),
+        rpNetworkReq(r2,[lans[1], rpMajorOf(wan)])),
+      rpGroup('Verify',
+        rpLearnedReq(r1, lans[1], 24, 1),
+        rpLearnedReq(r2, lans[0], 24, 1),
+        rpPingReq(pc1,pc2))
+    )
+  };
+}
+
+/* ── Medium: three sites in a chain.
+   The WAN links are unaddressed, so addressing and the protocol both
+   matter, and the passive-interface requirements make the point that a LAN
+   with no RIP neighbours should still be advertised but never spoken to. */
+function genRipLabMedium(){
+  rpResetTopo();
+  /* Laid out to fit the canvas at its default zoom: the rightmost PC's box
+     widens with its address string (rpDevSize), so it starts far enough
+     left that even a 15-character address stays inside. */
+  const pc1=rpAddPC(40,55), r1=rpAddRouter(190,150), r2=rpAddRouter(375,150),
+        r3=rpAddRouter(560,150), pc3=rpAddPC(660,55);
+  const lans=rpPickLans(2), wans=rpPickWans(2);
+
+  rpAddCable(pc1.id,0, r1.id,0);
+  rpAddCable(r1.id,1, r2.id,1);
+  rpAddCable(r2.id,2, r3.id,1);
+  rpAddCable(r3.id,0, pc3.id,0);
+  rpSetPort(r1,0, rpHost(lans[0],1), 24);
+  rpSetPort(r3,0, rpHost(lans[1],1), 24);
+  pc1.ip=rpHost(lans[0],10); pc3.ip=rpHost(lans[1],10);
+  rpInvalidate();
+
+  const ten=rpMajorOf(wans[0]);
+  return {
+    kind:'medium', helper:true,
+    title:'Three sites, one chain',
+    goal:'Address both WAN links, run RIPv2 across all three routers, and keep RIP updates off the two LANs — then prove '+pc1.name+' can reach '+pc3.name+'.',
+    note:'Both WAN links live in the same major network, so '+r2.name+' needs only one <span class="mono-inl">network 10.0.0.0</span> to cover both of its serial-facing interfaces. A LAN with no other router on it still has to be advertised — <span class="mono-inl">passive-interface</span> stops the updates going out, it does not stop the network being routed.',
+    addr:[
+      [pc1.name,'NIC',pc1.ip+'/24',r1.name+' Gi0/0'],
+      [r1.name,'Gi0/0',r1.ports[0].ip+'/24',pc1.name],
+      [r1.name,'Gi0/1',rpCidr(wans[0],30)+' — first host',r2.name+' Gi0/1'],
+      [r2.name,'Gi0/1',rpCidr(wans[0],30)+' — second host',r1.name+' Gi0/1'],
+      [r2.name,'Gi0/2',rpCidr(wans[1],30)+' — first host',r3.name+' Gi0/1'],
+      [r3.name,'Gi0/1',rpCidr(wans[1],30)+' — second host',r2.name+' Gi0/2'],
+      [r3.name,'Gi0/0',r3.ports[0].ip+'/24',pc3.name],
+      [pc3.name,'NIC',pc3.ip+'/24',r3.name+' Gi0/0']
+    ],
+    reqs:[].concat(
+      rpGroup('Addressing',
+        rpIfaceReq(r1,1,wans[0],30),
+        rpIfaceReq(r2,1,wans[0],30),
+        rpIfaceReq(r2,2,wans[1],30),
+        rpIfaceReq(r3,1,wans[1],30)),
+      rpGroup('RIP',
+        rpProcessReq(r1,2,false), rpNetworkReq(r1,[lans[0],ten]),
+        rpProcessReq(r2,2,false), rpNetworkReq(r2,[ten]),
+        rpProcessReq(r3,2,false), rpNetworkReq(r3,[lans[1],ten]),
+        rpPassiveReq(r1,0,'no RIP neighbours on that LAN'),
+        rpPassiveReq(r3,0,'no RIP neighbours on that LAN')),
+      rpGroup('Verify',
+        rpLearnedReq(r1, lans[1], 24, 2),
+        rpPingReq(pc1,pc3))
+    )
+  };
+}
+
+/* ── Hard: a discontiguous major network.
+   Two halves of 172.16.0.0 separated by 10.0.0.0. With the defaults, every
+   router summarises at the boundary, R2 ends up with two identical
+   172.16.0.0/16 routes and load-balances into a black hole. The fix is
+   version 2 plus no auto-summary on all three — including the middle
+   router, which crosses the boundary in both directions when it passes each
+   half on to the other. CLI only, like the IP Routing lab's hard tier. */
+function genRipLabHard(){
+  rpResetTopo();
+  /* Laid out to fit the canvas at its default zoom: the rightmost PC's box
+     widens with its address string (rpDevSize), so it starts far enough
+     left that even a 15-character address stays inside. */
+  const pc1=rpAddPC(40,55), r1=rpAddRouter(190,150), r2=rpAddRouter(375,150),
+        r3=rpAddRouter(560,150), pc3=rpAddPC(660,55);
+  const wans=rpPickWans(2);
+  let a=ri(1,254), b;
+  do{ b=ri(1,254); }while(b===a);
+  const lan1=ip2int('172.16.'+a+'.0'), lan3=ip2int('172.16.'+b+'.0');
+  const major=rpMajorOf(lan1);
+
+  rpAddCable(pc1.id,0, r1.id,0);
+  rpAddCable(r1.id,1, r2.id,1);
+  rpAddCable(r3.id,0, pc3.id,0);      /* the R2–R3 link is left to the learner */
+  rpSetPort(r1,0, rpHost(lan1,1), 24);
+  rpSetPort(r3,0, rpHost(lan3,1), 24);
+  pc1.ip=rpHost(lan1,10); pc3.ip=rpHost(lan3,10);
+  rpInvalidate();
+
+  const ten=rpMajorOf(wans[0]);
+  return {
+    kind:'hard', helper:false,
+    title:'A discontiguous 172.16.0.0',
+    goal:'Both LANs are subnets of 172.16.0.0, but the link between them is 10.0.0.0 — a discontiguous major network. Finish the cabling and addressing, then configure RIP so '+r2.name+' can tell the two halves apart.',
+    note:'Leave RIP at its defaults and every router summarises 172.16.x.0/24 back to 172.16.0.0/16 as it crosses into 10.0.0.0. '+r2.name+' then receives the same classful network from both sides, installs both, and load-balances half its traffic into the wrong half of the network. Hard mode is <b>CLI only</b> — configure everything through the terminal.',
+    addr:[
+      [pc1.name,'NIC',pc1.ip+'/24',r1.name+' Gi0/0'],
+      [r1.name,'Gi0/0',r1.ports[0].ip+'/24',pc1.name],
+      [r1.name,'Gi0/1',rpCidr(wans[0],30)+' — first host',r2.name+' Gi0/1'],
+      [r2.name,'Gi0/1',rpCidr(wans[0],30)+' — second host',r1.name+' Gi0/1'],
+      [r2.name,'Gi0/2',rpCidr(wans[1],30)+' — first host',r3.name+' Gi0/1'],
+      [r3.name,'Gi0/1',rpCidr(wans[1],30)+' — second host',r2.name+' Gi0/2'],
+      [r3.name,'Gi0/0',r3.ports[0].ip+'/24',pc3.name],
+      [pc3.name,'NIC',pc3.ip+'/24',r3.name+' Gi0/0']
+    ],
+    reqs:[].concat(
+      rpGroup('Cabling',
+        rpCableReq(r2,r2.name+' Gi0/2', r3,r3.name+' Gi0/1')),
+      rpGroup('Addressing',
+        rpIfaceReq(r1,1,wans[0],30),
+        rpIfaceReq(r2,1,wans[0],30),
+        rpIfaceReq(r2,2,wans[1],30),
+        rpIfaceReq(r3,1,wans[1],30)),
+      rpGroup('RIP',
+        rpProcessReq(r1,2,true), rpNetworkReq(r1,[major,ten]),
+        rpProcessReq(r2,2,true), rpNetworkReq(r2,[ten]),
+        rpProcessReq(r3,2,true), rpNetworkReq(r3,[major,ten])),
+      rpGroup('Verify',
+        rpNoSummaryReq(r2,[{netInt:lan1,pfx:24},{netInt:lan3,pfx:24}], major, 16),
+        rpLearnedReq(r1, lan3, 24, 2),
+        rpPingReq(pc1,pc3))
+    )
+  };
+}
+function genRipLab(diff){
+  return diff==='easy' ? genRipLabEasy() : diff==='medium' ? genRipLabMedium() : genRipLabHard();
+}
+
+/* ── Canvas ──
+   Geometry and drag/cable behaviour match the IP Routing lab's exactly;
+   only the ids differ (rp- rather than rl-) so the two can never collide
+   if they ever share a page. */
+function rpDevSize(d){
+  if(d.type==='router') return [RP_W,RP_H];
+  if(d.type==='switch') return [LabShared.SW_W,LabShared.SW_H];
+  const label=d.ip?d.ip:'no IP';
+  return [Math.max(LabShared.PC_W, Math.round(label.length*6.4)+24), LabShared.PC_H];
+}
+function rpFixedPortPos(d,i){
+  if(d.type==='router'){ const pad=20, span=RP_W-2*pad; return [pad+i*(span/(RP_PORTN-1)), RP_H]; }
+  if(d.type==='switch'){ const pad=20, span=LabShared.SW_W-2*pad; return [pad+i*(span/(RP_SW_PORTN-1)), LabShared.SW_H]; }
+  return null;
+}
+function rpPortPos(d,i){
+  const fixed=rpFixedPortPos(d,i);
+  if(fixed) return fixed;
+  const size=rpDevSize(d), w=size[0], h=size[1];
+  const c=rpPortCable(d.id,0);
+  if(!c) return [w/2,0];
+  const o=rpOtherEnd(c,d.id), od=rpById(o.d);
+  let tx,ty;
+  const oFixed=rpFixedPortPos(od,o.i);
+  if(oFixed){ tx=od.x+oFixed[0]; ty=od.y+oFixed[1]; }
+  else { const os=rpDevSize(od); tx=od.x+os[0]/2; ty=od.y+os[1]/2; }
+  const cx=d.x+w/2, cy=d.y+h/2, dx=tx-cx, dy=ty-cy;
+  if(!dx&&!dy) return [w/2,0];
+  const sx=dx?(w/2)/Math.abs(dx):Infinity, sy=dy?(h/2)/Math.abs(dy):Infinity;
+  const s=Math.min(sx,sy);
+  return [Math.min(w,Math.max(0,w/2+dx*s)), Math.min(h,Math.max(0,h/2+dy*s))];
+}
+function rpRenderCanvas(){
+  const svg=document.getElementById('rp-cable-svg'), layer=document.getElementById('rp-dev-layer');
+  if(!svg||!layer) return;
+  svg.innerHTML=''; layer.innerHTML='';
+
+  rpCables.forEach(function(c){
+    const A=rpById(c.a.d), B=rpById(c.b.d);
+    const pa=rpPortPos(A,c.a.i), pb=rpPortPos(B,c.b.i);
+    ['cable','cable-hit'].forEach(function(cls){
+      const l=document.createElementNS('http://www.w3.org/2000/svg','line');
+      l.setAttribute('x1',A.x+pa[0]); l.setAttribute('y1',A.y+pa[1]);
+      l.setAttribute('x2',B.x+pb[0]); l.setAttribute('y2',B.y+pb[1]);
+      l.setAttribute('class',cls); l.dataset.cid=c.id;
+      svg.appendChild(l);
+    });
+  });
+
+  rpDevices.forEach(function(d){
+    const size=rpDevSize(d);
+    const el=document.createElement('div');
+    el.className='dev '+d.type+(rpSelected===d.id?' selected':'');
+    el.style.left=d.x+'px'; el.style.top=d.y+'px';
+    el.style.width=size[0]+'px'; el.style.height=size[1]+'px';
+    el.dataset.did=d.id;
+    if(d.type==='router'){
+      const up=d.ports.filter(function(p){ return p.ip&&p.up; }).length;
+      const rip=d.rip.on ? 'RIPv'+d.rip.version : 'no RIP';
+      el.innerHTML='<div class="dev-name">'+d.name+'</div><div class="dev-sub">'+up+'/'+RP_PORTN+' up · '+rip+'</div>';
+    } else if(d.type==='switch'){
+      el.innerHTML='<div class="dev-name">'+d.name+'</div><div class="dev-sub">unmanaged switch</div>';
+    } else {
+      el.innerHTML='<div class="dev-name">'+d.name+'</div><div class="dev-sub">'+(d.ip?d.ip:'no IP')+'</div>';
+    }
+    layer.appendChild(el);
+
+    const ports=(d.type==='router'||d.type==='switch') ? d.ports.map(function(p,i){ return [i,p]; }) : [[0,null]];
+    ports.forEach(function(pair){
+      const i=pair[0], p=pair[1];
+      const pos=rpPortPos(d,i);
+      const pel=document.createElement('span');
+      let cls='port';
+      if(rpPending&&rpPending.d===d.id&&rpPending.i===i) cls+=' p-pending';
+      else if(p&&p.ip&&p.up) cls+=' p-acc';
+      pel.className=cls;
+      pel.style.left=(d.x+pos[0]-7)+'px'; pel.style.top=(d.y+pos[1]-7)+'px';
+      pel.dataset.did=d.id; pel.dataset.pi=i;
+      pel.title = p ? p.name+(p.ip?' '+p.ip+'/'+p.pfx:'')+(p.up?'':' (down)') : 'Eth0';
+      layer.appendChild(pel);
+    });
+  });
+}
+function rpSetHint(msg){ const el=document.getElementById('rp-hint'); if(el) el.textContent=msg; }
+function rpOnPortClick(did,i){
+  if(state.done) return;
+  const d=rpById(did);
+  const label=d.name+' '+((d.type==='router'||d.type==='switch')?d.ports[i].name:'Eth0');
+  if(rpPortCable(did,i)){ rpSetHint(label+' is already cabled — click the cable to remove it first.'); return; }
+  if(!rpPending){ rpPending={d:did,i:i}; rpSetHint('Selected '+label+' — now click a port on another device.'); }
+  else if(rpPending.d===did&&rpPending.i===i){ rpPending=null; rpSetHint('Selection cleared.'); }
+  else if(rpPending.d===did){ rpSetHint('Choose a port on a different device.'); }
+  else { rpAddCable(rpPending.d,rpPending.i,did,i); rpPending=null; rpSetHint('Cabled.'); }
+  rpRenderCanvas();
+}
+function rpOnCableClick(e){
+  if(state.done) return;
+  const cid=e.target.dataset&&e.target.dataset.cid;
+  if(!cid) return;
+  const idx=rpCables.findIndex(function(c){ return String(c.id)===cid; });
+  if(idx<0) return;
+  rpCables.splice(idx,1);
+  rpInvalidate();
+  rpRenderCanvas();
+}
+
+/* ── Config panel ── */
+function rpOpenCfg(did){ rpSelected=did; rpRenderCanvas(); rpRefreshCfg(); }
+function rpCloseCfg(){ rpSelected=null; rpRenderCanvas(); const p=document.getElementById('rp-cfg'); if(p) p.style.display='none'; }
+function rpRefreshCfg(){
+  const d=rpSelected!=null?rpById(rpSelected):null;
+  const panel=document.getElementById('rp-cfg');
+  if(!panel) return;
+  if(!d){ panel.style.display='none'; return; }
+  panel.style.display='';
+  if(d.type==='router') rpRenderRouterCfg(d,panel);
+  else if(d.type==='switch') rpRenderSwitchCfg(d,panel);
+  else rpRenderPcCfg(d,panel);
+}
+function rpPortTableHtml(d){
+  let html='<table class="port-table"><thead><tr><th>Interface</th><th>IP Address</th><th>Mask</th><th style="width:40px">Up</th></tr></thead><tbody>';
+  d.ports.forEach(function(p,i){
+    html+='<tr><td class="pt-name">'+p.name+'</td>'+
+      '<td><input type="text" class="pt-wide" value="'+(p.ip||'')+'" placeholder="e.g. 10.0.0.1" onchange="rpSetIfIp('+d.id+','+i+',this.value)"></td>'+
+      '<td><input type="text" class="pt-wide" value="'+(p.pfx!=null?cidr2mask(p.pfx):'')+'" placeholder="255.255.255.0" onchange="rpSetIfMask('+d.id+','+i+',this.value)"></td>'+
+      '<td><input type="checkbox" '+(p.up?'checked':'')+' onchange="rpSetIfUp('+d.id+','+i+',this.checked)"></td></tr>';
+  });
+  return html+'</tbody></table>';
+}
+/* Every control here routes through rpEchoCli, so the terminal log shows
+   the commands the click was equivalent to — the helper form teaches the
+   CLI rather than replacing it. */
+function rpRipFormHtml(d){
+  let html='<div class="pc-form"><label class="pc-form-lbl"><input type="checkbox" '+(d.rip.on?'checked':'')+
+    ' onchange="rpToggleRip('+d.id+',this.checked)"> router rip</label></div>';
+  if(!d.rip.on) return html;
+  html+='<div class="pc-form" style="margin-top:8px"><span class="pc-form-lbl">Version</span>'+
+    '<button class="cbtn'+(d.rip.version===1?' on':'')+'" onclick="rpSetVersion('+d.id+',1)">1</button>'+
+    '<button class="cbtn'+(d.rip.version===2?' on':'')+'" onclick="rpSetVersion('+d.id+',2)">2</button>'+
+    '<label class="pc-form-lbl" style="margin-left:12px"><input type="checkbox" '+(d.rip.autoSummary?'checked':'')+
+    ' onchange="rpSetAutoSum('+d.id+',this.checked)"> auto-summary</label></div>';
+  html+='<div class="vm-add" style="margin-top:8px">'+
+    '<input class="vm-inp" id="rp-net-inp" placeholder="network (e.g. 10.0.0.0)">'+
+    '<button class="rand-btn" onclick="rpAddNetwork('+d.id+')">+ Add Network</button></div>';
+  if(d.rip.networks.length){
+    html+='<table class="port-table"><tbody>';
+    d.rip.networks.forEach(function(n){
+      html+='<tr><td class="pt-conn">network '+int2ip(n)+'</td>'+
+        '<td><button class="rand-btn" onclick="rpDelNetwork('+d.id+','+n+')">×</button></td></tr>';
+    });
+    html+='</tbody></table>';
+  }
+  html+='<div class="cfg-sec-lbl" style="margin-top:12px">Passive Interfaces</div><div class="pc-form">';
+  d.ports.forEach(function(p,i){
+    html+='<label class="pc-form-lbl" style="margin-right:10px"><input type="checkbox" '+(rpIsPassive(d,i)?'checked':'')+
+      ' onchange="rpSetPassive('+d.id+','+i+',this.checked)"> '+p.name+'</label>';
+  });
+  return html+'</div>';
+}
+function rpTermHtml(){
+  return '<div class="term"><div class="term-log" id="rp-term-log"></div>'+
+    '<div class="term-inrow"><span class="term-prompt" id="rp-term-prompt"></span>'+
+    '<input class="term-in" id="rp-term-in" autocomplete="off" spellcheck="false"></div></div>';
+}
+function rpRenderRouterCfg(d,panel){
+  const helper=state.data&&state.data.helper;
+  panel.innerHTML=
+    '<div class="cfg-hdr"><div class="cfg-name">'+d.name+'</div>'+
+    '<button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="rpCloseCfg()">Close</button></div>'+
+    '<div class="cfg-grid"><div>'+
+      '<div class="cfg-sec-lbl">Interfaces</div>'+
+      (helper ? rpPortTableHtml(d) : '<div class="cli-note">Hard mode — address interfaces through the CLI (interface, ip address, no shutdown).</div>')+
+      '<div class="cfg-sec-lbl" style="margin-top:14px">RIP</div>'+
+      (helper ? rpRipFormHtml(d) : '<div class="cli-note">Hard mode — configure RIP through the CLI (router rip, version, network, no auto-summary).</div>')+
+    '</div><div><div class="cfg-sec-lbl">CLI</div>'+rpTermHtml()+'</div></div>';
+  rpRenderTerm();
+}
+function rpRenderPcCfg(d,panel){
+  panel.innerHTML=
+    '<div class="cfg-hdr"><div class="cfg-name">'+d.name+'</div>'+
+    '<button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="rpCloseCfg()">Close</button></div>'+
+    '<div class="pc-form"><span class="pc-form-lbl">IP Address</span>'+
+    '<input type="text" class="custom-ip-inp" value="'+(d.ip||'')+'" placeholder="e.g. 192.168.1.10" autocomplete="off" spellcheck="false" oninput="rpSetPcIp('+d.id+',this.value)">'+
+    '<span class="pc-pfx">/'+d.pfx+'</span></div>'+
+    '<div class="svi-conflict" id="rp-pc-ip-err" style="display:none"></div>'+
+    '<div class="cfg-sec-lbl" style="margin-top:14px">Ping</div>'+
+    '<div class="pc-form"><label class="pc-form-lbl">Target IP</label>'+
+    '<input class="custom-ip-inp" id="rp-ping-ip" placeholder="e.g. 192.168.20.10" autocomplete="off" spellcheck="false" onkeydown="if(event.key===\'Enter\')rpPingRun()">'+
+    '<button class="rand-btn" id="rp-ping-btn" onclick="rpPingRun()">Ping</button></div>'+
+    '<pre class="ping-out" id="rp-ping-out"></pre>';
+}
+function rpRenderSwitchCfg(d,panel){
+  panel.innerHTML=
+    '<div class="cfg-hdr"><div class="cfg-name">'+d.name+'</div>'+
+    '<button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="rpCloseCfg()">Close</button></div>'+
+    '<div class="cli-note">An unmanaged Layer 2 switch — nothing to configure.</div>';
+}
+
+/* ── Helper-form actions (all echoed as CLI) ── */
+function rpSetIfIp(did,i,val){
+  const d=rpById(did), p=d.ports[i];
+  const mask=p.pfx!=null?cidr2mask(p.pfx):'255.255.255.0';
+  rpEchoCli(d, val ? ['interface '+p.name,'ip address '+val+' '+mask,'exit'] : ['interface '+p.name,'no ip address','exit']);
+  rpRenderCanvas(); rpRefreshCfg();
+}
+function rpSetIfMask(did,i,val){
+  const d=rpById(did), p=d.ports[i];
+  if(p.ip) rpEchoCli(d,['interface '+p.name,'ip address '+p.ip+' '+val,'exit']);
+  rpRenderCanvas(); rpRefreshCfg();
+}
+function rpSetIfUp(did,i,checked){
+  const d=rpById(did), p=d.ports[i];
+  rpEchoCli(d,['interface '+p.name, checked?'no shutdown':'shutdown','exit']);
+  rpRenderCanvas(); rpRefreshCfg();
+}
+function rpToggleRip(did,on){
+  const d=rpById(did);
+  rpEchoCli(d, on ? ['configure terminal','router rip','end'] : ['configure terminal','no router rip','end']);
+  rpRenderCanvas(); rpRefreshCfg();
+}
+function rpSetVersion(did,v){
+  const d=rpById(did);
+  rpEchoCli(d,['configure terminal','router rip','version '+v,'end']);
+  rpRenderCanvas(); rpRefreshCfg();
+}
+function rpSetAutoSum(did,on){
+  const d=rpById(did);
+  rpEchoCli(d,['configure terminal','router rip', on?'auto-summary':'no auto-summary','end']);
+  rpRefreshCfg();
+}
+function rpAddNetwork(did){
+  const d=rpById(did), inp=document.getElementById('rp-net-inp');
+  const v=inp?inp.value.trim():'';
+  if(!v) return;
+  rpEchoCli(d,['configure terminal','router rip','network '+v,'end']);
+  rpRefreshCfg();
+}
+function rpDelNetwork(did,n){
+  const d=rpById(did);
+  rpEchoCli(d,['configure terminal','router rip','no network '+int2ip(n),'end']);
+  rpRefreshCfg();
+}
+function rpSetPassive(did,i,on){
+  const d=rpById(did);
+  rpEchoCli(d,['configure terminal','router rip',(on?'':'no ')+'passive-interface '+d.ports[i].name,'end']);
+  rpRefreshCfg();
+}
+function rpSetPcIp(did,val){
+  const d=rpById(did), s=val.trim();
+  const err=document.getElementById('rp-pc-ip-err');
+  if(err) err.style.display='none';
+  if(!s) d.ip=null;
+  else if(isValidIP(s)){
+    if(rpIsHostIp(s,d.pfx)) d.ip=s;
+    else if(err){ err.textContent=s+' is the network or broadcast address for /'+d.pfx+' — not a usable host address.'; err.style.display=''; }
+  }
+  rpRenderCanvas();
+}
+let rpPingGen=0;
+function rpPingRun(){
+  const d=rpSelected!=null?rpById(rpSelected):null;
+  if(!d||d.type!=='pc') return;
+  const myGen=++rpPingGen, pcId=d.id;
+  LabShared.runPing({
+    inputId:'rp-ping-ip', btnId:'rp-ping-btn', outId:'rp-ping-out',
+    resolve:function(dst){
+      if(!d.ip||!isValidIP(d.ip)) return {msg:d.name+' has no valid IP'};
+      if(!isValidIP(dst)) return {msg:'invalid target address'};
+      if(dst===d.ip) return {ok:true};
+      const r=rpResolvePing(d,dst);
+      if(!r.ok) return {ok:false};
+      d._arpKnown=d._arpKnown||new Set();
+      const firstTime=!d._arpKnown.has(dst);
+      d._arpKnown.add(dst);
+      return {ok:true, firstTime:firstTime};
+    },
+    stillActive:function(){ return myGen===rpPingGen && rpSelected===pcId; }
+  });
+}
+
+/* ── Terminal ──
+   One delegated document listener, because the input element is rebuilt
+   every time the config panel re-renders (same reason routing_game.html
+   does it this way rather than binding per element like the OSPF Cost
+   terminal above, whose input is never replaced mid-round). */
+function rpRenderTerm(){
+  const d=rpSelected!=null?rpById(rpSelected):null;
+  if(!d||d.type!=='router') return;
+  const log=document.getElementById('rp-term-log');
+  if(!log) return;
+  log.innerHTML=d.log.slice(-16).map(function(l){
+    return '<div class="tl'+(l.charAt(0)==='%'?' terr':'')+'">'+esc(l)+'</div>';
+  }).join('');
+  log.scrollTop=log.scrollHeight;
+  const pr=document.getElementById('rp-term-prompt');
+  if(pr) pr.textContent=rpPromptFor(d);
+}
+document.addEventListener('keydown', function(e){
+  const input=document.getElementById('rp-term-in');
+  if(!input||document.activeElement!==input) return;
+  const d=rpSelected!=null?rpById(rpSelected):null;
+  if(!d||d.type!=='router') return;
+  if(e.key==='Enter'){
+    const line=input.value; input.value='';
+    if(line.trim()){ d.hist.push(line); d.hi=d.hist.length; }
+    d.log.push(rpPromptFor(d)+' '+line);
+    const out=rpCli(d,line);
+    if(out) out.split('\n').forEach(function(l){ d.log.push(l); });
+    rpRenderTerm(); rpRenderCanvas(); rpRefreshCfg();
+    /* rpRefreshCfg() has just rebuilt this very input, so the node that had
+       focus no longer exists — refocus the fresh one or the next command
+       goes nowhere. */
+    const fresh=document.getElementById('rp-term-in');
+    if(fresh) fresh.focus();
+  } else if(e.key==='ArrowUp'){
+    e.preventDefault();
+    if(d.hi>0){ d.hi--; input.value=d.hist[d.hi]||''; }
+  } else if(e.key==='ArrowDown'){
+    e.preventDefault();
+    if(d.hi<d.hist.length-1){ d.hi++; input.value=d.hist[d.hi]||''; }
+    else { d.hi=d.hist.length; input.value=''; }
+  } else if(e.key==='Tab'){
+    e.preventDefault();
+    input.value=LabShared.tabComplete(RP_KW, input.value, function(cands){ d.log.push(cands.join('   ')); rpRenderTerm(); });
+  }
+});
+
+/* ── Brief + checklist ── */
+function rpTasksShown(){ try{ return localStorage.getItem('ne-riplab-tasks')!=='0'; }catch(e){ return true; } }
+function rpApplyTasksPref(){
+  const shown=rpTasksShown();
+  const list=document.getElementById('req-list'), btn=document.getElementById('rp-tasks-btn');
+  if(list) list.style.display=shown?'':'none';
+  if(btn){ btn.classList.toggle('collapsed',!shown); btn.setAttribute('aria-expanded',String(shown)); }
+}
+function rpToggleTasks(){
+  try{ localStorage.setItem('ne-riplab-tasks', rpTasksShown()?'0':'1'); }catch(e){}
+  rpApplyTasksPref();
+}
+function rpBriefHtml(d){
+  const rows=d.addr.map(function(r){ return '<tr>'+r.map(function(c){ return '<td>'+c+'</td>'; }).join('')+'</tr>'; }).join('');
+  return '<div class="qlbl" style="margin-top:1rem">Addressing Table'+
+    '<span class="tip-ic" tabindex="-1" data-tip="Addresses are written in CIDR. The router CLI still takes a dotted mask — /24 = 255.255.255.0, /30 = 255.255.255.252.">?</span></div>'+
+    '<table class="rt-table" style="margin-top:.35rem">'+
+    '<tr><th>Device</th><th>Interface</th><th>Address</th><th>Connects to</th></tr>'+rows+'</table>'+
+    '<div class="req-note">'+d.note+'</div>'+
+    '<button type="button" class="qlbl sec-toggle" id="rp-tasks-btn" style="margin-top:1rem" '+
+    'aria-expanded="'+rpTasksShown()+'" aria-controls="req-list" onclick="rpToggleTasks()">Tasks'+
+    '<svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></button>';
+}
+function rpRenderReqs(results){
+  if(!state.data||!state.data.reqs) return;
+  LabShared.renderReqList('req-list', state.data.reqs, results, esc);
+  rpApplyTasksPref();
+}
+function renderRipLab(body,qip){
+  const d=state.data;
+  document.getElementById('qprompt').innerHTML='<b>Goal:</b> '+d.goal;
+  document.getElementById('qspec').innerHTML=rpBriefHtml(d);
+  qip.style.display='none';
+  body.innerHTML=
+    '<div class="lab-card"><div class="lab-toolbar">'+
+      '<div class="legend"><span class="lg"><i class="lgdot lg-acc"></i>addressed &amp; up</span></div>'+
+    '</div>'+
+    '<div class="lab-canvas" id="rp-canvas"><svg id="rp-cable-svg"></svg><div id="rp-dev-layer"></div></div>'+
+    '<div class="lab-hint" id="rp-hint">Click a port, then another port, to cable them. Click a device to configure it, or drag it to move it. Click a cable to remove it.</div>'+
+    '</div><div class="cfg-panel" id="rp-cfg" style="display:none"></div>';
+  LabShared.attachCanvasDrag({
+    layer:document.getElementById('rp-dev-layer'),
+    canvas:document.getElementById('rp-canvas'),
+    getDevice:function(id){ return rpById(id); },
+    devSize:function(dev){ return rpDevSize(dev); },
+    onRender:function(){ rpRenderCanvas(); },
+    onDevClick:function(id){ rpOpenCfg(id); },
+    onPortClick:function(id,i){ rpOnPortClick(id,i); }
+  });
+  document.getElementById('rp-cable-svg').addEventListener('click', rpOnCableClick);
+  setBtns('lab');
+  rpRenderCanvas();
+  rpRenderReqs(null);
+}
+
+/* ── Grading ──
+   met + 2 if everything passed, out of results.length — the same shape the
+   IP Routing lab uses, so adding a requirement raises the ceiling by
+   itself and there is no per-tier score constant to keep in step. */
+function rpGrade(reveal){
+  rpInvalidate();
+  const d=state.data;
+  const results=d.reqs.map(function(r){ return r.test(); });
+  rpRenderReqs(results);
+  const met=results.filter(function(r){ return r.ok; }).length, total=results.length;
+  const all=met===total;
+  const pts=reveal?0:met+(all?2:0);
+  state.score+=pts;
+  state.streak = (!reveal&&all) ? state.streak+1 : 0;
+  state.round++;
+  const fb=document.getElementById('fb');
+  fb.style.display='block';
+  if(reveal){
+    fb.className='fbanner warn';
+    fb.textContent='Skipped — '+met+'/'+total+' requirements were met. +0 pts.';
+  } else if(all){
+    fb.className='fbanner ok';
+    fb.textContent='Perfect! All '+total+' requirements met. +'+pts+' pts (+2 bonus). Streak: '+state.streak;
+  } else {
+    fb.className='fbanner '+(met>=Math.ceil(total*0.6)?'warn':'err');
+    fb.textContent=met+'/'+total+' requirements met. +'+pts+' pt'+(pts!==1?'s':'')+'. Open each unmet task for the reason.';
+  }
+  finishRound();
+}
+
 /* ─── Round control ─────────────────────────────────────────────── */
+/* One table rather than a generate/render/grade if-chain apiece: adding a
+   topic means adding a row here and a button in the bar, and there is no
+   fourth or fifth place to forget. (routing_game.html's six topics each
+   need seven separate edits — worth not repeating.) */
+const TOPIC_FNS={
+  ospf:  {gen:genOspf,   render:renderOspf,   grade:osGrade},
+  lsa:   {gen:genLsa,    render:renderLsa,    grade:lsaGrade},
+  rip:   {gen:genRip,    render:renderRip,    grade:ripGrade},
+  riplab:{gen:genRipLab, render:renderRipLab, grade:rpGrade}
+};
 function pickTopic(){
   if(state.topic!=='rand') return state.topic;
   let t; do{ t=choice(TOPICS); }while(t===state.lastTopic && TOPICS.length>1);
@@ -1545,7 +2874,7 @@ function loadQ(){
   const t=pickTopic();
   state.mode=t;
   syncVersionButtons();
-  state.data = t==='ospf' ? genOspf(state.diff) : (t==='lsa' ? genLsa(state.diff) : genRip(state.diff));
+  state.data = TOPIC_FNS[t].gen(state.diff);
   render();
   updateChips();
 }
@@ -1568,17 +2897,16 @@ function render(){
   body.innerHTML='';
   document.getElementById('qspec').innerHTML='';
   if(window.setPreferredTool) setPreferredTool(TOPIC_REF[state.mode]);
-  if(state.mode==='ospf') renderOspf(body,qip);
-  else if(state.mode==='lsa') renderLsa(body,qip);
-  else renderRip(body,qip);
+  document.getElementById('req-list').innerHTML='';
+  TOPIC_FNS[state.mode].render(body,qip);
 }
 function checkAll(){
   if(state.done) return;
-  if(state.mode==='ospf') osGrade(false); else if(state.mode==='lsa') lsaGrade(false); else ripGrade(false);
+  TOPIC_FNS[state.mode].grade(false);
 }
 function revealAll(){
   if(state.done) return;
-  if(state.mode==='ospf') osGrade(true); else if(state.mode==='lsa') lsaGrade(true); else ripGrade(true);
+  TOPIC_FNS[state.mode].grade(true);
 }
 function finishRound(){
   state.done=true;
@@ -1593,7 +2921,7 @@ function resetGame(){ state.score=0; state.round=1; state.streak=0; loadQ(); }
 /* ─── Controls ──────────────────────────────────────────────────── */
 function setTopic(t,btn){
   state.topic=t;
-  document.querySelectorAll('#tb-rand,#tb-ospf,#tb-lsa,#tb-rip').forEach(b=>b.classList.remove('on'));
+  document.querySelectorAll('#tb-rand,#tb-ospf,#tb-lsa,#tb-rip,#tb-riplab').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
   loadQ();
 }
@@ -1641,7 +2969,7 @@ function toggleTool(id){
   const cb=document.getElementById('tog-'+id);
   cb.checked=!cb.checked;
   document.getElementById('t-'+id).style.display=cb.checked?'':'none';
-  const any=['cost','lsa','rip'].some(t=>document.getElementById('tog-'+t).checked);
+  const any=['cost','lsa','rip','ripcmd'].some(t=>document.getElementById('tog-'+t).checked);
   document.getElementById('toolsec').style.display=any?'':'none';
   if(window.saveOptionsState) saveOptionsState();
 }
