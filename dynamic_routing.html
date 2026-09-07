@@ -206,11 +206,13 @@ const VERSIONS={
   ospf:{opts:[], labels:['OSPFv2','OSPFv3'], note:'version does not affect cost'},
   lsa:{opts:['v2','v3'], labels:['OSPFv2','OSPFv3']},
   rip:{opts:['v1','v2'], labels:['RIPv1','RIPv2']},
-  /* The lab greys the row out on purpose: which version is running is not
-     given to you there, it is something you configure — "version 2" is one
-     of the graded tasks, and on Hard it is half the fix. Offering it as a
-     control would hand over the answer. */
-  riplab:{opts:[], labels:['RIPv1','RIPv2'], note:'set the version in the CLI'}
+  /* Live on the lab too: the row picks the version the round is BUILT for,
+     and the scenarios genuinely differ. Easy and Medium keep their shape and
+     swap which version the checklist demands (v1 needs no version command at
+     all — it is the default). Hard is two different labs, because every RIPv1
+     limitation has the same fix, "use v2", and a v1 round whose answer is
+     "switch to v2" would not be a v1 round. See genRipLabHardV1. */
+  riplab:{opts:['v1','v2'], labels:['RIPv1','RIPv2']}
 };
 
 let state={ topic:'rand', diff:'easy', ver:'v2', score:0, round:1, streak:0,
@@ -1782,10 +1784,22 @@ function rpConverge(){
           rpAdvertise(n, nb.port, learned).forEach(function(e){
             const metric=e.metric+1;
             if(metric>=RP_INFINITY) return;
-            const k=rpKey(e.netInt,e.prefix);
+            /* A v1 update carries no subnet mask, so the receiver has to
+               invent one: the receiving interface's own mask if the network
+               falls in the same major network, otherwise the classful mask.
+               That inference is right only when every subnet of a major
+               network uses one mask — which is precisely why RIPv1 cannot
+               do VLSM, and why getting this wrong shows up as a route to a
+               subnet that doesn't exist rather than as a missing route. */
+            let eNet=e.netInt, ePfx=e.prefix;
+            if(r.rip.version===1){
+              ePfx = (rpMajorOf(eNet)===rpMajorOf(ip2int(myPort.ip))) ? myPort.pfx : rpClassfulPfx(eNet);
+              eNet = netIntOf(eNet, ePfx);
+            }
+            const k=rpKey(eNet,ePfx);
             if(connected.has(k)) return;
             const cur=best.get(k);
-            if(!cur||metric<cur.metric) best.set(k,{netInt:e.netInt, prefix:e.prefix, metric:metric, via:[{nextHop:np.ip, iface:i}]});
+            if(!cur||metric<cur.metric) best.set(k,{netInt:eNet, prefix:ePfx, metric:metric, via:[{nextHop:np.ip, iface:i}]});
             else if(metric===cur.metric && cur.via.length<4 &&
                     !cur.via.some(function(v){ return v.nextHop===np.ip; })) cur.via.push({nextHop:np.ip, iface:i});
           });
@@ -2148,12 +2162,15 @@ function rpPcIpReq(pc,netInt,pfx){
 function rpProcessReq(router, version, noAuto){
   const bits=['Start RIP on '+router.name+' ('+rpMono('router rip')+')'];
   if(version===2) bits.push('set '+rpMono('version 2'));
+  else if(version===1) bits.push('leave it at '+rpMono('version 1')+', the default');
   if(noAuto) bits.push('turn off '+rpMono('auto-summary'));
   const r={desc:bits.join(', '),
     test:function(){
       if(!router.rip.on) return {ok:false, reason:'No RIP process on '+router.name+' yet — "router rip"'};
       if(version&&router.rip.version!==version)
-        return {ok:false, reason:router.name+' is running RIPv'+router.rip.version+', not RIPv'+version};
+        return {ok:false, reason: version===1
+          ? router.name+' is running RIPv2 — this round has to stay on v1'
+          : router.name+' is running RIPv'+router.rip.version+', not RIPv'+version};
       if(noAuto&&router.rip.autoSummary)
         return {ok:false, reason:router.name+' still has automatic summarization on — "no auto-summary"'};
       return {ok:true};
@@ -2271,10 +2288,13 @@ function rpPickWans(n){
   return out;
 }
 
-/* ── Easy: RIPv2 between two sites.
+/* ── Easy: two sites, one WAN link.
    Everything physical is already done — the whole job is the routing
-   protocol, so nothing else competes for attention. */
-function genRipLabEasy(){
+   protocol, so nothing else competes for attention. Every network here is
+   classful (two class-C LANs, a class-A WAN), which is exactly the shape
+   RIPv1 handles correctly, so the same topology serves both versions and
+   the only thing that changes is whether "version 2" is part of the job. */
+function genRipLabEasy(v2){
   rpResetTopo();
   const pc1=rpAddPC(60,60), r1=rpAddRouter(230,140), r2=rpAddRouter(470,140), pc2=rpAddPC(660,60);
   const lans=rpPickLans(2), wan=rpPickWans(1)[0];
@@ -2289,11 +2309,15 @@ function genRipLabEasy(){
   pc1.ip=rpHost(lans[0],10); pc2.ip=rpHost(lans[1],10);
   rpInvalidate();
 
+  const ver=v2?2:1;
   return {
-    kind:'easy', helper:true,
-    title:'RIPv2 between two sites',
-    goal:'Both sites are cabled and addressed. Configure RIPv2 on '+r1.name+' and '+r2.name+' so each site learns the other’s LAN, and prove it with a ping.',
-    note:'A RIP <span class="mono-inl">network</span> statement is classful — it names the major network, and RIP then runs on every interface whose address falls inside it. Each router here sits in two major networks, so each needs two statements.',
+    kind:'easy', helper:true, ver:ver,
+    title:'RIPv'+ver+' between two sites',
+    goal:'Both sites are cabled and addressed. Configure RIPv'+ver+' on '+r1.name+' and '+r2.name+
+         ' so each site learns the other’s LAN, and prove it with a ping.',
+    note:'A RIP <span class="mono-inl">network</span> statement is classful — it names the major network, and RIP then runs on every interface whose address falls inside it. Each router here sits in two major networks, so each needs two statements.'+
+      (v2 ? ' <span class="mono-inl">version 2</span> has to be set explicitly; a router that is left alone runs v1.'
+          : ' RIPv1 is the default, so there is <b>no version command to type</b> — and none of these networks is subnetted away from its classful boundary, so v1 has everything it needs.'),
     addr:[
       [pc1.name,'NIC',pc1.ip+'/24',r1.name+' Gi0/0'],
       [r1.name,'Gi0/0',r1.ports[0].ip+'/24',pc1.name],
@@ -2304,9 +2328,9 @@ function genRipLabEasy(){
     ],
     reqs:[].concat(
       rpGroup('RIP',
-        rpProcessReq(r1,2,false),
+        rpProcessReq(r1,ver,false),
         rpNetworkReq(r1,[lans[0], rpMajorOf(wan)]),
-        rpProcessReq(r2,2,false),
+        rpProcessReq(r2,ver,false),
         rpNetworkReq(r2,[lans[1], rpMajorOf(wan)])),
       rpGroup('Verify',
         rpLearnedReq(r1, lans[1], 24, 1),
@@ -2319,8 +2343,10 @@ function genRipLabEasy(){
 /* ── Medium: three sites in a chain.
    The WAN links are unaddressed, so addressing and the protocol both
    matter, and the passive-interface requirements make the point that a LAN
-   with no RIP neighbours should still be advertised but never spoken to. */
-function genRipLabMedium(){
+   with no RIP neighbours should still be advertised but never spoken to.
+   Both WAN links are /30s of one major network — a single mask throughout
+   10.0.0.0 — which is what keeps the round legal under v1 as well as v2. */
+function genRipLabMedium(v2){
   rpResetTopo();
   /* Laid out to fit the canvas at its default zoom: the rightmost PC's box
      widens with its address string (rpDevSize), so it starts far enough
@@ -2338,12 +2364,13 @@ function genRipLabMedium(){
   pc1.ip=rpHost(lans[0],10); pc3.ip=rpHost(lans[1],10);
   rpInvalidate();
 
-  const ten=rpMajorOf(wans[0]);
+  const ten=rpMajorOf(wans[0]), ver=v2?2:1;
   return {
-    kind:'medium', helper:true,
+    kind:'medium', helper:true, ver:ver,
     title:'Three sites, one chain',
-    goal:'Address both WAN links, run RIPv2 across all three routers, and keep RIP updates off the two LANs — then prove '+pc1.name+' can reach '+pc3.name+'.',
-    note:'Both WAN links live in the same major network, so '+r2.name+' needs only one <span class="mono-inl">network 10.0.0.0</span> to cover both of its serial-facing interfaces. A LAN with no other router on it still has to be advertised — <span class="mono-inl">passive-interface</span> stops the updates going out, it does not stop the network being routed.',
+    goal:'Address both WAN links, run RIPv'+ver+' across all three routers, and keep RIP updates off the two LANs — then prove '+pc1.name+' can reach '+pc3.name+'.',
+    note:'Both WAN links live in the same major network, so '+r2.name+' needs only one <span class="mono-inl">network 10.0.0.0</span> to cover both of its WAN-facing interfaces. A LAN with no other router on it still has to be advertised — <span class="mono-inl">passive-interface</span> stops the updates going out, it does not stop the network being routed.'+
+      (v2 ? '' : ' Both WAN links are <span class="mono-inl">/30</span>s: RIPv1 sends no subnet mask, so a router receiving one of them applies the mask of the interface it arrived on. That inference is only right because every subnet of 10.0.0.0 here uses the same mask — mix two masks in one major network and v1 gets it wrong.'),
     addr:[
       [pc1.name,'NIC',pc1.ip+'/24',r1.name+' Gi0/0'],
       [r1.name,'Gi0/0',r1.ports[0].ip+'/24',pc1.name],
@@ -2361,9 +2388,9 @@ function genRipLabMedium(){
         rpIfaceReq(r2,2,wans[1],30),
         rpIfaceReq(r3,1,wans[1],30)),
       rpGroup('RIP',
-        rpProcessReq(r1,2,false), rpNetworkReq(r1,[lans[0],ten]),
-        rpProcessReq(r2,2,false), rpNetworkReq(r2,[ten]),
-        rpProcessReq(r3,2,false), rpNetworkReq(r3,[lans[1],ten]),
+        rpProcessReq(r1,ver,false), rpNetworkReq(r1,[lans[0],ten]),
+        rpProcessReq(r2,ver,false), rpNetworkReq(r2,[ten]),
+        rpProcessReq(r3,ver,false), rpNetworkReq(r3,[lans[1],ten]),
         rpPassiveReq(r1,0,'no RIP neighbours on that LAN'),
         rpPassiveReq(r3,0,'no RIP neighbours on that LAN')),
       rpGroup('Verify',
@@ -2373,25 +2400,16 @@ function genRipLabMedium(){
   };
 }
 
-/* ── Hard: a discontiguous major network.
-   Two halves of 172.16.0.0 separated by 10.0.0.0. With the defaults, every
-   router summarises at the boundary, R2 ends up with two identical
-   172.16.0.0/16 routes and load-balances into a black hole. The fix is
-   version 2 plus no auto-summary on all three — including the middle
-   router, which crosses the boundary in both directions when it passes each
-   half on to the other. CLI only, like the IP Routing lab's hard tier. */
-function genRipLabHard(){
-  rpResetTopo();
-  /* Laid out to fit the canvas at its default zoom: the rightmost PC's box
-     widens with its address string (rpDevSize), so it starts far enough
-     left that even a 15-character address stays inside. */
+/* The shared hard topology: PC1–R1–R2–R3–PC2, with the R2–R3 link left
+   uncabled and both WAN links unaddressed. Both hard rounds start here and
+   differ only in what they ask of it. */
+function rpHardTopo(){
   const pc1=rpAddPC(40,55), r1=rpAddRouter(190,150), r2=rpAddRouter(375,150),
         r3=rpAddRouter(560,150), pc3=rpAddPC(660,55);
   const wans=rpPickWans(2);
   let a=ri(1,254), b;
   do{ b=ri(1,254); }while(b===a);
   const lan1=ip2int('172.16.'+a+'.0'), lan3=ip2int('172.16.'+b+'.0');
-  const major=rpMajorOf(lan1);
 
   rpAddCable(pc1.id,0, r1.id,0);
   rpAddCable(r1.id,1, r2.id,1);
@@ -2400,44 +2418,111 @@ function genRipLabHard(){
   rpSetPort(r3,0, rpHost(lan3,1), 24);
   pc1.ip=rpHost(lan1,10); pc3.ip=rpHost(lan3,10);
   rpInvalidate();
+  return {pc1:pc1, r1:r1, r2:r2, r3:r3, pc3:pc3, wans:wans,
+          lan1:lan1, lan3:lan3, major:rpMajorOf(lan1), ten:rpMajorOf(wans[0])};
+}
+function rpHardAddrRows(t, lan3Label){
+  return [
+    [t.pc1.name,'NIC',t.pc1.ip+'/24',t.r1.name+' Gi0/0'],
+    [t.r1.name,'Gi0/0',t.r1.ports[0].ip+'/24',t.pc1.name],
+    [t.r1.name,'Gi0/1',rpCidr(t.wans[0],30)+' — first host',t.r2.name+' Gi0/1'],
+    [t.r2.name,'Gi0/1',rpCidr(t.wans[0],30)+' — second host',t.r1.name+' Gi0/1'],
+    [t.r2.name,'Gi0/2',rpCidr(t.wans[1],30)+' — first host',t.r3.name+' Gi0/1'],
+    [t.r3.name,'Gi0/1',rpCidr(t.wans[1],30)+' — second host',t.r2.name+' Gi0/2'],
+    [t.r3.name,'Gi0/0',lan3Label,t.pc3.name],
+    [t.pc3.name,'NIC',lan3Label,t.r3.name+' Gi0/0']
+  ];
+}
 
-  const ten=rpMajorOf(wans[0]);
+/* ── Hard, v2: a discontiguous major network.
+   Two halves of 172.16.0.0 separated by 10.0.0.0. With the defaults, every
+   router summarises at the boundary, R2 ends up with two identical
+   172.16.0.0/16 routes and load-balances into a black hole. The fix is
+   version 2 plus no auto-summary on all three — including the middle
+   router, which crosses the boundary in both directions when it passes each
+   half on to the other. CLI only, like the IP Routing lab's hard tier. */
+function genRipLabHardV2(){
+  rpResetTopo();
+  const t=rpHardTopo();
   return {
-    kind:'hard', helper:false,
+    kind:'hard', helper:false, ver:2,
     title:'A discontiguous 172.16.0.0',
-    goal:'Both LANs are subnets of 172.16.0.0, but the link between them is 10.0.0.0 — a discontiguous major network. Finish the cabling and addressing, then configure RIP so '+r2.name+' can tell the two halves apart.',
-    note:'Leave RIP at its defaults and every router summarises 172.16.x.0/24 back to 172.16.0.0/16 as it crosses into 10.0.0.0. '+r2.name+' then receives the same classful network from both sides, installs both, and load-balances half its traffic into the wrong half of the network. Hard mode is <b>CLI only</b> — configure everything through the terminal.',
-    addr:[
-      [pc1.name,'NIC',pc1.ip+'/24',r1.name+' Gi0/0'],
-      [r1.name,'Gi0/0',r1.ports[0].ip+'/24',pc1.name],
-      [r1.name,'Gi0/1',rpCidr(wans[0],30)+' — first host',r2.name+' Gi0/1'],
-      [r2.name,'Gi0/1',rpCidr(wans[0],30)+' — second host',r1.name+' Gi0/1'],
-      [r2.name,'Gi0/2',rpCidr(wans[1],30)+' — first host',r3.name+' Gi0/1'],
-      [r3.name,'Gi0/1',rpCidr(wans[1],30)+' — second host',r2.name+' Gi0/2'],
-      [r3.name,'Gi0/0',r3.ports[0].ip+'/24',pc3.name],
-      [pc3.name,'NIC',pc3.ip+'/24',r3.name+' Gi0/0']
-    ],
+    goal:'Both LANs are subnets of 172.16.0.0, but the link between them is 10.0.0.0 — a discontiguous major network. Finish the cabling and addressing, then configure RIP so '+t.r2.name+' can tell the two halves apart.',
+    note:'Leave RIP at its defaults and every router summarises 172.16.x.0/24 back to 172.16.0.0/16 as it crosses into 10.0.0.0. '+t.r2.name+' then receives the same classful network from both sides, installs both, and load-balances half its traffic into the wrong half of the network. Hard mode is <b>CLI only</b> — configure everything through the terminal.',
+    addr:rpHardAddrRows(t, t.r3.ports[0].ip.replace(/\.1$/,'.x')+'/24'),
     reqs:[].concat(
       rpGroup('Cabling',
-        rpCableReq(r2,r2.name+' Gi0/2', r3,r3.name+' Gi0/1')),
+        rpCableReq(t.r2,t.r2.name+' Gi0/2', t.r3,t.r3.name+' Gi0/1')),
       rpGroup('Addressing',
-        rpIfaceReq(r1,1,wans[0],30),
-        rpIfaceReq(r2,1,wans[0],30),
-        rpIfaceReq(r2,2,wans[1],30),
-        rpIfaceReq(r3,1,wans[1],30)),
+        rpIfaceReq(t.r1,1,t.wans[0],30),
+        rpIfaceReq(t.r2,1,t.wans[0],30),
+        rpIfaceReq(t.r2,2,t.wans[1],30),
+        rpIfaceReq(t.r3,1,t.wans[1],30)),
       rpGroup('RIP',
-        rpProcessReq(r1,2,true), rpNetworkReq(r1,[major,ten]),
-        rpProcessReq(r2,2,true), rpNetworkReq(r2,[ten]),
-        rpProcessReq(r3,2,true), rpNetworkReq(r3,[major,ten])),
+        rpProcessReq(t.r1,2,true), rpNetworkReq(t.r1,[t.major,t.ten]),
+        rpProcessReq(t.r2,2,true), rpNetworkReq(t.r2,[t.ten]),
+        rpProcessReq(t.r3,2,true), rpNetworkReq(t.r3,[t.major,t.ten])),
       rpGroup('Verify',
-        rpNoSummaryReq(r2,[{netInt:lan1,pfx:24},{netInt:lan3,pfx:24}], major, 16),
-        rpLearnedReq(r1, lan3, 24, 2),
-        rpPingReq(pc1,pc3))
+        rpNoSummaryReq(t.r2,[{netInt:t.lan1,pfx:24},{netInt:t.lan3,pfx:24}], t.major, 16),
+        rpLearnedReq(t.r1, t.lan3, 24, 2),
+        rpPingReq(t.pc1,t.pc3))
+    )
+  };
+}
+
+/* ── Hard, v1: the same discontiguous network, but you cannot use v2.
+   This round exists because every RIPv1 limitation has the same fix — "use
+   version 2" — so a v1 round whose answer is "switch to v2" would not be a
+   v1 round at all. Here the WAN gear only speaks v1, which makes the
+   protocol a fixed constraint and the ADDRESSING the variable: 172.16.0.0
+   cannot be split across a 10.0.0.0 core under a protocol that always
+   summarises, so the far LAN has to move out of it. Re-addressing is the
+   real answer when you are stuck on legacy kit, and it is the half of the
+   discontiguous-network lesson the v2 round never gets to make.
+
+   The target network is named explicitly in the checklist rather than left
+   open: the lesson is why the LAN has to move, not guessing which /24 the
+   grader had in mind. */
+function genRipLabHardV1(){
+  rpResetTopo();
+  const t=rpHardTopo();
+  const newLan=rpPickLans(1)[0];      /* a class-C, so its own major network */
+  return {
+    kind:'hard', helper:false, ver:1,
+    title:'A discontiguous 172.16.0.0, on legacy gear',
+    goal:'Both LANs are subnets of 172.16.0.0 with a 10.0.0.0 core between them, and the WAN routers only speak <b>RIPv1</b>. Re-address '+t.r3.name+'’s LAN out of 172.16.0.0, finish the cabling and addressing, and bring RIPv1 up.',
+    note:'RIPv1 carries no subnet masks, so it <b>always</b> summarises 172.16.x.0/24 to 172.16.0.0/16 at the 10.0.0.0 boundary — <span class="mono-inl">no auto-summary</span> is accepted but has nothing to act on. With both halves advertising the same classful network, '+t.r2.name+' cannot tell them apart, and no amount of RIP configuration will fix it. Move '+t.r3.name+'’s LAN into '+rpMono(rpCidr(newLan,24))+' instead: once only one side owns 172.16.0.0, summarising it is harmless. Hard mode is <b>CLI only</b> — and '+t.pc3.name+' has to be re-addressed too.',
+    addr:rpHardAddrRows(t, rpCidr(newLan,24)+' — re-address'),
+    reqs:[].concat(
+      rpGroup('Cabling',
+        rpCableReq(t.r2,t.r2.name+' Gi0/2', t.r3,t.r3.name+' Gi0/1')),
+      rpGroup('Addressing',
+        rpIfaceReq(t.r1,1,t.wans[0],30),
+        rpIfaceReq(t.r2,1,t.wans[0],30),
+        rpIfaceReq(t.r2,2,t.wans[1],30),
+        rpIfaceReq(t.r3,1,t.wans[1],30),
+        rpIfaceReq(t.r3,0,newLan,24),
+        rpPcIpReq(t.pc3,newLan,24)),
+      rpGroup('RIP',
+        rpProcessReq(t.r1,1,false), rpNetworkReq(t.r1,[t.major,t.ten]),
+        rpProcessReq(t.r2,1,false), rpNetworkReq(t.r2,[t.ten]),
+        rpProcessReq(t.r3,1,false), rpNetworkReq(t.r3,[newLan,t.ten])),
+      rpGroup('Verify',
+        /* The summarised /16 is now the CORRECT answer, not the bug — only
+           R1's side owns 172.16.0.0, so one summarised route to it is
+           exactly right. Asserting it is what separates "I moved the LAN"
+           from "I broke something until the ping happened to work". */
+        rpLearnedReq(t.r2, t.major, 16, 1),
+        rpLearnedReq(t.r1, newLan, 24, 2),
+        rpPingReq(t.pc1,t.pc3))
     )
   };
 }
 function genRipLab(diff){
-  return diff==='easy' ? genRipLabEasy() : diff==='medium' ? genRipLabMedium() : genRipLabHard();
+  const v2 = state.ver!=='v1';
+  if(diff==='easy') return genRipLabEasy(v2);
+  if(diff==='medium') return genRipLabMedium(v2);
+  return v2 ? genRipLabHardV2() : genRipLabHardV1();
 }
 
 /* ── Canvas ──
