@@ -35,7 +35,6 @@
     <button class="cbtn" id="tb-read" onclick="setTopic('read',this)">Read Table</button>
     <button class="cbtn" id="tb-lpm" onclick="setTopic('lpm',this)">Longest Match</button>
     <button class="cbtn" id="tb-ad" onclick="setTopic('ad',this)">Admin Distance</button>
-    <button class="cbtn" id="tb-ospf" onclick="setTopic('ospf',this)">OSPF Cost</button>
     <button class="cbtn" id="tb-route" onclick="setTopic('route',this)">IP Routing</button>
     <button class="cbtn" id="tb-summ" onclick="setTopic('summ',this)">IP Summaries</button>
     <button class="cbtn" id="tb-summ6" onclick="setTopic('summ6',this)">IPv6 Summaries</button>
@@ -82,10 +81,6 @@
           <span class="opt-row-label">AD Reference</span>
           <div class="tog"><input type="checkbox" id="tog-ad" checked><span class="tog-track"></span></div>
         </label>
-        <label class="opt-row" onclick="toggleTool('cost')">
-          <span class="opt-row-label">OSPF Cost Reference</span>
-          <div class="tog"><input type="checkbox" id="tog-cost" checked><span class="tog-track"></span></div>
-        </label>
         <label class="opt-row" onclick="toggleTool('anat')">
           <span class="opt-row-label">Route Table Anatomy</span>
           <div class="tog"><input type="checkbox" id="tog-anat" checked><span class="tog-track"></span></div>
@@ -103,25 +98,6 @@
   </div>
 
   <div class="toolsec" id="toolsec">
-
-    <div class="tool-block" id="t-cost">
-      <div class="tool-block-title">OSPF Cost Reference</div>
-      <p class="tool-note">OSPF cost is <strong>reference bandwidth &divide; interface bandwidth</strong>, rounded down, with a minimum of 1. The default reference bandwidth is 100 Mbps, which is why every link at or above 100 Mbps lands on cost 1 until <span class="mono-inl">auto-cost reference-bandwidth</span> is raised. Cost accrues on the <strong>outgoing</strong> interface of each hop &mdash; including the last router's link to the destination network.</p>
-      <table class="ref-table">
-        <thead><tr><th>Interface</th><th>Bandwidth</th><th>Cost</th></tr></thead>
-        <tbody>
-          <tr><td>Modem</td><td>56 Kbps</td><td>1785</td></tr>
-          <tr><td>ISDN B channel</td><td>64 Kbps</td><td>1562</td></tr>
-          <tr><td>T1 / serial</td><td>1544 Kbps</td><td>64</td></tr>
-          <tr><td>E1</td><td>2048 Kbps</td><td>48</td></tr>
-          <tr><td>Ethernet</td><td>10 Mbps</td><td>10</td></tr>
-          <tr><td>T3</td><td>45 Mbps</td><td>2</td></tr>
-          <tr><td>Fast Ethernet</td><td>100 Mbps</td><td>1</td></tr>
-          <tr><td>Gigabit Ethernet</td><td>1 Gbps</td><td>1</td></tr>
-          <tr><td>10 Gigabit Ethernet</td><td>10 Gbps</td><td>1</td></tr>
-        </tbody>
-      </table>
-    </div>
 
     <div class="tool-block" id="t-ad">
       <div class="tool-block-title">Administrative Distance Reference</div>
@@ -340,353 +316,21 @@ function cliFullLine(e){
 
 /* ─── State ─────────────────────────────────────────────────────── */
 let state={ topic:'rand', diff:'easy', score:0, round:1, streak:0, done:false, mode:null, data:null, lastTopic:null, selectedId:null };
-const TOPICS=['read','lpm','ad','ospf','route','summ','summ6'];
-const TOPIC_LABEL={read:'Read The Table', lpm:'Longest Prefix Match', ad:'Administrative Distance', route:'IP Routing', summ:'IP Summaries', summ6:'IPv6 Summaries', ospf:'OSPF Cost'};
+const TOPICS=['read','lpm','ad','route','summ','summ6'];
+const TOPIC_LABEL={read:'Read The Table', lpm:'Longest Prefix Match', ad:'Administrative Distance', route:'IP Routing', summ:'IP Summaries', summ6:'IPv6 Summaries'};
 const POINTS={easy:3, medium:4, hard:6};
 /* The reference tool each topic most wants at hand. options.js floats it to
    the top of both the Options menu and the reference column and leaves the
    rest in the page's own markup order. Topics with no obvious reference
    (the two summaries topics) are simply absent, which restores plain
    canonical order rather than picking an arbitrary favourite. */
-const TOPIC_REF={read:'anat', lpm:'lpm', ad:'ad', ospf:'cost', route:'cli'};
+const TOPIC_REF={read:'anat', lpm:'lpm', ad:'ad', route:'cli'};
 
 function pickTopic(){
   if(state.topic!=='rand') return state.topic;
   let t; do{ t=choice(TOPICS); }while(t===state.lastTopic);
   state.lastTopic=t;
   return t;
-}
-
-/* ═══ OSPF Cost (topic: ospf) ═══════════════════════════════════════
-   A drill, not a lesson: read the topology, work out which neighbour the
-   packet leaves through, and be told afterwards why that was right. No
-   protocol engine and no config — each tier's generator knows its own
-   candidate paths and hands back the arithmetic already done, the same way
-   genSumm's medium/hard tiers keep a fixed shape and randomise the numbers.
-
-   Cost is the real formula: reference bandwidth (100 Mbps by default) over
-   interface bandwidth, rounded down, minimum 1 — which is why every link at
-   or above 100 Mbps lands on cost 1. Cost accrues on the *outgoing*
-   interface of each hop, including the last router's link to the destination
-   network, so that final segment counts too.
-
-   The winner is whatever the generator declares in `answer`, NOT the lowest
-   total: OSPF compares route type before metric, so the intra-vs-inter
-   variant is won by an 84 over a 20 and the grader has to respect that. */
-
-const OS_BW=[
-  {label:'56 Kbps',   kbps:56},
-  {label:'64 Kbps',   kbps:64},
-  {label:'1544 Kbps', kbps:1544},
-  {label:'2048 Kbps', kbps:2048},
-  {label:'10 Mbps',   kbps:10000},
-  {label:'45 Mbps',   kbps:45000},
-  {label:'100 Mbps',  kbps:100000},
-  {label:'1 Gbps',    kbps:1000000}
-];
-/* Every hop draws its own bandwidth, so a path is never characterised by a
-   single link speed. That matters: while both hops of a path shared one
-   bandwidth, "find the 100 Mbps-or-faster path" solved every round without
-   any arithmetic. A 1 Gbps first hop followed by a 56 Kbps second hop now
-   loses badly to two ordinary Fast Ethernet links, so the first hop tells
-   you nothing on its own. The sub-T1 speeds are drawn rarely — their costs
-   (1785, 1562) are correct and worth meeting, but a steady diet of them
-   makes the sums tedious rather than instructive. */
-const OS_COMMON=[OS_BW[2],OS_BW[3],OS_BW[4],OS_BW[5],OS_BW[6],OS_BW[7]];
-const OS_RARE=[OS_BW[0],OS_BW[1]];
-const OS_UNIT=[OS_BW[6],OS_BW[7]];   /* both cost 1 at the default reference */
-function osRandBw(){ return Math.random()<0.12 ? choice(OS_RARE) : choice(OS_COMMON); }
-function osCost(bw){ return Math.max(1, Math.floor(100000/bw.kbps)); }
-function osHop(lbl,bw,costOverride){
-  return {lbl, bw:bw.label, cost:(costOverride==null?osCost(bw):costOverride), override:costOverride!=null};
-}
-function osAdvHop(from,cost){ return {lbl:'Type 3 from '+from, bw:'advertised', cost}; }
-function osNet(){ return ri(10,203)+'.'+ri(0,254)+'.'+ri(0,254)+'.0/24'; }
-function osBigNet(){ return ri(10,172)+'.'+ri(0,254)+'.0.0/16'; }
-function osBare(n){ return n.split('/')[0]; }
-function osTotal(p){ p.total=p.hops.reduce(function(a,h){return a+h.cost;},0); return p; }
-function osWinners(paths){
-  const best=Math.min.apply(null,paths.map(function(p){ return p.total; }));
-  return paths.filter(function(p){ return p.total===best; }).map(function(p){ return p.via; });
-}
-/* True when "just pick the fastest first hop" happens to land on the right
-   answer. osBuild rejection-samples against this so the shortcut works on
-   exactly 1-in-N rounds — the same odds as guessing blindly between the N
-   paths. Simply making it fail most of the time would be no better than the
-   bug it replaces: at 25% on a two-path round, "never pick the fastest"
-   would win 75% of the time. The heuristic has to be worth nothing in both
-   directions. */
-function osFirstHopGivesItAway(d){
-  const min=Math.min.apply(null,d.paths.map(function(p){ return p.hops[0].cost; }));
-  const fast=d.paths.filter(function(p){ return p.hops[0].cost===min; })
-    .map(function(p){ return p.via; }).sort().join(',');
-  return fast===d.answer.slice().sort().join(',');
-}
-function osBuild(gen){
-  let first=null, target=null;
-  for(let i=0;i<80;i++){
-    const d=gen();
-    if(!d) continue;
-    if(!first) first=d;
-    /* The intra-vs-inter variant is decided by route type, not by cost, so
-       there is no cost heuristic to balance — leave it alone. */
-    if(d.trap==='intra') return d;
-    if(target===null) target = Math.random() < 1/d.paths.length;
-    if(osFirstHopGivesItAway(d)===target) return d;
-  }
-  return first;
-}
-
-/* ── Easy: one area, three parallel paths, each hop its own bandwidth.
-   About half the rounds are built to tie, which is the point — OSPF installs
-   both and load-balances, and a Gigabit link is no cheaper than Fast
-   Ethernet at the default reference bandwidth. */
-function genOspfEasy(){
-  const dest=osNet(), src=osNet();
-  const tie=Math.random()<0.5;
-  const names=shuffle(['R2','R4','R5','R6']).slice(0,3);
-  const tail=osRandBw();
-
-  function mk(via,b1,b2){
-    return osTotal({via, hops:[osHop('R1&rarr;'+via,b1), osHop(via+'&rarr;R3',b2), osHop('R3&rarr;'+osBare(dest),tail)]});
-  }
-  let paths=null;
-  for(let attempt=0; attempt<60 && !paths; attempt++){
-    let cand;
-    if(tie){
-      /* Two paths that differ only in a link whose two candidate speeds both
-         cost 1 — the tie is real and the reason for it is the lesson. */
-      const shared=osRandBw();
-      const swapFirst=Math.random()<0.5;
-      const u=shuffle(OS_UNIT.slice());
-      cand=swapFirst
-        ? [mk(names[0],u[0],shared), mk(names[1],u[1],shared), mk(names[2],osRandBw(),osRandBw())]
-        : [mk(names[0],shared,u[0]), mk(names[1],shared,u[1]), mk(names[2],osRandBw(),osRandBw())];
-      if(cand[2].total<=cand[0].total) continue;          /* decoy must lose */
-    } else {
-      cand=[mk(names[0],osRandBw(),osRandBw()), mk(names[1],osRandBw(),osRandBw()), mk(names[2],osRandBw(),osRandBw())];
-      if(osWinners(cand).length!==1) continue;            /* want one winner */
-    }
-    paths=cand;
-  }
-  if(!paths) return null;
-  const answer=osWinners(paths);
-
-  return {
-    kind:'easy',
-    prompt:'Which neighbour does <b>R1</b> use to reach <span class="mono-inl">'+dest+'</span>?',
-    note:'More than one answer may be correct.',
-    canvasH:390,
-    boxes:[
-      {id:'R1',x:150,y:168,sub:'source'},
-      {id:paths[0].via,x:360,y:24},
-      {id:paths[1].via,x:360,y:168},
-      {id:paths[2].via,x:360,y:300},
-      {id:'R3',x:590,y:168}
-    ],
-    links:[
-      {a:'R1',b:paths[0].via,bw:paths[0].hops[0].bw,dx:-14,dy:-10},
-      {a:paths[0].via,b:'R3',bw:paths[0].hops[1].bw,dx:14,dy:-10},
-      {a:'R1',b:paths[1].via,bw:paths[1].hops[0].bw,dy:-9},
-      {a:paths[1].via,b:'R3',bw:paths[1].hops[1].bw,dy:-9},
-      {a:'R1',b:paths[2].via,bw:paths[2].hops[0].bw,dx:-14,dy:14},
-      {a:paths[2].via,b:'R3',bw:paths[2].hops[1].bw,dx:14,dy:14}
-    ],
-    stubs:[
-      {from:'R1',dir:'left',text:src},
-      {from:'R3',dir:'right',text:dest,bw:tail.label}
-    ],
-    clickable:paths.map(function(p){ return p.via; }),
-    paths:paths, answer:answer, ecmp:answer.length>1
-  };
-}
-
-/* ── Medium: two areas, one ABR. The cost across the boundary isn't
-   recalculated — you add your cost to reach the ABR to the cost the ABR
-   advertised in its Type 3. Both legs of both paths are independent, so the
-   winner is computed, never assumed. */
-function genOspfMedium(){
-  const dest=osBigNet();
-  const adv=ri(6,25);
-  const a1=osRandBw(), a2=osRandBw(), b1=osRandBw(), b2=osRandBw();
-  const paths=[
-    osTotal({via:'R4',hops:[osHop('R1&rarr;R4',a1),osHop('R4&rarr;R6 (ABR)',a2),osAdvHop('R6',adv)]}),
-    osTotal({via:'R5',hops:[osHop('R1&rarr;R5',b1),osHop('R5&rarr;R6 (ABR)',b2),osAdvHop('R6',adv)]})
-  ];
-  if(paths[0].total===paths[1].total) return null;
-  return {
-    kind:'medium',
-    prompt:'<b>R1</b> is in <b>Area 1</b>. Which neighbour does it use to reach <span class="mono-inl">'+dest+'</span> in <b>Area 0</b>?',
-    canvasH:390,
-    areas:[{x:18,y:8,w:530,h:372,label:'AREA 1'},{x:548,y:8,w:234,h:372,label:'AREA 0'}],
-    boxes:[
-      {id:'R1',x:60,y:168,sub:'source'},
-      {id:'R4',x:290,y:36},
-      {id:'R5',x:290,y:296},
-      {id:'R6',x:502,y:168,sub:'ABR'},
-      {id:'R7',x:560,y:296}
-    ],
-    links:[
-      {a:'R1',b:'R4',bw:a1.label,dx:-14,dy:-10},
-      {a:'R4',b:'R6',bw:a2.label,dx:14,dy:-10},
-      {a:'R1',b:'R5',bw:b1.label,dx:-14,dy:14},
-      {a:'R5',b:'R6',bw:b2.label,dx:14,dy:14},
-      {a:'R6',b:'R7',bw:'',dashed:true}
-    ],
-    stubs:[{from:'R7',dir:'right',text:dest,len:120}],
-    annotations:[
-      {x:664,y:140,text:'R6 advertises '+dest,anchor:'middle'},
-      {x:664,y:154,text:'into Area 1 — Type 3, cost '+adv,anchor:'middle'}
-    ],
-    clickable:['R4','R5'],
-    paths:paths, answer:osWinners(paths), interArea:true
-  };
-}
-
-/* ── Hard A: three areas, two ABRs. Both links are drawn independently, so
-   neither the link speed nor the advertised cost decides it on its own. */
-function genOspfHardTwoAbr(){
-  const dest=osBigNet();
-  const l1=osRandBw(), l2=osRandBw();
-  const adv1=ri(4,40), adv2=ri(4,40);
-  const paths=[
-    osTotal({via:'R4',hops:[osHop('R1&rarr;R4 (ABR)',l1),osAdvHop('R4',adv1)]}),
-    osTotal({via:'R5',hops:[osHop('R1&rarr;R5 (ABR)',l2),osAdvHop('R5',adv2)]})
-  ];
-  if(paths[0].total===paths[1].total) return null;
-  return {
-    kind:'hard', variant:'twoabr',
-    prompt:'<b>R1</b> is in <b>Area 1</b>. Which neighbour does it use to reach <span class="mono-inl">'+dest+'</span>, which lives in <b>Area 2</b>?',
-    note:'R4 and R5 are both ABRs into the backbone, and each advertises the destination into Area 1 with its own cost.',
-    canvasH:440,
-    areas:[
-      {x:14,y:8,w:272,h:424,label:'AREA 1'},
-      {x:298,y:8,w:232,h:424,label:'AREA 0'},
-      {x:542,y:8,w:250,h:424,label:'AREA 2'}
-    ],
-    boxes:[
-      {id:'R1',x:30,y:200,sub:'source'},
-      {id:'R4',x:160,y:60,sub:'ABR'},
-      {id:'R5',x:160,y:320,sub:'ABR'},
-      {id:'R6',x:350,y:60},
-      {id:'R7',x:350,y:320},
-      {id:'R8',x:580,y:200,sub:'ABR'}
-    ],
-    links:[
-      {a:'R1',b:'R4',bw:l1.label,dx:-16,dy:-8},
-      {a:'R1',b:'R5',bw:l2.label,dx:-16,dy:12},
-      {a:'R4',b:'R6',bw:'',dashed:true},
-      {a:'R5',b:'R7',bw:'',dashed:true},
-      {a:'R6',b:'R7',bw:'',dashed:true},
-      {a:'R6',b:'R8',bw:'',dashed:true},
-      {a:'R7',b:'R8',bw:'',dashed:true}
-    ],
-    stubs:[{from:'R8',dir:'right',text:dest,len:110}],
-    annotations:[
-      {x:206,y:46,text:'Type 3: '+dest+' cost '+adv1,anchor:'middle'},
-      {x:206,y:392,text:'Type 3: '+dest+' cost '+adv2,anchor:'middle'},
-      {x:414,y:230,text:'backbone — costs not visible',anchor:'middle'},
-      {x:414,y:244,text:'from Area 1',anchor:'middle'}
-    ],
-    clickable:['R4','R5'],
-    paths:paths, answer:osWinners(paths), interArea:true, multiArea:true
-  };
-}
-
-/* ── Hard B: the same prefix reachable intra-area and inter-area. Route type
-   is compared before metric, so the dearer intra-area route still wins —
-   which only teaches anything while the intra path really is the dearer one,
-   hence the check before returning. */
-function genOspfHardIntra(){
-  const dest=osBigNet();
-  const h1=osRandBw(), h2=osRandBw(), tail=osRandBw(), fast=osRandBw();
-  const adv=ri(8,22);
-  const paths=[
-    osTotal({via:'R8',kind:'intra-area (O)',hops:[
-      osHop('R1&rarr;R8',h1), osHop('R8&rarr;R9',h2), osHop('R9&rarr;'+osBare(dest),tail)]}),
-    osTotal({via:'R6',kind:'inter-area (O IA)',hops:[
-      osHop('R1&rarr;R6 (ABR)',fast), osAdvHop('R6',adv)]})
-  ];
-  if(paths[0].total<=paths[1].total) return null;
-  return {
-    kind:'hard', variant:'intra',
-    prompt:'<b>R1</b> is in <b>Area 1</b>. Which neighbour does it use to reach <span class="mono-inl">'+dest+'</span>?',
-    note:dest+' is dual-attached: R9 carries it inside Area 1, and it is also reachable through the backbone, which R6 advertises into Area 1 as a Type 3.',
-    canvasH:420,
-    areas:[{x:14,y:8,w:500,h:404,label:'AREA 1'},{x:526,y:8,w:266,h:404,label:'AREA 0'}],
-    boxes:[
-      {id:'R1',x:40,y:180,sub:'source'},
-      {id:'R8',x:200,y:310},
-      {id:'R9',x:370,y:310},
-      {id:'R6',x:430,y:60,sub:'ABR'},
-      {id:'R7',x:610,y:180}
-    ],
-    links:[
-      {a:'R1',b:'R8',bw:h1.label,dx:-6,dy:16},
-      {a:'R8',b:'R9',bw:h2.label,dy:18},
-      {a:'R1',b:'R6',bw:fast.label,dx:-10,dy:-8},
-      {a:'R6',b:'R7',bw:'',dashed:true}
-    ],
-    stubs:[{from:'R9',dir:'right',text:dest,bw:tail.label,len:110}],
-    annotations:[
-      {x:660,y:120,text:'R6 advertises '+dest,anchor:'middle'},
-      {x:660,y:134,text:'into Area 1 — Type 3, cost '+adv,anchor:'middle'}
-    ],
-    clickable:['R8','R6'],
-    paths:paths, answer:['R8'], interArea:true, trap:'intra'
-  };
-}
-
-/* ── Hard C: an "ip ospf cost" override on one of R1's own interfaces. The
-   diagram still shows bandwidth, which is now a lie — the only way to find
-   the real cost is the CLI, which is why this variant is Hard-only. The
-   override has to be what beats that path, so the round is rejected unless
-   the path would have won or tied without it. */
-function genOspfHardOverride(){
-  const dest=osNet();
-  const tail=osRandBw();
-  const names=shuffle(['R2','R4','R5']);
-  const ovr=ri(25,90);
-  const a1=osRandBw(), a2=osRandBw(), b1=osRandBw(), b2=osRandBw(), c1=osRandBw(), c2=osRandBw();
-  const paths=[
-    osTotal({via:names[0],hops:[osHop('R1&rarr;'+names[0],a1),osHop(names[0]+'&rarr;R3',a2),osHop('R3&rarr;'+osBare(dest),tail)]}),
-    osTotal({via:names[1],hops:[osHop('R1&rarr;'+names[1],b1,ovr),osHop(names[1]+'&rarr;R3',b2),osHop('R3&rarr;'+osBare(dest),tail)]}),
-    osTotal({via:names[2],hops:[osHop('R1&rarr;'+names[2],c1),osHop(names[2]+'&rarr;R3',c2),osHop('R3&rarr;'+osBare(dest),tail)]})
-  ];
-  const winners=osWinners(paths);
-  if(winners.length!==1 || winners[0]===names[1]) return null;
-  const withoutOverride=osCost(b1)+paths[1].hops[1].cost+paths[1].hops[2].cost;
-  if(withoutOverride>Math.min(paths[0].total,paths[2].total)) return null;
-  return {
-    kind:'hard', variant:'override',
-    prompt:'Which neighbour does <b>R1</b> use to reach <span class="mono-inl">'+dest+'</span>?',
-    canvasH:390,
-    boxes:[
-      {id:'R1',x:150,y:168,sub:'source'},
-      {id:names[0],x:360,y:24},
-      {id:names[1],x:360,y:168},
-      {id:names[2],x:360,y:300},
-      {id:'R3',x:590,y:168}
-    ],
-    links:[
-      {a:'R1',b:names[0],bw:a1.label,dx:-14,dy:-10},
-      {a:names[0],b:'R3',bw:a2.label,dx:14,dy:-10},
-      {a:'R1',b:names[1],bw:b1.label,dy:-9},
-      {a:names[1],b:'R3',bw:b2.label,dy:-9},
-      {a:'R1',b:names[2],bw:c1.label,dx:-14,dy:14},
-      {a:names[2],b:'R3',bw:c2.label,dx:14,dy:14}
-    ],
-    stubs:[{from:'R3',dir:'right',text:dest,bw:tail.label}],
-    clickable:names,
-    paths:paths, answer:winners, trap:'override',
-    ovr:{neighbour:names[1], cost:ovr}
-  };
-}
-
-function genOspf(diff){
-  if(diff==='easy') return osBuild(genOspfEasy);
-  if(diff==='medium') return osBuild(genOspfMedium);
-  return osBuild(choice([genOspfHardTwoAbr,genOspfHardIntra,genOspfHardOverride]));
 }
 
 /* ─── Generators: Longest Prefix Match ─────────────────────────── */
@@ -2176,399 +1820,6 @@ function genRoute(diff){
   return {title,goal,note,addr,reqs};
 }
 
-/* ── OSPF Cost: diagram ──
-   Hand-laid-out and view-only, like the summaries topics' network diagram
-   (summTopoHtml) rather than the IP Routing lab's free-drag canvas — the
-   shape never varies within a variant, so there is nothing to drag and no
-   port maths to run. Routers are the same .dev/.router boxes either way, and
-   .cable lines need their own inline pointer-events:none for the same reason
-   summTopoHtml's do: the class hard-codes pointer-events:stroke, which would
-   otherwise give every line a "looks deletable" hover. */
-const OS_BOX_W=92, OS_BOX_H=44;
-function osCtr(b){ return [b.x+OS_BOX_W/2, b.y+OS_BOX_H/2]; }
-function osBoxOf(d,id){ return d.boxes.find(function(b){ return b.id===id; }); }
-
-function osDiagramHtml(d){
-  let svg='', html='';
-
-  (d.areas||[]).forEach(function(a){
-    svg+='<rect x="'+a.x+'" y="'+a.y+'" width="'+a.w+'" height="'+a.h+'" rx="10" '+
-      'fill="var(--surface)" fill-opacity=".35" stroke="var(--border-m)" stroke-width="1.5" stroke-dasharray="6 5"></rect>'+
-      '<text x="'+(a.x+12)+'" y="'+(a.y+20)+'" font-size="11" font-family="var(--font)" '+
-      'letter-spacing="1.5" fill="var(--text-t)">'+a.label+'</text>';
-  });
-
-  d.links.forEach(function(l){
-    const A=osCtr(osBoxOf(d,l.a)), B=osCtr(osBoxOf(d,l.b));
-    svg+='<line x1="'+A[0]+'" y1="'+A[1]+'" x2="'+B[0]+'" y2="'+B[1]+'" class="cable" '+
-      'style="pointer-events:none'+(l.dashed?';stroke-dasharray:6 5':'')+'"></line>';
-    if(l.bw){
-      svg+='<text x="'+((A[0]+B[0])/2+(l.dx||0))+'" y="'+((A[1]+B[1])/2+(l.dy||0))+'" '+
-        'text-anchor="middle" font-size="11" font-family="var(--font)" fill="var(--text-s)">'+l.bw+'</text>';
-    }
-  });
-
-  /* The label starts just clear of the device box and runs outward. Anchoring
-     it at the far end of the line instead makes long prefixes run back
-     underneath the box, which paints over them. */
-  (d.stubs||[]).forEach(function(st){
-    const b=osBoxOf(d,st.from), c=osCtr(b), len=st.len||150, left=st.dir==='left';
-    const x2 = left ? c[0]-len : c[0]+len;
-    const tx = left ? c[0]-OS_BOX_W/2-10 : c[0]+OS_BOX_W/2+10;
-    svg+='<line x1="'+c[0]+'" y1="'+c[1]+'" x2="'+x2+'" y2="'+c[1]+'" class="cable" style="pointer-events:none"></line>'+
-      '<text x="'+tx+'" y="'+(c[1]-10)+'" text-anchor="'+(left?'end':'start')+'" font-size="12" '+
-      'font-family="var(--mono)" fill="var(--text)">'+st.text+'</text>';
-    if(st.bw){
-      svg+='<text x="'+((tx+x2)/2)+'" y="'+(c[1]+18)+'" text-anchor="middle" font-size="11" '+
-        'font-family="var(--font)" fill="var(--text-s)">'+st.bw+'</text>';
-    }
-  });
-
-  (d.annotations||[]).forEach(function(a){
-    svg+='<text x="'+a.x+'" y="'+a.y+'" text-anchor="'+(a.anchor||'start')+'" font-size="10.5" '+
-      'font-family="var(--font)" fill="var(--text-t)">'+a.text+'</text>';
-  });
-
-  d.boxes.forEach(function(b){
-    const can=d.clickable.indexOf(b.id)>=0;
-    const picked=osPicked.indexOf(b.id)>=0, isAns=d.answer.indexOf(b.id)>=0;
-    let cls='dev router';
-    if(can&&picked) cls+= state.done ? (isAns?' dev-ok':' dev-bad') : ' q-sel';
-    if(state.done&&isAns&&!picked) cls+=' dev-ok';
-    html+='<div class="'+cls+'" style="left:'+b.x+'px;top:'+b.y+'px;width:'+OS_BOX_W+'px;height:'+OS_BOX_H+'px;'+
-      (can?'cursor:pointer':'cursor:default')+'"'+(can?' onclick="osPick(\''+b.id+'\')"':'')+'>'+
-      '<div class="dev-name">'+b.id+'</div>'+(b.sub?'<div class="dev-sub">'+b.sub+'</div>':'')+'</div>';
-  });
-
-  return '<div class="lab-card">'+
-    '<div class="lab-toolbar"><div class="legend"><span class="lg"><i class="lgdot lg-acc"></i>next hop</span></div></div>'+
-    '<div class="lab-canvas" style="height:'+d.canvasH+'px">'+
-      '<svg style="position:absolute;inset:0;width:100%;height:100%">'+svg+'</svg>'+
-      '<div style="position:absolute;inset:0">'+html+'</div>'+
-    '</div>'+
-    '<div class="lab-hint" id="os-hint">'+osHintText(d)+'</div></div>';
-}
-function osHintText(d){
-  if(state.done) return 'Green = the path OSPF installs.';
-  return 'Click the neighbour R1 forwards through'+(d.ecmp?' — pick every neighbour that ties.':'.');
-}
-
-/* ── Working table: one row per candidate path, a graded total, an Explain
-   slot that fills in once the round is graded, and an optional row of
-   per-hop boxes that are never scored (the same opt-in, persisted scratch
-   idea as Longest Match's binary rows, key ne-ospf-work). */
-function osWorkShown(){
-  try{ return localStorage.getItem('ne-ospf-work')!=='0'; }catch(e){ return true; }
-}
-function osToggleWork(){
-  try{ localStorage.setItem('ne-ospf-work', osWorkShown()?'0':'1'); }catch(e){}
-  osApplyWorkPref();
-}
-function osApplyWorkPref(){
-  const shown=osWorkShown(), btn=document.getElementById('os-work-btn');
-  document.querySelectorAll('.os-work-row').forEach(function(r){ r.style.display=shown?'':'none'; });
-  if(btn){ btn.classList.toggle('collapsed',!shown); btn.setAttribute('aria-expanded',String(shown)); }
-}
-
-/* Adds up whatever the learner typed into that path's hop boxes and shows it
-   as a running sum. It is a calculator, not a hint: it totals *their*
-   figures, right or wrong, so working out each hop's cost is still the
-   exercise — and it deliberately doesn't fill the Total box in for them,
-   since re-entering the number is the last chance to notice a mistyped hop.
-   Dimmed until every hop has a value, so a partial sum can't be mistaken
-   for a finished one. */
-function osSumWork(i){
-  const d=state.data, out=document.getElementById('os-sum-'+i);
-  if(!d||!d.paths[i]||!out) return;
-  const vals=[];
-  d.paths[i].hops.forEach(function(h,j){
-    const el=document.getElementById('os-hop-'+i+'-'+j);
-    const v=el?el.value.trim():'';
-    if(v!==''&&!isNaN(+v)) vals.push(+v);
-  });
-  const sum=vals.reduce(function(a,b){ return a+b; },0);
-  out.innerHTML = vals.length
-    ? (vals.length>1 ? vals.join(' + ')+' = <b>'+sum+'</b>' : '<b>'+sum+'</b>')
-    : '&mdash;';
-  out.style.opacity = vals.length===d.paths[i].hops.length ? '1' : '.55';
-}
-
-function osTableHtml(d){
-  let rows='';
-  d.paths.forEach(function(p,i){
-    const hops=p.hops.map(function(h,j){
-      return '<div style="flex:0 0 auto;background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:7px 9px">'+
-        '<div style="font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--text-t);margin-bottom:4px">'+h.lbl+'</div>'+
-        '<div style="display:flex;align-items:center;gap:7px">'+
-          '<span style="font-size:11.5px;color:var(--text-s);min-width:62px">'+h.bw+'</span>'+
-          '<input class="vm-inp" style="width:50px" id="os-hop-'+i+'-'+j+'" autocomplete="off" spellcheck="false" '+
-            'placeholder="?" oninput="osSumWork('+i+')">'+
-        '</div></div>';
-    }).join('')+
-    '<div style="flex:0 0 auto;display:flex;align-items:center;gap:9px;padding:7px 11px;'+
-      'border:1px dashed var(--border-m);border-radius:var(--r);background:var(--surface)">'+
-      '<span style="font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--text-t)">Your total</span>'+
-      '<span id="os-sum-'+i+'" style="font-family:var(--mono);font-size:13px;color:var(--text)">&mdash;</span>'+
-    '</div>';
-    rows+='<tr id="os-row-'+i+'">'+
-        '<td><b>via '+p.via+'</b>'+(p.kind?'<div style="font-size:11px;color:var(--text-t);margin-top:2px">'+p.kind+'</div>':'')+'</td>'+
-        '<td><input class="vm-inp" id="os-tot-'+i+'" autocomplete="off" spellcheck="false" placeholder="total"></td>'+
-        '<td id="os-verdict-'+i+'" style="font-size:12px"></td>'+
-      '</tr>'+
-      '<tr><td colspan="3" style="padding:0" id="os-foot-'+i+'"></td></tr>'+
-      '<tr class="os-work-row"><td colspan="3" style="padding:0">'+
-        '<div style="display:flex;gap:8px;flex-wrap:wrap;padding:10px 14px;background:var(--surface-s)">'+hops+'</div>'+
-      '</td></tr>';
-  });
-  return '<button type="button" class="qlbl sec-toggle" id="os-work-btn" style="margin-top:1rem" '+
-      'aria-expanded="true" onclick="osToggleWork()">Per-hop working'+
-      '<svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></button>'+
-    '<table class="rt-table" style="margin-top:.35rem">'+
-      '<tr><th style="width:130px">Path</th><th style="width:130px">Total cost</th><th></th></tr>'+rows+
-    '</table>';
-}
-
-/* ── Read-only CLI, Hard only ──
-   Four show commands against R1, no config mode: there is nothing here to
-   fix or break, it is a lookup surface. It exists because the Hard variants
-   can hide things the diagram cannot show — an "ip ospf cost" override makes
-   the bandwidth on the picture a lie, and the only way to find that out is
-   to look. Every line of output is generated from the scenario data, never
-   written per-round, so the CLI and the diagram cannot drift apart. */
-const OS_CMDS=[
-  'show ip ospf interface',
-  'show ip protocols',
-  'show run | section ospf',
-  'show interfaces'
-];
-function osIfaceName(i){ return 'Gi0/'+i; }
-function osIfaceRows(d){
-  /* R1's own interfaces, one per candidate path, in the order the paths are
-     listed — the override (if any) lands on whichever one the generator
-     marked, so the CLI agrees with the arithmetic by construction. */
-  return d.paths.map(function(p,i){
-    const h=p.hops[0];
-    return {name:osIfaceName(i), neighbour:p.via, bw:h.bw, cost:h.cost, override:!!h.override};
-  });
-}
-function osCliRun(cmd){
-  const d=state.data, t=cmd.trim().toLowerCase().replace(/\s+/g,' ');
-  if(!t) return '';
-  if(t==='?'||t==='help') return OS_CMDS.map(function(c){ return '  '+c; }).join('\n');
-  const ifs=osIfaceRows(d);
-
-  if(t.indexOf('show ip ospf int')===0){
-    return ifs.map(function(f){
-      return f.name+' is up, line protocol is up\n'+
-        '  Internet Address, Area '+(d.areas?1:0)+'\n'+
-        '  Process ID 1, Router ID 1.1.1.1, Network Type BROADCAST, Cost: '+f.cost+
-        (f.override?'   <-- set with "ip ospf cost"':'')+'\n'+
-        '  Neighbor Count is 1, Adjacent neighbor count is 1 ('+f.neighbour+')';
-    }).join('\n');
-  }
-  if(t.indexOf('show ip prot')===0){
-    return 'Routing Protocol is "ospf 1"\n'+
-      '  Router ID 1.1.1.1\n'+
-      '  Number of areas in this router is 1\n'+
-      '  Reference bandwidth unit is 100 mbps\n'+
-      '  Routing Information Sources:\n'+
-      ifs.map(function(f){ return '    '+f.neighbour+'   (via '+f.name+')'; }).join('\n');
-  }
-  if(t.indexOf('show run')===0){
-    return ifs.map(function(f){
-      return 'interface '+f.name+'\n description to '+f.neighbour+
-        (f.override?'\n ip ospf cost '+f.cost:'')+'\n!';
-    }).join('\n')+'\nrouter ospf 1\n router-id 1.1.1.1\n!';
-  }
-  if(t.indexOf('show int')===0){
-    return ifs.map(function(f){
-      return f.name+' is up, line protocol is up\n  BW '+f.bw.replace(' Kbps','').replace(' Mbps','')+
-        ' ('+f.bw+'), DLY 100 usec';
-    }).join('\n');
-  }
-  return '% Unknown command — try one of: '+OS_CMDS.join(', ');
-}
-let osCliLog=[];
-function osCliHtml(){
-  return '<div class="qlbl" style="margin-top:1rem">R1 CLI</div>'+
-    '<div class="cli-note" style="margin-bottom:.5rem">Read-only. Available: '+
-      OS_CMDS.map(function(c){ return '<span class="mono-inl">'+c+'</span>'; }).join(' &middot; ')+'</div>'+
-    '<div class="term"><div class="term-log" id="os-term-log"></div>'+
-    '<div class="term-inrow"><span class="term-prompt">R1#</span>'+
-    '<input class="term-in" id="os-term-in" autocomplete="off" spellcheck="false"></div></div>';
-}
-function osRenderTerm(){
-  const log=document.getElementById('os-term-log');
-  if(!log) return;
-  /* One .tl div per entry, exactly as rlRenderTerm does — .term-log itself
-     has no white-space rule, the pre-wrap lives on `.term-log .tl`, so
-     joining with newlines into the container collapses every command's
-     multi-line output onto a single line. */
-  log.innerHTML=osCliLog.slice(-14).map(function(l){
-    return '<div class="tl'+(l.charAt(0)==='%'?' terr':'')+'">'+rlEsc(l)+'</div>';
-  }).join('');
-  log.scrollTop=log.scrollHeight;
-}
-/* Tab-completion keyword tree, walked by the shared LabShared.tabComplete —
-   the same one RL_KW feeds for the IP Routing CLI. Only the show commands
-   this terminal actually answers are in it, so tabbing through it doubles as
-   a list of what's available. The "| section ospf" tail of "show run" isn't
-   a keyword: tabComplete returns the input untouched once it walks off the
-   tree, so typing the pipe by hand still works. */
-const OS_KW={
-  show:{ ip:{ ospf:{ interface:{} }, protocols:{} }, run:{}, interfaces:{} }
-};
-function osWireTerm(){
-  const input=document.getElementById('os-term-in');
-  if(!input) return;
-  input.addEventListener('keydown', function(e){
-    if(e.key==='Tab'){
-      e.preventDefault();
-      input.value=LabShared.tabComplete(OS_KW, input.value, function(cands){
-        osCliLog.push(cands.join('   '));
-        osRenderTerm();
-      });
-      return;
-    }
-    if(e.key!=='Enter') return;
-    const cmd=input.value;
-    osCliLog.push('R1# '+cmd);
-    const out=osCliRun(cmd);
-    if(out) osCliLog.push(out);
-    input.value='';
-    osRenderTerm();
-  });
-}
-
-function renderOspf(body,qip){
-  const d=state.data;
-  osPicked=[];
-  document.getElementById('qprompt').innerHTML=d.prompt;
-  document.getElementById('qspec').innerHTML = d.note ? '<div class="req-note">'+d.note+'</div>' : '';
-  qip.style.display='none';
-  osCliLog=[];
-  body.innerHTML=osDiagramHtml(d)+osTableHtml(d)+(d.kind==='hard'?osCliHtml():'');
-  osApplyWorkPref();
-  if(d.kind==='hard'){ osRenderTerm(); osWireTerm(); }
-  setBtns('mcq');
-}
-
-/* Only the diagram is redrawn after grading — rebuilding the whole body
-   would throw away the totals the learner just typed. */
-function osRedrawDiagram(){
-  const card=document.querySelector('#qbody .lab-card');
-  if(!card) return;
-  const tmp=document.createElement('div');
-  tmp.innerHTML=osDiagramHtml(state.data);
-  card.replaceWith(tmp.firstElementChild);
-}
-
-let osPicked=[];
-function osPick(id){
-  if(state.done) return;
-  const i=osPicked.indexOf(id);
-  if(i>=0) osPicked.splice(i,1); else osPicked.push(id);
-  osRedrawDiagram();
-}
-
-function osExplain(d,p,winCost){
-  const isWin=d.answer.indexOf(p.via)>=0;
-  let s='<div style="font-family:var(--mono);font-size:12.5px;margin-bottom:6px">'+
-    p.hops.map(function(h){
-      return h.lbl+' &middot; '+h.bw+' &rarr; <b>'+h.cost+'</b>'+(h.override?' (set by hand)':'');
-    }).join('<br>')+
-    '<br>'+p.hops.map(function(h){ return h.cost; }).join(' + ')+' = <b>'+p.total+'</b></div>';
-
-  if(isWin){
-    if(d.trap==='intra'){
-      const other=d.paths.filter(function(x){ return d.answer.indexOf(x.via)<0; })[0];
-      s+='Wins at cost '+p.total+' — <b>even though via '+other.via+' totals only '+other.total+'</b>. '+
-        'OSPF compares <b>route type before metric</b>: an intra-area (O) route always beats an inter-area '+
-        '(O IA) route to the same prefix, whatever the costs. Cost only breaks ties <i>within</i> one route type.';
-    } else if(d.ecmp&&d.answer.length>1){
-      s+='Lowest cost — and it ties with <b>via '+d.answer.filter(function(a){ return a!==p.via; }).join(', via ')+
-        '</b>, so OSPF installs both and load-balances (up to 4 equal-cost paths).';
-    } else {
-      s+='Lowest total cost, so this is the path SPF installs.';
-    }
-    if(d.multiArea){
-      s+=' With two ABRs the faster first hop does not settle it: add <b>your cost to reach each ABR</b> to the '+
-        'cost <b>that ABR advertised</b>, then compare the sums.';
-    } else if(d.interArea&&d.trap!=='intra'){
-      s+=' The cost across the area boundary is not recalculated: you add <b>your cost to the ABR</b> to the cost '+
-        '<b>the ABR advertised</b> in its Type 3 LSA.';
-    }
-  } else if(p.total<winCost){
-    s+='Cheaper on paper — '+p.total+' against '+winCost+' — and it <b>still loses</b>. It is an inter-area '+
-      '(O IA) route to a prefix R1 can already reach inside its own area, and route type is compared before cost.';
-  } else {
-    s+='Loses to <b>via '+d.answer[0]+'</b> at cost '+winCost+'.';
-    if(d.multiArea) s+=' The quicker link into '+p.via+' does not make up for the higher cost '+p.via+' advertised.';
-    if(p.hops[0].override) s+=' Its first hop carries an <b>ip ospf cost</b> override, so the bandwidth on the '+
-      'diagram never applied — <span class="mono-inl">show ip ospf interface</span> would have shown it.';
-  }
-  return s;
-}
-
-/* Grading. The winner is d.answer, never min(total) — the intra-vs-inter
-   variant is won by the dearer path on purpose. Points come from the pick
-   alone, the same as the other pick-one topics; the typed totals are
-   reported as feedback but never scored, so this stays a decision drill
-   rather than an arithmetic test. */
-function osGrade(reveal){
-  const d=state.data;
-  /* Set before the diagram is redrawn: osDiagramHtml paints the correct/wrong
-     router colours off state.done, and finishRound() only sets it at the end. */
-  state.done=true;
-  const winCost=d.paths.filter(function(p){ return d.answer.indexOf(p.via)>=0; })[0].total;
-  const want=d.answer.slice().sort().join(','), got=osPicked.slice().sort().join(',');
-  const win = !reveal && want===got;
-  let totalsRight=0;
-
-  d.paths.forEach(function(p,i){
-    const inp=document.getElementById('os-tot-'+i);
-    const val=(inp&&inp.value||'').trim();
-    const ok = val!=='' && +val===p.total;
-    if(ok) totalsRight++;
-    const row=document.getElementById('os-row-'+i);
-    if(row) row.style.background = d.answer.indexOf(p.via)>=0 ? 'var(--ok-bg)' : '';
-    const v=document.getElementById('os-verdict-'+i);
-    if(v) v.innerHTML = reveal
-      ? '<span style="color:var(--warn-text)">cost '+p.total+'</span>'
-      : (ok ? '<span style="color:var(--ok-text)">&#10003; '+p.total+'</span>'
-            : '<span style="color:var(--err-text)">&#10007; '+(val===''?'&mdash;':rlEsc(val))+' &rarr; '+p.total+'</span>');
-    const foot=document.getElementById('os-foot-'+i);
-    if(foot) foot.innerHTML='<div style="padding:0 14px 12px">'+
-      '<button class="expl-btn" onclick="this.nextElementSibling.classList.toggle(\'open\')">Explain</button>'+
-      '<div class="expl-box" style="margin-top:8px;padding-top:0;border-top:none">'+osExplain(d,p,winCost)+'</div></div>';
-  });
-
-  osRedrawDiagram();
-  const hint=document.getElementById('os-hint');
-  if(hint) hint.textContent='Green = the path OSPF installs.';
-
-  const pts = win ? POINTS[state.diff] : 0;
-  state.score+=pts;
-  state.streak = win ? state.streak+1 : 0;
-  state.round++;
-  const fb=document.getElementById('fb');
-  fb.style.display='block';
-  const answerTxt='<b>via '+d.answer.join(' and via ')+'</b> at cost '+winCost;
-  const totalsTxt=' Totals: '+totalsRight+'/'+d.paths.length+'.';
-  if(reveal){
-    fb.className='fbanner warn';
-    fb.innerHTML='Answer: '+answerTxt+'.'+totalsTxt;
-  } else if(win){
-    fb.className='fbanner ok';
-    fb.innerHTML='Correct — '+answerTxt+'. +'+pts+' pts. Streak: '+state.streak+totalsTxt;
-  } else {
-    fb.className='fbanner err';
-    fb.innerHTML='Not quite — you picked <b>'+(osPicked.length?osPicked.join(', '):'nothing')+
-      '</b>. The path OSPF installs is '+answerTxt+'. +0 pts.'+totalsTxt;
-  }
-  finishRound();
-}
-
 /* ─── Round control ──────────────────────────────────────────────── */
 function loadQ(){
   state.done=false; state.selectedId=null;
@@ -2577,7 +1828,6 @@ function loadQ(){
   if(t==='lpm') state.data=genLPM(state.diff);
   else if(t==='ad') state.data=genAD(state.diff);
   else if(t==='read') state.data=genRead(state.diff);
-  else if(t==='ospf') state.data=genOspf(state.diff);
   else if(t==='route') state.data=genRoute(state.diff);
   else if(t==='summ') state.data=genSumm(state.diff);
   else if(t==='summ6') state.data=genSumm6(state.diff);
@@ -2623,7 +1873,6 @@ function render(){
   if(state.mode==='lpm') renderLPM(body,qip);
   else if(state.mode==='ad') renderAD(body,qip);
   else if(state.mode==='read') renderRead(body,qip);
-  else if(state.mode==='ospf') renderOspf(body,qip);
   else if(state.mode==='route') renderRoute(body,qip);
   else if(state.mode==='summ') renderSumm(body,qip);
   else if(state.mode==='summ6') renderSumm6(body,qip);
@@ -3424,8 +2673,6 @@ function checkAll(){
     return;
   }
 
-  if(mode==='ospf'){ osGrade(false); return; }
-
   if(mode==='route'){
     const d=state.data;
     const results=d.reqs.map(r=>r.test());
@@ -3504,8 +2751,6 @@ function revealAll(){
   const fb=document.getElementById('fb');
   fb.style.display='block'; fb.className='fbanner warn';
 
-  if(mode==='ospf'){ osGrade(true); return; }
-
   if(mode==='lpm' || mode==='ad'){
     const d=state.data;
     document.querySelectorAll('.rt-row').forEach(r=>r.classList.remove('pick','sel'));
@@ -3551,7 +2796,7 @@ function resetGame(){ state.score=0; state.round=1; state.streak=0; loadQ(); }
 
 function setTopic(t,btn){
   state.topic=t;
-  document.querySelectorAll('#tb-rand,#tb-read,#tb-lpm,#tb-ad,#tb-ospf,#tb-route,#tb-summ,#tb-summ6').forEach(b=>b.classList.remove('on'));
+  document.querySelectorAll('#tb-rand,#tb-read,#tb-lpm,#tb-ad,#tb-route,#tb-summ,#tb-summ6').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
   syncDiffButtons();
   loadQ();
@@ -3584,7 +2829,7 @@ function toggleTool(id){
   const cb=document.getElementById('tog-'+id);
   cb.checked=!cb.checked;
   document.getElementById('t-'+id).style.display=cb.checked?'':'none';
-  const tools=['ad','anat','lpm','cli','cost'];
+  const tools=['ad','anat','lpm','cli'];
   const any=tools.some(t=>document.getElementById('tog-'+t).checked);
   document.getElementById('toolsec').style.display=any?'':'none';
   saveOptionsState();
