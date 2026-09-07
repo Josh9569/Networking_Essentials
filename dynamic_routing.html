@@ -2855,12 +2855,18 @@ function rpRenderCanvas(){
       const arm=document.createElementNS('http://www.w3.org/2000/svg','line');
       arm.setAttribute('x1',x); arm.setAttribute('y1',yTop);
       arm.setAttribute('x2',x); arm.setAttribute('y2',yEnd);
-      arm.setAttribute('class','cable'); arm.setAttribute('pointer-events','none');
+      /* Inline style, NOT setAttribute('pointer-events',...): that makes a
+         presentation attribute, which loses to any CSS rule, and .cable
+         hard-codes pointer-events:stroke plus a red :hover and a pointer
+         cursor. A loopback stub is not clickable, so it must not look it.
+         Inline style beats the class regardless of specificity — the same
+         fix summTopoHtml and osDiagramHtml already use. */
+      arm.setAttribute('class','cable'); arm.style.pointerEvents='none';
       svg.appendChild(arm);
       const bar=document.createElementNS('http://www.w3.org/2000/svg','line');
       bar.setAttribute('x1',x-16); bar.setAttribute('y1',yEnd);
       bar.setAttribute('x2',x+16); bar.setAttribute('y2',yEnd);
-      bar.setAttribute('class','cable'); bar.setAttribute('pointer-events','none');
+      bar.setAttribute('class','cable'); bar.style.pointerEvents='none';
       svg.appendChild(bar);
       const tx=document.createElementNS('http://www.w3.org/2000/svg','text');
       tx.setAttribute('x',x); tx.setAttribute('y',yEnd-7);
