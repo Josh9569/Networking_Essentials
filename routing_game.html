@@ -8,6 +8,7 @@
 <script src="theme.js"></script>
 <script src="custom-theme.js"></script>
 <script src="options.js"></script>
+<script src="answer-keys.js"></script>
 <script src="lab-shared.js"></script>
 </head>
 <body>
@@ -65,8 +66,8 @@
   <div id="qbody"></div>
 
   <div class="actrow">
-    <button class="btn btn-p" id="chkbtn" onclick="checkAll()">Check Answers</button>
-    <button class="btn btn-s" id="revbtn" onclick="revealAll()">Reveal All</button>
+    <button class="btn btn-p" id="chkbtn" onclick="checkAll()">Submit</button>
+    <button class="btn btn-s" id="revbtn" onclick="revealAll()">Skip</button>
     <button class="btn btn-s" id="nxtbtn" onclick="nextQ()" style="display:none">Next Question &#8594;</button>
     <button class="btn btn-d" onclick="resetGame()">Reset</button>
 
@@ -569,7 +570,7 @@ function renderSumm(body,qip){
         <div class="ahint" id="h-ans"></div>
       </div>`;
     summBuildBits();
-    setBtns('text');
+    setBtns();
     return;
   }
   if(d.kind==='medium'){
@@ -582,7 +583,7 @@ function renderSumm(body,qip){
     body.innerHTML=`${summTopoHtml('medium',d,false)}${topo}${summBitsToolHtml()}${summRouteFieldsHtml(d.routes,'ip route <network> <mask> <next-hop>')}`;
     summBuildBits();
     summTopoFit();
-    setBtns('text');
+    setBtns();
     return;
   }
   document.getElementById('qprompt').innerHTML=`ISP, HQ, and BRANCH are chained together. Configure a <strong>summary</strong> static route on ISP for everything behind HQ, a <strong>default</strong> route on HQ for the Internet, individual static routes on HQ for each of BRANCH's networks, and a <strong>default</strong> route on BRANCH for everything beyond it.`;
@@ -598,7 +599,7 @@ function renderSumm(body,qip){
   body.innerHTML=`${summTopoHtml('hard',d,false)}${topo}${summBitsToolHtml()}${summRouteFieldsHtml(d.routes,'ip route <network> <mask> <next-hop>')}`;
   summBuildBits();
   summTopoFit();
-  setBtns('text');
+  setBtns();
 }
 /* ── Interactive bit table (ported from binary_game.html's #bt-cells tool;
    ids prefixed sm- to avoid clashing with anything else in this file) ── */
@@ -1205,7 +1206,7 @@ function renderSumm6(body,qip){
         <input id="a-ans" placeholder="ipv6 route <prefix>/<len> <next-hop>" autocomplete="off" spellcheck="false">
         <div class="ahint" id="h-ans"></div>
       </div>`;
-    setBtns('text');
+    setBtns();
     return;
   }
   if(d.kind==='medium'){
@@ -1217,7 +1218,7 @@ function renderSumm6(body,qip){
       <div class="cli-block two-col-full">HQ: ${d.link.aText} &nbsp;&nbsp; ISP: ${d.link.bText}</div></div>`;
     body.innerHTML=`${summTopoHtml('medium',d,true)}${topo}${summRouteFieldsHtml(d.routes,'ipv6 route <prefix>/<len> <next-hop>')}`;
     summTopoFit();
-    setBtns('text');
+    setBtns();
     return;
   }
   document.getElementById('qprompt').innerHTML=`ISP, HQ, and BRANCH are chained together. Configure a <strong>summary</strong> static route on ISP for everything behind HQ, a <strong>default</strong> route on HQ for the Internet, individual static routes on HQ for each of BRANCH's networks, and a <strong>default</strong> route on BRANCH for everything beyond it.`;
@@ -1232,7 +1233,7 @@ function renderSumm6(body,qip){
     <div class="cli-block two-col-full">HQ: ${d.branchLink.aText} &nbsp;&nbsp; BRANCH: ${d.branchLink.bText}</div></div>`;
   body.innerHTML=`${summTopoHtml('hard',d,true)}${topo}${summRouteFieldsHtml(d.routes,'ipv6 route <prefix>/<len> <next-hop>')}`;
   summTopoFit();
-  setBtns('text');
+  setBtns();
 }
 
 /* Grading for both summary topics — single binary right/wrong answer (no
@@ -1841,12 +1842,9 @@ function updateChips(){
   document.getElementById('str').textContent=state.streak;
 }
 
-function setBtns(mode){
+function setBtns(){
   const chk=document.getElementById('chkbtn'), rev=document.getElementById('revbtn'), nxt=document.getElementById('nxtbtn');
   nxt.style.display='none';
-  if(mode==='mcq'){ chk.textContent='Submit Answer'; rev.textContent='Skip'; }
-  else if(mode==='route'){ chk.textContent='Check Requirements'; rev.textContent='Reveal All'; }
-  else { chk.textContent='Check Answers'; rev.textContent='Reveal All'; }
   chk.style.display=''; rev.style.display='';
   document.getElementById('fb').style.display='none';
 }
@@ -1954,7 +1952,7 @@ function renderLPM(body,qip){
     + rtTable([{label:'Src',width:'10%'},{label:'Network',width:'27%'},{label:'Path',width:'63%'}], rows, 'table-layout:fixed');
   wireBinSingle('lpmbin-dest');
   d.entries.forEach(e=>wireBinSingle('lpmbin-'+e.id));
-  setBtns('mcq');
+  setBtns();
 }
 function lpmToggleBinRows(){
   const btn=document.getElementById('lpm-bin-btn');
@@ -2184,7 +2182,7 @@ function renderAD(body,qip){
       <td>${cliPath(e)}</td>
     </tr>`).join('');
   body.innerHTML = rtTable(['Source','Network','AD / Metric','Path'], rows);
-  setBtns('mcq');
+  setBtns();
 }
 function pickAD(id){
   if(state.done) return;
@@ -2229,7 +2227,7 @@ function renderRead(body,qip){
     grid.appendChild(div);
   });
   body.appendChild(grid);
-  setBtns('text');
+  setBtns();
 }
 
 /* ─── Render: IP Routing Lab ──────────────────────────────────────
@@ -2297,7 +2295,7 @@ function renderRoute(body,qip){
     onPortClick: (id,i)=>rlOnPortClick(id,i)
   });
   document.getElementById('rl-cable-svg').addEventListener('click', rlOnCableClick);
-  setBtns('route');
+  setBtns();
   rlRenderCanvas();
   rlRenderReqs(null);
 }
@@ -2843,6 +2841,9 @@ document.addEventListener('click', e=>{
 });
 
 loadQ();
+
+/* Enter submits, then Enter moves on — see answer-keys.js. */
+AnswerKeys.wire({answers:'.afield input', submit:'checkAll'});
 </script>
 </body>
 </html>

@@ -8,6 +8,7 @@
 <script src="theme.js"></script>
 <script src="custom-theme.js"></script>
 <script src="options.js"></script>
+<script src="answer-keys.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -53,10 +54,9 @@
   </div>
 
   <div class="actrow">
-    <button class="btn btn-p" id="chkbtn" onclick="checkAnswer()">Check Answer</button>
+    <button class="btn btn-p" id="chkbtn" onclick="checkAnswer()">Submit</button>
     <button class="btn btn-s" id="skipbtn" onclick="skipQ()">Skip</button>
     <button class="btn btn-s" id="nxtbtn" onclick="nextQ()" style="display:none">Next &rarr;</button>
-    <button class="btn btn-d" onclick="resetGame()">Reset</button>
 
     <div class="opt-wrap">
       <button class="opt-btn" id="opt-btn" onclick="toggleOpts()">
@@ -434,7 +434,6 @@ function skipQ(){
 }
 
 function nextQ(){ loadQ(); }
-function resetGame(){ score=0;rnd=1;streak=0;loadQ(); }
 
 /* ═══ Options ═════════════════════════════════════════════════════════════ */
 
@@ -505,11 +504,6 @@ function buildTypeTable(){
 /* ═══ Keyboard ════════════════════════════════════════════════════════════ */
 
 document.addEventListener('keydown',e=>{
-  if(e.key==='Enter'){
-    if(!answered){
-      if(Q&&Q.qt!=='identify') checkAnswer();
-    } else nextQ();
-  }
   if(e.key==='Escape'){
     document.getElementById('opt-menu').classList.remove('open');
     document.getElementById('opt-btn').classList.remove('open');
@@ -519,6 +513,9 @@ document.addEventListener('keydown',e=>{
 /* ═══ Init ════════════════════════════════════════════════════════════════ */
 buildTypeTable();
 loadQ();
+
+/* Enter submits, then Enter moves on — see answer-keys.js. */
+AnswerKeys.wire({answers:'#ans-inp', submit:'checkAnswer'});
 </script>
 </body>
 </html>

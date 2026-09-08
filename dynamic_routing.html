@@ -8,6 +8,7 @@
 <script src="theme.js"></script>
 <script src="custom-theme.js"></script>
 <script src="options.js"></script>
+<script src="answer-keys.js"></script>
 <script src="lab-shared.js"></script>
 </head>
 <body>
@@ -64,7 +65,7 @@
   <div id="qbody"></div>
 
   <div class="actrow">
-    <button class="btn btn-p" id="chkbtn" onclick="checkAll()">Submit Answer</button>
+    <button class="btn btn-p" id="chkbtn" onclick="checkAll()">Submit</button>
     <button class="btn btn-s" id="revbtn" onclick="revealAll()">Skip</button>
     <button class="btn btn-s" id="nxtbtn" onclick="nextQ()" style="display:none">Next Question &#8594;</button>
     <button class="btn btn-d" onclick="resetGame()">Reset</button>
@@ -3314,7 +3315,6 @@ function updateChips(){
 function setBtns(mode){
   const chk=document.getElementById('chkbtn'), rev=document.getElementById('revbtn'), nxt=document.getElementById('nxtbtn');
   nxt.style.display='none';
-  chk.textContent='Submit Answer'; rev.textContent='Skip';
   chk.style.display=''; rev.style.display='';
   document.getElementById('fb').style.display='none';
 }
@@ -3410,6 +3410,9 @@ document.addEventListener('click', e=>{
 });
 
 loadQ();
+
+/* Enter submits, then Enter moves on — see answer-keys.js. */
+AnswerKeys.wire({});
 </script>
 </body>
 </html>

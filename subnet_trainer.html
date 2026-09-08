@@ -8,6 +8,7 @@
 <script src="theme.js"></script>
 <script src="custom-theme.js"></script>
 <script src="options.js"></script>
+<script src="answer-keys.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -48,8 +49,8 @@
   <div class="agrid" id="agrid"></div>
 
   <div class="actrow">
-    <button class="btn btn-p" id="chkbtn" onclick="checkAll()">Check Answers</button>
-    <button class="btn btn-s" id="revbtn" onclick="revealAll()">Reveal All</button>
+    <button class="btn btn-p" id="chkbtn" onclick="checkAll()">Submit</button>
+    <button class="btn btn-s" id="revbtn" onclick="revealAll()">Skip</button>
     <button class="btn btn-s" id="nxtbtn" onclick="nextQ()" style="display:none">Next Question →</button>
     <button class="btn btn-d" onclick="resetGame()">Reset</button>
 
@@ -694,10 +695,6 @@ function selectMnCol(i){
 
 /* ─── Keyboard ───────────────────────── */
 document.addEventListener('keydown',e=>{
-  if(e.key==='Enter' && document.activeElement.tagName !== 'INPUT' && !document.activeElement.classList.contains('cust-in-c')) { 
-    if(!done && cls !== 'custom') checkAll(); 
-    else if (done) nextQ(); 
-  }
   if(e.key==='Escape'){
     document.getElementById('opt-menu').classList.remove('open');
     document.getElementById('opt-btn').classList.remove('open');
@@ -708,6 +705,9 @@ document.addEventListener('keydown',e=>{
 buildMagicTool();
 applyMnOctetConstraints();  // disable octets invalid for default Class C
 loadQ();
+
+/* Enter submits, then Enter moves on — see answer-keys.js. */
+AnswerKeys.wire({answers:'.afield input', submit:'checkAll'});
 </script>
 </body>
 </html>
