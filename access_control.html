@@ -68,7 +68,7 @@
     <button class="btn btn-p" id="chkbtn" onclick="checkAll()">Submit</button>
     <button class="btn btn-s" id="revbtn" onclick="revealAll()">Skip</button>
     <button class="btn btn-s" id="nxtbtn" onclick="nextQ()" style="display:none">Next Question &#8594;</button>
-    <button class="btn btn-d" onclick="resetGame()">Reset</button>
+    <button class="btn btn-d" id="rstbtn" onclick="resetGame()">Reset</button>
 
     <div class="opt-wrap">
       <button class="opt-btn" id="opt-btn" onclick="toggleOpts()">
@@ -1745,10 +1745,17 @@ function updateChips(){
   document.getElementById('rnd').textContent=state.round;
   document.getElementById('str').textContent=state.streak;
 }
+/* Reset only earns its place when a round has enough state behind it that
+   clearing it by hand would be a chore — a lab you have cabled and
+   configured, or a grid of answer fields. On a one-click drill it is just
+   Skip with the score wiped, so it is hidden there. Kept per topic rather
+   than per page, because these pages mix both kinds. */
+const TOPIC_RESET={wild:false, match:false, place:false, lab:true};
 function setBtns(){
   const chk=document.getElementById('chkbtn'), rev=document.getElementById('revbtn'), nxt=document.getElementById('nxtbtn');
   nxt.style.display='none';
   chk.style.display=''; rev.style.display='';
+  document.getElementById('rstbtn').style.display=TOPIC_RESET[state.mode]?'':'none';
   document.getElementById('fb').style.display='none';
 }
 function render(){
