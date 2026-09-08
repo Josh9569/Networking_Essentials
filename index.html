@@ -1,232 +1,280 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Network Study Tools</title>
-<link rel="stylesheet" href="styles.css">
-<script src="theme.js"></script>
-<script src="custom-theme.js"></script>
-</head>
-<body class="index-page">
-<div class="wrap">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Network Study Tools</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="theme.js"></script>
+    <script src="custom-theme.js"></script>
+  </head>
+  <body class="index-page">
+    <div class="wrap">
+      <div class="site-header">
+        <div>
+          <div class="site-title">Network Study Tools</div>
+          <div class="site-sub">
+            Interactive practice games for networking fundamentals. Pick a topic
+            and start training.
+          </div>
+        </div>
+        <div class="hdr-right">
+          <a
+            class="gh-link"
+            href="https://github.com/Josh9569/Networking_Essentials"
+            target="_blank"
+            rel="noopener"
+            title="View source on GitHub"
+          >
+            <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+              <path
+                d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"
+              />
+            </svg>
+            <span>GitHub</span>
+          </a>
+          <div id="theme-toggle-slot"></div>
+        </div>
+      </div>
 
-  <div class="site-header">
-    <div>
-      <div class="site-title">Network Study Tools</div>
-      <div class="site-sub">Interactive practice games for networking fundamentals. Pick a topic and start training.</div>
+      <div class="card-grid">
+        <a href="subnet_trainer.html" class="game-card">
+          <div class="card-accent blue"></div>
+          <div class="card-body">
+            <div class="card-icon blue">IP/&#8203;CIDR</div>
+            <div class="card-title">Subnet Trainer</div>
+            <div class="card-desc">
+              Practice IPv4 subnetting with randomly generated addresses. Work
+              out subnet masks, network addresses, broadcast addresses, usable
+              hosts, and more.
+            </div>
+            <div class="card-tags">
+              <span class="tag">CIDR</span>
+              <span class="tag">IPv4</span>
+              <span class="tag">Subnetting</span>
+              <span class="tag">Wildcard</span>
+            </div>
+          </div>
+          <div class="card-footer">
+            <span class="play-label">Open trainer</span>
+            <span class="play-arrow">&#8594;</span>
+          </div>
+        </a>
+
+        <a href="binary_game.html" class="game-card">
+          <div class="card-accent green"></div>
+          <div class="card-body">
+            <div class="card-icon green">01</div>
+            <div class="card-title">Binary Trainer</div>
+            <div class="card-desc">
+              Convert between decimal and binary with timed rounds. Includes an
+              interactive bit table you can toggle to work through calculations
+              step by step.
+            </div>
+            <div class="card-tags">
+              <span class="tag">Binary</span>
+              <span class="tag">Decimal</span>
+              <span class="tag">Bit weights</span>
+              <span class="tag">8-bit</span>
+            </div>
+          </div>
+          <div class="card-footer">
+            <span class="play-label">Open trainer</span>
+            <span class="play-arrow">&#8594;</span>
+          </div>
+        </a>
+
+        <a href="vlsm_game.html" class="game-card">
+          <div class="card-accent purple"></div>
+          <div class="card-body">
+            <div class="card-icon purple">VLSM</div>
+            <div class="card-title">VLSM Trainer</div>
+            <div class="card-desc">
+              Practice Variable Length Subnet Masking. Given a parent network
+              and host requirements, allocate subnets of different sizes without
+              wasting address space.
+            </div>
+            <div class="card-tags">
+              <span class="tag">VLSM</span>
+              <span class="tag">Subnetting</span>
+              <span class="tag">IPv4</span>
+              <span class="tag">Address planning</span>
+            </div>
+          </div>
+          <div class="card-footer">
+            <span class="play-label">Open trainer</span>
+            <span class="play-arrow">&#8594;</span>
+          </div>
+        </a>
+
+        <a href="osi_game.html" class="game-card">
+          <div class="card-accent teal"></div>
+          <div class="card-body">
+            <div class="card-icon teal">OSI</div>
+            <div class="card-title">OSI / TCP-IP Trainer</div>
+            <div class="card-desc">
+              Match protocols and technologies to OSI or TCP/IP model layers, or
+              identify protocols from descriptions. Includes a full searchable
+              reference for every item.
+            </div>
+            <div class="card-tags">
+              <span class="tag">OSI model</span>
+              <span class="tag">TCP/IP</span>
+              <span class="tag">Protocols</span>
+              <span class="tag">Layers</span>
+            </div>
+          </div>
+          <div class="card-footer">
+            <span class="play-label">Open trainer</span>
+            <span class="play-arrow">&#8594;</span>
+          </div>
+        </a>
+
+        <a href="ipv6_game.html" class="game-card">
+          <div class="card-accent sky"></div>
+          <div class="card-body">
+            <div class="card-icon sky">IPv6</div>
+            <div class="card-title">IPv6 Trainer</div>
+            <div class="card-desc">
+              Expand and compress IPv6 addresses, and identify address types —
+              link-local, multicast, global unicast and more. Includes
+              compression rules and a type reference.
+            </div>
+            <div class="card-tags">
+              <span class="tag">IPv6</span>
+              <span class="tag">Expand</span>
+              <span class="tag">Compress</span>
+              <span class="tag">Address types</span>
+            </div>
+          </div>
+          <div class="card-footer">
+            <span class="play-label">Open trainer</span>
+            <span class="play-arrow">&#8594;</span>
+          </div>
+        </a>
+
+        <a href="hex_game.html" class="game-card">
+          <div class="card-accent purple"></div>
+          <div class="card-body">
+            <div class="card-icon purple">Hex</div>
+            <div class="card-title">Hex Conversion Trainer</div>
+            <div class="card-desc">
+              Practice converting between hexadecimal, decimal and binary for
+              nibbles, bytes and 16-bit words. Six conversion directions with a
+              hex reference table, bit place values, and a live converter tool.
+            </div>
+            <div class="card-tags">
+              <span class="tag">Hex</span>
+              <span class="tag">Binary</span>
+              <span class="tag">Decimal</span>
+              <span class="tag">Conversions</span>
+            </div>
+          </div>
+          <div class="card-footer">
+            <span class="play-label">Open trainer</span>
+            <span class="play-arrow">&#8594;</span>
+          </div>
+        </a>
+
+        <a href="switching_lab.html" class="game-card">
+          <div class="card-accent teal"></div>
+          <div class="card-body">
+            <div class="card-icon teal">L2</div>
+            <div class="card-title">Switching Lab</div>
+            <div class="card-desc">
+              Interactive Layer 2 lab — cable switches and PCs on a canvas, then
+              configure VLANs, trunks and EtherChannel through a port table or
+              IOS-style CLI. Includes STP root and blocking-port challenges plus
+              a free sandbox.
+            </div>
+            <div class="card-tags">
+              <span class="tag">VLANs</span>
+              <span class="tag">Trunking</span>
+              <span class="tag">EtherChannel</span>
+              <span class="tag">STP</span>
+              <span class="tag">CLI</span>
+            </div>
+          </div>
+          <div class="card-footer">
+            <span class="play-label">Open lab</span>
+            <span class="play-arrow">&#8594;</span>
+          </div>
+        </a>
+
+        <a href="dynamic_routing.html" class="game-card">
+          <div class="card-accent teal"></div>
+          <div class="card-body">
+            <div class="card-icon teal">DR</div>
+            <div class="card-title">Dynamic Routing Trainer</div>
+            <div class="card-desc">
+              Work out what OSPF and RIP decide, and why — link costs and
+              equal-cost paths, inter-area routes across ABRs, which LSA types
+              end up in which database, and hop counts that ignore bandwidth
+              entirely. Then build it: a RIP lab where you cable, address and
+              configure the routers and watch the routes converge.
+            </div>
+            <div class="card-tags">
+              <span class="tag">OSPF</span>
+              <span class="tag">Cost</span>
+              <span class="tag">LSAs</span>
+              <span class="tag">RIP</span>
+              <span class="tag">Lab</span>
+            </div>
+          </div>
+          <div class="card-footer">
+            <span class="play-label">Open trainer</span>
+            <span class="play-arrow">&#8594;</span>
+          </div>
+        </a>
+
+        <a href="access_control.html" class="game-card">
+          <div class="card-accent purple"></div>
+          <div class="card-body">
+            <div class="card-icon purple">ACL</div>
+            <div class="card-title">Access Control Trainer</div>
+            <div class="card-desc">
+              Standard IPv4 ACLs: wildcard mask math for a prefix, a single
+              host, or an odd range; reading an ACL for the entry that actually
+              decides a packet's fate (first match wins, not most specific); and
+              placing it on the right interface and direction — for a standard
+              ACL, as close to the destination as possible.
+            </div>
+            <div class="card-tags">
+              <span class="tag">ACLs</span>
+              <span class="tag">Wildcards</span>
+              <span class="tag">Security</span>
+              <span class="tag">Lab</span>
+            </div>
+          </div>
+          <div class="card-footer">
+            <span class="play-label">Open trainer</span>
+            <span class="play-arrow">&#8594;</span>
+          </div>
+        </a>
+
+        <a href="routing_game.html" class="game-card">
+          <div class="card-accent amber"></div>
+          <div class="card-body">
+            <div class="card-icon amber">RT</div>
+            <div class="card-title">Routing Table Trainer</div>
+            <div class="card-desc">
+              Practice reading and choosing routing table entries — longest
+              prefix match, administrative distance, converting IPs to binary to
+              find the best match, and building networks from a table entry.
+            </div>
+            <div class="card-tags">
+              <span class="tag">Longest Match</span>
+              <span class="tag">Admin Distance</span>
+              <span class="tag">Binary</span>
+              <span class="tag">Routing</span>
+            </div>
+          </div>
+          <div class="card-footer">
+            <span class="play-label">Open trainer</span>
+            <span class="play-arrow">&#8594;</span>
+          </div>
+        </a>
+      </div>
     </div>
-    <div class="hdr-right">
-      <a class="gh-link" href="https://github.com/Josh9569/Networking_Essentials" target="_blank" rel="noopener" title="View source on GitHub">
-        <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27s1.36.09 2 .27c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
-        <span>GitHub</span>
-      </a>
-      <div id="theme-toggle-slot"></div>
-    </div>
-  </div>
-
-  <div class="card-grid">
-
-    <a href="subnet_trainer.html" class="game-card">
-      <div class="card-accent blue"></div>
-      <div class="card-body">
-        <div class="card-icon blue">IP/&#8203;CIDR</div>
-        <div class="card-title">Subnet Trainer</div>
-        <div class="card-desc">Practice IPv4 subnetting with randomly generated addresses. Work out subnet masks, network addresses, broadcast addresses, usable hosts, and more.</div>
-        <div class="card-tags">
-          <span class="tag">CIDR</span>
-          <span class="tag">IPv4</span>
-          <span class="tag">Subnetting</span>
-          <span class="tag">Wildcard</span>
-        </div>
-      </div>
-      <div class="card-footer">
-        <span class="play-label">Open trainer</span>
-        <span class="play-arrow">&#8594;</span>
-      </div>
-    </a>
-
-    <a href="binary_game.html" class="game-card">
-      <div class="card-accent green"></div>
-      <div class="card-body">
-        <div class="card-icon green">01</div>
-        <div class="card-title">Binary Trainer</div>
-        <div class="card-desc">Convert between decimal and binary with timed rounds. Includes an interactive bit table you can toggle to work through calculations step by step.</div>
-        <div class="card-tags">
-          <span class="tag">Binary</span>
-          <span class="tag">Decimal</span>
-          <span class="tag">Bit weights</span>
-          <span class="tag">8-bit</span>
-        </div>
-      </div>
-      <div class="card-footer">
-        <span class="play-label">Open trainer</span>
-        <span class="play-arrow">&#8594;</span>
-      </div>
-    </a>
-
-
-    <a href="vlsm_game.html" class="game-card">
-      <div class="card-accent purple"></div>
-      <div class="card-body">
-        <div class="card-icon purple">VLSM</div>
-        <div class="card-title">VLSM Trainer</div>
-        <div class="card-desc">Practice Variable Length Subnet Masking. Given a parent network and host requirements, allocate subnets of different sizes without wasting address space.</div>
-        <div class="card-tags">
-          <span class="tag">VLSM</span>
-          <span class="tag">Subnetting</span>
-          <span class="tag">IPv4</span>
-          <span class="tag">Address planning</span>
-        </div>
-      </div>
-      <div class="card-footer">
-        <span class="play-label">Open trainer</span>
-        <span class="play-arrow">&#8594;</span>
-      </div>
-    </a>
-
-
-    <a href="osi_game.html" class="game-card">
-      <div class="card-accent teal"></div>
-      <div class="card-body">
-        <div class="card-icon teal">OSI</div>
-        <div class="card-title">OSI / TCP-IP Trainer</div>
-        <div class="card-desc">Match protocols and technologies to OSI or TCP/IP model layers, or identify protocols from descriptions. Includes a full searchable reference for every item.</div>
-        <div class="card-tags">
-          <span class="tag">OSI model</span>
-          <span class="tag">TCP/IP</span>
-          <span class="tag">Protocols</span>
-          <span class="tag">Layers</span>
-        </div>
-      </div>
-      <div class="card-footer">
-        <span class="play-label">Open trainer</span>
-        <span class="play-arrow">&#8594;</span>
-      </div>
-    </a>
-
-
-    <a href="ipv6_game.html" class="game-card">
-      <div class="card-accent sky"></div>
-      <div class="card-body">
-        <div class="card-icon sky">IPv6</div>
-        <div class="card-title">IPv6 Trainer</div>
-        <div class="card-desc">Expand and compress IPv6 addresses, and identify address types — link-local, multicast, global unicast and more. Includes compression rules and a type reference.</div>
-        <div class="card-tags">
-          <span class="tag">IPv6</span>
-          <span class="tag">Expand</span>
-          <span class="tag">Compress</span>
-          <span class="tag">Address types</span>
-        </div>
-      </div>
-      <div class="card-footer">
-        <span class="play-label">Open trainer</span>
-        <span class="play-arrow">&#8594;</span>
-      </div>
-    </a>
-
-
-    <a href="hex_game.html" class="game-card">
-      <div class="card-accent purple"></div>
-      <div class="card-body">
-        <div class="card-icon purple">Hex</div>
-        <div class="card-title">Hex Conversion Trainer</div>
-        <div class="card-desc">Practice converting between hexadecimal, decimal and binary for nibbles, bytes and 16-bit words. Six conversion directions with a hex reference table, bit place values, and a live converter tool.</div>
-        <div class="card-tags">
-          <span class="tag">Hex</span>
-          <span class="tag">Binary</span>
-          <span class="tag">Decimal</span>
-          <span class="tag">Conversions</span>
-        </div>
-      </div>
-      <div class="card-footer">
-        <span class="play-label">Open trainer</span>
-        <span class="play-arrow">&#8594;</span>
-      </div>
-    </a>
-
-
-    <a href="switching_lab.html" class="game-card">
-      <div class="card-accent teal"></div>
-      <div class="card-body">
-        <div class="card-icon teal">L2</div>
-        <div class="card-title">Switching Lab</div>
-        <div class="card-desc">Interactive Layer 2 lab — cable switches and PCs on a canvas, then configure VLANs, trunks and EtherChannel through a port table or IOS-style CLI. Includes STP root and blocking-port challenges plus a free sandbox.</div>
-        <div class="card-tags">
-          <span class="tag">VLANs</span>
-          <span class="tag">Trunking</span>
-          <span class="tag">EtherChannel</span>
-          <span class="tag">STP</span>
-          <span class="tag">CLI</span>
-        </div>
-      </div>
-      <div class="card-footer">
-        <span class="play-label">Open lab</span>
-        <span class="play-arrow">&#8594;</span>
-      </div>
-    </a>
-
-
-    <a href="dynamic_routing.html" class="game-card">
-      <div class="card-accent teal"></div>
-      <div class="card-body">
-        <div class="card-icon teal">DR</div>
-        <div class="card-title">Dynamic Routing Trainer</div>
-        <div class="card-desc">Work out what OSPF and RIP decide, and why — link costs and equal-cost paths, inter-area routes across ABRs, which LSA types end up in which database, and hop counts that ignore bandwidth entirely. Then build it: a RIP lab where you cable, address and configure the routers and watch the routes converge.</div>
-        <div class="card-tags">
-          <span class="tag">OSPF</span>
-          <span class="tag">Cost</span>
-          <span class="tag">LSAs</span>
-          <span class="tag">RIP</span>
-          <span class="tag">Lab</span>
-        </div>
-      </div>
-      <div class="card-footer">
-        <span class="play-label">Open trainer</span>
-        <span class="play-arrow">&#8594;</span>
-      </div>
-    </a>
-
-    <a href="access_control.html" class="game-card">
-      <div class="card-accent purple"></div>
-      <div class="card-body">
-        <div class="card-icon purple">ACL</div>
-        <div class="card-title">Access Control Trainer</div>
-        <div class="card-desc">Standard IPv4 access lists, from the wildcard maths up. Work out the mask for a prefix, a single host or an odd little range; read an ACL and pick the entry that actually decides a packet's fate, remembering that the first match wins and not the most specific one; and choose the interface and direction to apply it, which for a standard ACL means as close to the destination as you can get. The lab then follows Cisco's Lab 8A: build a numbered list, a named one, edit it in place by sequence number, and finish by locking down the vty lines so only the administrator can SSH in.</div>
-        <div class="card-tags">
-          <span class="tag">ACLs</span>
-          <span class="tag">Wildcards</span>
-          <span class="tag">Security</span>
-          <span class="tag">Lab</span>
-        </div>
-      </div>
-      <div class="card-footer">
-        <span class="play-label">Open trainer</span>
-        <span class="play-arrow">&#8594;</span>
-      </div>
-    </a>
-
-    <a href="routing_game.html" class="game-card">
-      <div class="card-accent amber"></div>
-      <div class="card-body">
-        <div class="card-icon amber">RT</div>
-        <div class="card-title">Routing Table Trainer</div>
-        <div class="card-desc">Practice reading and choosing routing table entries — longest prefix match, administrative distance, converting IPs to binary to find the best match, and building networks from a table entry.</div>
-        <div class="card-tags">
-          <span class="tag">Longest Match</span>
-          <span class="tag">Admin Distance</span>
-          <span class="tag">Binary</span>
-          <span class="tag">Routing</span>
-        </div>
-      </div>
-      <div class="card-footer">
-        <span class="play-label">Open trainer</span>
-        <span class="play-arrow">&#8594;</span>
-      </div>
-    </a>
-
-  </div>
-
-</div>
-</body>
+  </body>
 </html>
