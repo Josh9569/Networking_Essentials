@@ -8,6 +8,7 @@
 <script src="theme.js"></script>
 <script src="custom-theme.js"></script>
 <script src="options.js"></script>
+<script src="answer-keys.js"></script>
 <script src="lab-shared.js"></script>
 </head>
 <body>
@@ -168,10 +169,10 @@
   </div>
 
   <div class="actrow">
-    <button class="btn btn-p" id="chkbtn" onclick="checkAll()">Check Requirements</button>
+    <button class="btn btn-p" id="chkbtn" onclick="checkAll()">Submit</button>
     <button class="btn btn-s" id="skipbtn" onclick="skipQ()">Skip</button>
     <button class="btn btn-s" id="nxtbtn" onclick="nextQ()" style="display:none">Next Challenge &rarr;</button>
-    <button class="btn btn-d" onclick="resetGame()">Reset</button>
+    <button class="btn btn-d" id="rstbtn" onclick="resetGame()">Reset</button>
 
     <div class="opt-wrap">
       <button class="opt-btn" id="opt-btn" onclick="toggleOpts()">
@@ -499,7 +500,7 @@ function onPortClick(did,i){
   if(qclick==='port'&&d.type==='switch'){
     devices.forEach(x=>x.ports.forEach(p=>{ if(p._mark==='p-sel') p._mark=null; }));
     d.ports[i]._mark='p-sel'; qsel={did,pi:i};
-    setHint(`Selected ${d.name} ${d.ports[i].name} — press Submit Answer.`);
+    setHint(`Selected ${d.name} ${d.ports[i].name} — press Submit.`);
     render(); return;
   }
   if(qclick==='root'){ selectRootCand(did); return; }
@@ -525,7 +526,7 @@ function selectRootCand(did){
   const d=byId(did); if(d.type!=='switch') return;
   devices.forEach(x=>{ if(x._mark==='q-sel') x._mark=null; });
   d._mark='q-sel'; qsel={did};
-  setHint(`Selected ${d.name} — press Submit Answer.`);
+  setHint(`Selected ${d.name} — press Submit.`);
   render();
 }
 function onDevClick(did){
@@ -1791,13 +1792,13 @@ function buildSTPScenario(D){
     qclick='root';
     return {type:'stp',allowIP:false,stp,
       title:'STP — Root Bridge Election',
-      instr:`${sub} Using the priorities and MAC addresses shown, <strong>click the switch</strong> that will be elected the STP root bridge, then press Submit Answer.`,
+      instr:`${sub} Using the priorities and MAC addresses shown, <strong>click the switch</strong> that will be elected the STP root bridge, then press Submit.`,
       reqs:[]};
   }
   qclick='port';
   return {type:'stp',allowIP:false,stp,
     title:'STP — Blocking Port',
-    instr:`${sub} STP must block exactly one port to break the loop. Work out the root and port roles, <strong>click the port</strong> that will go into blocking state, then press Submit Answer.`,
+    instr:`${sub} STP must block exactly one port to break the loop. Work out the root and port roles, <strong>click the port</strong> that will go into blocking state, then press Submit.`,
     reqs:[]};
 }
 
@@ -1956,12 +1957,11 @@ function newScenario(){
   qsel=null;
   const cb=document.getElementById('chkbtn');
   cb.style.display='';
-  cb.textContent=qclick?'Submit Answer':'Check Requirements';
   document.getElementById('skipbtn').style.display='';
   document.getElementById('nxtbtn').style.display='none';
   const fb=document.getElementById('fb'); fb.className='fbanner'; fb.style.display='none';
-  setHint(qclick==='root'?'Click the switch you believe is the root, then press Submit Answer.'
-        : qclick==='port'?'Click the port (dot) you believe will block, then press Submit Answer.'
+  setHint(qclick==='root'?'Click the switch you believe is the root, then press Submit.'
+        : qclick==='port'?'Click the port (dot) you believe will block, then press Submit.'
         : 'Click a port, then a port on another device, to run a cable. Click a switch to configure it.');
   document.getElementById('sc').textContent=score;
   document.getElementById('rnd').textContent=rnd;
@@ -2022,8 +2022,8 @@ function checkAll(){
   if(qclick){
     if(done) return;
     if(!qsel){
-      setHint(qclick==='root'?'Click a switch first, then press Submit Answer.'
-                             :'Click a port (dot) first, then press Submit Answer.');
+      setHint(qclick==='root'?'Click a switch first, then press Submit.'
+                             :'Click a port (dot) first, then press Submit.');
       return;
     }
     devices.forEach(x=>{ if(x._mark==='q-sel') x._mark=null; x.ports.forEach(p=>{ if(p._mark==='p-sel') p._mark=null; }); });
@@ -2253,6 +2253,9 @@ document.addEventListener('keydown',e=>{
 
 /* ═══ Init ════════════════════════════════════════════════════════════════ */
 newScenario();
+
+/* Enter submits, then Enter moves on — see answer-keys.js. */
+AnswerKeys.wire({});
 </script>
 </body>
 </html>

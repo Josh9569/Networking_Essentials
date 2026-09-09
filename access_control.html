@@ -1,0 +1,1841 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Access Control Trainer</title>
+<link rel="stylesheet" href="styles.css">
+<script src="theme.js"></script>
+<script src="custom-theme.js"></script>
+<script src="options.js"></script>
+<script src="answer-keys.js"></script>
+<script src="lab-shared.js"></script>
+</head>
+<body>
+<div class="wrap">
+
+  <a href="index.html" class="home-link">&#8592; All Tools</a>
+  <div class="hdr">
+    <div>
+      <div class="hdr-title">Access Control Trainer</div>
+      <div class="hdr-sub">Standard IPv4 ACLs &mdash; wildcards, matching, placement &amp; a full lab</div>
+    </div>
+    <div class="hdr-right">
+      <div class="chips">
+        <div class="chip">Score <b id="sc">0</b></div>
+        <div class="chip">Round <b id="rnd">1</b></div>
+        <div class="chip">Streak <b id="str">0</b></div>
+      </div>
+      <div id="theme-toggle-slot"></div>
+    </div>
+  </div>
+
+  <div class="cls-row">
+    <span>Topic:</span>
+    <button class="cbtn on" id="tb-rand" onclick="setTopic('rand',this)">Random</button>
+    <button class="cbtn" id="tb-wild" onclick="setTopic('wild',this)">Wildcard Masks</button>
+    <button class="cbtn" id="tb-match" onclick="setTopic('match',this)">Which ACE Matches?</button>
+    <button class="cbtn" id="tb-place" onclick="setTopic('place',this)">Placement</button>
+    <button class="cbtn" id="tb-lab" onclick="setTopic('lab',this)">ACL Lab</button>
+  </div>
+
+  <div class="diff-row">
+    <span>Difficulty:</span>
+    <button class="cbtn on" id="db-easy" onclick="setDiff('easy',this)">Easy</button>
+    <button class="cbtn" id="db-medium" onclick="setDiff('medium',this)">Medium</button>
+    <button class="cbtn" id="db-hard" onclick="setDiff('hard',this)">Hard</button>
+  </div>
+
+  <div class="diff-row">
+    <span>ACL type:</span>
+    <button class="cbtn on" id="vb-a" onclick="setVer(0,this)">Standard</button>
+    <button class="cbtn" id="vb-b" onclick="setVer(1,this)">Extended</button>
+  </div>
+
+  <div class="qcard" id="qcard">
+    <div class="qcard-hdr"><div class="qlbl" id="qlbl">ACL</div></div>
+    <div class="q-prompt" id="qprompt">Loading&hellip;</div>
+    <div class="ipdisp" id="qip" style="display:none"></div>
+    <div id="qspec"></div>
+    <div class="req-list two-col" id="req-list"></div>
+  </div>
+
+  <div class="fbanner" id="fb"></div>
+
+  <div id="qbody"></div>
+
+  <div class="actrow">
+    <button class="btn btn-p" id="chkbtn" onclick="checkAll()">Submit</button>
+    <button class="btn btn-s" id="revbtn" onclick="revealAll()">Skip</button>
+    <button class="btn btn-s" id="nxtbtn" onclick="nextQ()" style="display:none">Next Question &#8594;</button>
+    <button class="btn btn-d" id="rstbtn" onclick="resetGame()">Reset</button>
+
+    <div class="opt-wrap">
+      <button class="opt-btn" id="opt-btn" onclick="toggleOpts()">
+        Options
+        <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="opt-menu" id="opt-menu">
+        <div class="opt-section-label">Reference Tools</div>
+        <label class="opt-row" onclick="toggleTool('wcref')">
+          <span class="opt-row-label">Wildcard Mask Reference</span>
+          <div class="tog"><input type="checkbox" id="tog-wcref" checked><span class="tog-track"></span></div>
+        </label>
+        <label class="opt-row" onclick="toggleTool('aclref')">
+          <span class="opt-row-label">ACL Rules Reference</span>
+          <div class="tog"><input type="checkbox" id="tog-aclref" checked><span class="tog-track"></span></div>
+        </label>
+        <label class="opt-row" onclick="toggleTool('cmdref')">
+          <span class="opt-row-label">ACL Command Reference</span>
+          <div class="tog"><input type="checkbox" id="tog-cmdref" checked><span class="tog-track"></span></div>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div class="toolsec" id="toolsec">
+    <div class="tool-block" id="t-wcref">
+      <div class="tool-block-title">Wildcard Mask Reference</div>
+      <p class="tool-note">A wildcard mask is the <strong>inverse of a subnet mask</strong>: a <span class="mono-inl">0</span> bit means "this bit must match", a <span class="mono-inl">1</span> bit means "don't care". Subtract each octet of the subnet mask from 255 to get it.</p>
+      <table class="ref-table">
+        <thead><tr><th>Prefix</th><th>Subnet mask</th><th>Wildcard mask</th><th>Addresses matched</th></tr></thead>
+        <tbody>
+          <tr><td class="cidr-col">/24</td><td class="cidr-col">255.255.255.0</td><td class="cidr-col">0.0.0.255</td><td>256</td></tr>
+          <tr><td class="cidr-col">/25</td><td class="cidr-col">255.255.255.128</td><td class="cidr-col">0.0.0.127</td><td>128</td></tr>
+          <tr><td class="cidr-col">/26</td><td class="cidr-col">255.255.255.192</td><td class="cidr-col">0.0.0.63</td><td>64</td></tr>
+          <tr><td class="cidr-col">/27</td><td class="cidr-col">255.255.255.224</td><td class="cidr-col">0.0.0.31</td><td>32</td></tr>
+          <tr><td class="cidr-col">/28</td><td class="cidr-col">255.255.255.240</td><td class="cidr-col">0.0.0.15</td><td>16</td></tr>
+          <tr><td class="cidr-col">/29</td><td class="cidr-col">255.255.255.248</td><td class="cidr-col">0.0.0.7</td><td>8</td></tr>
+          <tr><td class="cidr-col">/30</td><td class="cidr-col">255.255.255.252</td><td class="cidr-col">0.0.0.3</td><td>4</td></tr>
+          <tr><td class="cidr-col">/32</td><td class="cidr-col">255.255.255.255</td><td class="cidr-col">0.0.0.0</td><td>1</td></tr>
+          <tr><td class="cidr-col">/16</td><td class="cidr-col">255.255.0.0</td><td class="cidr-col">0.0.255.255</td><td>65536</td></tr>
+          <tr><td class="cidr-col">/8</td><td class="cidr-col">255.0.0.0</td><td class="cidr-col">0.255.255.255</td><td>16777216</td></tr>
+        </tbody>
+      </table>
+      <p class="tool-note">Two shorthands mean exactly the same thing as a wildcard: <span class="mono-inl">host 192.168.30.3</span> is <span class="mono-inl">192.168.30.3 0.0.0.0</span>, and <span class="mono-inl">any</span> is <span class="mono-inl">0.0.0.0 255.255.255.255</span>.</p>
+    </div>
+
+    <div class="tool-block" id="t-aclref">
+      <div class="tool-block-title">ACL Rules Reference</div>
+      <table class="ref-table">
+        <thead><tr><th></th><th>Standard</th><th>Extended</th></tr></thead>
+        <tbody>
+          <tr><td>Matches on</td><td>Source address only</td><td>Source, destination, protocol, port</td></tr>
+          <tr><td>Numbered ranges</td><td class="cidr-col">1&ndash;99, 1300&ndash;1999</td><td class="cidr-col">100&ndash;199, 2000&ndash;2699</td></tr>
+          <tr><td>Place it</td><td>As close to the <strong>destination</strong> as possible</td><td>As close to the <strong>source</strong> as possible</td></tr>
+        </tbody>
+      </table>
+      <p class="tool-note"><strong>Why the placement rule differs.</strong> A standard ACL can only see where a packet came from, so filtering it early would block that source from reaching everything, not just the one network you meant to protect. An extended ACL knows the destination too, so it can be applied early and drop unwanted traffic before it crosses the network.</p>
+      <p class="tool-note"><strong>Order matters.</strong> ACEs are checked top to bottom and the <strong>first match wins</strong> &mdash; nothing after it is considered. A broad <span class="mono-inl">permit</span> above a specific <span class="mono-inl">deny</span> makes that deny unreachable.</p>
+      <p class="tool-note"><strong>There is always an implicit <span class="mono-inl">deny any</span></strong> at the end of every ACL, so anything not explicitly permitted is dropped. Adding an explicit <span class="mono-inl">deny any</span> changes nothing functionally, but it shows up in <span class="mono-inl">show access-lists</span> with a match counter, which is genuinely useful when troubleshooting.</p>
+      <p class="tool-note">An ACL applied to an interface filters traffic <strong>passing through</strong> the router. An ACL applied to the vty lines with <span class="mono-inl">access-class</span> filters traffic <strong>to the router itself</strong> &mdash; who is allowed to log in.</p>
+    </div>
+
+    <div class="tool-block" id="t-cmdref">
+      <div class="tool-block-title">ACL Command Reference</div>
+      <table class="ref-table">
+        <thead><tr><th>Command</th><th>Mode</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td class="mono-inl">access-list 1 permit 192.168.10.0 0.0.0.255</td><td>config</td><td>Add an ACE to numbered standard ACL 1</td></tr>
+          <tr><td class="mono-inl">access-list 1 deny any</td><td>config</td><td>An explicit deny at the end</td></tr>
+          <tr><td class="mono-inl">ip access-list standard NAME</td><td>config</td><td>Create or edit a named standard ACL, and drop into its own mode</td></tr>
+          <tr><td class="mono-inl">permit host 192.168.30.3</td><td>config-std-nacl</td><td>One host. Same as <span class="mono-inl">192.168.30.3 0.0.0.0</span></td></tr>
+          <tr><td class="mono-inl">30 permit 209.165.200.224 0.0.0.31</td><td>config-std-nacl</td><td>Insert at a specific sequence number &mdash; how you edit an ACL in place</td></tr>
+          <tr><td class="mono-inl">no 30</td><td>config-std-nacl</td><td>Delete just that line, leaving the rest alone</td></tr>
+          <tr><td class="mono-inl">ip access-group 1 out</td><td>config-if</td><td>Apply an ACL to an interface in one direction</td></tr>
+          <tr><td class="mono-inl">access-class ADMIN-MGT in</td><td>config-line</td><td>Apply an ACL to the vty lines &mdash; who may SSH in</td></tr>
+          <tr><td class="mono-inl">show access-lists</td><td>exec</td><td>Every ACL with its ACEs, sequence numbers and match counters</td></tr>
+          <tr><td class="mono-inl">show ip interface Gi0/1.30</td><td>exec</td><td>Which ACL is applied to that interface, and in which direction</td></tr>
+          <tr><td class="mono-inl">ping <em>ip</em> source <em>iface</em></td><td>exec</td><td>An extended ping. Sends from that interface's address, which is how you test an ACL from a source other than the router's usual one</td></tr>
+        </tbody>
+      </table>
+      <p class="tool-note">IOS numbers ACEs in tens automatically, which is what leaves room to insert a line between two existing ones later. <strong>Tab</strong> completes a command; <strong>&uarr;</strong> and <strong>&darr;</strong> walk the history.</p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* Access Control Trainer — standard IPv4 ACLs.
+
+   Three point-and-click drills (wildcard masks, which ACE matches, where to
+   put the ACL) and a packet-tracer lab, all on one page and dispatched
+   through TOPIC_FNS the way dynamic_routing.html does it — one row per
+   topic, rather than routing_game.html's parallel if/else chains.
+
+   The lab mirrors Cisco's Lab 8A closely: the same topology, the same
+   addressing, the same three ACLs, and the same verification steps. What it
+   deliberately does NOT ask you to build is the network underneath — VLANs,
+   port security, inter-VLAN routing and RIP all arrive already working,
+   exactly as Part 3 of the real lab assumes ("it is very important to
+   verify that network connectivity is working before you configure and
+   apply access lists"). This page is about the filtering. */
+
+function ri(a,b){ return Math.floor(Math.random()*(b-a+1))+a; }
+function choice(arr){ return arr[ri(0,arr.length-1)]; }
+function shuffle(arr){ for(let i=arr.length-1;i>0;i--){ const j=ri(0,i); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
+function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+/* ── IP helpers ── */
+function ip2int(ip){ const p=ip.split('.').map(Number); return((p[0]<<24)|(p[1]<<16)|(p[2]<<8)|p[3])>>>0; }
+function int2ip(n){ return[(n>>>24)&255,(n>>>16)&255,(n>>>8)&255,n&255].join('.'); }
+function maskInt(cidr){ return cidr<=0?0:(cidr>=32?0xFFFFFFFF>>>0:(0xFFFFFFFF<<(32-cidr))>>>0); }
+function cidr2mask(cidr){ return int2ip(maskInt(cidr)); }
+function cidr2wild(cidr){ return int2ip((~maskInt(cidr))>>>0); }
+function netIntOf(ipInt,cidr){ return (ipInt & maskInt(cidr))>>>0; }
+function bcastIntOf(netI,cidr){ const wc=cidr<=0?0xFFFFFFFF>>>0:(~maskInt(cidr))>>>0; return (netI|wc)>>>0; }
+const isValidIP = LabShared.isValidIP;
+function maskToCidr(maskStr){
+  if(!isValidIP(maskStr)) return null;
+  const n=ip2int(maskStr)>>>0;
+  let cidr=0, seenZero=false;
+  for(let i=31;i>=0;i--){
+    const bit=(n>>>i)&1;
+    if(bit===1){ if(seenZero) return null; cidr++; }
+    else seenZero=true;
+  }
+  return cidr;
+}
+/* A wildcard is only a valid *prefix* wildcard when its bits are contiguous
+   from the right. IOS accepts non-contiguous ones, and they do work, but
+   nothing this page generates needs them. */
+function wildToCidr(wcStr){
+  if(!isValidIP(wcStr)) return null;
+  const n=ip2int(wcStr)>>>0;
+  const inv=(~n)>>>0;
+  return maskToCidr(int2ip(inv));
+}
+
+const TOPICS=['wild','match','place','lab'];
+const TOPIC_LABEL={wild:'Wildcard Masks', match:'Which ACE Matches?', place:'ACL Placement', lab:'ACL Lab'};
+const POINTS={easy:3, medium:4, hard:6};
+const TOPIC_REF={wild:'wcref', match:'aclref', place:'aclref', lab:'cmdref'};
+
+/* The "ACL type" row is this page's Version row. Standard ACLs are all Lab
+   8A covers and all this page implements, so the row is greyed out with the
+   label still visible — the same treatment OSPF Cost gives a version choice
+   that would change nothing. Extended ACLs are the obvious next thing and
+   slot straight in here. */
+const VERSIONS={
+  wild:{opts:[], labels:['Standard','Extended'], note:'wildcards work the same either way'},
+  match:{opts:[], labels:['Standard','Extended'], note:'extended matching not built yet'},
+  place:{opts:[], labels:['Standard','Extended'], note:'extended placement not built yet'},
+  lab:{opts:[], labels:['Standard','Extended'], note:'extended ACLs not built yet'}
+};
+
+let state={ topic:'rand', diff:'easy', ver:'std', score:0, round:1, streak:0,
+            done:false, mode:null, data:null, lastTopic:null };
+
+/* ═══ ACL core ═════════════════════════════════════════════════════
+   Pure functions over plain data: an ACL is a list of ACEs, an ACE is an
+   action plus an address and a wildcard, and evaluating one against an
+   address is arithmetic. Nothing here knows about devices, interfaces or
+   the canvas, which is what would let it move into lab-shared.js the day a
+   second page wants ACLs. It stays here for now because one page using it
+   should not make three pages download it. */
+
+/* kind is only ever a display choice — 'host' renders "permit host X" and
+   'any' renders "permit any", but both are stored as an address and a
+   wildcard and matched by exactly the same arithmetic. */
+function aceMake(seq, action, kind, ipInt, wcInt){
+  return {seq:seq, action:action, kind:kind, ipInt:ipInt>>>0, wcInt:wcInt>>>0, matches:0};
+}
+function aceHost(seq, action, ip){ return aceMake(seq, action, 'host', ip2int(ip), 0); }
+function aceNet(seq, action, ip, wc){ return aceMake(seq, action, 'net', ip2int(ip), ip2int(wc)); }
+function aceAny(seq, action){ return aceMake(seq, action, 'any', 0, 0xFFFFFFFF); }
+/* A wildcard 1-bit is "don't care", so mask both sides with its inverse. */
+function aceMatches(ace, ipInt){
+  const care=(~ace.wcInt)>>>0;
+  return ((ipInt & care)>>>0) === ((ace.ipInt & care)>>>0);
+}
+function aceText(ace){
+  if(ace.kind==='any') return ace.action+' any';
+  if(ace.kind==='host') return ace.action+' host '+int2ip(ace.ipInt);
+  return ace.action+' '+int2ip(ace.ipInt)+' '+int2ip(ace.wcInt);
+}
+function aclMake(name, numbered){
+  return {name:String(name), numbered:!!numbered, aces:[]};
+}
+/* IOS hands out sequence numbers in tens, which is exactly what leaves room
+   to insert a line between two existing ones later — the whole point of
+   Part 4's "Option 2". */
+function aclNextSeq(acl){
+  return acl.aces.length ? (Math.floor(acl.aces[acl.aces.length-1].seq/10)+1)*10 : 10;
+}
+function aclInsert(acl, ace){
+  acl.aces=acl.aces.filter(function(a){ return a.seq!==ace.seq; });
+  acl.aces.push(ace);
+  acl.aces.sort(function(a,b){ return a.seq-b.seq; });
+}
+function aclRemoveSeq(acl, seq){
+  const before=acl.aces.length;
+  acl.aces=acl.aces.filter(function(a){ return a.seq!==seq; });
+  return acl.aces.length!==before;
+}
+/* First match wins, and there is always an implicit deny at the end.
+   count:true bumps the per-ACE hit counters, so show access-lists reflects
+   the traffic the learner has actually sent — the counters in the real lab
+   only appear because pings were run. */
+function aclEvaluate(acl, ipInt, count){
+  for(let i=0;i<acl.aces.length;i++){
+    if(aceMatches(acl.aces[i], ipInt)){
+      if(count) acl.aces[i].matches++;
+      return {action:acl.aces[i].action, ace:acl.aces[i], implicit:false};
+    }
+  }
+  return {action:'deny', ace:null, implicit:true};
+}
+function aclPermits(acl, ipInt, count){ return aclEvaluate(acl, ipInt, count).action==='permit'; }
+function aclShowLines(acl){
+  const head='Standard IP access list '+acl.name;
+  const rows=acl.aces.map(function(a){
+    /* IOS pads the action so permit/deny line up, and only shows a counter
+       once the ACE has actually been hit. */
+    const body = a.kind==='any' ? a.action+(a.action==='deny'?'   ':' ')+'any'
+               : a.kind==='host' ? a.action+' host '+int2ip(a.ipInt)
+               : a.action+' '+int2ip(a.ipInt)+' '+int2ip(a.wcInt);
+    return '    '+a.seq+' '+body+(a.matches?' ('+a.matches+' match'+(a.matches===1?'':'es')+')':'');
+  });
+  return [head].concat(rows);
+}
+
+/* ═══ Device model ═════════════════════════════════════════════════
+   Smaller than the RIP lab's, on purpose: routing here is given, not
+   configured, because Lab 8A builds the network in Part 2 and only starts
+   filtering in Part 3. What this model adds that no other lab has is
+   subinterfaces and an ACL enforcement point on every interface. */
+const AC_RT_W=128, AC_RT_H=60;
+let acDevices=[], acCables=[], acNid=1, acSelected=null;
+
+function acReset(){ acDevices=[]; acCables=[]; acNid=1; acSelected=null; }
+function acById(id){ return acDevices.find(function(d){ return d.id===id; }); }
+function acByName(n){ return acDevices.find(function(d){ return d.name===n; }); }
+
+function acAddRouter(name,x,y){
+  const d={id:acNid++, type:'router', name:name, x:x, y:y,
+    ifaces:[], acls:{}, vtyAcl:null, routes:[],
+    cm:'exec', ci:null, cl:null, log:[], hist:[], hi:0};
+  acDevices.push(d); return d;
+}
+/* One interface record covers physical ports, dot1Q subinterfaces and
+   loopbacks — they differ only in what they are attached to, and every one
+   of them can carry an ACL in each direction, which is the only property
+   this page actually cares about. */
+function acAddIface(r, name, ip, pfx, opts){
+  opts=opts||{};
+  const f={name:name, ip:ip, pfx:pfx, up:true,
+    vlan:opts.vlan||null,           /* dot1Q tag, for a subinterface */
+    parent:opts.parent||null,       /* the physical port it rides on */
+    loopback:!!opts.loopback,
+    serial:!!opts.serial,
+    aclIn:null, aclOut:null};
+  r.ifaces.push(f); return f;
+}
+function acIface(r, name){
+  const n=String(name).toLowerCase();
+  return r.ifaces.find(function(f){ return f.name.toLowerCase()===n; })||null;
+}
+function acAddSwitch(name,x,y){
+  const d={id:acNid++, type:'switch', name:name, x:x, y:y, ports:[]};
+  acDevices.push(d); return d;
+}
+function acAddPC(name,x,y,ip,pfx,gw){
+  const d={id:acNid++, type:'pc', name:name, x:x, y:y, ip:ip, pfx:pfx, gw:gw};
+  acDevices.push(d); return d;
+}
+/* Cables are drawn, not edited: the topology is Lab 8A's and stays that
+   way, so there is no cabling task and nothing to click. */
+function acCable(a,b,opts){ acCables.push(Object.assign({a:a.id,b:b.id},opts||{})); }
+
+/* Which router interface is a PC's gateway. Everything about VLANs on this
+   page reduces to this one question: a PC's access port carries a VLAN tag,
+   and the subinterface configured for that tag is its gateway. That is
+   enough to keep PC-A and PC-B on separate subnets while both hang off S1,
+   without building a configurable VLAN model. */
+function acGatewayFor(pc){
+  for(const d of acDevices){
+    if(d.type!=='router') continue;
+    for(const f of d.ifaces){
+      if(!f.ip||!f.up||f.loopback) continue;
+      if(netIntOf(ip2int(pc.ip),f.pfx)===netIntOf(ip2int(f.ip),f.pfx)) return {router:d, iface:f};
+    }
+  }
+  return null;
+}
+function acIfaceWithIp(ipStr){
+  for(const d of acDevices){
+    if(d.type!=='router') continue;
+    const f=d.ifaces.find(function(x){ return x.ip===ipStr&&x.up; });
+    if(f) return {router:d, iface:f};
+  }
+  return null;
+}
+function acPcWithIp(ipStr){ return acDevices.find(function(d){ return d.type==='pc'&&d.ip===ipStr; }); }
+
+/* Routing is given. Each route is {netInt, prefix, viaIface, nextHop, code,
+   metric} — the metrics are the ones RIP would have converged to in Part 2
+   of the real lab, precomputed rather than run, because this page does not
+   test RIP and carrying a second protocol engine to produce numbers nobody
+   grades would be dead weight. */
+function acAddRoute(r, netStr, pfx, viaIfaceName, nextHop, metric){
+  r.routes.push({netInt:ip2int(netStr), prefix:pfx, viaIface:viaIfaceName,
+                 nextHop:nextHop||null, code:'R', metric:metric==null?1:metric});
+}
+function acRoutingTable(r){
+  const t=[];
+  r.ifaces.forEach(function(f){
+    if(!f.ip||!f.up) return;
+    t.push({code:'C', netInt:netIntOf(ip2int(f.ip),f.pfx), prefix:f.pfx,
+            iface:f.name, nextHop:null, metric:0, _if:f});
+  });
+  r.routes.forEach(function(rt){
+    t.push({code:rt.code, netInt:rt.netInt, prefix:rt.prefix, iface:rt.viaIface,
+            nextHop:rt.nextHop, metric:rt.metric, _if:acIface(r,rt.viaIface)});
+  });
+  return t;
+}
+function acBestMatch(dstInt, table){
+  let best=null;
+  table.forEach(function(e){
+    if(((dstInt & maskInt(e.prefix))>>>0)!==e.netInt) return;
+    if(!best||e.prefix>best.prefix) best=e;
+  });
+  return best;
+}
+
+/* ═══ Forwarding, with ACLs enforced ═══════════════════════════════
+   Unlike the RIP lab's forwarder, this one carries the SOURCE address the
+   whole way, because a standard ACL matches on nothing else. An ACL is
+   checked twice per hop: inbound on the interface the packet arrives on,
+   outbound on the interface it leaves by. */
+function acCheckAcl(router, iface, dir, srcInt, count){
+  const name = dir==='in' ? iface.aclIn : iface.aclOut;
+  if(!name) return null;
+  const acl=router.acls[name];
+  if(!acl) return null;
+  const res=aclEvaluate(acl, srcInt, count);
+  if(res.action==='permit') return null;
+  return {router:router, iface:iface, dir:dir, acl:acl, ace:res.ace, implicit:res.implicit};
+}
+function acBlockReason(b){
+  return int2ip(b.srcInt)+' was dropped by '+b.acl.name+' '+b.dir+'bound on '+
+    b.router.name+' '+b.iface.name+
+    (b.implicit ? ' — nothing in the list matched it, so the implicit deny any caught it'
+                : ' — matched "'+aceText(b.ace)+'"');
+}
+/* start: {router, iface} the packet is entering the network from. For a PC
+   that is its gateway interface; for a router-sourced ping it is the router
+   itself with no ingress interface. */
+function acForward(start, srcInt, dstStr, count){
+  const dstInt=ip2int(dstStr);
+  let cur=start.router, ingress=start.iface||null;
+  /* A packet the router generates itself is not filtered by an outbound ACL
+     on the interface it leaves by — only transit traffic is. That is real
+     IOS behaviour, and without it a router cannot answer a ping on an
+     interface whose own outbound list would have denied the source. */
+  let originated = !start.iface;
+  const visited=new Set();
+  for(let hop=0; hop<10; hop++){
+    if(visited.has(cur.id)) return {ok:false, reason:'Routing loop at '+cur.name};
+    visited.add(cur.id);
+
+    if(ingress){
+      const b=acCheckAcl(cur, ingress, 'in', srcInt, count);
+      if(b){ b.srcInt=srcInt; return {ok:false, blocked:b, reason:acBlockReason(b)}; }
+    }
+    /* Reached the destination itself? A packet addressed to one of this
+       router's own interfaces is delivered, not forwarded — so an outbound
+       ACL never applies to it. */
+    const self=cur.ifaces.find(function(f){ return f.ip===dstStr&&f.up; });
+    if(self) return {ok:true};
+
+    const win=acBestMatch(dstInt, acRoutingTable(cur));
+    if(!win) return {ok:false, reason:cur.name+' has no route to '+dstStr};
+    const out=win._if;
+    if(!out) return {ok:false, reason:cur.name+"'s route to "+dstStr+' points at an interface that is not up'};
+
+    if(!originated){
+      const b=acCheckAcl(cur, out, 'out', srcInt, count);
+      if(b){ b.srcInt=srcInt; return {ok:false, blocked:b, reason:acBlockReason(b)}; }
+    }
+    originated=false;
+
+    if(win.code==='C'){
+      /* Last hop. A modelled PC has to actually sit on this segment; any
+         other address is accepted as long as it is a valid host address
+         inside the subnet, because Part 5 has you move a host to an
+         arbitrary address and the question being asked is about filtering,
+         not about which addresses happen to be occupied. */
+      const pc=acPcWithIp(dstStr);
+      if(pc){
+        const g=acGatewayFor(pc);
+        return (g&&g.iface===out) ? {ok:true}
+          : {ok:false, reason:dstStr+' is not on the segment behind '+cur.name+' '+out.name};
+      }
+      if(out.loopback) return out.ip===dstStr ? {ok:true}
+        : {ok:false, reason:'Nothing answers to '+dstStr+' behind '+out.name};
+      const net=netIntOf(ip2int(out.ip),out.pfx);
+      if(dstInt!==net && dstInt!==bcastIntOf(net,out.pfx)) return {ok:true};
+      return {ok:false, reason:dstStr+' is a network or broadcast address, not a host'};
+    }
+    const nh=acIfaceWithIp(win.nextHop);
+    if(!nh) return {ok:false, reason:'Next hop '+win.nextHop+' is not a live interface'};
+    ingress=nh.iface;
+    cur=nh.router;
+  }
+  return {ok:false, reason:'Too many hops'};
+}
+/* A ping is only successful if the echo REPLY gets home too, which is what
+   makes "PC-A cannot ping PC-B" fall out of an ACL that only filters one
+   direction. */
+function acPing(srcIp, dstStr, count){
+  if(!isValidIP(srcIp)||!isValidIP(dstStr)) return {ok:false, reason:'Invalid address'};
+  /* Where a packet from this address enters the network. A modelled PC uses
+     its gateway; a router interface address means the router originated it;
+     anything else is treated as a host on whichever connected subnet holds
+     it, which is what lets Part 5's "change PC-A to 192.168.10.100" be
+     asked without inventing a device for every test address. */
+  const startFor=function(ip){
+    const pc=acPcWithIp(ip);
+    if(pc){ const g=acGatewayFor(pc); return g?{router:g.router, iface:g.iface}:null; }
+    const hit=acIfaceWithIp(ip);
+    if(hit) return {router:hit.router, iface:null};
+    const ipInt=ip2int(ip);
+    for(const d of acDevices){
+      if(d.type!=='router') continue;
+      for(const f of d.ifaces){
+        if(!f.ip||!f.up||f.loopback) continue;
+        if(netIntOf(ipInt,f.pfx)===netIntOf(ip2int(f.ip),f.pfx)) return {router:d, iface:f};
+      }
+    }
+    return null;
+  };
+  const a=startFor(srcIp), b=startFor(dstStr);
+  if(!a) return {ok:false, reason:srcIp+' is not a host or interface on this network'};
+  const there=acForward(a, ip2int(srcIp), dstStr, count);
+  if(!there.ok) return there;
+  if(!b) return {ok:false, reason:'Nothing answers to '+dstStr};
+  const back=acForward(b, ip2int(dstStr), srcIp, count);
+  if(!back.ok) return {ok:false, blocked:back.blocked,
+    reason:'The request arrived, but the reply could not get back: '+back.reason};
+  return {ok:true};
+}
+/* SSH to a router: it has to be routable, and then the vty access-class
+   decides. Modelled as reachability plus the ACL — the page is not testing
+   authentication. */
+function acSsh(srcIp, routerIp, count){
+  const hit=acIfaceWithIp(routerIp);
+  if(!hit) return {ok:false, reason:routerIp+' is not a router interface'};
+  const reach=acPing(srcIp, routerIp, false);
+  if(!reach.ok) return {ok:false, reason:'Cannot even reach '+routerIp+' — '+reach.reason};
+  const r=hit.router;
+  if(!r.vtyAcl) return {ok:true};
+  const acl=r.acls[r.vtyAcl];
+  if(!acl) return {ok:true};
+  const res=aclEvaluate(acl, ip2int(srcIp), count);
+  if(res.action==='permit') return {ok:true};
+  return {ok:false, deniedByVty:true,
+    reason:'Refused by '+acl.name+' on '+r.name+"'s vty lines"+
+      (res.implicit?' — the implicit deny any':' — matched "'+aceText(res.ace)+'"')};
+}
+
+/* ═══ CLI ══════════════════════════════════════════════════════════ */
+const AC_KW={
+  enable:{}, configure:{terminal:{}}, end:{}, exit:{}, clear:{},
+  show:{ip:{route:{}, interface:{}}, 'access-lists':{}, 'access-list':{}, run:{}},
+  interface:{},
+  ip:{'access-list':{standard:{}}, 'access-group':{}},
+  'access-list':{},
+  line:{vty:{}},
+  'access-class':{},
+  permit:{host:{}, any:{}},
+  deny:{host:{}, any:{}},
+  ping:{},
+  no:{ip:{'access-list':{standard:{}}, 'access-group':{}}, 'access-list':{}, 'access-class':{}}
+};
+function acPrompt(d){
+  return d.name+(d.cm==='conf'?'(config)#':d.cm==='if'?'(config-if)#':
+                 d.cm==='nacl'?'(config-std-nacl)#':d.cm==='line'?'(config-line)#':'#');
+}
+/* Parses the tail of a permit/deny into an ACE, minus its sequence number.
+   Accepts the three forms Lab 8A uses: "host X", "any", and "X wildcard". */
+function acParseAce(action, parts){
+  if(!parts.length) return {err:'% Incomplete command'};
+  if(parts[0]==='any') return {ace:aceAny(0, action)};
+  if(parts[0]==='host'){
+    if(!parts[1]||!isValidIP(parts[1])) return {err:'% Invalid host address'};
+    return {ace:aceHost(0, action, parts[1])};
+  }
+  if(!isValidIP(parts[0])) return {err:'% Invalid address'};
+  if(parts.length===1) return {ace:aceHost(0, action, parts[0])};
+  if(!isValidIP(parts[1])) return {err:'% Invalid wildcard mask'};
+  return {ace:aceNet(0, action, parts[0], parts[1])};
+}
+function acCli(d, line){
+  const t=line.trim().replace(/\s+/g,' ');
+  if(!t) return '';
+  const w=t.toLowerCase().split(' ');
+  const raw=t.split(' ');
+  const M=function(tok,cand){ return tok&&cand.indexOf(tok)===0; };
+
+  if(M(w[0],'enable')){ d.cm='exec'; d.ci=null; return ''; }
+  if(M(w[0],'configure')||w[0]==='conf'){ d.cm='conf'; d.ci=null; return ''; }
+  if(M(w[0],'end')){ d.cm='exec'; d.ci=null; return ''; }
+  if(M(w[0],'exit')){ d.cm = d.cm==='exec' ? 'exec' : 'conf'; d.ci=null; return ''; }
+  if(w[0]==='cls'||M(w[0],'clear')){ d.log.length=0; return ''; }
+
+  /* ── show ── */
+  if(M(w[0],'show')||w[0]==='sh'){
+    if(w[1]&&(w[1]==='access-lists'||w[1]==='access-list')) return acShowAcls(d);
+    if(w[1]&&M(w[1],'ip')&&w[2]&&M(w[2],'route')) return acShowRoute(d);
+    if(w[1]&&M(w[1],'ip')&&w[2]&&M(w[2],'interface')){
+      if(!raw[3]) return acShowIfBrief(d);
+      const f=acIface(d,raw[3]);
+      return f ? acShowIface(d,f) : '% Invalid interface';
+    }
+    if(w[1]&&M(w[1],'run')) return acShowRun(d);
+    return '% Unknown show command — try "show access-lists", "show ip interface <iface>" or "show ip route"';
+  }
+
+  /* ── ping, with the extended "source" form ── */
+  if(M(w[0],'ping')){
+    if(!raw[1]||!isValidIP(raw[1])) return '% Usage: ping <ip> [source <interface>]';
+    let src=null;
+    if(w[2]&&M(w[2],'source')){
+      const f=acIface(d,raw[3]);
+      if(!f) return '% Invalid source interface';
+      src=f.ip;
+    } else {
+      /* With no source given IOS uses the exit interface's address. */
+      const win=acBestMatch(ip2int(raw[1]), acRoutingTable(d));
+      src = win && win._if ? win._if.ip : (d.ifaces[0]&&d.ifaces[0].ip);
+    }
+    if(!src) return '% No usable source address';
+    const r=acPing(src, raw[1], true);
+    const lines=['Type escape sequence to abort.',
+      'Sending 5, 100-byte ICMP Echos to '+raw[1]+', timeout is 2 seconds:'];
+    if(w[2]&&M(w[2],'source')) lines.push('Packet sent with a source address of '+src);
+    lines.push(r.ok?'!!!!!':'U.U.U');
+    lines.push(r.ok ? 'Success rate is 100 percent (5/5)' : 'Success rate is 0 percent (0/5)');
+    if(!r.ok&&r.reason) lines.push('  ('+r.reason+')');
+    return lines.join('\n');
+  }
+
+  /* ── interface / line context ── */
+  if(M(w[0],'interface')||w[0]==='int'){
+    const f=acIface(d, raw.slice(1).join(''));
+    if(!f) return '% Invalid interface — try "interface Gi0/1.10"';
+    d.cm='if'; d.ci=f.name; return '';
+  }
+  if(M(w[0],'line')&&w[1]&&M(w[1],'vty')){ d.cm='line'; return ''; }
+
+  /* ── numbered ACL, global config ── */
+  if(w[0]==='access-list'){
+    const num=raw[1];
+    if(!/^\d+$/.test(num)) return '% Invalid access list number';
+    const n=+num;
+    if(!((n>=1&&n<=99)||(n>=1300&&n<=1999)))
+      return '% This lab covers standard ACLs — use 1-99 or 1300-1999';
+    const act=w[2];
+    if(act!=='permit'&&act!=='deny') return '% Expected permit or deny';
+    const p=acParseAce(act, raw.slice(3));
+    if(p.err) return p.err;
+    if(!d.acls[num]) d.acls[num]=aclMake(num, true);
+    p.ace.seq=aclNextSeq(d.acls[num]);
+    aclInsert(d.acls[num], p.ace);
+    return '';
+  }
+  if(w[0]==='no'&&w[1]==='access-list'){ delete d.acls[raw[2]]; return ''; }
+
+  /* ── named ACL sub-mode ── */
+  if(M(w[0],'ip')&&w[1]==='access-list'){
+    if(w[2]!=='standard') return '% This lab covers standard ACLs — "ip access-list standard <name>"';
+    const name=raw[3];
+    if(!name) return '% Give the access list a name';
+    if(!d.acls[name]) d.acls[name]=aclMake(name, false);
+    d.cm='nacl'; d.ci=name; return '';
+  }
+  if(w[0]==='no'&&M(w[1],'ip')&&w[2]==='access-list'){ delete d.acls[raw[4]]; return ''; }
+
+  if(d.cm==='nacl'){
+    const acl=d.acls[d.ci];
+    /* "30 permit ..." inserts at that sequence number — Option 2 in Part 4. */
+    if(/^\d+$/.test(w[0])){
+      const seq=+w[0], act=w[1];
+      if(act!=='permit'&&act!=='deny') return '% Expected permit or deny';
+      const p=acParseAce(act, raw.slice(2));
+      if(p.err) return p.err;
+      p.ace.seq=seq;
+      aclInsert(acl, p.ace);
+      return '';
+    }
+    if(w[0]==='no'&&/^\d+$/.test(w[1])){
+      return aclRemoveSeq(acl, +w[1]) ? '' : '% Sequence number not found in this access list';
+    }
+    if(w[0]==='permit'||w[0]==='deny'){
+      const p=acParseAce(w[0], raw.slice(1));
+      if(p.err) return p.err;
+      p.ace.seq=aclNextSeq(acl);
+      aclInsert(acl, p.ace);
+      return '';
+    }
+  }
+
+  if(d.cm==='if'){
+    const f=acIface(d, d.ci);
+    if(M(w[0],'ip')&&w[1]==='access-group'){
+      const name=raw[2], dir=w[3];
+      if(!d.acls[name]) return '% Access list '+name+' does not exist yet';
+      if(dir!=='in'&&dir!=='out') return '% Direction must be "in" or "out"';
+      if(dir==='in') f.aclIn=name; else f.aclOut=name;
+      return '';
+    }
+    if(w[0]==='no'&&M(w[1],'ip')&&w[2]==='access-group'){
+      if(w[4]==='in'||w[3]==='in') f.aclIn=null; else f.aclOut=null;
+      return '';
+    }
+  }
+
+  if(d.cm==='line'){
+    if(w[0]==='access-class'){
+      const name=raw[1], dir=w[2];
+      if(!d.acls[name]) return '% Access list '+name+' does not exist yet';
+      if(dir!=='in') return '% Use "access-class <name> in" to filter inbound sessions';
+      d.vtyAcl=name; return '';
+    }
+    if(w[0]==='no'&&w[1]==='access-class'){ d.vtyAcl=null; return ''; }
+  }
+
+  return '% Invalid input detected';
+}
+function acEcho(d, cmds){
+  cmds.forEach(function(c){
+    d.log.push(acPrompt(d)+' '+c);
+    const out=acCli(d,c);
+    if(out) out.split('\n').forEach(function(l){ d.log.push(l); });
+  });
+}
+
+/* ── show output ── */
+function acShowAcls(d){
+  const names=Object.keys(d.acls);
+  if(!names.length) return '(no access lists configured)';
+  /* IOS lists numbered ACLs before named ones. */
+  names.sort(function(a,b){
+    const na=/^\d+$/.test(a), nb=/^\d+$/.test(b);
+    if(na&&nb) return +a-+b;
+    if(na!==nb) return na?-1:1;
+    return a<b?-1:1;
+  });
+  const out=[];
+  names.forEach(function(n){ aclShowLines(d.acls[n]).forEach(function(l){ out.push(l); }); });
+  return out.join('\n');
+}
+function acShowIface(d,f){
+  return [f.name+' is up, line protocol is up',
+    '  Internet address is '+f.ip+'/'+f.pfx,
+    '  Broadcast address is 255.255.255.255',
+    '  MTU is 1500 bytes',
+    '  Helper address is not set',
+    '  Directed broadcast forwarding is disabled',
+    '  Outgoing access list is '+(f.aclOut||'not set'),
+    '  Inbound access list is '+(f.aclIn||'not set')].join('\n');
+}
+function acShowIfBrief(d){
+  const lines=['Interface                  IP-Address      Status                Protocol'];
+  d.ifaces.forEach(function(f){
+    lines.push((f.name+'                           ').slice(0,27)+
+      ((f.ip||'unassigned')+'                ').slice(0,16)+'up                    up');
+  });
+  return lines.join('\n');
+}
+function acShowRoute(d){
+  const t=acRoutingTable(d);
+  const lines=['Codes: C - connected, R - RIP',''];
+  t.slice().sort(function(a,b){ return a.netInt-b.netInt||a.prefix-b.prefix; }).forEach(function(e){
+    lines.push(e.code==='C'
+      ? 'C    '+int2ip(e.netInt)+'/'+e.prefix+' is directly connected, '+e.iface
+      : 'R    '+int2ip(e.netInt)+'/'+e.prefix+' [120/'+e.metric+'] via '+e.nextHop+', '+e.iface);
+  });
+  return lines.join('\n');
+}
+function acShowRun(d){
+  const lines=['!'];
+  d.ifaces.forEach(function(f){
+    lines.push('interface '+f.name);
+    if(f.vlan) lines.push(' encapsulation dot1Q '+f.vlan);
+    lines.push(' ip address '+f.ip+' '+cidr2mask(f.pfx));
+    if(f.aclIn) lines.push(' ip access-group '+f.aclIn+' in');
+    if(f.aclOut) lines.push(' ip access-group '+f.aclOut+' out');
+    lines.push('!');
+  });
+  Object.keys(d.acls).forEach(function(n){
+    const acl=d.acls[n];
+    if(acl.numbered) acl.aces.forEach(function(a){ lines.push('access-list '+acl.name+' '+aceText(a)); });
+    else {
+      lines.push('ip access-list standard '+acl.name);
+      acl.aces.forEach(function(a){ lines.push(' '+aceText(a)); });
+    }
+    lines.push('!');
+  });
+  if(d.vtyAcl){ lines.push('line vty 0 4'); lines.push(' access-class '+d.vtyAcl+' in'); lines.push('!'); }
+  return lines.join('\n');
+}
+
+/* ═══ The Lab 8A topology ══════════════════════════════════════════
+   Cisco's addressing exactly, so anything the learner reads in the real lab
+   lines up with what they see here. Built once per round and handed over
+   already working: VLANs, inter-VLAN routing and RIP are all done, which is
+   where the real lab is by the end of Part 2. */
+function acBuildTopology(){
+  acReset();
+  /* R2 sits far enough down the canvas that its loopback stub and the label
+     above it still fit — the arm reaches 34px above the box and the text
+     another 6 on top of that, so anything less than ~50px of headroom
+     clips. Checked by measuring, not by eye. */
+  const r1=acAddRouter('R1',120,150), r2=acAddRouter('R2',340,58), r3=acAddRouter('R3',540,150);
+  const s1=acAddSwitch('S1',95,250), s3=acAddSwitch('S3',515,250);
+  const pcA=acAddPC('PC-A',30,336,'192.168.10.3',24,'192.168.10.1');
+  const pcB=acAddPC('PC-B',195,336,'192.168.20.3',24,'192.168.20.1');
+  const pcC=acAddPC('PC-C',515,336,'192.168.30.3',24,'192.168.30.1');
+
+  acAddIface(r1,'Gi0/1.10','192.168.10.1',24,{vlan:10,parent:'Gi0/1'});
+  acAddIface(r1,'Gi0/1.20','192.168.20.1',24,{vlan:20,parent:'Gi0/1'});
+  acAddIface(r1,'Gi0/1.99','192.168.99.1',24,{vlan:99,parent:'Gi0/1'});
+  acAddIface(r1,'S0/0/0','10.1.1.1',30,{serial:true});
+
+  acAddIface(r2,'S0/0/0','10.1.1.2',30,{serial:true});
+  acAddIface(r2,'S0/0/1','10.2.2.2',30,{serial:true});
+  acAddIface(r2,'Lo0','209.165.200.225',27,{loopback:true});
+
+  acAddIface(r3,'Gi0/1.30','192.168.30.1',24,{vlan:30,parent:'Gi0/1'});
+  acAddIface(r3,'Gi0/1.100','192.168.100.1',24,{vlan:100,parent:'Gi0/1'});
+  acAddIface(r3,'Lo0','192.168.40.1',24,{loopback:true});
+  acAddIface(r3,'S0/0/1','10.2.2.1',30,{serial:true});
+
+  acCable(r1,r2,{serial:true,aLabel:'S0/0/0',bLabel:'S0/0/0'});
+  acCable(r2,r3,{serial:true,aLabel:'S0/0/1',bLabel:'S0/0/1'});
+  acCable(r1,s1,{aLabel:'G0/1',bLabel:'F0/5'});
+  acCable(r3,s3,{aLabel:'G0/1',bLabel:'F0/5'});
+  acCable(s1,pcA,{aLabel:'F0/6'});
+  acCable(s1,pcB,{aLabel:'F0/7'});
+  acCable(s3,pcC,{aLabel:'F0/18'});
+
+  /* What RIPv2 converged to in Part 2. Metrics are hop counts from here. */
+  acAddRoute(r1,'10.2.2.0',30,'S0/0/0','10.1.1.2',1);
+  acAddRoute(r1,'192.168.30.0',24,'S0/0/0','10.1.1.2',2);
+  acAddRoute(r1,'192.168.100.0',24,'S0/0/0','10.1.1.2',2);
+  acAddRoute(r1,'192.168.40.0',24,'S0/0/0','10.1.1.2',2);
+  acAddRoute(r1,'0.0.0.0',0,'S0/0/0','10.1.1.2',1);
+
+  acAddRoute(r2,'192.168.10.0',24,'S0/0/0','10.1.1.1',1);
+  acAddRoute(r2,'192.168.20.0',24,'S0/0/0','10.1.1.1',1);
+  acAddRoute(r2,'192.168.99.0',24,'S0/0/0','10.1.1.1',1);
+  acAddRoute(r2,'192.168.30.0',24,'S0/0/1','10.2.2.1',1);
+  acAddRoute(r2,'192.168.100.0',24,'S0/0/1','10.2.2.1',1);
+  acAddRoute(r2,'192.168.40.0',24,'S0/0/1','10.2.2.1',1);
+
+  acAddRoute(r3,'10.1.1.0',30,'S0/0/1','10.2.2.2',1);
+  acAddRoute(r3,'192.168.10.0',24,'S0/0/1','10.2.2.2',2);
+  acAddRoute(r3,'192.168.20.0',24,'S0/0/1','10.2.2.2',2);
+  acAddRoute(r3,'192.168.99.0',24,'S0/0/1','10.2.2.2',2);
+  acAddRoute(r3,'0.0.0.0',0,'S0/0/1','10.2.2.2',1);
+
+  return {r1:r1,r2:r2,r3:r3,s1:s1,s3:s3,pcA:pcA,pcB:pcB,pcC:pcC};
+}
+
+/* ═══ Requirement factories ════════════════════════════════════════ */
+function acGroup(name){
+  const rs=Array.prototype.slice.call(arguments,1);
+  rs.forEach(function(r){ r.group=name; });
+  return rs;
+}
+function mono(s){ return '<span class="mono-inl">'+esc(s)+'</span>'; }
+function acFindAcl(r,name){ return r.acls[name]||null; }
+
+/* The ACL exists, and its ACEs are the right ones in the right order.
+   want is a list of {action, kind, ip, wc} in the order they must appear. */
+function acAclReq(router, name, want, note){
+  return {group:'ACL', desc:'On '+router.name+', build '+mono(name)+' — '+note,
+    test:function(){
+      const acl=acFindAcl(router,name);
+      if(!acl) return {ok:false, reason:router.name+' has no access list called '+name+' yet'};
+      if(acl.aces.length<want.length)
+        return {ok:false, reason:name+' has '+acl.aces.length+' entr'+(acl.aces.length===1?'y':'ies')+
+          ', the policy needs '+want.length};
+      for(let i=0;i<want.length;i++){
+        const got=acl.aces[i], w=want[i];
+        const wantInt=ip2int(w.ip), wantWc=w.wc==null?0:ip2int(w.wc);
+        if(got.action!==w.action || got.ipInt!==wantInt || got.wcInt!==wantWc){
+          return {ok:false, reason:'Entry '+(i+1)+' of '+name+' is "'+aceText(got)+
+            '", the policy needs "'+w.action+' '+(w.kind==='any'?'any':w.ip+(w.wc?' '+w.wc:''))+
+            '". Order matters — the first match wins'};
+        }
+      }
+      if(acl.aces.length>want.length)
+        return {ok:false, reason:name+' has extra entries after "'+aceText(acl.aces[want.length-1])+
+          '" that the policy does not call for'};
+      return {ok:true};
+    }};
+}
+function acAppliedReq(router, ifName, aclName, dir, why){
+  return {group:'ACL', desc:'Apply '+mono(aclName)+' to '+router.name+' '+mono(ifName)+' '+mono(dir)+'bound'+(why?' — '+why:''),
+    test:function(){
+      const f=acIface(router,ifName);
+      if(!f) return {ok:false, reason:router.name+' has no interface '+ifName};
+      const got = dir==='in' ? f.aclIn : f.aclOut;
+      const other = dir==='in' ? f.aclOut : f.aclIn;
+      if(got===aclName) return {ok:true};
+      if(other===aclName)
+        return {ok:false, reason:aclName+' is applied '+(dir==='in'?'out':'in')+'bound on '+ifName+
+          ', not '+dir+'bound. A standard ACL filters on source address, so the direction decides which traffic it sees'};
+      if(got) return {ok:false, reason:ifName+' has '+got+' applied '+dir+'bound, not '+aclName};
+      return {ok:false, reason:'Nothing is applied '+dir+'bound on '+router.name+' '+ifName+' yet'};
+    }};
+}
+function acVtyReq(router, aclName){
+  return {group:'ACL', desc:'Apply '+mono(aclName)+' to '+router.name+"'s vty lines ("+mono('access-class '+aclName+' in')+')',
+    test:function(){
+      if(!acFindAcl(router,aclName)) return {ok:false, reason:aclName+' does not exist yet'};
+      if(router.vtyAcl!==aclName)
+        return {ok:false, reason:router.vtyAcl
+          ? router.name+"'s vty lines use "+router.vtyAcl+', not '+aclName
+          : router.name+' has no access-class on its vty lines yet'};
+      return {ok:true};
+    }};
+}
+/* The network arrives working, so a plain "PC-A can ping PC-C" is green
+   before the learner has typed anything — a tick for an empty config, the
+   same trap the RIP lab's "do not advertise" requirement had. A gate fixes
+   it without needing a third state in the shared renderReqList: until the
+   ACL this check is about exists and is applied, the row reports not-met
+   and names the missing step. After that it is a real test of what the
+   list lets through. */
+function acGateApplied(router, aclName, ifName, dir){
+  return function(){
+    if(!router.acls[aclName]) return 'Build '+aclName+' first — this checks what it lets through';
+    const f=acIface(router,ifName);
+    const got=f?(dir==='in'?f.aclIn:f.aclOut):null;
+    if(got!==aclName) return 'Apply '+aclName+' to '+router.name+' '+ifName+' '+dir+'bound first — until it is on the interface, this is just the network as it already was';
+    return null;
+  };
+}
+function acGateVty(router, aclName){
+  return function(){
+    if(!router.acls[aclName]) return 'Build '+aclName+' first';
+    if(router.vtyAcl!==aclName) return 'Apply '+aclName+' to the vty lines first';
+    return null;
+  };
+}
+function acGateAces(router, aclName, n){
+  return function(){
+    const acl=router.acls[aclName];
+    if(!acl||acl.aces.length<n) return 'Finish editing '+aclName+' first — it needs '+n+' entries';
+    return null;
+  };
+}
+/* Reachability, graded as an outcome. Every one of these is a line from the
+   real lab's own verification steps. */
+function acPingReq(fromLabel, srcIp, toLabel, dstIp, shouldWork, why, gate){
+  return {group:'Verify',
+    desc:(shouldWork?'<b>'+fromLabel+'</b> can ping <b>'+toLabel+'</b>'
+                    :'<b>'+fromLabel+'</b> is <b>blocked</b> from '+toLabel)+(why?' — '+why:''),
+    test:function(){
+      if(gate){ const g=gate(); if(g) return {ok:false, reason:g}; }
+      const r=acPing(srcIp, dstIp, false);
+      if(shouldWork) return r.ok ? {ok:true} : {ok:false, reason:r.reason};
+      if(!r.ok && r.blocked) return {ok:true};
+      if(!r.ok) return {ok:false, reason:'It does fail, but not because of an ACL: '+r.reason};
+      return {ok:false, reason:dstIp+' is still reachable from '+srcIp+' — the policy says it should not be'};
+    }};
+}
+function acSshReq(fromLabel, srcIp, router, routerIp, shouldWork, gate){
+  return {group:'Verify',
+    desc:shouldWork?'<b>'+fromLabel+'</b> ('+mono(srcIp)+') can SSH to '+router.name
+                   :'<b>'+fromLabel+'</b> ('+mono(srcIp)+') is <b>refused</b> SSH to '+router.name,
+    test:function(){
+      if(gate){ const g=gate(); if(g) return {ok:false, reason:g}; }
+      const r=acSsh(srcIp, routerIp, false);
+      if(shouldWork) return r.ok ? {ok:true} : {ok:false, reason:r.reason};
+      if(!r.ok && r.deniedByVty) return {ok:true};
+      if(!r.ok) return {ok:false, reason:'It fails, but not because of the vty ACL: '+r.reason};
+      return {ok:false, reason:srcIp+' can still SSH in — the policy says it should not'};
+    }};
+}
+/* "Do you have to re-apply the ACL after editing it?" graded as a fact
+   rather than a question: the access-group must still be there afterwards. */
+function acStillAppliedReq(router, ifName, aclName, gate){
+  return {group:'Verify', desc:'The '+mono('ip access-group')+' on '+router.name+' '+mono(ifName)+' is still in place after the edit',
+    test:function(){
+      if(gate){ const g=gate(); if(g) return {ok:false, reason:g}; }
+      const f=acIface(router,ifName);
+      if(!f||f.aclOut!==aclName)
+        return {ok:false, reason:'Editing an ACL in place does not remove it from the interface — put '+aclName+' back on '+ifName+' outbound'};
+      return {ok:true};
+    }};
+}
+
+/* ═══ Lab tiers ════════════════════════════════════════════════════
+   Easy  = Lab 8A Part 3 Step 1   (numbered ACL 1 on R3)
+   Medium= Lab 8A Part 3 Step 2   (named BRANCH-OFFICE-POLICY on R1)
+   Hard  = Lab 8A Parts 4 and 5   (edit in place, then the vty ACL)   */
+
+function genAclLabEasy(){
+  const t=acBuildTopology();
+  return {
+    kind:'easy', part:'Part 3, Step 1',
+    title:'A numbered standard ACL',
+    goal:'Allow every host on <b>192.168.10.0/24</b> and every host on <b>192.168.20.0/24</b> to reach <b>192.168.30.0/24</b>. The security policy also says an explicit <span class="mono-inl">deny any</span> must sit at the end of every ACL. Use <b>1</b> as the access list number.',
+    note:'A standard ACL matches on the <b>source address only</b>, so best practice is to apply it as close to the <b>destination</b> as possible — anywhere earlier and you would block those sources from reaching everything, not just this one network. Work out which router that means, which interface, and which direction.',
+    hint:'R1 pinging PC-C will stop working once this is applied, and that is correct: R1 sources those packets from 10.1.1.1, which the list does not permit.',
+    reqs:[].concat(
+      acGroup('ACL',
+        acAclReq(t.r3,'1',[
+          {action:'permit', kind:'net', ip:'192.168.10.0', wc:'0.0.0.255'},
+          {action:'permit', kind:'net', ip:'192.168.20.0', wc:'0.0.0.255'},
+          {action:'deny',  kind:'any', ip:'0.0.0.0', wc:'255.255.255.255'}
+        ], 'two permits and an explicit deny any'),
+        acAppliedReq(t.r3,'Gi0/1.30','1','out','closest to the destination')),
+      (function(){ const g=acGateApplied(t.r3,'1','Gi0/1.30','out'); return acGroup('Verify',
+        acPingReq('PC-A','192.168.10.3','PC-C','192.168.30.3',true,null,g),
+        acPingReq('PC-B','192.168.20.3','PC-C','192.168.30.3',true,null,g),
+        acPingReq('R1','10.1.1.1','PC-C','192.168.30.3',false,'R1 sources from 10.1.1.1, which the list does not permit',g)); })()
+    ),
+    topo:t
+  };
+}
+
+function genAclLabMedium(){
+  const t=acBuildTopology();
+  /* Part 3 Step 1's ACL is already in place — the real lab builds on it. */
+  acEcho(t.r3,['configure terminal',
+    'access-list 1 permit 192.168.10.0 0.0.0.255',
+    'access-list 1 permit 192.168.20.0 0.0.0.255',
+    'access-list 1 deny any',
+    'interface Gi0/1.30','ip access-group 1 out','end']);
+  return {
+    kind:'medium', part:'Part 3, Step 2',
+    title:'A named standard ACL',
+    goal:'Build <b>BRANCH-OFFICE-POLICY</b>: allow every host on <b>192.168.40.0/24</b> to reach <b>192.168.10.0/24</b>, and allow <b>only host PC-C</b> (192.168.30.3) to reach it as well.',
+    note:'Use the <span class="mono-inl">host</span> keyword rather than a <span class="mono-inl">0.0.0.0</span> wildcard. Put PC-C first — order is what makes this list say "only that one host, plus that whole network" rather than something broader. Do <b>not</b> add a deny any yet; Part 4 does that. ACL 1 from the previous step is already configured on R3.',
+    hint:'Two extended pings from R3 prove it: sourcing from Gi0/1.30 (192.168.30.1) must fail, sourcing from Lo0 (192.168.40.1) must work.',
+    reqs:[].concat(
+      acGroup('ACL',
+        acAclReq(t.r1,'BRANCH-OFFICE-POLICY',[
+          {action:'permit', kind:'host', ip:'192.168.30.3', wc:null},
+          {action:'permit', kind:'net', ip:'192.168.40.0', wc:'0.0.0.255'}
+        ], 'host PC-C, then the 192.168.40.0/24 network'),
+        acAppliedReq(t.r1,'Gi0/1.10','BRANCH-OFFICE-POLICY','out','closest to the destination')),
+      (function(){ const g=acGateApplied(t.r1,'BRANCH-OFFICE-POLICY','Gi0/1.10','out'); return acGroup('Verify',
+        acPingReq('PC-C','192.168.30.3','PC-A','192.168.10.3',true,null,g),
+        acPingReq('R3 sourcing from Gi0/1.30','192.168.30.1','PC-A','192.168.10.3',false,'only host 192.168.30.3 is permitted, not the whole 192.168.30.0/24 network',g),
+        acPingReq('R3 sourcing from Lo0','192.168.40.1','PC-A','192.168.10.3',true,null,g),
+        acPingReq('PC-A','192.168.10.3','PC-B','192.168.20.3',false,"PC-B's reply leaves R1 via Gi0/1.10, where the list denies it",g)); })()
+    ),
+    topo:t
+  };
+}
+
+function genAclLabHard(){
+  const t=acBuildTopology();
+  acEcho(t.r3,['configure terminal',
+    'access-list 1 permit 192.168.10.0 0.0.0.255',
+    'access-list 1 permit 192.168.20.0 0.0.0.255',
+    'access-list 1 deny any',
+    'interface Gi0/1.30','ip access-group 1 out','end']);
+  acEcho(t.r1,['configure terminal',
+    'ip access-list standard BRANCH-OFFICE-POLICY',
+    'permit host 192.168.30.3',
+    'permit 192.168.40.0 0.0.0.255',
+    'exit',
+    'interface Gi0/1.10','ip access-group BRANCH-OFFICE-POLICY out','end']);
+  return {
+    kind:'hard', part:'Parts 4 and 5',
+    title:'Modify an ACL, then lock down the vty lines',
+    goal:'Management has changed the policy twice. First, <b>209.165.200.224/27</b> now gets full access to 192.168.10.0/24, and every ACL must end with an explicit <span class="mono-inl">deny any</span> — add both to <b>BRANCH-OFFICE-POLICY</b>. Second, build <b>ADMIN-MGT</b> so only the administrator at <b>192.168.10.3</b> and the reserved range <b>192.168.10.4 – 192.168.10.7</b> may SSH into R1, and apply it to the vty lines.',
+    note:'Edit BRANCH-OFFICE-POLICY <b>in place</b> by sequence number — that is Option 2 in the lab, and it is why IOS numbers entries in tens. Deleting and retyping the whole list is how mistakes get made. ACL 1 and BRANCH-OFFICE-POLICY are already configured from the earlier steps.',
+    hint:'192.168.10.4 through 192.168.10.7 is four addresses, so the wildcard is 0.0.0.3. Adding an ACE does not detach the list from the interface.',
+    reqs:[].concat(
+      acGroup('ACL',
+        acAclReq(t.r1,'BRANCH-OFFICE-POLICY',[
+          {action:'permit', kind:'host', ip:'192.168.30.3', wc:null},
+          {action:'permit', kind:'net', ip:'192.168.40.0', wc:'0.0.0.255'},
+          {action:'permit', kind:'net', ip:'209.165.200.224', wc:'0.0.0.31'},
+          {action:'deny',  kind:'any', ip:'0.0.0.0', wc:'255.255.255.255'}
+        ], 'the two existing entries, then the new permit, then deny any'),
+        acAclReq(t.r1,'ADMIN-MGT',[
+          {action:'permit', kind:'host', ip:'192.168.10.3', wc:null},
+          {action:'permit', kind:'net', ip:'192.168.10.4', wc:'0.0.0.3'}
+        ], 'the administrator host, then the reserved range'),
+        acVtyReq(t.r1,'ADMIN-MGT')),
+      (function(){
+        const gb=acGateAces(t.r1,'BRANCH-OFFICE-POLICY',4), gv=acGateVty(t.r1,'ADMIN-MGT');
+        return acGroup('Verify',
+          acStillAppliedReq(t.r1,'Gi0/1.10','BRANCH-OFFICE-POLICY',gb),
+          acPingReq('R2 sourcing from Lo0','209.165.200.225','PC-A','192.168.10.3',true,null,gb),
+          acSshReq('PC-A','192.168.10.3',t.r1,'192.168.10.1',true,gv),
+          acSshReq('a host at 192.168.10.100','192.168.10.100',t.r1,'192.168.10.1',false,gv),
+          acSshReq('a reserved admin host','192.168.10.5',t.r1,'192.168.10.1',true,gv),
+          acPingReq('PC-A','192.168.10.3','PC-C','192.168.30.3',true,'the earlier ACLs must keep working',gb));
+      })()
+    ),
+    topo:t
+  };
+}
+function genAclLab(diff){
+  return diff==='easy' ? genAclLabEasy() : diff==='medium' ? genAclLabMedium() : genAclLabHard();
+}
+
+/* ═══ Canvas ═══════════════════════════════════════════════════════
+   Read-only: the topology is Lab 8A's and never changes, so there is no
+   cabling and no dragging of ports. Devices are still draggable and the
+   canvas still zooms, because reading a diagram is easier when you can move
+   things out of your own way. */
+const AC_CANVAS_H=400;
+function acDevSize(d){
+  if(d.type==='router') return [AC_RT_W,AC_RT_H];
+  if(d.type==='switch') return [LabShared.SW_W,LabShared.SW_H];
+  const label=d.ip||'no IP';
+  return [Math.max(LabShared.PC_W, Math.round(label.length*6.4)+24), LabShared.PC_H];
+}
+function acCentre(d){ const s=acDevSize(d); return [d.x+s[0]/2, d.y+s[1]/2]; }
+/* Meet the box edge on the straight line between two centres, so a cable
+   stops at the box rather than running under it. */
+function acEdge(from,to){
+  const s=acDevSize(from), c=acCentre(from), o=acCentre(to);
+  const dx=o[0]-c[0], dy=o[1]-c[1];
+  if(!dx&&!dy) return c;
+  const sx=dx?(s[0]/2)/Math.abs(dx):Infinity, sy=dy?(s[1]/2)/Math.abs(dy):Infinity;
+  const k=Math.min(sx,sy);
+  return [c[0]+dx*k, c[1]+dy*k];
+}
+function acRenderCanvas(){
+  const svg=document.getElementById('ac-cable-svg'), layer=document.getElementById('ac-dev-layer');
+  if(!svg||!layer) return;
+  svg.innerHTML=''; layer.innerHTML='';
+
+  acCables.forEach(function(c){
+    const A=acById(c.a), B=acById(c.b);
+    const p=acEdge(A,B), q=acEdge(B,A);
+    const l=document.createElementNS('http://www.w3.org/2000/svg','line');
+    l.setAttribute('x1',p[0]); l.setAttribute('y1',p[1]);
+    l.setAttribute('x2',q[0]); l.setAttribute('y2',q[1]);
+    l.setAttribute('class','cable');
+    /* Inline style, not setAttribute — a presentation attribute loses to
+       .cable's own pointer-events:stroke and red :hover, and nothing on
+       this canvas is clickable. */
+    l.style.pointerEvents='none';
+    if(c.serial) l.style.strokeDasharray='7 4';
+    svg.appendChild(l);
+    if(c.aLabel) acEdgeLabel(svg,p,q,c.aLabel);
+    if(c.bLabel) acEdgeLabel(svg,q,p,c.bLabel);
+  });
+
+  /* Loopbacks as the usual stub symbol: an arm off the top with a T-bar. */
+  acDevices.forEach(function(d){
+    if(d.type!=='router') return;
+    d.ifaces.filter(function(f){ return f.loopback; }).forEach(function(f){
+      const c=acCentre(d), yTop=d.y, yEnd=d.y-34, x=c[0];
+      [[x,yTop,x,yEnd],[x-15,yEnd,x+15,yEnd]].forEach(function(g){
+        const l=document.createElementNS('http://www.w3.org/2000/svg','line');
+        l.setAttribute('x1',g[0]); l.setAttribute('y1',g[1]);
+        l.setAttribute('x2',g[2]); l.setAttribute('y2',g[3]);
+        l.setAttribute('class','cable'); l.style.pointerEvents='none';
+        svg.appendChild(l);
+      });
+      const tx=document.createElementNS('http://www.w3.org/2000/svg','text');
+      tx.setAttribute('x',x); tx.setAttribute('y',yEnd-6);
+      tx.setAttribute('text-anchor','middle'); tx.setAttribute('font-size','10.5');
+      tx.setAttribute('font-family','var(--mono)'); tx.setAttribute('fill','var(--text-t)');
+      tx.textContent=f.name+' '+f.ip+'/'+f.pfx;
+      svg.appendChild(tx);
+    });
+  });
+
+  acDevices.forEach(function(d){
+    const size=acDevSize(d);
+    const el=document.createElement('div');
+    el.className='dev '+d.type+(acSelected===d.id?' selected':'');
+    el.style.left=d.x+'px'; el.style.top=d.y+'px';
+    el.style.width=size[0]+'px'; el.style.height=size[1]+'px';
+    el.dataset.did=d.id;
+    if(d.type==='router'){
+      const applied=d.ifaces.filter(function(f){ return f.aclIn||f.aclOut; }).length;
+      const bits=[];
+      if(applied) bits.push(applied+' ACL'+(applied===1?'':'s')+' applied');
+      if(d.vtyAcl) bits.push('vty '+d.vtyAcl);
+      el.innerHTML='<div class="dev-name">'+d.name+'</div><div class="dev-sub">'+
+        (bits.length?esc(bits.join(' · ')):'no ACLs')+'</div>';
+    } else if(d.type==='switch'){
+      el.innerHTML='<div class="dev-name">'+d.name+'</div><div class="dev-sub">switch</div>';
+    } else {
+      el.innerHTML='<div class="dev-name">'+d.name+'</div><div class="dev-sub">'+d.ip+'</div>';
+    }
+    layer.appendChild(el);
+  });
+}
+function acEdgeLabel(svg,near,far,text){
+  const t=0.26;
+  const x=near[0]+(far[0]-near[0])*t, y=near[1]+(far[1]-near[1])*t;
+  const tx=document.createElementNS('http://www.w3.org/2000/svg','text');
+  tx.setAttribute('x',x); tx.setAttribute('y',y-4);
+  tx.setAttribute('text-anchor','middle'); tx.setAttribute('font-size','10');
+  tx.setAttribute('font-family','var(--mono)'); tx.setAttribute('fill','var(--text-t)');
+  tx.textContent=text;
+  svg.appendChild(tx);
+}
+
+/* ═══ Config panel ═════════════════════════════════════════════════ */
+function acOpenCfg(id){ acSelected=id; acRenderCanvas(); acRefreshCfg(); }
+function acCloseCfg(){ acSelected=null; acRenderCanvas(); const p=document.getElementById('ac-cfg'); if(p) p.style.display='none'; }
+function acRefreshCfg(){
+  const d=acSelected!=null?acById(acSelected):null;
+  const panel=document.getElementById('ac-cfg');
+  if(!panel) return;
+  if(!d){ panel.style.display='none'; return; }
+  panel.style.display='';
+  if(d.type==='router') acRenderRouterCfg(d,panel);
+  else if(d.type==='pc') acRenderPcCfg(d,panel);
+  else acRenderSwitchCfg(d,panel);
+}
+function acIfaceTableHtml(d){
+  let html='<table class="port-table"><thead><tr><th>Interface</th><th>Address</th><th>ACL in</th><th>ACL out</th></tr></thead><tbody>';
+  d.ifaces.forEach(function(f){
+    html+='<tr><td class="pt-name">'+f.name+'</td><td class="pt-conn">'+f.ip+'/'+f.pfx+'</td>'+
+      '<td class="pt-conn">'+(f.aclIn||'—')+'</td><td class="pt-conn">'+(f.aclOut||'—')+'</td></tr>';
+  });
+  html+='</tbody></table>';
+  html+='<div class="cli-note" style="margin-top:8px">vty lines: '+(d.vtyAcl?'<b>access-class '+esc(d.vtyAcl)+' in</b>':'no access-class')+'</div>';
+  return html;
+}
+function acAclListHtml(d){
+  const names=Object.keys(d.acls);
+  if(!names.length) return '<div class="cli-note">No access lists on '+d.name+' yet.</div>';
+  return '<pre class="ping-out" style="margin:0">'+esc(acShowAcls(d))+'</pre>';
+}
+function acTermHtml(){
+  return '<div class="term"><div class="term-log" id="ac-term-log"></div>'+
+    '<div class="term-inrow"><span class="term-prompt" id="ac-term-prompt"></span>'+
+    '<input class="term-in" id="ac-term-in" autocomplete="off" spellcheck="false"></div></div>';
+}
+function acRenderRouterCfg(d,panel){
+  panel.innerHTML=
+    '<div class="cfg-hdr"><div class="cfg-name">'+d.name+'</div>'+
+    '<button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="acCloseCfg()">Close</button></div>'+
+    '<div class="cfg-grid"><div>'+
+      '<div class="cfg-sec-lbl">Interfaces</div>'+acIfaceTableHtml(d)+
+      '<div class="cfg-sec-lbl" style="margin-top:14px">Access Lists</div>'+acAclListHtml(d)+
+    '</div><div><div class="cfg-sec-lbl">CLI</div>'+acTermHtml()+'</div></div>';
+  acRenderTerm();
+}
+function acRenderSwitchCfg(d,panel){
+  panel.innerHTML=
+    '<div class="cfg-hdr"><div class="cfg-name">'+d.name+'</div>'+
+    '<button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="acCloseCfg()">Close</button></div>'+
+    '<div class="cli-note">VLANs, access ports and port security are already configured — Part 2 of the lab. This page is about the filtering that goes on top, so there is nothing to change here.</div>';
+}
+function acRenderPcCfg(d,panel){
+  panel.innerHTML=
+    '<div class="cfg-hdr"><div class="cfg-name">'+d.name+'</div>'+
+    '<button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="acCloseCfg()">Close</button></div>'+
+    '<div class="pc-form"><span class="pc-form-lbl">IP Address</span>'+
+    '<input type="text" class="custom-ip-inp" value="'+d.ip+'" autocomplete="off" spellcheck="false" oninput="acSetPcIp('+d.id+',this.value)">'+
+    '<span class="pc-pfx">/'+d.pfx+'</span></div>'+
+    '<div class="cli-note" style="margin-top:6px">Part 5 has you change this address to test the vty ACL from a permitted and a non-permitted host.</div>'+
+    '<div class="cfg-sec-lbl" style="margin-top:14px">Ping</div>'+
+    '<div class="pc-form"><label class="pc-form-lbl">Target IP</label>'+
+    '<input class="custom-ip-inp" id="ac-ping-ip" placeholder="e.g. 192.168.30.3" autocomplete="off" spellcheck="false" onkeydown="if(event.key===\'Enter\')acPingRun()">'+
+    '<button class="rand-btn" id="ac-ping-btn" onclick="acPingRun()">Ping</button></div>'+
+    '<pre class="ping-out" id="ac-ping-out"></pre>'+
+    '<div class="cfg-sec-lbl" style="margin-top:14px">SSH</div>'+
+    '<div class="pc-form"><label class="pc-form-lbl">Router IP</label>'+
+    '<input class="custom-ip-inp" id="ac-ssh-ip" placeholder="e.g. 192.168.10.1" autocomplete="off" spellcheck="false" onkeydown="if(event.key===\'Enter\')acSshRun()">'+
+    '<button class="rand-btn" id="ac-ssh-btn" onclick="acSshRun()">SSH</button></div>'+
+    '<pre class="ping-out" id="ac-ssh-out"></pre>';
+}
+function acSetPcIp(id,val){
+  const d=acById(id), s=val.trim();
+  if(isValidIP(s)) d.ip=s;
+  acRenderCanvas();
+}
+let acPingGen=0;
+function acPingRun(){
+  const d=acSelected!=null?acById(acSelected):null;
+  if(!d||d.type!=='pc') return;
+  const myGen=++acPingGen, pcId=d.id;
+  LabShared.runPing({
+    inputId:'ac-ping-ip', btnId:'ac-ping-btn', outId:'ac-ping-out',
+    resolve:function(dst){
+      if(!isValidIP(dst)) return {msg:'invalid target address'};
+      if(dst===d.ip) return {ok:true};
+      /* count:true — the real lab's match counters only appear because
+         somebody actually ran these pings. */
+      const r=acPing(d.ip, dst, true);
+      if(!r.ok) return {ok:false};
+      d._arp=d._arp||new Set();
+      const firstTime=!d._arp.has(dst);
+      d._arp.add(dst);
+      return {ok:true, firstTime:firstTime};
+    },
+    stillActive:function(){ return myGen===acPingGen && acSelected===pcId; }
+  });
+}
+function acSshRun(){
+  const d=acSelected!=null?acById(acSelected):null;
+  if(!d||d.type!=='pc') return;
+  const ip=(document.getElementById('ac-ssh-ip').value||'').trim();
+  const out=document.getElementById('ac-ssh-out');
+  if(!isValidIP(ip)){ out.textContent='Invalid address.'; return; }
+  const r=acSsh(d.ip, ip, true);
+  out.textContent = r.ok
+    ? 'Connecting to '+ip+'...\nOpen\nUsername: admin\nPassword: *****\n\nR1>  (connected)'
+    : 'Connecting to '+ip+'...\n% Connection refused by remote host\n\n('+r.reason+')';
+  acRefreshCfgKeepScroll();
+}
+/* Re-render the panel after an SSH so the match counters update, but keep
+   the output the learner just produced. */
+function acRefreshCfgKeepScroll(){ acRenderCanvas(); }
+
+/* ═══ Terminal ═════════════════════════════════════════════════════ */
+function acRenderTerm(){
+  const d=acSelected!=null?acById(acSelected):null;
+  if(!d||d.type!=='router') return;
+  const log=document.getElementById('ac-term-log');
+  if(!log) return;
+  log.innerHTML=d.log.slice(-18).map(function(l){
+    return '<div class="tl'+(l.charAt(0)==='%'?' terr':'')+'">'+esc(l)+'</div>';
+  }).join('');
+  log.scrollTop=log.scrollHeight;
+  const pr=document.getElementById('ac-term-prompt');
+  if(pr) pr.textContent=acPrompt(d);
+}
+document.addEventListener('keydown', function(e){
+  const input=document.getElementById('ac-term-in');
+  if(!input||document.activeElement!==input) return;
+  const d=acSelected!=null?acById(acSelected):null;
+  if(!d||d.type!=='router') return;
+  if(e.key==='Enter'){
+    const line=input.value; input.value='';
+    if(line.trim()){ d.hist.push(line); d.hi=d.hist.length; }
+    d.log.push(acPrompt(d)+' '+line);
+    const out=acCli(d,line);
+    if(out) out.split('\n').forEach(function(l){ d.log.push(l); });
+    acRenderTerm(); acRenderCanvas(); acRefreshCfg();
+    const fresh=document.getElementById('ac-term-in');
+    if(fresh) fresh.focus();
+  } else if(e.key==='ArrowUp'){
+    e.preventDefault();
+    if(d.hi>0){ d.hi--; input.value=d.hist[d.hi]||''; }
+  } else if(e.key==='ArrowDown'){
+    e.preventDefault();
+    if(d.hi<d.hist.length-1){ d.hi++; input.value=d.hist[d.hi]||''; }
+    else { d.hi=d.hist.length; input.value=''; }
+  } else if(e.key==='Tab'){
+    e.preventDefault();
+    input.value=LabShared.tabComplete(AC_KW, input.value, function(cands){ d.log.push(cands.join('   ')); acRenderTerm(); });
+  }
+});
+
+/* ═══ Lab brief + render ═══════════════════════════════════════════ */
+function acTasksShown(){ try{ return localStorage.getItem('ne-acl-tasks')!=='0'; }catch(e){ return true; } }
+function acApplyTasksPref(){
+  const shown=acTasksShown();
+  const list=document.getElementById('req-list'), btn=document.getElementById('ac-tasks-btn');
+  if(list) list.style.display=shown?'':'none';
+  if(btn){ btn.classList.toggle('collapsed',!shown); btn.setAttribute('aria-expanded',String(shown)); }
+}
+function acToggleTasks(){
+  try{ localStorage.setItem('ne-acl-tasks', acTasksShown()?'0':'1'); }catch(e){}
+  acApplyTasksPref();
+}
+const AC_ADDR_ROWS=[
+  ['R1','Gi0/1.10','192.168.10.1/24','VLAN 10 — PC-A'],
+  ['R1','Gi0/1.20','192.168.20.1/24','VLAN 20 — PC-B'],
+  ['R1','Gi0/1.99','192.168.99.1/24','VLAN 99 — management'],
+  ['R1','S0/0/0','10.1.1.1/30','R2 S0/0/0'],
+  ['R2','S0/0/0','10.1.1.2/30','R1 S0/0/0'],
+  ['R2','S0/0/1','10.2.2.2/30','R3 S0/0/1'],
+  ['R2','Lo0','209.165.200.225/27','simulated Internet'],
+  ['R3','Gi0/1.30','192.168.30.1/24','VLAN 30 — PC-C'],
+  ['R3','Gi0/1.100','192.168.100.1/24','VLAN 100 — management'],
+  ['R3','Lo0','192.168.40.1/24','simulated branch LAN'],
+  ['R3','S0/0/1','10.2.2.1/30','R2 S0/0/1'],
+  ['PC-A','NIC','192.168.10.3/24','S1 F0/6'],
+  ['PC-B','NIC','192.168.20.3/24','S1 F0/7'],
+  ['PC-C','NIC','192.168.30.3/24','S3 F0/18']
+];
+function acBriefHtml(d){
+  const rows=AC_ADDR_ROWS.map(function(r){ return '<tr>'+r.map(function(c){ return '<td>'+c+'</td>'; }).join('')+'</tr>'; }).join('');
+  return '<div class="req-note">'+d.note+'</div>'+
+    '<div class="qlbl" style="margin-top:1rem">Addressing Table'+
+    '<span class="tip-ic" tabindex="-1" data-tip="The network is already built and working — VLANs, inter-VLAN routing and RIP were done in Part 2. Your job starts at the filtering.">?</span></div>'+
+    '<table class="rt-table" style="margin-top:.35rem">'+
+    '<tr><th>Device</th><th>Interface</th><th>Address</th><th>Connects to</th></tr>'+rows+'</table>'+
+    '<button type="button" class="qlbl sec-toggle" id="ac-tasks-btn" style="margin-top:1rem" '+
+    'aria-expanded="'+acTasksShown()+'" aria-controls="req-list" onclick="acToggleTasks()">Tasks'+
+    '<svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></button>';
+}
+function acRenderReqs(results){
+  if(!state.data||!state.data.reqs) return;
+  LabShared.renderReqList('req-list', state.data.reqs, results, esc);
+  acApplyTasksPref();
+}
+function renderAclLab(body,qip){
+  const d=state.data;
+  document.getElementById('qprompt').innerHTML='<b>'+d.part+' — '+d.title+'.</b> '+d.goal;
+  document.getElementById('qspec').innerHTML=acBriefHtml(d);
+  qip.style.display='none';
+  body.innerHTML=
+    '<div class="lab-card"><div class="lab-toolbar">'+
+      '<div class="legend"><span class="lg">Click a router to open its CLI · click a PC to ping or SSH</span></div>'+
+    '</div>'+
+    '<div class="lab-canvas" id="ac-canvas" style="height:'+AC_CANVAS_H+'px"><svg id="ac-cable-svg"></svg><div id="ac-dev-layer"></div></div>'+
+    '<div class="lab-hint" id="ac-hint">'+esc(d.hint)+'</div>'+
+    '</div><div class="cfg-panel" id="ac-cfg" style="display:none"></div>';
+  LabShared.attachCanvasDrag({
+    layer:document.getElementById('ac-dev-layer'),
+    canvas:document.getElementById('ac-canvas'),
+    getDevice:function(id){ return acById(id); },
+    devSize:function(dev){ return acDevSize(dev); },
+    onRender:function(){ acRenderCanvas(); },
+    onDevClick:function(id){ acOpenCfg(id); },
+    onPortClick:function(){}
+  });
+  setBtns();
+  acRenderCanvas();
+  acRenderReqs(null);
+}
+function acLabGrade(reveal){
+  const d=state.data;
+  const results=d.reqs.map(function(r){ return r.test(); });
+  acRenderReqs(results);
+  const met=results.filter(function(r){ return r.ok; }).length, total=results.length;
+  const all=met===total;
+  const pts=reveal?0:met+(all?2:0);
+  state.score+=pts;
+  state.streak=(!reveal&&all)?state.streak+1:0;
+  state.round++;
+  const fb=document.getElementById('fb');
+  fb.style.display='block';
+  if(reveal){ fb.className='fbanner warn'; fb.textContent='Skipped — '+met+'/'+total+' requirements were met. +0 pts.'; }
+  else if(all){ fb.className='fbanner ok'; fb.textContent='Perfect! All '+total+' requirements met. +'+pts+' pts (+2 bonus). Streak: '+state.streak; }
+  else { fb.className='fbanner '+(met>=Math.ceil(total*0.6)?'warn':'err');
+    fb.textContent=met+'/'+total+' requirements met. +'+pts+' pt'+(pts!==1?'s':'')+'. Open each unmet task for the reason.'; }
+  finishRound();
+}
+
+/* ═══ Drill 1: wildcard masks ══════════════════════════════════════
+   The lab asks "what wildcard mask would you use for …" three separate
+   times, and it is the one piece of ACL arithmetic people actually get
+   wrong. Graded as typed answers because a wildcard mask has exactly one
+   right form — this is the same .afield pattern the summaries topics use. */
+function acRandNet(){
+  return choice([10,172,192,192,192,209]) + '.' +
+    (Math.random()<0.5?168:ri(0,255)) + '.' + ri(0,255) + '.0';
+}
+function genWild(diff){
+  if(diff==='easy'){
+    const pfx=choice([8,16,24,25,26,27,28,29,30]);
+    const net=int2ip(netIntOf(ip2int(acRandNet()),pfx));
+    return {kind:'easy', prompt:'Which wildcard mask matches every host on '+
+      '<span class="mono-inl">'+net+'/'+pfx+'</span>?',
+      fields:[{id:'wc', label:'Wildcard mask', answer:cidr2wild(pfx)}],
+      explain:'A wildcard mask is the inverse of the subnet mask. /'+pfx+' is '+
+        cidr2mask(pfx)+', and 255 minus each octet gives '+cidr2wild(pfx)+'.'};
+  }
+  if(diff==='medium'){
+    const which=choice(['host','range','back']);
+    if(which==='host'){
+      const ip=int2ip(netIntOf(ip2int(acRandNet()),24)+ri(2,250));
+      return {kind:'medium', prompt:'You need an ACE that matches <b>only</b> the single host '+
+        '<span class="mono-inl">'+ip+'</span>. Write the wildcard mask, and the keyword IOS lets you use instead.',
+        fields:[{id:'wc', label:'Wildcard mask', answer:'0.0.0.0'},
+                {id:'kw', label:'Keyword form', answer:'host '+ip, loose:true}],
+        explain:'Every bit must match, so the wildcard is all zeros. '+
+          '<span class="mono-inl">host '+ip+'</span> means exactly the same thing and is what the lab asks you to write.'};
+    }
+    if(which==='range'){
+      const base=netIntOf(ip2int(acRandNet()),24);
+      const blk=choice([4,8,16]), start=base+choice([4,8,16,32,64]);
+      const wc=blk-1;
+      return {kind:'medium', prompt:'Reserved administrative addresses run from '+
+        '<span class="mono-inl">'+int2ip(start)+'</span> to <span class="mono-inl">'+int2ip(start+blk-1)+
+        '</span>. Which address and wildcard mask match exactly that range?',
+        fields:[{id:'ip', label:'Address', answer:int2ip(start)},
+                {id:'wc', label:'Wildcard mask', answer:'0.0.0.'+wc}],
+        explain:'That is '+blk+' consecutive addresses starting on a '+blk+'-address boundary, so the last '+
+          Math.log2(blk)+' bits are "don\'t care" — wildcard 0.0.0.'+wc+'.'};
+    }
+    const pfx=choice([24,25,26,27,28,30]);
+    return {kind:'medium', prompt:'An ACE reads <span class="mono-inl">permit 172.16.8.0 '+cidr2wild(pfx)+
+      '</span>. What prefix length does that wildcard correspond to, and how many addresses does it match?',
+      fields:[{id:'pfx', label:'Prefix length (e.g. /24)', answer:'/'+pfx, loose:true},
+              {id:'n', label:'Addresses matched', answer:String(Math.pow(2,32-pfx))}],
+      explain:'Inverting '+cidr2wild(pfx)+' gives '+cidr2mask(pfx)+', which is /'+pfx+' — '+
+        Math.pow(2,32-pfx)+' addresses.'};
+  }
+  /* Hard: the two shorthands, and a range that is not a whole subnet. */
+  const style=choice(['any','odd']);
+  if(style==='any'){
+    return {kind:'hard', prompt:'Write the address and wildcard mask that <span class="mono-inl">any</span> is shorthand for, and the address and wildcard that <span class="mono-inl">host 10.1.1.1</span> is shorthand for.',
+      fields:[{id:'a', label:'"any" as address + wildcard', answer:'0.0.0.0 255.255.255.255', loose:true},
+              {id:'h', label:'"host 10.1.1.1" as address + wildcard', answer:'10.1.1.1 0.0.0.0', loose:true}],
+      explain:'<span class="mono-inl">any</span> cares about no bits at all, so every bit is "don\'t care". '+
+        '<span class="mono-inl">host</span> cares about all 32, so none are.'};
+  }
+  const base=netIntOf(ip2int(acRandNet()),24);
+  const blk=choice([2,4,8]), start=base+choice([16,32,64,128]);
+  return {kind:'hard',
+    prompt:'A policy must permit only <span class="mono-inl">'+int2ip(start)+'</span> through '+
+      '<span class="mono-inl">'+int2ip(start+blk-1)+'</span>, and nothing else on that subnet. '+
+      'Give the address, the wildcard mask, and the prefix length the pair is equivalent to.',
+    fields:[{id:'ip', label:'Address', answer:int2ip(start)},
+            {id:'wc', label:'Wildcard mask', answer:'0.0.0.'+(blk-1)},
+            {id:'pfx', label:'Equivalent prefix', answer:'/'+(32-Math.log2(blk)), loose:true}],
+    explain:blk+' addresses means the low '+Math.log2(blk)+' bits are "don\'t care" — wildcard 0.0.0.'+
+      (blk-1)+', which is the same as a /'+(32-Math.log2(blk))+'.'};
+}
+function renderWild(body,qip){
+  const d=state.data;
+  document.getElementById('qprompt').innerHTML=d.prompt;
+  qip.style.display='none';
+  body.innerHTML='<div class="agrid">'+d.fields.map(function(f){
+    return '<div class="afield" id="f-'+f.id+'"><label>'+esc(f.label)+'</label>'+
+      '<input id="a-'+f.id+'" autocomplete="off" spellcheck="false">'+
+      '<div class="ahint" id="h-'+f.id+'"></div></div>';
+  }).join('')+'</div>';
+  setBtns();
+}
+function wildGrade(reveal){
+  const d=state.data;
+  let correct=0;
+  d.fields.forEach(function(f){
+    const inp=document.getElementById('a-'+f.id), fld=document.getElementById('f-'+f.id), hnt=document.getElementById('h-'+f.id);
+    const norm=function(s){ return String(s).trim().toLowerCase().replace(/\s+/g,' '); };
+    const uv=norm(inp.value), cv=norm(f.answer);
+    inp.disabled=true;
+    const ok=!reveal && uv!=='' && uv===cv;
+    if(ok){ fld.classList.add('ok'); hnt.textContent='✓ Correct'; correct++; }
+    else { fld.classList.add(uv===''?'show':'bad'); inp.value=f.answer;
+           hnt.textContent = uv===''?'Revealed':'Correct: '+f.answer; }
+  });
+  const all=correct===d.fields.length;
+  const pts=reveal?0:(all?POINTS[state.diff]:correct);
+  state.score+=pts; state.streak=(!reveal&&all)?state.streak+1:0; state.round++;
+  const fb=document.getElementById('fb');
+  fb.style.display='block';
+  fb.className='fbanner '+(reveal?'warn':all?'ok':'err');
+  fb.innerHTML=(reveal?'Skipped. ':all?'Correct! ':'Not quite. ')+d.explain+
+    (reveal?' +0 pts.':' +'+pts+' pt'+(pts!==1?'s':'')+'.'+(all?' Streak: '+state.streak:''));
+  finishRound();
+}
+
+/* ═══ Drill 2: which ACE matches? ══════════════════════════════════
+   Same graded shape as Longest Prefix Match on the routing page: a list of
+   rows, click the one that decides. What makes it an ACL question rather
+   than a routing one is that the FIRST match wins, not the most specific —
+   which is exactly the mistake worth drilling. */
+let acPicked=null;
+function acAceRowsHtml(d){
+  let html='<div class="qlbl">'+esc(d.aclLabel)+'</div>'+
+    '<table class="rt-table" style="margin-top:.35rem"><tr><th style="width:70px">Seq</th><th>Entry</th></tr>';
+  d.aces.forEach(function(a,i){
+    html+='<tr class="rt-row" id="ace-'+i+'" onclick="acPick('+i+')"><td class="cidr-col">'+a.seq+'</td>'+
+      '<td class="mono-inl">'+esc(aceText(a))+'</td></tr>';
+  });
+  html+='<tr class="rt-row" id="ace-'+d.aces.length+'" onclick="acPick('+d.aces.length+')">'+
+    '<td class="cidr-col">—</td><td><em>implicit deny any</em> (never shown by <span class="mono-inl">show access-lists</span>)</td></tr>';
+  return html+'</table>';
+}
+function acPick(i){
+  if(state.done) return;
+  acPicked=i;
+  document.querySelectorAll('#qbody .rt-row').forEach(function(r){ r.classList.remove('sel'); });
+  const el=document.getElementById('ace-'+i);
+  if(el) el.classList.add('sel');
+}
+function genMatch(diff){
+  const net=function(o3){ return '192.168.'+o3+'.0'; };
+  const a=ri(1,60), b=a+ri(1,40), c=b+ri(1,40);
+  let aces=[], src, winner, why;
+  if(diff==='easy'){
+    aces=[aceNet(10,'permit',net(a),'0.0.0.255'), aceNet(20,'permit',net(b),'0.0.0.255')];
+    const hit=Math.random()<0.6;
+    src = hit ? '192.168.'+a+'.'+ri(2,250) : '192.168.'+c+'.'+ri(2,250);
+    winner = hit?0:aces.length;
+    why = hit ? 'It falls inside '+net(a)+'/24, which entry 10 permits.'
+              : 'Nothing in the list matches it, so the implicit deny any at the end drops it.';
+  } else if(diff==='medium'){
+    /* First match wins, and the first match is deliberately the broader
+       one — picking the "most specific" is the trap. */
+    const host='192.168.'+a+'.'+ri(2,250);
+    aces=[aceNet(10,'permit',net(a),'0.0.0.255'), aceHost(20,'deny',host)];
+    src=host; winner=0;
+    why='Both entries match this address, but ACEs are read top to bottom and the <b>first</b> match wins. '+
+      'Entry 10 permits it, so entry 20 is never reached — it is a dead rule.';
+  } else {
+    /* Hard: a deny that only bites because of what precedes it, or an
+       explicit deny any that catches something the learner expects through. */
+    const shape=choice(['shadow','explicit']);
+    if(shape==='shadow'){
+      const host='192.168.'+a+'.'+ri(2,250);
+      aces=[aceHost(10,'deny',host), aceNet(20,'permit',net(a),'0.0.0.255'), aceAny(30,'deny')];
+      src=host; winner=0;
+      why='Entry 10 denies this exact host before entry 20 gets a chance to permit the network it sits in. '+
+        'Putting the specific deny above the broad permit is what makes it effective — the other way round it would be dead.';
+    } else {
+      aces=[aceHost(10,'permit','192.168.'+a+'.3'), aceNet(20,'permit',net(b),'0.0.0.255'), aceAny(30,'deny')];
+      src='192.168.'+a+'.'+ri(4,250);
+      winner=2;
+      why='Only the single host .3 is permitted from that network, not the rest of it, so this address falls through to the explicit deny any at entry 30.';
+    }
+  }
+  const action = winner<aces.length ? aces[winner].action : 'deny';
+  return {kind:diff, aces:aces, src:src, winner:winner, action:action, why:why,
+    aclLabel:'Standard IP access list '+(diff==='easy'?'1':'BRANCH-OFFICE-POLICY')};
+}
+function renderMatch(body,qip){
+  const d=state.data;
+  acPicked=null;
+  document.getElementById('qprompt').innerHTML=
+    'A packet arrives with source address <span class="mono-inl">'+d.src+
+    '</span>. Click the entry that decides its fate.';
+  qip.style.display='none';
+  body.innerHTML=acAceRowsHtml(d);
+  setBtns();
+}
+function matchGrade(reveal){
+  const d=state.data;
+  const fb=document.getElementById('fb');
+  fb.style.display='block';
+  if(!reveal && acPicked===null){ fb.className='fbanner warn'; fb.textContent='Pick an entry first.'; return; }
+  document.querySelectorAll('#qbody .rt-row').forEach(function(r){ r.classList.remove('sel'); });
+  const win=document.getElementById('ace-'+d.winner);
+  if(win) win.classList.add('correct');
+  const ok=!reveal && acPicked===d.winner;
+  if(!ok && acPicked!==null && !reveal){
+    const el=document.getElementById('ace-'+acPicked);
+    if(el) el.classList.add('wrong');
+  }
+  const pts=ok?POINTS[state.diff]:0;
+  state.score+=pts; state.streak=ok?state.streak+1:0; state.round++;
+  fb.className='fbanner '+(reveal?'warn':ok?'ok':'err');
+  fb.innerHTML=(reveal?'Skipped. ':ok?'Correct — the packet is <b>'+d.action+'ted</b>. ':'Not quite — the packet is <b>'+d.action+'ted</b>. ')+
+    d.why+(reveal?' +0 pts.':' +'+pts+' pts.'+(ok?' Streak: '+state.streak:''));
+  finishRound();
+}
+
+/* ═══ Drill 3: placement ═══════════════════════════════════════════
+   "On which router would you place this ACL? On which interface? In what
+   direction?" — three of the lab's written blanks, answered by clicking a
+   diagram and a direction instead of writing prose. */
+const AC_PLACE_BOXES=[
+  {id:'R1', x:60,  y:96, label:'R1'},
+  {id:'R2', x:250, y:20, label:'R2'},
+  {id:'R3', x:440, y:96, label:'R3'}
+];
+let placePickIf=null, placePickDir=null;
+function genPlace(diff){
+  /* Every round is a real policy from Lab 8A or a close variant of it. */
+  const cases=[
+    {src:'192.168.10.0/24 and 192.168.20.0/24', dst:'192.168.30.0/24',
+     router:'R3', iface:'Gi0/1.30', dir:'out',
+     why:'192.168.30.0/24 hangs off R3 Gi0/1.30, so that is the last interface the traffic crosses. A standard ACL only sees the source address, so applying it any earlier would block those two networks from reaching everything beyond that point, not just this one LAN.'},
+    {src:'192.168.40.0/24 and host 192.168.30.3', dst:'192.168.10.0/24',
+     router:'R1', iface:'Gi0/1.10', dir:'out',
+     why:'192.168.10.0/24 is on R1 Gi0/1.10. Placing a standard ACL close to the destination is what keeps its effect limited to the network it is meant to protect.'},
+    {src:'192.168.30.0/24', dst:'192.168.20.0/24',
+     router:'R1', iface:'Gi0/1.20', dir:'out',
+     why:'192.168.20.0/24 is behind R1 Gi0/1.20, and outbound on that subinterface is the closest you can get to the destination.'}
+  ];
+  const c=diff==='easy'?cases[0]:choice(cases);
+  const ifaces=[
+    {r:'R1', n:'Gi0/1.10'},{r:'R1', n:'Gi0/1.20'},{r:'R1', n:'S0/0/0'},
+    {r:'R2', n:'S0/0/0'},{r:'R2', n:'S0/0/1'},
+    {r:'R3', n:'S0/0/1'},{r:'R3', n:'Gi0/1.30'}
+  ];
+  return {kind:diff, cse:c, ifaces:ifaces,
+    prompt:'A <b>standard</b> ACL must allow traffic from <b>'+c.src+'</b> to reach <b>'+c.dst+
+      '</b>. Following best practice, which interface should it be applied to, and in which direction?'};
+}
+function renderPlace(body,qip){
+  const d=state.data;
+  placePickIf=null; placePickDir=null;
+  document.getElementById('qprompt').innerHTML=d.prompt;
+  qip.style.display='none';
+  let html='<div class="lab-card"><div class="lab-toolbar"><div class="legend">'+
+    '<span class="lg">R1 &mdash; R2 &mdash; R3, with the LANs behind R1 and R3</span></div></div>'+
+    '<div class="lab-canvas" style="height:150px"><svg style="position:absolute;inset:0;width:100%;height:100%">'+
+    '<line x1="124" y1="126" x2="314" y2="50" class="cable" style="pointer-events:none"></line>'+
+    '<line x1="314" y1="50" x2="504" y2="126" class="cable" style="pointer-events:none"></line></svg>'+
+    '<div style="position:absolute;inset:0">';
+  AC_PLACE_BOXES.forEach(function(b){
+    html+='<div class="dev router" style="left:'+b.x+'px;top:'+b.y+'px;width:128px;height:44px;cursor:default">'+
+      '<div class="dev-name">'+b.label+'</div></div>';
+  });
+  html+='</div></div></div>';
+  html+='<div class="qlbl" style="margin-top:1rem">Interface</div><div class="cls-row" style="margin-top:.35rem">';
+  d.ifaces.forEach(function(f,i){
+    html+='<button class="cbtn" id="pif-'+i+'" onclick="placeSetIf('+i+')">'+f.r+' '+f.n+'</button> ';
+  });
+  html+='</div><div class="qlbl" style="margin-top:1rem">Direction</div><div class="cls-row" style="margin-top:.35rem">'+
+    '<button class="cbtn" id="pdir-in" onclick="placeSetDir(\'in\')">in</button> '+
+    '<button class="cbtn" id="pdir-out" onclick="placeSetDir(\'out\')">out</button></div>';
+  body.innerHTML=html;
+  setBtns();
+}
+function placeSetIf(i){
+  if(state.done) return;
+  placePickIf=i;
+  state.data.ifaces.forEach(function(_,j){ document.getElementById('pif-'+j).classList.toggle('on', i===j); });
+}
+function placeSetDir(dir){
+  if(state.done) return;
+  placePickDir=dir;
+  ['in','out'].forEach(function(x){ document.getElementById('pdir-'+x).classList.toggle('on', x===dir); });
+}
+function placeGrade(reveal){
+  const d=state.data, c=d.cse;
+  const fb=document.getElementById('fb');
+  fb.style.display='block';
+  if(!reveal && (placePickIf===null||!placePickDir)){
+    fb.className='fbanner warn'; fb.textContent='Pick an interface and a direction first.'; return;
+  }
+  const picked = placePickIf!==null ? d.ifaces[placePickIf] : null;
+  const ok = !reveal && picked && picked.r===c.router && picked.n===c.iface && placePickDir===c.dir;
+  const pts=ok?POINTS[state.diff]:0;
+  state.score+=pts; state.streak=ok?state.streak+1:0; state.round++;
+  d.ifaces.forEach(function(f,j){
+    const el=document.getElementById('pif-'+j);
+    el.classList.remove('on');
+    if(f.r===c.router&&f.n===c.iface) el.classList.add('on');
+  });
+  ['in','out'].forEach(function(x){ document.getElementById('pdir-'+x).classList.toggle('on', x===c.dir); });
+  fb.className='fbanner '+(reveal?'warn':ok?'ok':'err');
+  fb.innerHTML=(reveal?'Skipped. ':ok?'Correct. ':'Not quite. ')+
+    'Apply it to <b>'+c.router+' '+c.iface+'</b>, <b>'+c.dir+'bound</b>. '+c.why+
+    (reveal?' +0 pts.':' +'+pts+' pts.'+(ok?' Streak: '+state.streak:''));
+  finishRound();
+}
+
+/* ─── Round control ─────────────────────────────────────────────── */
+const TOPIC_FNS={
+  wild: {gen:genWild,    render:renderWild,   grade:wildGrade},
+  match:{gen:genMatch,   render:renderMatch,  grade:matchGrade},
+  place:{gen:genPlace,   render:renderPlace,  grade:placeGrade},
+  lab:  {gen:genAclLab,  render:renderAclLab, grade:acLabGrade}
+};
+function pickTopic(){
+  if(state.topic!=='rand') return state.topic;
+  let t; do{ t=choice(TOPICS); }while(t===state.lastTopic && TOPICS.length>1);
+  state.lastTopic=t;
+  return t;
+}
+function loadQ(){
+  state.done=false;
+  const t=pickTopic();
+  state.mode=t;
+  syncVersionButtons();
+  state.data=TOPIC_FNS[t].gen(state.diff);
+  render();
+  updateChips();
+}
+function updateChips(){
+  document.getElementById('sc').textContent=state.score;
+  document.getElementById('rnd').textContent=state.round;
+  document.getElementById('str').textContent=state.streak;
+}
+/* Reset only earns its place when a round has enough state behind it that
+   clearing it by hand would be a chore — a lab you have cabled and
+   configured, or a grid of answer fields. On a one-click drill it is just
+   Skip with the score wiped, so it is hidden there. Kept per topic rather
+   than per page, because these pages mix both kinds. */
+const TOPIC_RESET={wild:false, match:false, place:false, lab:true};
+function setBtns(){
+  const chk=document.getElementById('chkbtn'), rev=document.getElementById('revbtn'), nxt=document.getElementById('nxtbtn');
+  nxt.style.display='none';
+  chk.style.display=''; rev.style.display='';
+  document.getElementById('rstbtn').style.display=TOPIC_RESET[state.mode]?'':'none';
+  document.getElementById('fb').style.display='none';
+}
+function render(){
+  document.getElementById('qlbl').textContent=TOPIC_LABEL[state.mode];
+  const qip=document.getElementById('qip'); qip.style.display='none';
+  const body=document.getElementById('qbody');
+  body.innerHTML='';
+  document.getElementById('qspec').innerHTML='';
+  document.getElementById('req-list').innerHTML='';
+  if(window.setPreferredTool) setPreferredTool(TOPIC_REF[state.mode]);
+  TOPIC_FNS[state.mode].render(body,qip);
+}
+function checkAll(){ if(!state.done) TOPIC_FNS[state.mode].grade(false); }
+function revealAll(){ if(!state.done) TOPIC_FNS[state.mode].grade(true); }
+function finishRound(){
+  state.done=true;
+  updateChips();
+  document.getElementById('chkbtn').style.display='none';
+  document.getElementById('revbtn').style.display='none';
+  document.getElementById('nxtbtn').style.display='';
+}
+function nextQ(){ loadQ(); }
+function resetGame(){ state.score=0; state.round=1; state.streak=0; loadQ(); }
+
+/* ─── Controls ──────────────────────────────────────────────────── */
+function setTopic(t,btn){
+  state.topic=t;
+  document.querySelectorAll('#tb-rand,#tb-wild,#tb-match,#tb-place,#tb-lab').forEach(function(b){ b.classList.remove('on'); });
+  btn.classList.add('on');
+  loadQ();
+}
+function setDiff(d,btn){
+  state.diff=d;
+  document.querySelectorAll('#db-easy,#db-medium,#db-hard').forEach(function(b){ b.classList.remove('on'); });
+  btn.classList.add('on');
+  loadQ();
+}
+function setVer(i,btn){
+  const cfg=VERSIONS[state.mode];
+  if(!cfg||!cfg.opts.length) return;
+  state.ver=cfg.opts[i];
+  document.querySelectorAll('#vb-a,#vb-b').forEach(function(b){ b.classList.remove('on'); });
+  btn.classList.add('on');
+  loadQ();
+}
+function syncVersionButtons(){
+  const cfg=VERSIONS[state.mode]||{opts:[],labels:['—','—']};
+  const btns=[document.getElementById('vb-a'),document.getElementById('vb-b')];
+  const live=cfg.opts.length>0;
+  btns.forEach(function(b,i){
+    b.textContent=cfg.labels[i];
+    b.disabled=!live;
+    b.classList.toggle('on', live ? cfg.opts[i]===state.ver : i===0);
+  });
+}
+function toggleOpts(){
+  const menu=document.getElementById('opt-menu'), btn=document.getElementById('opt-btn');
+  const open=menu.classList.toggle('open');
+  btn.classList.toggle('open',open);
+}
+function toggleTool(id){
+  const cb=document.getElementById('tog-'+id);
+  cb.checked=!cb.checked;
+  document.getElementById('t-'+id).style.display=cb.checked?'':'none';
+  const any=['wcref','aclref','cmdref'].some(function(t){ return document.getElementById('tog-'+t).checked; });
+  document.getElementById('toolsec').style.display=any?'':'none';
+  if(window.saveOptionsState) saveOptionsState();
+}
+document.addEventListener('click', function(e){
+  const wrap=document.getElementById('opt-btn').closest('.opt-wrap');
+  if(wrap && !wrap.contains(e.target)){
+    document.getElementById('opt-menu').classList.remove('open');
+    document.getElementById('opt-btn').classList.remove('open');
+  }
+});
+
+loadQ();
+
+/* Enter submits, then Enter moves on — see answer-keys.js. */
+AnswerKeys.wire({answers:'#qbody .afield input', submit:'checkAll'});
+</script>
+</body>
+</html>
