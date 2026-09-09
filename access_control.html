@@ -1534,8 +1534,149 @@ function wildGrade(reveal){
    Same graded shape as Longest Prefix Match on the routing page: a list of
    rows, click the one that decides. What makes it an ACL question rather
    than a routing one is that the FIRST match wins, not the most specific —
-   which is exactly the mistake worth drilling. */
+   which is exactly the mistake worth drilling.
+
+   The winner is never asserted by the generator. Entries are built first,
+   then a target position is drawn and a source address is rejection-sampled
+   until a real first-match walk lands on it. An earlier version hard-coded
+   winner=0 on Medium, which meant "always click the top row" scored every
+   round — the same shortcut the OSPF Cost topic had to design out. Drawing
+   the target uniformly is what stops any position being worth guessing. */
 let acPicked=null;
+
+/* ".4 through .7" reads better than a wildcard when explaining a near-miss. */
+function aceRangeText(a){
+  if(a.kind==='any') return 'every address';
+  const size=(a.wcInt>>>0)+1;
+  if(size===1) return 'only '+int2ip(a.ipInt);
+  return int2ip(a.ipInt)+' through '+int2ip((a.ipInt+size-1)>>>0);
+}
+function acFirstHit(aces, ipInt){
+  for(let i=0;i<aces.length;i++) if(aceMatches(aces[i], ipInt)) return i;
+  return aces.length;              /* the implicit deny */
+}
+/* Addresses worth trying: inside each entry, just outside each entry (the
+   near-miss that makes a wildcard bite), and some unrelated ones. */
+function acSrcPool(aces, otherNets){
+  const pool=[];
+  aces.forEach(function(a){
+    if(a.kind==='any') return;
+    const size=(a.wcInt>>>0)+1;
+    for(let k=0;k<4;k++) pool.push((a.ipInt + (size>1?ri(0,size-1):0))>>>0);
+    pool.push((a.ipInt+size)>>>0);
+    pool.push((a.ipInt-1)>>>0);
+  });
+  (otherNets||[]).forEach(function(n){ for(let k=0;k<3;k++) pool.push((n+ri(1,250))>>>0); });
+  return pool;
+}
+function acPickSrc(aces, target, otherNets){
+  const pool=shuffle(acSrcPool(aces, otherNets));
+  for(let i=0;i<pool.length;i++){
+    const ip=pool[i], last=ip&255;
+    if(last===0||last===255) continue;          /* not a host address */
+    if(acFirstHit(aces, ip)===target) return ip;
+  }
+  return null;
+}
+/* Written from the list that was actually generated, not from a per-shape
+   string, so it stays true whatever the shuffle produced. */
+function acMatchWhy(aces, srcInt, winner){
+  const ip=int2ip(srcInt);
+  if(winner===aces.length)
+    return 'Nothing in the list matches '+ip+', so the <b>implicit deny any</b> at the end drops it. '+
+      '<span class="mono-inl">show access-lists</span> never displays that line, which is exactly why it is easy to forget when troubleshooting.';
+  const w=aces[winner];
+  let s='Entry '+w.seq+' (<span class="mono-inl">'+esc(aceText(w))+'</span>) is the first line that matches '+
+    ip+', so it decides.';
+  const later=[];
+  for(let i=winner+1;i<aces.length;i++) if(aceMatches(aces[i], srcInt)) later.push(aces[i]);
+  if(later.length){
+    s+=' Entr'+(later.length===1?'y ':'ies ')+later.map(function(a){ return a.seq; }).join(' and ')+
+      ' also match'+(later.length===1?'es':'')+' it, but an ACL stops at the first match, so '+
+      (later.length===1?'that line is':'those lines are')+' never reached — a more specific rule sitting '+
+      'below a broader one is a <b>dead rule</b>.';
+  }
+  const near=aces.filter(function(a,i){
+    return i<winner && a.kind!=='any' &&
+           netIntOf(a.ipInt,24)===netIntOf(srcInt,24) && !aceMatches(a, srcInt);
+  });
+  if(near.length)
+    s+=' Entry '+near[0].seq+' is the near miss: it covers '+aceRangeText(near[0])+', which does not include '+ip+'.';
+  return s;
+}
+
+/* Each tier builds a list; the caller draws the winner. */
+function acMatchAces(diff, seed){
+  const A=seed.a, B=seed.b, C=seed.c;
+  const netOf=function(o3){ return ip2int('192.168.'+o3+'.0'); };
+  const n=function(o3,off){ return int2ip((netOf(o3)+off)>>>0); };
+  let list;
+  if(diff==='easy'){
+    /* No overlaps: read each line, decide if it covers the address. */
+    list=[['permit','net',n(A,0),'0.0.0.255'], ['permit','net',n(B,0),'0.0.0.255']];
+    if(Math.random()<0.5) list.push(['deny','net',n(C,0),'0.0.0.255']);
+  } else if(diff==='medium'){
+    /* One shadowing pair, ordered at random: broad-then-specific makes the
+       specific line dead, specific-then-broad makes it bite. Both are the
+       same lesson from opposite sides, and they put the answer in different
+       places. */
+    const host=['deny','host',n(A,ri(2,250)),null];
+    const broad=['permit','net',n(A,0),'0.0.0.255'];
+    const pair = Math.random()<0.5 ? [broad,host] : [host,broad];
+    list=pair.concat([['permit','net',n(B,0),'0.0.0.255']]);
+    if(Math.random()<0.5) list.push(['deny','net',n(C,0),'0.0.0.255']);
+  } else {
+    /* Hard: six or seven lines, several of which interact. Ranges that stop
+       short of where you expect, a host that is one address off, and a
+       broad rule whose position decides whether the two specific lines
+       above or below it ever run. */
+    const mid=shuffle([
+      ['permit','host',n(A,3),null],
+      ['permit','net',n(A,4),'0.0.0.3'],            /* .4 to .7 only */
+      ['deny','net',n(A,0),'0.0.0.255'],            /* kills the two above if it lands first */
+      ['permit','net',n(B,16),'0.0.0.15'],          /* .16 to .31 only */
+      ['deny','host',n(C,ri(2,250)),null],
+      ['permit','net',n(C,0),'0.0.0.255']
+    ]);
+    list=mid;
+    if(Math.random()<0.6) list=list.concat([['deny','any',null,null]]);
+  }
+  return list.map(function(row,i){
+    const seq=(i+1)*10;
+    if(row[1]==='any')  return aceAny(seq, row[0]);
+    if(row[1]==='host') return aceHost(seq, row[0], row[2]);
+    return aceNet(seq, row[0], row[2], row[3]);
+  });
+}
+function genMatch(diff){
+  const a=ri(1,60), b=a+ri(1,40), c=b+ri(1,40), d=c+ri(1,40);
+  const seed={a:a,b:b,c:c};
+  const otherNets=[ip2int('192.168.'+d+'.0'), ip2int('10.'+ri(1,250)+'.'+ri(1,250)+'.0')];
+  /* Draw the answer's position first, then find an address that produces
+     it. Retry with a fresh list if this one cannot. */
+  for(let attempt=0; attempt<40; attempt++){
+    const aces=acMatchAces(diff, seed);
+    const target=ri(0, aces.length);          /* aces.length === implicit deny */
+    const srcInt=acPickSrc(aces, target, otherNets);
+    if(srcInt===null) continue;
+    const winner=acFirstHit(aces, srcInt);    /* recomputed, never assumed */
+    if(winner!==target) continue;
+    const action = winner<aces.length ? aces[winner].action : 'deny';
+    return {kind:diff, aces:aces, src:int2ip(srcInt), winner:winner, action:action,
+      why:acMatchWhy(aces, srcInt, winner),
+      aclLabel:'Standard IP access list '+(diff==='easy'?'1':diff==='medium'?'BRANCH-OFFICE-POLICY':'SITE-POLICY')};
+  }
+  /* Falls back to a plain round rather than looping forever — never hit in
+     30000 generations, but a generator that can spin is worse than one that
+     occasionally gives an easy question. */
+  const aces=[aceNet(10,'permit',int2ip(ip2int('192.168.'+a+'.0')),'0.0.0.255'), aceAny(20,'deny')];
+  const srcInt=(ip2int('192.168.'+a+'.0')+ri(2,250))>>>0;
+  return {kind:diff, aces:aces, src:int2ip(srcInt), winner:0, action:'permit',
+    why:acMatchWhy(aces, srcInt, 0), aclLabel:'Standard IP access list 1'};
+}
+
+/* One row per ACE, plus a row for the implicit deny that show access-lists
+   never prints — the learner has to be able to choose it. */
 function acAceRowsHtml(d){
   let html='<div class="qlbl">'+esc(d.aclLabel)+'</div>'+
     '<table class="rt-table" style="margin-top:.35rem"><tr><th style="width:70px">Seq</th><th>Entry</th></tr>';
@@ -1544,7 +1685,7 @@ function acAceRowsHtml(d){
       '<td class="mono-inl">'+esc(aceText(a))+'</td></tr>';
   });
   html+='<tr class="rt-row" id="ace-'+d.aces.length+'" onclick="acPick('+d.aces.length+')">'+
-    '<td class="cidr-col">—</td><td><em>implicit deny any</em> (never shown by <span class="mono-inl">show access-lists</span>)</td></tr>';
+    '<td class="cidr-col">&mdash;</td><td><em>implicit deny any</em> (never shown by <span class="mono-inl">show access-lists</span>)</td></tr>';
   return html+'</table>';
 }
 function acPick(i){
@@ -1553,46 +1694,6 @@ function acPick(i){
   document.querySelectorAll('#qbody .rt-row').forEach(function(r){ r.classList.remove('sel'); });
   const el=document.getElementById('ace-'+i);
   if(el) el.classList.add('sel');
-}
-function genMatch(diff){
-  const net=function(o3){ return '192.168.'+o3+'.0'; };
-  const a=ri(1,60), b=a+ri(1,40), c=b+ri(1,40);
-  let aces=[], src, winner, why;
-  if(diff==='easy'){
-    aces=[aceNet(10,'permit',net(a),'0.0.0.255'), aceNet(20,'permit',net(b),'0.0.0.255')];
-    const hit=Math.random()<0.6;
-    src = hit ? '192.168.'+a+'.'+ri(2,250) : '192.168.'+c+'.'+ri(2,250);
-    winner = hit?0:aces.length;
-    why = hit ? 'It falls inside '+net(a)+'/24, which entry 10 permits.'
-              : 'Nothing in the list matches it, so the implicit deny any at the end drops it.';
-  } else if(diff==='medium'){
-    /* First match wins, and the first match is deliberately the broader
-       one — picking the "most specific" is the trap. */
-    const host='192.168.'+a+'.'+ri(2,250);
-    aces=[aceNet(10,'permit',net(a),'0.0.0.255'), aceHost(20,'deny',host)];
-    src=host; winner=0;
-    why='Both entries match this address, but ACEs are read top to bottom and the <b>first</b> match wins. '+
-      'Entry 10 permits it, so entry 20 is never reached — it is a dead rule.';
-  } else {
-    /* Hard: a deny that only bites because of what precedes it, or an
-       explicit deny any that catches something the learner expects through. */
-    const shape=choice(['shadow','explicit']);
-    if(shape==='shadow'){
-      const host='192.168.'+a+'.'+ri(2,250);
-      aces=[aceHost(10,'deny',host), aceNet(20,'permit',net(a),'0.0.0.255'), aceAny(30,'deny')];
-      src=host; winner=0;
-      why='Entry 10 denies this exact host before entry 20 gets a chance to permit the network it sits in. '+
-        'Putting the specific deny above the broad permit is what makes it effective — the other way round it would be dead.';
-    } else {
-      aces=[aceHost(10,'permit','192.168.'+a+'.3'), aceNet(20,'permit',net(b),'0.0.0.255'), aceAny(30,'deny')];
-      src='192.168.'+a+'.'+ri(4,250);
-      winner=2;
-      why='Only the single host .3 is permitted from that network, not the rest of it, so this address falls through to the explicit deny any at entry 30.';
-    }
-  }
-  const action = winner<aces.length ? aces[winner].action : 'deny';
-  return {kind:diff, aces:aces, src:src, winner:winner, action:action, why:why,
-    aclLabel:'Standard IP access list '+(diff==='easy'?'1':'BRANCH-OFFICE-POLICY')};
 }
 function renderMatch(body,qip){
   const d=state.data;
@@ -1620,7 +1721,9 @@ function matchGrade(reveal){
   const pts=ok?POINTS[state.diff]:0;
   state.score+=pts; state.streak=ok?state.streak+1:0; state.round++;
   fb.className='fbanner '+(reveal?'warn':ok?'ok':'err');
-  fb.innerHTML=(reveal?'Skipped. ':ok?'Correct — the packet is <b>'+d.action+'ted</b>. ':'Not quite — the packet is <b>'+d.action+'ted</b>. ')+
+  /* permit -> permitted, deny -> denied. Concatenating 'ted' gave "denyted". */
+  const verdict = d.action==='permit' ? 'permitted' : 'denied';
+  fb.innerHTML=(reveal?'Skipped. ':ok?'Correct — the packet is <b>'+verdict+'</b>. ':'Not quite — the packet is <b>'+verdict+'</b>. ')+
     d.why+(reveal?' +0 pts.':' +'+pts+' pts.'+(ok?' Streak: '+state.streak:''));
   finishRound();
 }
