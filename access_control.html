@@ -34,6 +34,7 @@
     <span>Topic:</span>
     <button class="cbtn on" id="tb-rand" onclick="setTopic('rand',this)">Random</button>
     <button class="cbtn" id="tb-wild" onclick="setTopic('wild',this)">Wildcard Masks</button>
+    <button class="cbtn" id="tb-range" onclick="setTopic('range',this)">Wildcard Ranges</button>
     <button class="cbtn" id="tb-match" onclick="setTopic('match',this)">Which ACE Matches?</button>
     <button class="cbtn" id="tb-place" onclick="setTopic('place',this)">Placement</button>
     <button class="cbtn" id="tb-lab" onclick="setTopic('lab',this)">ACL Lab</button>
@@ -206,10 +207,11 @@ function wildToCidr(wcStr){
   return maskToCidr(int2ip(inv));
 }
 
-const TOPICS=['wild','match','place','lab'];
-const TOPIC_LABEL={wild:'Wildcard Masks', match:'Which ACE Matches?', place:'ACL Placement', lab:'ACL Lab'};
+const TOPICS=['wild','range','match','place','lab'];
+const TOPIC_LABEL={wild:'Wildcard Masks', range:'Wildcard Ranges', match:'Which ACE Matches?',
+                   place:'ACL Placement', lab:'ACL Lab'};
 const POINTS={easy:3, medium:4, hard:6};
-const TOPIC_REF={wild:'wcref', match:'aclref', place:'aclref', lab:'cmdref'};
+const TOPIC_REF={wild:'wcref', range:'wcref', match:'aclref', place:'aclref', lab:'cmdref'};
 
 /* The "ACL type" row is this page's Version row. Standard ACLs are all Lab
    8A covers and all this page implements, so the row is greyed out with the
@@ -218,6 +220,7 @@ const TOPIC_REF={wild:'wcref', match:'aclref', place:'aclref', lab:'cmdref'};
    slot straight in here. */
 const VERSIONS={
   wild:{opts:[], labels:['Standard','Extended'], note:'wildcards work the same either way'},
+  range:{opts:[], labels:['Standard','Extended'], note:'wildcards work the same either way'},
   match:{opts:[], labels:['Standard','Extended'], note:'extended matching not built yet'},
   place:{opts:[], labels:['Standard','Extended'], note:'extended placement not built yet'},
   lab:{opts:[], labels:['Standard','Extended'], note:'extended ACLs not built yet'}
@@ -1530,6 +1533,245 @@ function wildGrade(reveal){
   finishRound();
 }
 
+
+/* ═══ Drill: wildcard ranges ════════════════════════════════════════
+   The mirror of the Wildcard Masks topic. That one converts between a
+   prefix and a wildcard — arithmetic on the mask itself. This one *applies*
+   a wildcard to work out which addresses it actually covers, which is the
+   skill that makes "Which ACE Matches?" answerable at all.
+
+   A wildcard bit of 1 means "don't care", so the range an ACE covers runs
+   from every don't-care bit set to 0 up to every one set to 1:
+       first = address AND NOT wildcard
+       last  = address OR  wildcard
+   Cisco ignores the address bits under a 1, which is why 192.168.10.7
+   0.0.0.3 and 192.168.10.4 0.0.0.3 are the same rule.
+
+   Hard is where this stops being a subnet calculation: a Cisco wildcard is
+   NOT required to be contiguous. 0.0.0.254 leaves bit 0 significant and
+   every other bit free, so it matches only even addresses — a subnet mask
+   can never express that, and it is the thing people get wrong. */
+function wcFirst(ipInt, wcInt){ return (ipInt & ~wcInt)>>>0; }
+function wcLast(ipInt, wcInt){ return (ipInt | wcInt)>>>0; }
+function wcContiguous(wcInt){
+  /* Contiguous from the right: 0…01…1. Adding one to such a value clears
+     every set bit at once, so the AND is zero. */
+  return ((wcInt+1) & wcInt)>>>0 === 0;
+}
+function wcCount(wcInt){
+  let n=1;
+  for(let b=0;b<32;b++) if((wcInt>>>b)&1) n*=2;
+  return n;
+}
+function wcMatches(ipInt, wcInt, testInt){
+  const care=(~wcInt)>>>0;
+  return ((testInt & care)>>>0) === ((ipInt & care)>>>0);
+}
+
+/* Multi-select chips, the same `.cbtn` idiom the LSA drill uses. */
+let rangePicked=[];
+function rangeToggle(i){
+  if(state.done) return;
+  const k=rangePicked.indexOf(i);
+  if(k>=0) rangePicked.splice(k,1); else rangePicked.push(i);
+  document.getElementById('rc-'+i).classList.toggle('on', k<0);
+}
+/* Build a chip set whose number of CORRECT answers varies from round to
+   round. The first version always produced exactly three out of six, which
+   made "click any three" a winning strategy without reading the wildcard at
+   all — the same guessable regularity that made the ACE-match drill
+   answerable by clicking the top row. Between 1 and total-1 match, so there
+   is always something to click and always something to leave alone. */
+function rangeChipSet(ipInt, wcInt, inGen, outGen){
+  for(let attempt=0; attempt<30; attempt++){
+    const total=ri(5,7), hits=ri(1,total-1);
+    const seen={}, opts=[];
+    const add=function(t){
+      const lab=int2ip(t);
+      if(seen[lab]) return false;
+      seen[lab]=1;
+      opts.push({label:lab, ok:wcMatches(ipInt,wcInt,t)});
+      return true;
+    };
+    let need=hits, g=0;
+    while(need>0 && g++<300){ const t=inGen(); if(wcMatches(ipInt,wcInt,t) && add(t)) need--; }
+    if(need>0) continue;
+    need=total-hits; g=0;
+    while(need>0 && g++<300){ const t=outGen(); if(!wcMatches(ipInt,wcInt,t) && add(t)) need--; }
+    if(need>0) continue;
+    return shuffle(opts);
+  }
+  return null;
+}
+function rangeChipsHtml(opts, label){
+  let h='<div class="qlbl" style="margin-top:1rem">'+esc(label)+'</div><div class="cls-row" style="margin-top:.35rem">';
+  opts.forEach(function(o,i){
+    h+='<button class="cbtn" id="rc-'+i+'" onclick="rangeToggle('+i+')">'+esc(o.label)+'</button> ';
+  });
+  return h+'</div>';
+}
+
+function genRange(diff){
+  const oct=function(){ return ri(0,255); };
+  if(diff==='easy'){
+    /* One octet's worth of don't-care bits: the everyday case, and the one
+       where an off-by-one on the last address is the usual mistake. */
+    const bits=choice([2,3,4,5]);            /* 4, 8, 16 or 32 addresses */
+    const size=Math.pow(2,bits), wc=size-1;
+    const base=ri(0, (256/size)-1)*size;
+    const ip=ip2int('192.168.'+ri(1,254)+'.'+base);
+    const wcInt=ip2int('0.0.0.'+wc);
+    return {kind:'easy', mode:'fields',
+      ace:int2ip(ip)+' '+int2ip(wcInt),
+      prompt:'The ACE <span class="mono-inl">permit '+int2ip(ip)+' '+int2ip(wcInt)+
+        '</span> covers a block of addresses. Give the first and last address in that block, and how many there are.',
+      fields:[{id:'first', label:'First address', answer:int2ip(wcFirst(ip,wcInt))},
+              {id:'last',  label:'Last address',  answer:int2ip(wcLast(ip,wcInt))},
+              {id:'count', label:'How many addresses', answer:String(size)}],
+      explain:'A wildcard bit of 1 means "don\'t care". '+int2ip(wcInt)+' frees the low '+bits+
+        ' bits, so the block runs from '+int2ip(wcFirst(ip,wcInt))+' (all of them 0) to '+
+        int2ip(wcLast(ip,wcInt))+' (all of them 1) — 2^'+bits+' = '+size+' addresses.'};
+  }
+  if(diff==='medium'){
+    if(Math.random()<0.5){
+      /* A wildcard that runs past one octet. The third octet moving is the
+         part people miss when they think in single octets. */
+      const bits=choice([9,10,11,12]);       /* 0.0.1.255 … 0.0.15.255 */
+      const size=Math.pow(2,bits), wc=size-1;
+      const wcInt=wc>>>0;
+      const blockThird=Math.pow(2,bits-8);
+      const third=ri(0,(256/blockThird)-1)*blockThird;
+      const ip=ip2int('172.'+ri(16,31)+'.'+third+'.0');
+      return {kind:'medium', mode:'fields',
+        ace:int2ip(ip)+' '+int2ip(wcInt),
+        prompt:'The ACE <span class="mono-inl">permit '+int2ip(ip)+' '+int2ip(wcInt)+
+          '</span> spans more than one octet. Give the first and last address it covers, and how many there are.',
+        fields:[{id:'first', label:'First address', answer:int2ip(wcFirst(ip,wcInt))},
+                {id:'last',  label:'Last address',  answer:int2ip(wcLast(ip,wcInt))},
+                {id:'count', label:'How many addresses', answer:String(size)}],
+        explain:int2ip(wcInt)+' frees the low '+bits+' bits, which is the whole fourth octet plus '+
+          (bits-8)+' bit'+(bits-8===1?'':'s')+' of the third. So the third octet runs '+
+          ((ip>>>8)&255)+' to '+((wcLast(ip,wcInt)>>>8)&255)+' and the fourth runs 0 to 255 — '+size+' addresses.'};
+    }
+    /* Membership. The wrong answers cluster just outside the block, since
+       an address one past the end is the mistake worth catching. */
+    const bits=choice([2,3]);
+    const size=Math.pow(2,bits), wc=size-1;
+    const base=ri(1,(256/size)-2)*size;
+    const third=ri(1,254);
+    const ip=ip2int('192.168.'+third+'.'+base), wcInt=ip2int('0.0.0.'+wc);
+    const at=function(o){ return ip2int('192.168.'+third+'.'+Math.max(0,Math.min(255,o))); };
+    const opts=rangeChipSet(ip, wcInt,
+      function(){ return at(base+ri(0,size-1)); },
+      function(){ return Math.random()<0.7 ? at(base+choice([-2,-1,size,size+1,size+2]))
+                                           : at(ri(0,255)); });
+    if(!opts) return genRange('medium');
+    return {kind:'medium', mode:'chips', opts:opts,
+      chipLabel:'Click every address this ACE matches',
+      prompt:'Which of these addresses does <span class="mono-inl">permit '+int2ip(ip)+' '+int2ip(wcInt)+
+        '</span> match?',
+      explain:'It covers '+int2ip(wcFirst(ip,wcInt))+' through '+int2ip(wcLast(ip,wcInt))+
+        ' and nothing else — '+size+' addresses. The two just outside that block are the ones to watch.'};
+  }
+  /* Hard: non-contiguous wildcards. */
+  if(Math.random()<0.5){
+    /* Even/odd within one octet. */
+    const odd=Math.random()<0.5;
+    const third=ri(1,254);
+    const ip=ip2int('192.168.'+third+'.'+(odd?1:0)), wcInt=ip2int('0.0.0.254');
+    const at=function(o){ return ip2int('192.168.'+third+'.'+o); };
+    const opts=rangeChipSet(ip, wcInt,
+      function(){ return at(odd ? ri(0,127)*2+1 : ri(0,127)*2); },
+      function(){ return at(odd ? ri(0,127)*2 : ri(0,127)*2+1); });
+    if(!opts) return genRange('hard');
+    return {kind:'hard', mode:'chips', opts:opts,
+      chipLabel:'Click every address this ACE matches',
+      prompt:'<span class="mono-inl">permit '+int2ip(ip)+' 0.0.0.254</span> uses a <b>non-contiguous</b> '+
+        'wildcard — something a subnet mask cannot express. Which of these does it match?',
+      explain:'0.0.0.254 is <span class="mono-inl">11111110</span> in the last octet: every bit is "don\'t care" '+
+        '<b>except bit 0</b>, which must match the address. The address ends in '+(odd?1:0)+
+        ', so this matches every <b>'+(odd?'odd':'even')+'</b> address in 192.168.'+third+
+        '.0 — 128 of them, and not one contiguous block.'};
+  }
+  /* Odd/even subnets: the classic "match every other subnet" wildcard. */
+  const odd=Math.random()<0.5;
+  const second=ri(16,31);
+  const ip=ip2int('172.'+second+'.'+(odd?1:0)+'.0'), wcInt=ip2int('0.0.254.255');
+  const at=function(o){ return ip2int('172.'+second+'.'+o+'.'+ri(1,254)); };
+  const opts=rangeChipSet(ip, wcInt,
+    function(){ return at(odd ? ri(0,127)*2+1 : ri(0,127)*2); },
+    function(){ return at(odd ? ri(0,127)*2 : ri(0,127)*2+1); });
+  if(!opts) return genRange('hard');
+  return {kind:'hard', mode:'chips', opts:opts,
+    chipLabel:'Click every address this ACE matches',
+    prompt:'<span class="mono-inl">permit '+int2ip(ip)+' 0.0.254.255</span> is how you match every <i>other</i> '+
+      'subnet. Which of these addresses does it match?',
+    explain:'0.0.254.255 frees the whole fourth octet and every bit of the third <b>except bit 0</b>. '+
+      'The address has '+(odd?1:0)+' in the third octet, so only subnets with an '+(odd?'odd':'even')+
+      ' third octet match — 172.'+second+'.'+(odd?'1, 3, 5':'0, 2, 4')+' and so on.'};
+}
+
+function renderRange(body,qip){
+  const d=state.data;
+  rangePicked=[];
+  document.getElementById('qprompt').innerHTML=d.prompt;
+  qip.style.display='none';
+  if(d.mode==='fields'){
+    body.innerHTML='<div class="agrid">'+d.fields.map(function(f){
+      return '<div class="afield" id="f-'+f.id+'"><label>'+esc(f.label)+'</label>'+
+        '<input id="a-'+f.id+'" autocomplete="off" spellcheck="false">'+
+        '<div class="ahint" id="h-'+f.id+'"></div></div>';
+    }).join('')+'</div>';
+  } else {
+    body.innerHTML=rangeChipsHtml(d.opts, d.chipLabel);
+  }
+  setBtns();
+}
+function rangeGrade(reveal){
+  const d=state.data;
+  const fb=document.getElementById('fb');
+  fb.style.display='block';
+  let ok=false, pts=0;
+
+  if(d.mode==='fields'){
+    let correct=0;
+    d.fields.forEach(function(f){
+      const inp=document.getElementById('a-'+f.id), fld=document.getElementById('f-'+f.id), hnt=document.getElementById('h-'+f.id);
+      const norm=function(s){ return String(s).trim().toLowerCase(); };
+      const uv=norm(inp.value), cv=norm(f.answer);
+      inp.disabled=true;
+      const good=!reveal && uv!=='' && uv===cv;
+      if(good){ fld.classList.add('ok'); hnt.textContent='✓ Correct'; correct++; }
+      else { fld.classList.add(uv===''?'show':'bad'); inp.value=f.answer;
+             hnt.textContent = uv===''?'Revealed':'Correct: '+f.answer; }
+    });
+    ok = correct===d.fields.length;
+    pts = reveal?0:(ok?POINTS[state.diff]:correct);
+  } else {
+    /* Every matching address picked and no others — a partial tick would
+       let "click everything" score. */
+    const want=[], got=rangePicked.slice().sort();
+    d.opts.forEach(function(o,i){ if(o.ok) want.push(i); });
+    ok = !reveal && want.length===got.length && want.every(function(v,i){ return v===got[i]; });
+    d.opts.forEach(function(o,i){
+      const el=document.getElementById('rc-'+i);
+      el.classList.remove('on');
+      if(o.ok) el.classList.add('on');
+      el.disabled=true;
+      if(!reveal && rangePicked.indexOf(i)>=0 && !o.ok) el.classList.add('wrong');
+    });
+    pts = ok?POINTS[state.diff]:0;
+  }
+
+  state.score+=pts;
+  state.streak=(!reveal&&ok)?state.streak+1:0;
+  state.round++;
+  fb.className='fbanner '+(reveal?'warn':ok?'ok':'err');
+  fb.innerHTML=(reveal?'Skipped. ':ok?'Correct! ':'Not quite. ')+d.explain+
+    (reveal?' +0 pts.':' +'+pts+' pt'+(pts!==1?'s':'')+'.'+(ok?' Streak: '+state.streak:''));
+  finishRound();
+}
+
 /* ═══ Drill 2: which ACE matches? ══════════════════════════════════
    Same graded shape as Longest Prefix Match on the routing page: a list of
    rows, click the one that decides. What makes it an ACL question rather
@@ -1824,6 +2066,7 @@ function placeGrade(reveal){
 /* ─── Round control ─────────────────────────────────────────────── */
 const TOPIC_FNS={
   wild: {gen:genWild,    render:renderWild,   grade:wildGrade},
+  range:{gen:genRange,   render:renderRange,  grade:rangeGrade},
   match:{gen:genMatch,   render:renderMatch,  grade:matchGrade},
   place:{gen:genPlace,   render:renderPlace,  grade:placeGrade},
   lab:  {gen:genAclLab,  render:renderAclLab, grade:acLabGrade}
@@ -1853,7 +2096,7 @@ function updateChips(){
    configured, or a grid of answer fields. On a one-click drill it is just
    Skip with the score wiped, so it is hidden there. Kept per topic rather
    than per page, because these pages mix both kinds. */
-const TOPIC_RESET={wild:false, match:false, place:false, lab:true};
+const TOPIC_RESET={wild:false, range:false, match:false, place:false, lab:true};
 function setBtns(){
   const chk=document.getElementById('chkbtn'), rev=document.getElementById('revbtn'), nxt=document.getElementById('nxtbtn');
   nxt.style.display='none';
@@ -1886,7 +2129,7 @@ function resetGame(){ state.score=0; state.round=1; state.streak=0; loadQ(); }
 /* ─── Controls ──────────────────────────────────────────────────── */
 function setTopic(t,btn){
   state.topic=t;
-  document.querySelectorAll('#tb-rand,#tb-wild,#tb-match,#tb-place,#tb-lab').forEach(function(b){ b.classList.remove('on'); });
+  document.querySelectorAll('#tb-rand,#tb-wild,#tb-range,#tb-match,#tb-place,#tb-lab').forEach(function(b){ b.classList.remove('on'); });
   btn.classList.add('on');
   loadQ();
 }
