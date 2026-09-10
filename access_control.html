@@ -121,22 +121,17 @@
     </div>
 
     <div class="tool-block" id="t-ncref">
-      <div class="tool-block-title">Non-Contiguous Wildcards</div>
-      <p class="tool-note">A wildcard's <strong>1 bits are the free bits</strong>, and the addresses it covers are the base address plus <em>every combination</em> of them. When those 1 bits sit together at the bottom that is one run of consecutive addresses &mdash; the everyday case. When they do not, it breaks into several separate blocks, and the only way to see the shape is to write the mask out in binary.</p>
-      <table class="ref-table">
-        <thead><tr><th>Read this</th><th>To get</th></tr></thead>
-        <tbody>
-          <tr><td>The run of <span class="mono-inl">1</span>s touching bit&nbsp;0</td><td><strong>Block size</strong> = 2<sup>run length</sup></td></tr>
-          <tr><td>The <span class="mono-inl">1</span>s left of that run</td><td><strong>How many blocks</strong> = 2<sup>how many</sup></td></tr>
-          <tr><td>Those same higher bits' values</td><td><strong>Where each block starts</strong> &mdash; every combination of them, added to the base address</td></tr>
-        </tbody>
-      </table>
-      <p class="tool-note">Total addresses is 2<sup>number of 1 bits</sup> either way, which is block size &times; number of blocks. Note the blocks are <strong>not</strong> evenly spaced in general: <span class="mono-inl">0.0.0.18</span> is <span class="mono-inl">00010010</span> and covers offsets 0, 2, 16, 18 &mdash; gaps of 2, then 14, then 2. Add the combinations rather than assuming a stride.</p>
-      <div class="pc-form" style="margin-bottom:.6rem">
-        <span class="pc-form-lbl">Try one</span>
-        <input class="custom-ip-inp" id="nc-inp" value="0.0.0.20" autocomplete="off" spellcheck="false" oninput="ncCalc()">
-      </div>
-      <div id="nc-out"></div>
+      <div class="tool-block-title">Binary Compare</div>
+      <p class="tool-note">Scratch space for working a wildcard out by hand. <strong>Nothing here is graded or checked</strong> &mdash; it only writes what you type in binary, lined up so you can read down the columns. A <span class="mono-inl">1</span> in the wildcard is a bit that is free to differ; a <span class="mono-inl">0</span> is a bit that has to match.</p>
+      <div class="pc-form"><span class="pc-form-lbl">Wildcard mask</span>
+        <input class="custom-ip-inp" id="nc-wc" value="0.0.0.20" autocomplete="off" spellcheck="false" oninput="ncCalc()"></div>
+      <div class="cli-block" id="nc-wc-bin" style="margin:.35rem 0 .8rem"></div>
+      <div class="pc-form"><span class="pc-form-lbl">Address in the ACE</span>
+        <input class="custom-ip-inp" id="nc-a" value="192.168.10.4" autocomplete="off" spellcheck="false" oninput="ncCalc()"></div>
+      <div class="cli-block" id="nc-a-bin" style="margin:.35rem 0 .8rem"></div>
+      <div class="pc-form"><span class="pc-form-lbl">Address to test</span>
+        <input class="custom-ip-inp" id="nc-b" value="192.168.10.20" autocomplete="off" spellcheck="false" oninput="ncCalc()"></div>
+      <div class="cli-block" id="nc-b-bin" style="margin:.35rem 0 0"></div>
     </div>
 
     <div class="tool-block" id="t-aclref">
@@ -1712,51 +1707,21 @@ function rangeParityChips(ip, wcInt, odd, at){
     function(){ return at(odd ? ri(0,127)*2 : ri(0,127)*2+1); });
 }
 
-/* The standing hint. It works a FIXED example rather than this round's
-   wildcard, on purpose: the Hard rounds ask for exactly the numbers it would
-   otherwise hand over. 0.0.0.9 is excluded from the generator so the example
-   can never be the question. */
-const NC_EG=9;
-function wcHintHtml(){
-  const sh=wcShape(NC_EG);
-  return '<div class="qlbl" style="margin-top:.7rem">Reading a non-contiguous wildcard</div>'+
-    '<p class="tool-note" style="margin-bottom:0">Write the mask in binary; the '+
-    '<span class="mono-inl">1</span>s are the free bits. Worked on '+
-    '<span class="mono-inl">0.0.0.'+NC_EG+'</span> = <span class="mono-inl">'+wcBin(NC_EG)+'</span>: '+
-    'the run of <span class="mono-inl">1</span>s touching bit&nbsp;0 is '+sh.base+' long, so each block '+
-    'is 2<sup>'+sh.base+'</sup> = <b>'+sh.size+'</b> addresses; there '+(sh.stray.length===1?'is':'are')+' '+
-    sh.stray.length+' further <span class="mono-inl">1</span>'+(sh.stray.length===1?'':'s')+
-    ' above it, so there are 2<sup>'+sh.stray.length+'</sup> = <b>'+sh.blocks+'</b> of those blocks '+
-    '(2<sup>'+(sh.base+sh.stray.length)+'</sup> = '+sh.total+' addresses in all). Each block starts at the '+
-    'base address plus one combination of those higher bits — here +'+
-    wcBlockStarts(NC_EG).join(', +')+'. Combinations, not a fixed step: the gaps need not be equal.</p>';
+/* The reference tool. It converts and nothing else, on purpose: an earlier
+   version printed the block size, the block count and the total, which are
+   exactly the three answers the Hard typed round asks for — a "helper" that
+   completes the question is not a helper. Reading the columns is the work. */
+function ncBinLine(raw){
+  const t=String(raw||'').trim();
+  if(!isValidIP(t)) return '<span style="opacity:.45">' +
+    '········ . ········ . ········ . ········</span>';
+  return t.split('.').map(function(o){ return wcBin(Number(o)); }).join(' . ');
 }
-
-/* The reference tool's calculator. Same helpers the drill grades with, so the
-   tool and the answer key cannot drift apart. */
 function ncCalc(){
-  const out=document.getElementById('nc-out');
-  if(!out) return;
-  const raw=(document.getElementById('nc-inp').value||'').trim();
-  if(!isValidIP(raw)){ out.innerHTML='<p class="tool-note" style="margin:0">Enter a wildcard mask, e.g. <span class="mono-inl">0.0.0.20</span>.</p>'; return; }
-  const wcInt=ip2int(raw), sh=wcShape(wcInt);
-  const octs=raw.split('.').map(Number);
-  const bin=octs.map(function(o){ return wcBin(o); }).join(' . ');
-  const starts=wcBlockStarts(wcInt);
-  const shown=starts.slice(0,16).map(function(v){ return '+'+v; }).join(', ')+
-              (starts.length>16?', … ('+starts.length+' in all)':'');
-  out.innerHTML='<div class="cli-block" style="margin-bottom:.6rem">'+bin+'</div>'+
-    '<table class="ref-table"><tbody>'+
-    '<tr><td>Free bits</td><td class="cidr-col">'+(sh.base+sh.stray.length)+'</td></tr>'+
-    '<tr><td>Addresses in total</td><td class="cidr-col">'+sh.total+'</td></tr>'+
-    '<tr><td>Block size</td><td class="cidr-col">'+sh.size+'</td></tr>'+
-    '<tr><td>Separate blocks</td><td class="cidr-col">'+sh.blocks+'</td></tr>'+
-    '<tr><td>Block starts (offset from the base address)</td><td class="cidr-col">'+shown+'</td></tr>'+
-    '</tbody></table>'+
-    '<p class="tool-note" style="margin:.6rem 0 0">'+
-    (sh.blocks===1 ? 'The free bits are one run at the bottom, so this is a single contiguous block — the ordinary case, and the one where last = first + wildcard works.'
-                   : 'The free bits are not one run at the bottom, so this covers '+sh.blocks+
-                     ' separate blocks and there is no single first-plus-wildcard to add up.')+'</p>';
+  [['nc-wc','nc-wc-bin'],['nc-a','nc-a-bin'],['nc-b','nc-b-bin']].forEach(function(p){
+    const inp=document.getElementById(p[0]), out=document.getElementById(p[1]);
+    if(inp&&out) out.innerHTML=ncBinLine(inp.value);
+  });
 }
 
 /* An arbitrary non-contiguous wildcard: at least one free bit above the run
@@ -1765,7 +1730,6 @@ function ncCalc(){
 function wcRandNonContig(){
   for(let i=0;i<300;i++){
     const oct=ri(1,254);
-    if(oct===NC_EG) continue;
     const sh=wcShape(oct);
     if(sh.stray.length>=1 && sh.stray.length<=3 && sh.base<=2 && sh.total<=32) return oct;
   }
@@ -1921,14 +1885,11 @@ function renderRange(body,qip){
   rangePicked=[];
   document.getElementById('qprompt').innerHTML=d.prompt;
   qip.style.display='none';
-  /* A non-contiguous round gets the method standing under the prompt, not
-     only in the explanation afterwards — it is a rule you apply, not one you
-     are told about once you have already guessed. The reference tool is
-     floated to the top of the column for the same round. */
+  /* A non-contiguous round is the one that cannot be done in the head, so the
+     Binary Compare scratchpad is floated to the top of the tool column there. */
   const wc=(d.prompt.match(/((?:\d{1,3}\.){3}\d{1,3})<\/span>/)||[])[1];
-  const nc=wc && isValidIP(wc) && wcShape(ip2int(wc)).blocks>1;
-  document.getElementById('qspec').innerHTML = nc ? wcHintHtml() : '';
-  if(nc && window.setPreferredTool) setPreferredTool('ncref');
+  if(wc && isValidIP(wc) && wcShape(ip2int(wc)).blocks>1 && window.setPreferredTool)
+    setPreferredTool('ncref');
   body.innerHTML = d.mode==='fields' ? fieldsHtml(d.fields) : rangeChipsHtml(d.opts);
   setBtns();
 }
@@ -2389,6 +2350,7 @@ document.addEventListener('click', function(e){
 });
 
 loadQ();
+ncCalc();
 
 /* Enter submits, then Enter moves on — see answer-keys.js. */
 AnswerKeys.wire({answers:'#qbody .afield input', submit:'checkAll'});
