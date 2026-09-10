@@ -122,7 +122,8 @@
 
     <div class="tool-block" id="t-ncref">
       <div class="tool-block-title">Binary Compare</div>
-      <p class="tool-note">Scratch space for working a wildcard out by hand. <strong>Nothing here is graded or checked</strong> &mdash; it only writes what you type in binary, stacked so the bit columns line up and can be read straight down. A <span class="mono-inl">1</span> in the wildcard is a bit that is free to differ; a <span class="mono-inl">0</span> is a bit that has to match.</p>
+      <p class="tool-note">Scratch space for working a wildcard out by hand. <strong>Nothing here is graded or checked</strong> &mdash; it only writes what you type in binary, stacked so the bit columns line up.</p>
+      <p class="tool-note">Read it <strong>one column at a time</strong>. Where <b>Wildcard</b> has a <span class="mono-inl">1</span>, nothing in that column is checked &mdash; <b>ACE</b> and <b>Test</b> are free to differ there and it makes no difference. Where <b>Wildcard</b> has a <span class="mono-inl">0</span>, that column <em>is</em> checked: <b>ACE</b> and <b>Test</b> must carry the same bit. The address matches only if <strong>every <span class="mono-inl">0</span> column agrees</strong> &mdash; one disagreement in a single one of them rules it out, however many other columns line up.</p>
       <div class="nc-inputs">
         <span class="pc-form-lbl">Wildcard mask</span>
         <input class="custom-ip-inp" id="nc-wc" placeholder="0.0.0.20" autocomplete="off" spellcheck="false" oninput="ncCalc()">
