@@ -1629,18 +1629,23 @@ function wcLastSum(ipInt, wcInt){
 function rangeAddr(blockStartInt, size){
   return Math.random()<0.5 ? blockStartInt : (blockStartInt+ri(1,size-1))>>>0;
 }
-/* Where the two cases differ, and the only part of the explanation that
-   has to branch on it. */
-function rangeStartText(ipInt, wcInt){
-  const first=wcFirst(ipInt,wcInt);
-  if(first===ipInt)
-    return 'The block starts at '+int2ip(first)+', and the last address is simply that plus '+
-           'the wildcard: '+wcLastSum(ipInt,wcInt)+'.';
-  return int2ip(ipInt)+' is not where that block starts, though. The wildcard\'s 1-bits are '+
-         '"don\'t care" in the address too, so set them to 0 to find the real first address, '+
-         int2ip(first)+', then add the wildcard as usual: '+wcLastSum(ipInt,wcInt)+
-         '. That makes <span class="mono-inl">'+int2ip(ipInt)+' '+int2ip(wcInt)+'</span> the '+
-         'same rule as <span class="mono-inl">'+int2ip(first)+' '+int2ip(wcInt)+'</span>.';
+/* The whole method, in the order the work is actually done: find the block
+   the address falls in, then do the arithmetic on the wildcard. Step one is
+   stated first on every round, not only on the rounds that need it — it is a
+   no-op on a block-aligned address and the entire trick on one that is not,
+   and a learner cannot tell which they are looking at until they do it. */
+function rangeMethodText(ipInt, wcInt, size){
+  const first=wcFirst(ipInt,wcInt), moved=first!==ipInt;
+  return '<b>Find the block the address is in first</b>: zero every bit the wildcard frees. '+
+    (moved ? 'That turns '+int2ip(ipInt)+' into <b>'+int2ip(first)+'</b> — that, not the address '+
+             'as written, is the first address. '
+           : 'Nothing under '+int2ip(wcInt)+' is set in '+int2ip(ipInt)+', so it is already the '+
+             'first address. ')+
+    'The rest is arithmetic on the wildcard alone: it covers '+wcCountSum(wcInt)+' = '+size+
+    ' addresses, and the last is the first plus the wildcard, '+wcLastSum(ipInt,wcInt)+'.'+
+    (moved ? ' Which is why <span class="mono-inl">'+int2ip(ipInt)+' '+int2ip(wcInt)+'</span> and '+
+             '<span class="mono-inl">'+int2ip(first)+' '+int2ip(wcInt)+'</span> are the same rule.'
+           : '');
 }
 
 /* Easy and the multi-octet Medium round ask the same three things of the
@@ -1672,8 +1677,7 @@ function genRange(diff){
       prompt:'The ACE <span class="mono-inl">permit '+int2ip(ip)+' '+int2ip(wcInt)+
         '</span> covers a block of addresses. Give the first and last address in that block, and how many there are.',
       fields:rangeFields(ip, wcInt, size),
-      explain:'The wildcard is one less than the block size, so '+int2ip(wcInt)+' covers '+
-        wcCountSum(wcInt)+' = '+size+' addresses. '+rangeStartText(ip, wcInt)};
+      explain:rangeMethodText(ip, wcInt, size)};
   }
   if(diff==='medium'){
     if(Math.random()<0.5){
@@ -1689,10 +1693,8 @@ function genRange(diff){
         prompt:'The ACE <span class="mono-inl">permit '+int2ip(ip)+' '+int2ip(wcInt)+
           '</span> spans more than one octet. Give the first and last address it covers, and how many there are.',
         fields:rangeFields(ip, wcInt, size),
-        explain:'The same two sums, carried across octets. '+int2ip(wcInt)+' covers '+
-          wcCountSum(wcInt)+' = '+size+' addresses, and the sum runs octet by octet — the third '+
-          'moves too, which is the part missed by anyone reading only the fourth. '+
-          rangeStartText(ip, wcInt)};
+        explain:rangeMethodText(ip, wcInt, size)+' Both steps run octet by octet here — the '+
+          'third octet moves too, which is the part missed by anyone reading only the fourth.'};
     }
     /* Membership. The wrong answers cluster just outside the block, since
        an address one past the end is the mistake worth catching. */
@@ -1711,8 +1713,8 @@ function genRange(diff){
     return {kind:'medium', mode:'chips', opts:opts,
       prompt:'Which of these addresses does <span class="mono-inl">permit '+int2ip(ip)+' '+int2ip(wcInt)+
         '</span> match?',
-      explain:int2ip(wcInt)+' covers '+wcCountSum(wcInt)+' = '+size+' addresses and nothing '+
-        'else. '+rangeStartText(ip, wcInt)+' The ones just outside that block are what to watch.'};
+      explain:rangeMethodText(ip, wcInt, size)+' Nothing outside that block matches, so the '+
+        'addresses sitting just past either end are what to watch.'};
   }
   /* Hard: non-contiguous wildcards. */
   if(Math.random()<0.5){
