@@ -186,27 +186,6 @@ function cidr2wild(cidr){ return int2ip((~maskInt(cidr))>>>0); }
 function netIntOf(ipInt,cidr){ return (ipInt & maskInt(cidr))>>>0; }
 function bcastIntOf(netI,cidr){ const wc=cidr<=0?0xFFFFFFFF>>>0:(~maskInt(cidr))>>>0; return (netI|wc)>>>0; }
 const isValidIP = LabShared.isValidIP;
-function maskToCidr(maskStr){
-  if(!isValidIP(maskStr)) return null;
-  const n=ip2int(maskStr)>>>0;
-  let cidr=0, seenZero=false;
-  for(let i=31;i>=0;i--){
-    const bit=(n>>>i)&1;
-    if(bit===1){ if(seenZero) return null; cidr++; }
-    else seenZero=true;
-  }
-  return cidr;
-}
-/* A wildcard is only a valid *prefix* wildcard when its bits are contiguous
-   from the right. IOS accepts non-contiguous ones, and they do work, but
-   nothing this page generates needs them. */
-function wildToCidr(wcStr){
-  if(!isValidIP(wcStr)) return null;
-  const n=ip2int(wcStr)>>>0;
-  const inv=(~n)>>>0;
-  return maskToCidr(int2ip(inv));
-}
-
 const TOPICS=['wild','range','match','place','lab'];
 const TOPIC_LABEL={wild:'Wildcard Masks', range:'Wildcard Ranges', match:'Which ACE Matches?',
                    place:'ACL Placement', lab:'ACL Lab'};
@@ -246,11 +225,18 @@ function aceMake(seq, action, kind, ipInt, wcInt){
 function aceHost(seq, action, ip){ return aceMake(seq, action, 'host', ip2int(ip), 0); }
 function aceNet(seq, action, ip, wc){ return aceMake(seq, action, 'net', ip2int(ip), ip2int(wc)); }
 function aceAny(seq, action){ return aceMake(seq, action, 'any', 0, 0xFFFFFFFF); }
-/* A wildcard 1-bit is "don't care", so mask both sides with its inverse. */
-function aceMatches(ace, ipInt){
-  const care=(~ace.wcInt)>>>0;
-  return ((ipInt & care)>>>0) === ((ace.ipInt & care)>>>0);
+/* The page's one piece of wildcard arithmetic. A 1-bit is "don't care", so
+   the covered block runs from every don't-care bit at 0 up to every one at
+   1, and matching is "mask both sides with the inverse". The ACL core and
+   the Wildcard Ranges drill are the same question wearing different names —
+   an address plus a wildcard IS an ACE — so they share these three. */
+function wcFirst(ipInt, wcInt){ return (ipInt & ~wcInt)>>>0; }
+function wcLast(ipInt, wcInt){ return (ipInt | wcInt)>>>0; }
+function wcMatches(ipInt, wcInt, testInt){
+  const care=(~wcInt)>>>0;
+  return ((testInt & care)>>>0) === ((ipInt & care)>>>0);
 }
+function aceMatches(ace, ipInt){ return wcMatches(ace.ipInt, ace.wcInt, ipInt); }
 function aceText(ace){
   if(ace.kind==='any') return ace.action+' any';
   if(ace.kind==='host') return ace.action+' host '+int2ip(ace.ipInt);
@@ -288,7 +274,6 @@ function aclEvaluate(acl, ipInt, count){
   }
   return {action:'deny', ace:null, implicit:true};
 }
-function aclPermits(acl, ipInt, count){ return aclEvaluate(acl, ipInt, count).action==='permit'; }
 function aclShowLines(acl){
   const head='Standard IP access list '+acl.name;
   const rows=acl.aces.map(function(a){
@@ -312,7 +297,6 @@ let acDevices=[], acCables=[], acNid=1, acSelected=null;
 
 function acReset(){ acDevices=[]; acCables=[]; acNid=1; acSelected=null; }
 function acById(id){ return acDevices.find(function(d){ return d.id===id; }); }
-function acByName(n){ return acDevices.find(function(d){ return d.name===n; }); }
 
 function acAddRouter(name,x,y){
   const d={id:acNid++, type:'router', name:name, x:x, y:y,
@@ -350,21 +334,26 @@ function acAddPC(name,x,y,ip,pfx,gw){
    way, so there is no cabling task and nothing to click. */
 function acCable(a,b,opts){ acCables.push(Object.assign({a:a.id,b:b.id},opts||{})); }
 
-/* Which router interface is a PC's gateway. Everything about VLANs on this
-   page reduces to this one question: a PC's access port carries a VLAN tag,
-   and the subinterface configured for that tag is its gateway. That is
-   enough to keep PC-A and PC-B on separate subnets while both hang off S1,
-   without building a configurable VLAN model. */
-function acGatewayFor(pc){
+/* Which router interface owns the connected subnet an address sits on.
+   Everything about VLANs on this page reduces to this one question: a PC's
+   access port carries a VLAN tag, and the subinterface configured for that
+   tag is its gateway. That is enough to keep PC-A and PC-B on separate
+   subnets while both hang off S1, without building a configurable VLAN
+   model. Asked of a bare address rather than a device, it is also what lets
+   Part 5's "re-address PC-A to 192.168.10.100" be graded without inventing
+   a modelled device for every test address. */
+function acSubnetOwner(ipStr){
+  const ipInt=ip2int(ipStr);
   for(const d of acDevices){
     if(d.type!=='router') continue;
     for(const f of d.ifaces){
       if(!f.ip||!f.up||f.loopback) continue;
-      if(netIntOf(ip2int(pc.ip),f.pfx)===netIntOf(ip2int(f.ip),f.pfx)) return {router:d, iface:f};
+      if(netIntOf(ipInt,f.pfx)===netIntOf(ip2int(f.ip),f.pfx)) return {router:d, iface:f};
     }
   }
   return null;
 }
+function acGatewayFor(pc){ return acSubnetOwner(pc.ip); }
 function acIfaceWithIp(ipStr){
   for(const d of acDevices){
     if(d.type!=='router') continue;
@@ -493,25 +482,12 @@ function acForward(start, srcInt, dstStr, count){
    direction. */
 function acPing(srcIp, dstStr, count){
   if(!isValidIP(srcIp)||!isValidIP(dstStr)) return {ok:false, reason:'Invalid address'};
-  /* Where a packet from this address enters the network. A modelled PC uses
-     its gateway; a router interface address means the router originated it;
-     anything else is treated as a host on whichever connected subnet holds
-     it, which is what lets Part 5's "change PC-A to 192.168.10.100" be
-     asked without inventing a device for every test address. */
+  /* Where a packet from this address enters the network. A router interface
+     address means the router originated it; anything else — a modelled PC or
+     a bare test address — is a host on whichever connected subnet holds it. */
   const startFor=function(ip){
-    const pc=acPcWithIp(ip);
-    if(pc){ const g=acGatewayFor(pc); return g?{router:g.router, iface:g.iface}:null; }
     const hit=acIfaceWithIp(ip);
-    if(hit) return {router:hit.router, iface:null};
-    const ipInt=ip2int(ip);
-    for(const d of acDevices){
-      if(d.type!=='router') continue;
-      for(const f of d.ifaces){
-        if(!f.ip||!f.up||f.loopback) continue;
-        if(netIntOf(ipInt,f.pfx)===netIntOf(ip2int(f.ip),f.pfx)) return {router:d, iface:f};
-      }
-    }
-    return null;
+    return hit ? {router:hit.router, iface:null} : acSubnetOwner(ip);
   };
   const a=startFor(srcIp), b=startFor(dstStr);
   if(!a) return {ok:false, reason:srcIp+' is not a host or interface on this network'};
@@ -1008,14 +984,18 @@ function genAclLabEasy(){
   };
 }
 
-function genAclLabMedium(){
-  const t=acBuildTopology();
-  /* Part 3 Step 1's ACL is already in place — the real lab builds on it. */
-  acEcho(t.r3,['configure terminal',
+/* Part 3 Step 1's ACL, already in place — Medium and Hard both build on it. */
+function acPreconfigAcl1(r3){
+  acEcho(r3,['configure terminal',
     'access-list 1 permit 192.168.10.0 0.0.0.255',
     'access-list 1 permit 192.168.20.0 0.0.0.255',
     'access-list 1 deny any',
     'interface Gi0/1.30','ip access-group 1 out','end']);
+}
+
+function genAclLabMedium(){
+  const t=acBuildTopology();
+  acPreconfigAcl1(t.r3);
   return {
     kind:'medium', part:'Part 3, Step 2',
     title:'A named standard ACL',
@@ -1041,11 +1021,7 @@ function genAclLabMedium(){
 
 function genAclLabHard(){
   const t=acBuildTopology();
-  acEcho(t.r3,['configure terminal',
-    'access-list 1 permit 192.168.10.0 0.0.0.255',
-    'access-list 1 permit 192.168.20.0 0.0.0.255',
-    'access-list 1 deny any',
-    'interface Gi0/1.30','ip access-group 1 out','end']);
+  acPreconfigAcl1(t.r3);
   acEcho(t.r1,['configure terminal',
     'ip access-list standard BRANCH-OFFICE-POLICY',
     'permit host 192.168.30.3',
@@ -1427,6 +1403,55 @@ function acLabGrade(reveal){
   finishRound();
 }
 
+/* ═══ Shared drill plumbing ════════════════════════════════════════
+   Wildcard Masks and Wildcard Ranges are both "type it in a box" drills, so
+   they share the markup and the grading; all four drills share the way a
+   round is banked and announced. */
+function fieldsHtml(fields){
+  return '<div class="agrid">'+fields.map(function(f){
+    return '<div class="afield" id="f-'+f.id+'"><label>'+esc(f.label)+'</label>'+
+      '<input id="a-'+f.id+'" autocomplete="off" spellcheck="false">'+
+      '<div class="ahint" id="h-'+f.id+'"></div></div>';
+  }).join('')+'</div>';
+}
+/* Returns how many boxes were right. A wrong box KEEPS what the learner
+   typed: overwriting it with the correct answer and then captioning it
+   "Correct: <that same value>" makes a correct grade look like a broken one,
+   and erases the only evidence of what actually went in. Only an empty box
+   is filled in, because there is nothing there to preserve. */
+function gradeFields(fields, reveal){
+  const norm=function(s){ return String(s).trim().toLowerCase().replace(/\s+/g,' '); };
+  let correct=0;
+  fields.forEach(function(f){
+    const inp=document.getElementById('a-'+f.id),
+          fld=document.getElementById('f-'+f.id),
+          hnt=document.getElementById('h-'+f.id);
+    const uv=norm(inp.value);
+    inp.disabled=true;
+    if(!reveal && uv!=='' && uv===norm(f.answer)){
+      fld.classList.add('ok'); hnt.textContent='✓ Correct'; correct++;
+    } else if(uv===''){
+      fld.classList.add('show'); inp.value=f.answer; hnt.textContent='Revealed';
+    } else {
+      fld.classList.add('bad');
+      hnt.textContent='You put '+inp.value.trim()+' — correct: '+f.answer;
+    }
+  });
+  return correct;
+}
+/* Bank the points, set the streak, colour the banner, hand over to
+   finishRound(). Only the sentence differs between drills. */
+function scoreRound(reveal, ok, pts, html){
+  state.score+=pts;
+  state.streak=(!reveal&&ok)?state.streak+1:0;
+  state.round++;
+  const fb=document.getElementById('fb');
+  fb.style.display='block';
+  fb.className='fbanner '+(reveal?'warn':ok?'ok':'err');
+  fb.innerHTML=html+(reveal?' +0 pts.':' +'+pts+' pt'+(pts!==1?'s':'')+'.'+(ok?' Streak: '+state.streak:''));
+  finishRound();
+}
+
 /* ═══ Drill 1: wildcard masks ══════════════════════════════════════
    The lab asks "what wildcard mask would you use for …" three separate
    times, and it is the one piece of ACL arithmetic people actually get
@@ -1502,47 +1527,15 @@ function renderWild(body,qip){
   const d=state.data;
   document.getElementById('qprompt').innerHTML=d.prompt;
   qip.style.display='none';
-  body.innerHTML='<div class="agrid">'+d.fields.map(function(f){
-    return '<div class="afield" id="f-'+f.id+'"><label>'+esc(f.label)+'</label>'+
-      '<input id="a-'+f.id+'" autocomplete="off" spellcheck="false">'+
-      '<div class="ahint" id="h-'+f.id+'"></div></div>';
-  }).join('')+'</div>';
+  body.innerHTML=fieldsHtml(d.fields);
   setBtns();
 }
 function wildGrade(reveal){
   const d=state.data;
-  let correct=0;
-  d.fields.forEach(function(f){
-    const inp=document.getElementById('a-'+f.id), fld=document.getElementById('f-'+f.id), hnt=document.getElementById('h-'+f.id);
-    const norm=function(s){ return String(s).trim().toLowerCase().replace(/\s+/g,' '); };
-    const uv=norm(inp.value), cv=norm(f.answer);
-    inp.disabled=true;
-    const ok=!reveal && uv!=='' && uv===cv;
-    if(ok){ fld.classList.add('ok'); hnt.textContent='✓ Correct'; correct++; }
-    else if(uv===''){
-      /* Nothing typed, so there is nothing to preserve — fill the answer in. */
-      fld.classList.add('show'); inp.value=f.answer; hnt.textContent='Revealed';
-    } else {
-      /* KEEP what the learner typed. Overwriting the box with the correct
-         answer and then captioning it "Correct: <that same value>" makes a
-         correct grade look like a broken one: a red field holding the right
-         answer, with no trace of what was actually entered. The box shows
-         theirs, the hint shows the right one. */
-      fld.classList.add('bad');
-      hnt.textContent='You put '+inp.value.trim()+' — correct: '+f.answer;
-    }
-  });
-  const all=correct===d.fields.length;
-  const pts=reveal?0:(all?POINTS[state.diff]:correct);
-  state.score+=pts; state.streak=(!reveal&&all)?state.streak+1:0; state.round++;
-  const fb=document.getElementById('fb');
-  fb.style.display='block';
-  fb.className='fbanner '+(reveal?'warn':all?'ok':'err');
-  fb.innerHTML=(reveal?'Skipped. ':all?'Correct! ':'Not quite. ')+d.explain+
-    (reveal?' +0 pts.':' +'+pts+' pt'+(pts!==1?'s':'')+'.'+(all?' Streak: '+state.streak:''));
-  finishRound();
+  const correct=gradeFields(d.fields, reveal), all=correct===d.fields.length;
+  scoreRound(reveal, all, reveal?0:(all?POINTS[state.diff]:correct),
+    (reveal?'Skipped. ':all?'Correct! ':'Not quite. ')+d.explain);
 }
-
 
 /* ═══ Drill: wildcard ranges ════════════════════════════════════════
    The mirror of the Wildcard Masks topic. That one converts between a
@@ -1560,23 +1553,11 @@ function wildGrade(reveal){
    Hard is where this stops being a subnet calculation: a Cisco wildcard is
    NOT required to be contiguous. 0.0.0.254 leaves bit 0 significant and
    every other bit free, so it matches only even addresses — a subnet mask
-   can never express that, and it is the thing people get wrong. */
-function wcFirst(ipInt, wcInt){ return (ipInt & ~wcInt)>>>0; }
-function wcLast(ipInt, wcInt){ return (ipInt | wcInt)>>>0; }
-function wcContiguous(wcInt){
-  /* Contiguous from the right: 0…01…1. Adding one to such a value clears
-     every set bit at once, so the AND is zero. */
-  return ((wcInt+1) & wcInt)>>>0 === 0;
-}
-function wcCount(wcInt){
-  let n=1;
-  for(let b=0;b<32;b++) if((wcInt>>>b)&1) n*=2;
-  return n;
-}
-function wcMatches(ipInt, wcInt, testInt){
-  const care=(~wcInt)>>>0;
-  return ((testInt & care)>>>0) === ((ipInt & care)>>>0);
-}
+   can never express that, and it is the thing people get wrong.
+
+   The arithmetic itself is wcFirst/wcLast/wcMatches up in the ACL core:
+   a drill round and an ACE are the same question asked of the same
+   numbers. */
 
 /* Multi-select chips, the same `.cbtn` idiom the LSA drill uses. */
 let rangePicked=[];
@@ -1613,16 +1594,32 @@ function rangeChipSet(ipInt, wcInt, inGen, outGen){
   }
   return null;
 }
-function rangeChipsHtml(opts, label){
-  let h='<div class="qlbl" style="margin-top:1rem">'+esc(label)+'</div><div class="cls-row" style="margin-top:.35rem">';
+function rangeChipsHtml(opts){
+  let h='<div class="qlbl" style="margin-top:1rem">Click every address this ACE matches</div>'+
+        '<div class="cls-row" style="margin-top:.35rem">';
   opts.forEach(function(o,i){
     h+='<button class="cbtn" id="rc-'+i+'" onclick="rangeToggle('+i+')">'+esc(o.label)+'</button> ';
   });
   return h+'</div>';
 }
 
+/* Easy and the multi-octet Medium round ask the same three things of the
+   same two numbers, so the fields are built once. */
+function rangeFields(ip, wcInt, size){
+  return [{id:'first', label:'First address', answer:int2ip(wcFirst(ip,wcInt))},
+          {id:'last',  label:'Last address',  answer:int2ip(wcLast(ip,wcInt))},
+          {id:'count', label:'How many addresses', answer:String(size)}];
+}
+/* Both Hard variants are one question at two bit positions: the address's
+   parity is pinned and every other bit is free. Only `at` — how a chosen
+   octet value becomes an address — differs. */
+function rangeParityChips(ip, wcInt, odd, at){
+  return rangeChipSet(ip, wcInt,
+    function(){ return at(odd ? ri(0,127)*2+1 : ri(0,127)*2); },
+    function(){ return at(odd ? ri(0,127)*2 : ri(0,127)*2+1); });
+}
+
 function genRange(diff){
-  const oct=function(){ return ri(0,255); };
   if(diff==='easy'){
     /* One octet's worth of don't-care bits: the everyday case, and the one
        where an off-by-one on the last address is the usual mistake. */
@@ -1632,12 +1629,9 @@ function genRange(diff){
     const ip=ip2int('192.168.'+ri(1,254)+'.'+base);
     const wcInt=ip2int('0.0.0.'+wc);
     return {kind:'easy', mode:'fields',
-      ace:int2ip(ip)+' '+int2ip(wcInt),
       prompt:'The ACE <span class="mono-inl">permit '+int2ip(ip)+' '+int2ip(wcInt)+
         '</span> covers a block of addresses. Give the first and last address in that block, and how many there are.',
-      fields:[{id:'first', label:'First address', answer:int2ip(wcFirst(ip,wcInt))},
-              {id:'last',  label:'Last address',  answer:int2ip(wcLast(ip,wcInt))},
-              {id:'count', label:'How many addresses', answer:String(size)}],
+      fields:rangeFields(ip, wcInt, size),
       explain:'A wildcard bit of 1 means "don\'t care". '+int2ip(wcInt)+' frees the low '+bits+
         ' bits, so the block runs from '+int2ip(wcFirst(ip,wcInt))+' (all of them 0) to '+
         int2ip(wcLast(ip,wcInt))+' (all of them 1) — 2^'+bits+' = '+size+' addresses.'};
@@ -1653,12 +1647,9 @@ function genRange(diff){
       const third=ri(0,(256/blockThird)-1)*blockThird;
       const ip=ip2int('172.'+ri(16,31)+'.'+third+'.0');
       return {kind:'medium', mode:'fields',
-        ace:int2ip(ip)+' '+int2ip(wcInt),
         prompt:'The ACE <span class="mono-inl">permit '+int2ip(ip)+' '+int2ip(wcInt)+
           '</span> spans more than one octet. Give the first and last address it covers, and how many there are.',
-        fields:[{id:'first', label:'First address', answer:int2ip(wcFirst(ip,wcInt))},
-                {id:'last',  label:'Last address',  answer:int2ip(wcLast(ip,wcInt))},
-                {id:'count', label:'How many addresses', answer:String(size)}],
+        fields:rangeFields(ip, wcInt, size),
         explain:int2ip(wcInt)+' frees the low '+bits+' bits, which is the whole fourth octet plus '+
           (bits-8)+' bit'+(bits-8===1?'':'s')+' of the third. So the third octet runs '+
           ((ip>>>8)&255)+' to '+((wcLast(ip,wcInt)>>>8)&255)+' and the fourth runs 0 to 255 — '+size+' addresses.'};
@@ -1677,7 +1668,6 @@ function genRange(diff){
                                            : at(ri(0,255)); });
     if(!opts) return genRange('medium');
     return {kind:'medium', mode:'chips', opts:opts,
-      chipLabel:'Click every address this ACE matches',
       prompt:'Which of these addresses does <span class="mono-inl">permit '+int2ip(ip)+' '+int2ip(wcInt)+
         '</span> match?',
       explain:'It covers '+int2ip(wcFirst(ip,wcInt))+' through '+int2ip(wcLast(ip,wcInt))+
@@ -1690,12 +1680,9 @@ function genRange(diff){
     const third=ri(1,254);
     const ip=ip2int('192.168.'+third+'.'+(odd?1:0)), wcInt=ip2int('0.0.0.254');
     const at=function(o){ return ip2int('192.168.'+third+'.'+o); };
-    const opts=rangeChipSet(ip, wcInt,
-      function(){ return at(odd ? ri(0,127)*2+1 : ri(0,127)*2); },
-      function(){ return at(odd ? ri(0,127)*2 : ri(0,127)*2+1); });
+    const opts=rangeParityChips(ip, wcInt, odd, at);
     if(!opts) return genRange('hard');
     return {kind:'hard', mode:'chips', opts:opts,
-      chipLabel:'Click every address this ACE matches',
       prompt:'<span class="mono-inl">permit '+int2ip(ip)+' 0.0.0.254</span> uses a <b>non-contiguous</b> '+
         'wildcard — something a subnet mask cannot express. Which of these does it match?',
       explain:'0.0.0.254 is <span class="mono-inl">11111110</span> in the last octet: every bit is "don\'t care" '+
@@ -1708,12 +1695,9 @@ function genRange(diff){
   const second=ri(16,31);
   const ip=ip2int('172.'+second+'.'+(odd?1:0)+'.0'), wcInt=ip2int('0.0.254.255');
   const at=function(o){ return ip2int('172.'+second+'.'+o+'.'+ri(1,254)); };
-  const opts=rangeChipSet(ip, wcInt,
-    function(){ return at(odd ? ri(0,127)*2+1 : ri(0,127)*2); },
-    function(){ return at(odd ? ri(0,127)*2 : ri(0,127)*2+1); });
+  const opts=rangeParityChips(ip, wcInt, odd, at);
   if(!opts) return genRange('hard');
   return {kind:'hard', mode:'chips', opts:opts,
-    chipLabel:'Click every address this ACE matches',
     prompt:'<span class="mono-inl">permit '+int2ip(ip)+' 0.0.254.255</span> is how you match every <i>other</i> '+
       'subnet. Which of these addresses does it match?',
     explain:'0.0.254.255 frees the whole fourth octet and every bit of the third <b>except bit 0</b>. '+
@@ -1726,51 +1710,22 @@ function renderRange(body,qip){
   rangePicked=[];
   document.getElementById('qprompt').innerHTML=d.prompt;
   qip.style.display='none';
-  if(d.mode==='fields'){
-    body.innerHTML='<div class="agrid">'+d.fields.map(function(f){
-      return '<div class="afield" id="f-'+f.id+'"><label>'+esc(f.label)+'</label>'+
-        '<input id="a-'+f.id+'" autocomplete="off" spellcheck="false">'+
-        '<div class="ahint" id="h-'+f.id+'"></div></div>';
-    }).join('')+'</div>';
-  } else {
-    body.innerHTML=rangeChipsHtml(d.opts, d.chipLabel);
-  }
+  body.innerHTML = d.mode==='fields' ? fieldsHtml(d.fields) : rangeChipsHtml(d.opts);
   setBtns();
 }
 function rangeGrade(reveal){
   const d=state.data;
-  const fb=document.getElementById('fb');
-  fb.style.display='block';
-  let ok=false, pts=0;
-
+  let ok, pts;
   if(d.mode==='fields'){
-    let correct=0;
-    d.fields.forEach(function(f){
-      const inp=document.getElementById('a-'+f.id), fld=document.getElementById('f-'+f.id), hnt=document.getElementById('h-'+f.id);
-      const norm=function(s){ return String(s).trim().toLowerCase().replace(/\s+/g,' '); };
-      const uv=norm(inp.value), cv=norm(f.answer);
-      inp.disabled=true;
-      const good=!reveal && uv!=='' && uv===cv;
-      if(good){ fld.classList.add('ok'); hnt.textContent='✓ Correct'; correct++; }
-      else if(uv===''){
-        /* Nothing typed, so there is nothing to preserve — fill the answer in. */
-        fld.classList.add('show'); inp.value=f.answer; hnt.textContent='Revealed';
-      } else {
-        /* KEEP what the learner typed. Overwriting the box with the correct
-           answer and then captioning it "Correct: <that same value>" makes a
-           correct grade look like a broken one: a red field holding the right
-           answer, with no trace of what was actually entered. The box shows
-           theirs, the hint shows the right one. */
-        fld.classList.add('bad');
-        hnt.textContent='You put '+inp.value.trim()+' — correct: '+f.answer;
-      }
-    });
+    const correct=gradeFields(d.fields, reveal);
     ok = correct===d.fields.length;
     pts = reveal?0:(ok?POINTS[state.diff]:correct);
   } else {
     /* Every matching address picked and no others — a partial tick would
-       let "click everything" score. */
-    const want=[], got=rangePicked.slice().sort();
+       let "click everything" score. Sort numerically: Array#sort compares as
+       strings by default, which happens to agree for the 5-7 chips a round
+       has today and would silently stop agreeing at eleven. */
+    const want=[], got=rangePicked.slice().sort(function(a,b){ return a-b; });
     d.opts.forEach(function(o,i){ if(o.ok) want.push(i); });
     ok = !reveal && want.length===got.length && want.every(function(v,i){ return v===got[i]; });
     d.opts.forEach(function(o,i){
@@ -1782,14 +1737,8 @@ function rangeGrade(reveal){
     });
     pts = ok?POINTS[state.diff]:0;
   }
-
-  state.score+=pts;
-  state.streak=(!reveal&&ok)?state.streak+1:0;
-  state.round++;
-  fb.className='fbanner '+(reveal?'warn':ok?'ok':'err');
-  fb.innerHTML=(reveal?'Skipped. ':ok?'Correct! ':'Not quite. ')+d.explain+
-    (reveal?' +0 pts.':' +'+pts+' pt'+(pts!==1?'s':'')+'.'+(ok?' Streak: '+state.streak:''));
-  finishRound();
+  scoreRound(reveal, ok, pts,
+    (reveal?'Skipped. ':ok?'Correct! ':'Not quite. ')+d.explain);
 }
 
 /* ═══ Drill 2: which ACE matches? ══════════════════════════════════
@@ -1809,9 +1758,8 @@ let acPicked=null;
 /* ".4 through .7" reads better than a wildcard when explaining a near-miss. */
 function aceRangeText(a){
   if(a.kind==='any') return 'every address';
-  const size=(a.wcInt>>>0)+1;
-  if(size===1) return 'only '+int2ip(a.ipInt);
-  return int2ip(a.ipInt)+' through '+int2ip((a.ipInt+size-1)>>>0);
+  if(a.wcInt===0) return 'only '+int2ip(a.ipInt);
+  return int2ip(wcFirst(a.ipInt,a.wcInt))+' through '+int2ip(wcLast(a.ipInt,a.wcInt));
 }
 function acFirstHit(aces, ipInt){
   for(let i=0;i<aces.length;i++) if(aceMatches(aces[i], ipInt)) return i;
@@ -1980,14 +1928,10 @@ function matchGrade(reveal){
     const el=document.getElementById('ace-'+acPicked);
     if(el) el.classList.add('wrong');
   }
-  const pts=ok?POINTS[state.diff]:0;
-  state.score+=pts; state.streak=ok?state.streak+1:0; state.round++;
-  fb.className='fbanner '+(reveal?'warn':ok?'ok':'err');
   /* permit -> permitted, deny -> denied. Concatenating 'ted' gave "denyted". */
   const verdict = d.action==='permit' ? 'permitted' : 'denied';
-  fb.innerHTML=(reveal?'Skipped. ':ok?'Correct — the packet is <b>'+verdict+'</b>. ':'Not quite — the packet is <b>'+verdict+'</b>. ')+
-    d.why+(reveal?' +0 pts.':' +'+pts+' pts.'+(ok?' Streak: '+state.streak:''));
-  finishRound();
+  scoreRound(reveal, ok, ok?POINTS[state.diff]:0,
+    (reveal?'Skipped. ':(ok?'Correct':'Not quite')+' — the packet is <b>'+verdict+'</b>. ')+d.why);
 }
 
 /* ═══ Drill 3: placement ═══════════════════════════════════════════
@@ -2067,20 +2011,16 @@ function placeGrade(reveal){
     fb.className='fbanner warn'; fb.textContent='Pick an interface and a direction first.'; return;
   }
   const picked = placePickIf!==null ? d.ifaces[placePickIf] : null;
-  const ok = !reveal && picked && picked.r===c.router && picked.n===c.iface && placePickDir===c.dir;
-  const pts=ok?POINTS[state.diff]:0;
-  state.score+=pts; state.streak=ok?state.streak+1:0; state.round++;
+  const ok = !!(!reveal && picked && picked.r===c.router && picked.n===c.iface && placePickDir===c.dir);
   d.ifaces.forEach(function(f,j){
     const el=document.getElementById('pif-'+j);
     el.classList.remove('on');
     if(f.r===c.router&&f.n===c.iface) el.classList.add('on');
   });
   ['in','out'].forEach(function(x){ document.getElementById('pdir-'+x).classList.toggle('on', x===c.dir); });
-  fb.className='fbanner '+(reveal?'warn':ok?'ok':'err');
-  fb.innerHTML=(reveal?'Skipped. ':ok?'Correct. ':'Not quite. ')+
-    'Apply it to <b>'+c.router+' '+c.iface+'</b>, <b>'+c.dir+'bound</b>. '+c.why+
-    (reveal?' +0 pts.':' +'+pts+' pts.'+(ok?' Streak: '+state.streak:''));
-  finishRound();
+  scoreRound(reveal, ok, ok?POINTS[state.diff]:0,
+    (reveal?'Skipped. ':ok?'Correct. ':'Not quite. ')+
+    'Apply it to <b>'+c.router+' '+c.iface+'</b>, <b>'+c.dir+'bound</b>. '+c.why);
 }
 
 /* ─── Round control ─────────────────────────────────────────────── */
