@@ -1603,6 +1603,21 @@ function rangeChipsHtml(opts){
   return h+'</div>';
 }
 
+/* A contiguous wildcard comes down to two sums, and every explanation in
+   this topic is built from them so the learner meets the same rule each
+   time: the count is the wildcard plus one, and the last address is the
+   first plus the wildcard. Hard's non-contiguous rounds are the deliberate
+   exception, and say so. */
+function wcCountSum(wcInt){
+  const parts=[24,16,8,0].map(function(sh){ return (wcInt>>>sh)&255; })
+                         .filter(function(v){ return v; });
+  return parts.length>1 ? parts.map(function(v){ return '('+v+'+1)'; }).join(' × ')
+                        : String(parts[0]||0)+' + 1';
+}
+function wcLastSum(ipInt, wcInt){
+  return int2ip(wcFirst(ipInt,wcInt))+' + '+int2ip(wcInt)+' = '+int2ip(wcLast(ipInt,wcInt));
+}
+
 /* Easy and the multi-octet Medium round ask the same three things of the
    same two numbers, so the fields are built once. */
 function rangeFields(ip, wcInt, size){
@@ -1632,12 +1647,13 @@ function genRange(diff){
       prompt:'The ACE <span class="mono-inl">permit '+int2ip(ip)+' '+int2ip(wcInt)+
         '</span> covers a block of addresses. Give the first and last address in that block, and how many there are.',
       fields:rangeFields(ip, wcInt, size),
-      explain:'A wildcard bit of 1 means "don\'t care". '+int2ip(wcInt)+' frees the low '+bits+
-        ' bits, so the block runs from '+int2ip(wcFirst(ip,wcInt))+' (all of them 0) to '+
-        int2ip(wcLast(ip,wcInt))+' (all of them 1) — 2^'+bits+' = '+size+' addresses.'};
+      explain:'The wildcard is one less than the block size, so '+int2ip(wcInt)+' covers '+
+        wcCountSum(wcInt)+' = '+size+' addresses. The block starts at '+int2ip(wcFirst(ip,wcInt))+
+        ', and the last address is simply that plus the wildcard: '+wcLastSum(ip,wcInt)+'.'};
   }
   if(diff==='medium'){
-    if(Math.random()<0.5){
+    const pick=choice(['span','off','chips']);
+    if(pick==='span'){
       /* A wildcard that runs past one octet. The third octet moving is the
          part people miss when they think in single octets. */
       const bits=choice([9,10,11,12]);       /* 0.0.1.255 … 0.0.15.255 */
@@ -1650,9 +1666,33 @@ function genRange(diff){
         prompt:'The ACE <span class="mono-inl">permit '+int2ip(ip)+' '+int2ip(wcInt)+
           '</span> spans more than one octet. Give the first and last address it covers, and how many there are.',
         fields:rangeFields(ip, wcInt, size),
-        explain:int2ip(wcInt)+' frees the low '+bits+' bits, which is the whole fourth octet plus '+
-          (bits-8)+' bit'+(bits-8===1?'':'s')+' of the third. So the third octet runs '+
-          ((ip>>>8)&255)+' to '+((wcLast(ip,wcInt)>>>8)&255)+' and the fourth runs 0 to 255 — '+size+' addresses.'};
+        explain:'The same two sums, carried across octets. '+int2ip(wcInt)+' covers '+
+          wcCountSum(wcInt)+' = '+size+' addresses, and the last address is the first plus the '+
+          'wildcard octet by octet: '+wcLastSum(ip,wcInt)+'. The third octet moves too — that is '+
+          'the part missed by anyone reading only the fourth.'};
+    }
+    /* The address IOS is given need not be the start of the block. A
+       wildcard 1-bit is "don't care" in the ADDRESS as well as in the
+       traffic, so 192.168.47.245 0.0.0.7 and 192.168.47.240 0.0.0.7 are the
+       same rule. Every other round in this topic hands over a block-aligned
+       address, which quietly teaches that they always are; this one never
+       does. The offset is at least 1, so the address is never the block
+       base, and it lands on an odd number more often than not. */
+    if(pick==='off'){
+      const bits=choice([2,3,4,5]);
+      const size=Math.pow(2,bits), wcInt=ip2int('0.0.0.'+(size-1));
+      const base=ri(0,(256/size)-1)*size;
+      const ip=ip2int('192.168.'+ri(1,254)+'.'+(base+ri(1,size-1)));
+      return {kind:'medium', mode:'fields',
+        prompt:'The ACE <span class="mono-inl">permit '+int2ip(ip)+' '+int2ip(wcInt)+
+          '</span> covers a block of addresses. Give the first and last address in that block, and how many there are.',
+        fields:rangeFields(ip, wcInt, size),
+        explain:int2ip(wcInt)+' covers '+wcCountSum(wcInt)+' = '+size+' addresses — but '+
+          int2ip(ip)+' is not where that block starts. The wildcard\'s 1-bits are "don\'t care" in '+
+          'the address too, so set them to 0 to find the real first address, '+
+          int2ip(wcFirst(ip,wcInt))+', then add the wildcard as usual: '+wcLastSum(ip,wcInt)+
+          '. That makes <span class="mono-inl">'+int2ip(ip)+' '+int2ip(wcInt)+'</span> the same '+
+          'rule as <span class="mono-inl">'+int2ip(wcFirst(ip,wcInt))+' '+int2ip(wcInt)+'</span>.'};
     }
     /* Membership. The wrong answers cluster just outside the block, since
        an address one past the end is the mistake worth catching. */
@@ -1670,8 +1710,9 @@ function genRange(diff){
     return {kind:'medium', mode:'chips', opts:opts,
       prompt:'Which of these addresses does <span class="mono-inl">permit '+int2ip(ip)+' '+int2ip(wcInt)+
         '</span> match?',
-      explain:'It covers '+int2ip(wcFirst(ip,wcInt))+' through '+int2ip(wcLast(ip,wcInt))+
-        ' and nothing else — '+size+' addresses. The two just outside that block are the ones to watch.'};
+      explain:'The block is '+wcLastSum(ip,wcInt)+', so it covers '+int2ip(wcFirst(ip,wcInt))+
+        ' through '+int2ip(wcLast(ip,wcInt))+' and nothing else — '+size+' addresses. The ones '+
+        'just outside it are what to watch.'};
   }
   /* Hard: non-contiguous wildcards. */
   if(Math.random()<0.5){
@@ -1688,7 +1729,9 @@ function genRange(diff){
       explain:'0.0.0.254 is <span class="mono-inl">11111110</span> in the last octet: every bit is "don\'t care" '+
         '<b>except bit 0</b>, which must match the address. The address ends in '+(odd?1:0)+
         ', so this matches every <b>'+(odd?'odd':'even')+'</b> address in 192.168.'+third+
-        '.0 — 128 of them, and not one contiguous block.'};
+        '.0 — 128 of them, and not one contiguous block. This is the one case where '+
+        '"last = first + wildcard" does not hold: that shortcut needs the wildcard bits to be '+
+        'contiguous, and these are not.'};
   }
   /* Odd/even subnets: the classic "match every other subnet" wildcard. */
   const odd=Math.random()<0.5;
@@ -1702,7 +1745,8 @@ function genRange(diff){
       'subnet. Which of these addresses does it match?',
     explain:'0.0.254.255 frees the whole fourth octet and every bit of the third <b>except bit 0</b>. '+
       'The address has '+(odd?1:0)+' in the third octet, so only subnets with an '+(odd?'odd':'even')+
-      ' third octet match — 172.'+second+'.'+(odd?'1, 3, 5':'0, 2, 4')+' and so on.'};
+      ' third octet match — 172.'+second+'.'+(odd?'1, 3, 5':'0, 2, 4')+' and so on. There is no '+
+      'first-plus-wildcard sum to do here: that only works on a contiguous wildcard.'};
 }
 
 function renderRange(body,qip){
