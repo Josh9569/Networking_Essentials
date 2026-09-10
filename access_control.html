@@ -1519,8 +1519,18 @@ function wildGrade(reveal){
     inp.disabled=true;
     const ok=!reveal && uv!=='' && uv===cv;
     if(ok){ fld.classList.add('ok'); hnt.textContent='✓ Correct'; correct++; }
-    else { fld.classList.add(uv===''?'show':'bad'); inp.value=f.answer;
-           hnt.textContent = uv===''?'Revealed':'Correct: '+f.answer; }
+    else if(uv===''){
+      /* Nothing typed, so there is nothing to preserve — fill the answer in. */
+      fld.classList.add('show'); inp.value=f.answer; hnt.textContent='Revealed';
+    } else {
+      /* KEEP what the learner typed. Overwriting the box with the correct
+         answer and then captioning it "Correct: <that same value>" makes a
+         correct grade look like a broken one: a red field holding the right
+         answer, with no trace of what was actually entered. The box shows
+         theirs, the hint shows the right one. */
+      fld.classList.add('bad');
+      hnt.textContent='You put '+inp.value.trim()+' — correct: '+f.answer;
+    }
   });
   const all=correct===d.fields.length;
   const pts=reveal?0:(all?POINTS[state.diff]:correct);
@@ -1737,13 +1747,23 @@ function rangeGrade(reveal){
     let correct=0;
     d.fields.forEach(function(f){
       const inp=document.getElementById('a-'+f.id), fld=document.getElementById('f-'+f.id), hnt=document.getElementById('h-'+f.id);
-      const norm=function(s){ return String(s).trim().toLowerCase(); };
+      const norm=function(s){ return String(s).trim().toLowerCase().replace(/\s+/g,' '); };
       const uv=norm(inp.value), cv=norm(f.answer);
       inp.disabled=true;
       const good=!reveal && uv!=='' && uv===cv;
       if(good){ fld.classList.add('ok'); hnt.textContent='✓ Correct'; correct++; }
-      else { fld.classList.add(uv===''?'show':'bad'); inp.value=f.answer;
-             hnt.textContent = uv===''?'Revealed':'Correct: '+f.answer; }
+      else if(uv===''){
+        /* Nothing typed, so there is nothing to preserve — fill the answer in. */
+        fld.classList.add('show'); inp.value=f.answer; hnt.textContent='Revealed';
+      } else {
+        /* KEEP what the learner typed. Overwriting the box with the correct
+           answer and then captioning it "Correct: <that same value>" makes a
+           correct grade look like a broken one: a red field holding the right
+           answer, with no trace of what was actually entered. The box shows
+           theirs, the hint shows the right one. */
+        fld.classList.add('bad');
+        hnt.textContent='You put '+inp.value.trim()+' — correct: '+f.answer;
+      }
     });
     ok = correct===d.fields.length;
     pts = reveal?0:(ok?POINTS[state.diff]:correct);
