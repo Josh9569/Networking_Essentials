@@ -9,7 +9,8 @@
        the blanks first — jumping to the next empty one — and only submits
        once they all have something in them, so a half-finished answer is
        never graded by accident.
-     · Enter once the round is graded moves to the next question.
+     · Enter once the round is graded moves to the next question, and the
+       caret lands back in the first answer box ready for it.
 
    The second half needs no page-specific code at all. "The round is graded"
    is simply "the Next button is visible", which is true on all ten pages,
@@ -86,18 +87,42 @@
       }
     });
 
-    /* Focus the Next button the moment it appears. Without this, clicking
-       Submit leaves focus on a button that is then hidden, and a focused
-       hidden button swallows the next Enter. preventScroll keeps the page
-       where the learner is reading. */
+    function focusQuietly(el) {
+      if (!el) return;
+      try { el.focus({ preventScroll: true }); } catch (err) { el.focus(); }
+    }
+
+    /* The Next button appearing and disappearing is the whole round cycle, so
+       one observer drives both halves of the keyboard flow.
+
+       It APPEARS: the round has been graded. Focus it, because clicking Submit
+       leaves focus on a button that is then hidden, and a focused hidden
+       button swallows the next Enter — so without this the second Enter did
+       nothing. Focusing Next also means Enter there is handled natively by the
+       button, which is why the keydown listener above ignores BUTTON: the two
+       can never both fire and skip two rounds.
+
+       It DISAPPEARS: a new round has rendered. Put the caret in the first
+       answer box. The rhythm is answer, submit, next, answer — and without
+       this the third step strands focus on a button that has just been hidden,
+       so continuing means reaching for the mouse. Only pages that actually
+       have typed answers do this; the labs pass no `answers` selector and are
+       left alone, as is any round within a page that happens to have no boxes
+       (a lab topic, a click-only round). Nothing is focused on first load
+       either — the button has to have been visible first — so arriving on a
+       page never yanks the view or opens a phone keyboard.
+
+       Both branches run from the observer rather than from the click, which
+       means they fire after the page's own loadQ()/render() has finished; the
+       new round's boxes exist by then whatever order a page renders its body
+       and re-labels its buttons in. */
     var btn = nextBtn();
     if (btn && window.MutationObserver) {
       var wasVisible = btn.style.display !== 'none';
       new MutationObserver(function () {
         var vis = btn.style.display !== 'none';
-        if (vis && !wasVisible) {
-          try { btn.focus({ preventScroll: true }); } catch (err) { btn.focus(); }
-        }
+        if (vis && !wasVisible) focusQuietly(btn);
+        else if (!vis && wasVisible) focusQuietly(boxes()[0]);
         wasVisible = vis;
       }).observe(btn, { attributes: true, attributeFilter: ['style'] });
     }
