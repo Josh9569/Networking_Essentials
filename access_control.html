@@ -82,6 +82,10 @@
           <span class="opt-row-label">Wildcard Mask Reference</span>
           <div class="tog"><input type="checkbox" id="tog-wcref" checked><span class="tog-track"></span></div>
         </label>
+        <label class="opt-row" onclick="toggleTool('ncref')">
+          <span class="opt-row-label">Non-Contiguous Wildcards</span>
+          <div class="tog"><input type="checkbox" id="tog-ncref" checked><span class="tog-track"></span></div>
+        </label>
         <label class="opt-row" onclick="toggleTool('aclref')">
           <span class="opt-row-label">ACL Rules Reference</span>
           <div class="tog"><input type="checkbox" id="tog-aclref" checked><span class="tog-track"></span></div>
@@ -114,6 +118,25 @@
         </tbody>
       </table>
       <p class="tool-note">Two shorthands mean exactly the same thing as a wildcard: <span class="mono-inl">host 192.168.30.3</span> is <span class="mono-inl">192.168.30.3 0.0.0.0</span>, and <span class="mono-inl">any</span> is <span class="mono-inl">0.0.0.0 255.255.255.255</span>.</p>
+    </div>
+
+    <div class="tool-block" id="t-ncref">
+      <div class="tool-block-title">Binary Compare</div>
+      <p class="tool-note">Scratch space for working a wildcard out by hand. <strong>Nothing here is graded or checked</strong> &mdash; it only writes what you type in binary, stacked so the bit columns line up.</p>
+      <p class="tool-note">Read it <strong>one column at a time</strong>. Where <b>Wildcard</b> has a <span class="mono-inl">1</span>, nothing in that column is checked &mdash; <b>ACE</b> and <b>Test</b> are free to differ there and it makes no difference. Where <b>Wildcard</b> has a <span class="mono-inl">0</span>, that column <em>is</em> checked: <b>ACE</b> and <b>Test</b> must carry the same bit. The address matches only if <strong>every <span class="mono-inl">0</span> column agrees</strong> &mdash; one disagreement in a single one of them rules it out, however many other columns line up.</p>
+      <div class="nc-inputs">
+        <span class="pc-form-lbl">Wildcard mask</span>
+        <input class="custom-ip-inp" id="nc-wc" placeholder="0.0.0.20" autocomplete="off" spellcheck="false" oninput="ncCalc()">
+        <span class="pc-form-lbl">Address in the ACE</span>
+        <input class="custom-ip-inp" id="nc-a" placeholder="192.168.10.4" autocomplete="off" spellcheck="false" oninput="ncCalc()">
+        <span class="pc-form-lbl">Address to test</span>
+        <input class="custom-ip-inp" id="nc-b" placeholder="192.168.10.20" autocomplete="off" spellcheck="false" oninput="ncCalc()">
+      </div>
+      <div class="cli-block nc-cmp">
+        <span class="nc-lbl">Wildcard</span><span id="nc-wc-bin"></span>
+        <span class="nc-lbl">ACE</span><span id="nc-a-bin"></span>
+        <span class="nc-lbl">Test</span><span id="nc-b-bin"></span>
+      </div>
     </div>
 
     <div class="tool-block" id="t-aclref">
@@ -237,6 +260,31 @@ function wcMatches(ipInt, wcInt, testInt){
   return ((testInt & care)>>>0) === ((ipInt & care)>>>0);
 }
 function aceMatches(ace, ipInt){ return wcMatches(ace.ipInt, ace.wcInt, ipInt); }
+/* Where the free bits SIT decides the shape of what a wildcard covers, and it
+   reduces to two numbers: the run of 1s touching bit 0 gives the block size,
+   and the 1s above that run give how many blocks there are. Checked against a
+   brute-force enumeration for all 256 single-octet wildcards, no exceptions.
+   The block STARTS are every subset-sum of those higher bits — deliberately
+   not a stride, which only holds when they happen to be contiguous too:
+   0.0.0.18 covers offsets 0, 2, 16, 18, gaps of 2, 14, 2. */
+function wcShape(wcInt){
+  let base=0; while(base<32 && ((wcInt>>>base)&1)) base++;
+  const stray=[]; for(let b=base+1;b<32;b++) if((wcInt>>>b)&1) stray.push(b);
+  return {base:base, size:Math.pow(2,base), stray:stray,
+          blocks:Math.pow(2,stray.length), total:Math.pow(2,base+stray.length)};
+}
+function wcBlockStarts(wcInt){
+  let out=[0];
+  wcShape(wcInt).stray.forEach(function(b){
+    out=out.concat(out.map(function(v){ return v+Math.pow(2,b); }));
+  });
+  return out.sort(function(a,b){ return a-b; });
+}
+function wcBin(oct){
+  let s=(oct>>>0).toString(2);
+  while(s.length<8) s='0'+s;
+  return s;
+}
 function aceText(ace){
   if(ace.kind==='any') return ace.action+' any';
   if(ace.kind==='host') return ace.action+' host '+int2ip(ace.ipInt);
@@ -1594,13 +1642,29 @@ function rangeChipSet(ipInt, wcInt, inGen, outGen){
   }
   return null;
 }
+const COPY_ICON='<svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/>'+
+  '<path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>';
+/* Each chip carries a copy button that surfaces above it on hover. Copying an
+   address out of the round and into the Binary Compare scratchpad is the one
+   piece of retyping the topic actually forces, and retyping a dotted quad is
+   exactly where a transcription slip turns into a wrong answer you cannot
+   account for. tabindex="-1" keeps it out of the tab order, so tabbing still
+   walks the chips themselves. */
 function rangeChipsHtml(opts){
   let h='<div class="qlbl" style="margin-top:1rem">Click every address this ACE matches</div>'+
         '<div class="cls-row" style="margin-top:.35rem">';
   opts.forEach(function(o,i){
-    h+='<button class="cbtn" id="rc-'+i+'" onclick="rangeToggle('+i+')">'+esc(o.label)+'</button> ';
+    h+='<span class="chip-copy-wrap">'+
+         '<button type="button" class="chip-copy" tabindex="-1" '+
+           'onclick="rangeCopyChip(event,\''+o.label+'\',this)">'+COPY_ICON+'Copy</button>'+
+         '<button class="cbtn" id="rc-'+i+'" onclick="rangeToggle('+i+')">'+esc(o.label)+'</button>'+
+       '</span> ';
   });
   return h+'</div>';
+}
+function rangeCopyChip(e, addr, btn){
+  e.stopPropagation();
+  copyText(addr, btn);
 }
 
 /* A contiguous wildcard comes down to two sums, and every explanation in
@@ -1664,6 +1728,81 @@ function rangeParityChips(ip, wcInt, odd, at){
     function(){ return at(odd ? ri(0,127)*2 : ri(0,127)*2+1); });
 }
 
+/* The reference tool. It converts and nothing else, on purpose: an earlier
+   version printed the block size, the block count and the total, which are
+   exactly the three answers the Hard typed round asks for — a "helper" that
+   completes the question is not a helper. Reading the columns is the work. */
+function ncBinLine(raw){
+  const t=String(raw||'').trim();
+  if(!isValidIP(t)) return '<span style="opacity:.45">' +
+    '········ . ········ . ········ . ········</span>';
+  return t.split('.').map(function(o){ return wcBin(Number(o)); }).join(' . ');
+}
+function ncCalc(){
+  [['nc-wc','nc-wc-bin'],['nc-a','nc-a-bin'],['nc-b','nc-b-bin']].forEach(function(p){
+    const inp=document.getElementById(p[0]), out=document.getElementById(p[1]);
+    if(inp&&out) out.innerHTML=ncBinLine(inp.value);
+  });
+}
+/* navigator.clipboard needs a secure context — 127.0.0.1 and https both are,
+   so the execCommand path is only a fallback rather than the usual route. It
+   does fire in practice when clipboard permission is withheld, so it is a real
+   path and not decoration: without it the button would silently do nothing.
+   Confirmation is the button relabelling itself, not a second piece of UI. */
+function copyText(txt, btn){
+  const done=function(){
+    if(btn.dataset.copied) return;
+    const was=btn.innerHTML;
+    btn.dataset.copied='1';
+    btn.innerHTML=COPY_ICON+'Copied';
+    setTimeout(function(){ btn.innerHTML=was; delete btn.dataset.copied; }, 1200);
+  };
+  if(navigator.clipboard && navigator.clipboard.writeText)
+    navigator.clipboard.writeText(txt).then(done, function(){ ncCopyFallback(txt, done); });
+  else ncCopyFallback(txt, done);
+}
+function ncCopyFallback(txt, done){
+  const ta=document.createElement('textarea');
+  ta.value=txt;
+  ta.setAttribute('readonly','');
+  ta.style.position='fixed';
+  ta.style.opacity='0';
+  document.body.appendChild(ta);
+  ta.select();
+  try{ document.execCommand('copy'); done(); }catch(e){}
+  document.body.removeChild(ta);
+}
+
+/* An arbitrary non-contiguous wildcard: at least one free bit above the run
+   touching bit 0, which is what makes it non-contiguous, and small enough that
+   the blocks can be listed. */
+function wcRandNonContig(){
+  for(let i=0;i<300;i++){
+    const oct=ri(1,254);
+    const sh=wcShape(oct);
+    if(sh.stray.length>=1 && sh.stray.length<=3 && sh.base<=2 && sh.total<=32) return oct;
+  }
+  return 20;
+}
+/* One breakdown, shared by both Hard bits rounds. */
+function wcShapeText(ipInt, wcInt){
+  const sh=wcShape(wcInt), first=wcFirst(ipInt,wcInt);
+  const starts=wcBlockStarts(wcInt);
+  return int2ip(wcInt)+' is <span class="mono-inl">'+wcBin(wcInt&255)+'</span> in the last octet: '+
+    (sh.base+sh.stray.length)+' free bits, so 2^'+(sh.base+sh.stray.length)+' = <b>'+sh.total+
+    '</b> addresses, counted the same way as always. The free bits are not one run at the bottom, '+
+    'though — the run touching bit 0 is '+sh.base+' long, so each block is 2^'+sh.base+' = <b>'+
+    sh.size+'</b>, and the '+sh.stray.length+' bit'+(sh.stray.length===1?'':'s')+' above it give 2^'+
+    sh.stray.length+' = <b>'+sh.blocks+'</b> separate blocks. '+
+    (first!==ipInt ? 'Zeroing the free bits turns '+int2ip(ipInt)+' into '+int2ip(first)+
+       ' — that, not the address as written, is where the first block starts. ' : '')+
+    'They start at '+int2ip(first)+' plus each combination of those bits (+'+starts.join(', +')+
+    '), so: '+starts.map(function(v){ return int2ip((first+v)>>>0); }).join(', ')+'.'+
+    (first!==ipInt ? ' Which is why <span class="mono-inl">'+int2ip(ipInt)+' '+int2ip(wcInt)+
+       '</span> and <span class="mono-inl">'+int2ip(first)+' '+int2ip(wcInt)+
+       '</span> are the same rule.' : '');
+}
+
 function genRange(diff){
   if(diff==='easy'){
     /* One octet's worth of don't-care bits: the everyday case, and the one
@@ -1716,8 +1855,44 @@ function genRange(diff){
       explain:rangeMethodText(ip, wcInt, size)+' Nothing outside that block matches, so the '+
         'addresses sitting just past either end are what to watch.'};
   }
-  /* Hard: non-contiguous wildcards. */
-  if(Math.random()<0.5){
+  /* Hard: non-contiguous wildcards. The two parity rounds are the famous
+     shapes — every other address, every other subnet — and are recognisable
+     once seen. The two `bits` rounds are an arbitrary mask, where there is no
+     shape to recognise and the binary genuinely has to be read. */
+  const shape=choice(['odd','odd','sub','sub','bits','bitschips']);
+  if(shape==='bits' || shape==='bitschips'){
+    const wcOct=wcRandNonContig(), wcInt=ip2int('0.0.0.'+wcOct);
+    const sh=wcShape(wcInt), starts=wcBlockStarts(wcInt);
+    const third=ri(1,254);
+    /* Keep the whole thing inside one octet so the blocks are listable. */
+    const baseOct=ri(0, Math.floor((255-starts[starts.length-1]-sh.size+1)/1));
+    const first=ip2int('192.168.'+third+'.'+((baseOct & ~wcOct & 255)>>>0));
+    const ip=(first + (Math.random()<0.5 ? 0 : choice(starts)+ri(0,sh.size-1)))>>>0;
+    if(shape==='bits'){
+      return {kind:'hard', mode:'fields',
+        prompt:'The ACE <span class="mono-inl">permit '+int2ip(ip)+' '+int2ip(wcInt)+
+          '</span> uses a wildcard whose free bits are <b>not</b> one run at the bottom. Write it out in '+
+          'binary: how many addresses does it match in total, how many separate blocks do they fall into, '+
+          'and how big is each block?',
+        fields:[{id:'total', label:'Addresses in total', answer:String(sh.total)},
+                {id:'blocks', label:'Separate blocks',   answer:String(sh.blocks)},
+                {id:'size',   label:'Addresses per block', answer:String(sh.size)}],
+        explain:wcShapeText(ip, wcInt)};
+    }
+    const at=function(o){ return ip2int('192.168.'+third+'.'+Math.max(0,Math.min(255,o))); };
+    const lo=first&255;
+    const opts=rangeChipSet(ip, wcInt,
+      function(){ return at(lo+choice(starts)+ri(0,sh.size-1)); },
+      function(){ return Math.random()<0.7 ? at(lo+choice(starts)+choice([-1,sh.size,sh.size+1]))
+                                           : at(ri(0,255)); });
+    if(!opts) return genRange('hard');
+    return {kind:'hard', mode:'chips', opts:opts,
+      prompt:'<span class="mono-inl">permit '+int2ip(ip)+' '+int2ip(wcInt)+'</span> uses a wildcard whose '+
+        'free bits are <b>not</b> one run at the bottom, so it does not cover a single block. Which of '+
+        'these does it match?',
+      explain:wcShapeText(ip, wcInt)};
+  }
+  if(shape==='odd'){
     /* Even/odd within one octet. */
     const odd=Math.random()<0.5;
     const third=ri(1,254);
@@ -1759,6 +1934,11 @@ function renderRange(body,qip){
   rangePicked=[];
   document.getElementById('qprompt').innerHTML=d.prompt;
   qip.style.display='none';
+  /* A non-contiguous round is the one that cannot be done in the head, so the
+     Binary Compare scratchpad is floated to the top of the tool column there. */
+  const wc=(d.prompt.match(/((?:\d{1,3}\.){3}\d{1,3})<\/span>/)||[])[1];
+  if(wc && isValidIP(wc) && wcShape(ip2int(wc)).blocks>1 && window.setPreferredTool)
+    setPreferredTool('ncref');
   body.innerHTML = d.mode==='fields' ? fieldsHtml(d.fields) : rangeChipsHtml(d.opts);
   setBtns();
 }
@@ -2219,6 +2399,7 @@ document.addEventListener('click', function(e){
 });
 
 loadQ();
+ncCalc();
 
 /* Enter submits, then Enter moves on — see answer-keys.js. */
 AnswerKeys.wire({answers:'#qbody .afield input', submit:'checkAll'});
