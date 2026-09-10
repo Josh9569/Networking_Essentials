@@ -125,13 +125,13 @@
       <p class="tool-note">Scratch space for working a wildcard out by hand. <strong>Nothing here is graded or checked</strong> &mdash; it only writes what you type in binary, lined up so you can read down the columns. A <span class="mono-inl">1</span> in the wildcard is a bit that is free to differ; a <span class="mono-inl">0</span> is a bit that has to match.</p>
       <div class="pc-form"><span class="pc-form-lbl">Wildcard mask</span>
         <input class="custom-ip-inp" id="nc-wc" placeholder="0.0.0.20" autocomplete="off" spellcheck="false" oninput="ncCalc()"></div>
-      <div class="cli-block" id="nc-wc-bin" style="margin:.35rem 0 .8rem"></div>
+      <div style="position:relative;margin:.35rem 0 .8rem"><button class="copy-btn" id="nc-wc-copy" data-tip="Copy binary" onclick="ncCopy('nc-wc-bin',this)" hidden><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><div class="cli-block" id="nc-wc-bin"></div></div>
       <div class="pc-form"><span class="pc-form-lbl">Address in the ACE</span>
         <input class="custom-ip-inp" id="nc-a" placeholder="192.168.10.4" autocomplete="off" spellcheck="false" oninput="ncCalc()"></div>
-      <div class="cli-block" id="nc-a-bin" style="margin:.35rem 0 .8rem"></div>
+      <div style="position:relative;margin:.35rem 0 .8rem"><button class="copy-btn" id="nc-a-copy" data-tip="Copy binary" onclick="ncCopy('nc-a-bin',this)" hidden><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><div class="cli-block" id="nc-a-bin"></div></div>
       <div class="pc-form"><span class="pc-form-lbl">Address to test</span>
         <input class="custom-ip-inp" id="nc-b" placeholder="192.168.10.20" autocomplete="off" spellcheck="false" oninput="ncCalc()"></div>
-      <div class="cli-block" id="nc-b-bin" style="margin:.35rem 0 0"></div>
+      <div style="position:relative;margin:.35rem 0 0"><button class="copy-btn" id="nc-b-copy" data-tip="Copy binary" onclick="ncCopy('nc-b-bin',this)" hidden><svg viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></button><div class="cli-block" id="nc-b-bin"></div></div>
     </div>
 
     <div class="tool-block" id="t-aclref">
@@ -1718,10 +1718,43 @@ function ncBinLine(raw){
   return t.split('.').map(function(o){ return wcBin(Number(o)); }).join(' . ');
 }
 function ncCalc(){
-  [['nc-wc','nc-wc-bin'],['nc-a','nc-a-bin'],['nc-b','nc-b-bin']].forEach(function(p){
-    const inp=document.getElementById(p[0]), out=document.getElementById(p[1]);
-    if(inp&&out) out.innerHTML=ncBinLine(inp.value);
+  [['nc-wc','nc-wc-bin','nc-wc-copy'],['nc-a','nc-a-bin','nc-a-copy'],
+   ['nc-b','nc-b-bin','nc-b-copy']].forEach(function(p){
+    const inp=document.getElementById(p[0]), out=document.getElementById(p[1]),
+          btn=document.getElementById(p[2]);
+    if(!inp||!out) return;
+    const ok=isValidIP(String(inp.value||'').trim());
+    out.innerHTML=ncBinLine(inp.value);
+    /* Nothing worth copying out of a row of dots. */
+    if(btn) btn.hidden=!ok;
   });
+}
+/* navigator.clipboard needs a secure context — 127.0.0.1 and https both are,
+   so the execCommand path is only a fallback rather than the usual route.
+   Confirmation reuses the button's own tooltip instead of adding a second
+   piece of feedback UI. */
+function ncCopy(id, btn){
+  const txt=document.getElementById(id).textContent;
+  const done=function(){
+    const was=btn.getAttribute('data-tip');
+    if(was==='Copied') return;
+    btn.setAttribute('data-tip','Copied');
+    setTimeout(function(){ btn.setAttribute('data-tip', was); }, 1200);
+  };
+  if(navigator.clipboard && navigator.clipboard.writeText)
+    navigator.clipboard.writeText(txt).then(done, function(){ ncCopyFallback(txt, done); });
+  else ncCopyFallback(txt, done);
+}
+function ncCopyFallback(txt, done){
+  const ta=document.createElement('textarea');
+  ta.value=txt;
+  ta.setAttribute('readonly','');
+  ta.style.position='fixed';
+  ta.style.opacity='0';
+  document.body.appendChild(ta);
+  ta.select();
+  try{ document.execCommand('copy'); done(); }catch(e){}
+  document.body.removeChild(ta);
 }
 
 /* An arbitrary non-contiguous wildcard: at least one free bit above the run

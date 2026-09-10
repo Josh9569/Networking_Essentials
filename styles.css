@@ -304,10 +304,20 @@ sup  { font-size: .65em; vertical-align: super; }
 
 /* ── Field hover tooltips ────────────────────────────────────────────────────── */
 .tip-ic            { display: inline-flex; align-items: center; justify-content: center; width: 13px; height: 13px; margin-left: 5px; border-radius: 50%; border: 1px solid var(--border-m); background: var(--surface-s); color: var(--text-t); font-size: 9px; font-weight: 700; letter-spacing: normal; text-transform: none; line-height: 1; cursor: help; position: relative; vertical-align: middle; }
-.tip-ic::after     { content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 7px); transform: translateX(-50%); width: max-content; max-width: 220px; background: var(--custom-surface-tip, var(--surface)); color: var(--text-s); border: 1px solid var(--border); font-size: 11.5px; font-weight: 400; letter-spacing: normal; text-transform: none; line-height: 1.4; padding: 6px 9px; border-radius: 6px; opacity: 0; pointer-events: none; transition: opacity .12s ease; z-index: 30; }
-.tip-ic::before    { content: ''; position: absolute; left: 50%; bottom: calc(100% + 2px); transform: translateX(-50%); border: 5px solid transparent; border-top-color: var(--custom-surface-tip, var(--surface)); opacity: 0; transition: opacity .12s ease; }
+.tip-ic::after, .copy-btn::after { content: attr(data-tip); position: absolute; left: 50%; bottom: calc(100% + 7px); transform: translateX(-50%); width: max-content; max-width: 220px; background: var(--custom-surface-tip, var(--surface)); color: var(--text-s); border: 1px solid var(--border); font-size: 11.5px; font-weight: 400; letter-spacing: normal; text-transform: none; line-height: 1.4; padding: 6px 9px; border-radius: 6px; opacity: 0; pointer-events: none; transition: opacity .12s ease; z-index: 30; }
+.tip-ic::before, .copy-btn::before { content: ''; position: absolute; left: 50%; bottom: calc(100% + 2px); transform: translateX(-50%); border: 5px solid transparent; border-top-color: var(--custom-surface-tip, var(--surface)); opacity: 0; transition: opacity .12s ease; }
 .tip-ic:hover::after, .tip-ic:hover::before,
-.tip-ic:focus::after, .tip-ic:focus::before { opacity: 1; }
+.tip-ic:focus::after, .tip-ic:focus::before,
+.copy-btn:hover::after, .copy-btn:hover::before,
+.copy-btn:focus::after, .copy-btn:focus::before { opacity: 1; }
+
+/* Sits in the top-right corner of the row it copies. Its own display rule
+   would beat the UA's [hidden] { display: none }, so that is restated here —
+   ncCalc() hides the button while a row has nothing worth copying. */
+.copy-btn          { position: absolute; top: 5px; right: 6px; z-index: 4; display: inline-flex; align-items: center; justify-content: center; width: 22px; height: 22px; padding: 0; border-radius: 5px; border: 1px solid var(--border-m); background: var(--surface-s); color: var(--text-t); cursor: pointer; transition: color .12s ease, border-color .12s ease; }
+.copy-btn:hover    { color: var(--text); border-color: var(--info-bdr); }
+.copy-btn[hidden]  { display: none; }
+.copy-btn svg      { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
 /* ── Explanations ───────────────────────────────────────────────────────────── */
 .expl-btn          { background: transparent; border: 1px solid var(--border-m); color: var(--text-s); border-radius: 4px; padding: 2px 6px; font-size: 10px; cursor: pointer; opacity: 0.8; font-family: var(--font); text-transform: uppercase; letter-spacing: .05em; transition: opacity .15s; }
@@ -1111,7 +1121,7 @@ sup  { font-size: .65em; vertical-align: super; }
    --surface/--surface-s as its background (at rest or on hover/open/on)
    should be added here too, or it'll go translucent without going blurry. */
 .chip, .qcard, .opt-menu, .theme-dd-menu, .tool-block, .afield, .btn, .ct-drawer,
-.theme-dd-btn, .theme-dd-edit, .theme-dd-item, .opt-btn, .tip-ic, .expl-box code, .bbox.hb, .bdge-s,
+.theme-dd-btn, .theme-dd-edit, .theme-dd-item, .opt-btn, .tip-ic, .copy-btn, .expl-box code, .bbox.hb, .bdge-s,
 .mn-c1, .mn-stat, .mn-mask-row, .mn-cls-badge, .mn-stats-toggle, .mn-sel-btn,
 .gh-link, .game-card, .tag, .cbtn,
 .card-footer, .bit-cell, .pow-cell, .req-chip, .sub-panel, .sub-hdr, .sub-ltr.e,
@@ -1137,7 +1147,7 @@ sup  { font-size: .65em; vertical-align: super; }
    it's to not blur it a second time once it's already sitting on a blurred
    backdrop. Every pairing below is a real nested case found in the site's
    HTML; add to it whenever a new nested case shows up. */
-.tool-block .ref-table, .tool-block .cli-block, .tool-block .mn-mask-row,
+.tool-block .ref-table, .tool-block .cli-block, .tool-block .copy-btn, .tool-block .mn-mask-row,
 .tool-block .mn-cls-badge, .tool-block .mn-c1, .tool-block .mn-stat,
 .tool-block .bdge-s, .tool-block .bbox, .tool-block .conv-tool-inp,
 .tool-block .conv-tool-result, .tool-block .pv-cell, .tool-block .hex-ref-table,
@@ -1176,7 +1186,7 @@ sup  { font-size: .65em; vertical-align: super; }
    no blur at all there. --custom-surface-tip (set alongside --custom-blur-tip
    in custom-theme.js) backs it with a higher opacity floor for the same
    reason: blur is a bonus, not the thing actually guaranteeing legibility. */
-.tip-ic::after {
+.tip-ic::after, .copy-btn::after {
   backdrop-filter: var(--custom-blur-tip, var(--custom-blur, none));
   -webkit-backdrop-filter: var(--custom-blur-tip, var(--custom-blur, none));
 }
