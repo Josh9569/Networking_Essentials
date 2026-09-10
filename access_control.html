@@ -112,11 +112,14 @@
           <tr><td class="cidr-col">/28</td><td class="cidr-col">255.255.255.240</td><td class="cidr-col">0.0.0.15</td><td>16</td></tr>
           <tr><td class="cidr-col">/29</td><td class="cidr-col">255.255.255.248</td><td class="cidr-col">0.0.0.7</td><td>8</td></tr>
           <tr><td class="cidr-col">/30</td><td class="cidr-col">255.255.255.252</td><td class="cidr-col">0.0.0.3</td><td>4</td></tr>
+          <tr><td class="cidr-col">/31</td><td class="cidr-col">255.255.255.254</td><td class="cidr-col">0.0.0.1</td><td>2</td></tr>
           <tr><td class="cidr-col">/32</td><td class="cidr-col">255.255.255.255</td><td class="cidr-col">0.0.0.0</td><td>1</td></tr>
           <tr><td class="cidr-col">/16</td><td class="cidr-col">255.255.0.0</td><td class="cidr-col">0.0.255.255</td><td>65536</td></tr>
           <tr><td class="cidr-col">/8</td><td class="cidr-col">255.0.0.0</td><td class="cidr-col">0.255.255.255</td><td>16777216</td></tr>
         </tbody>
       </table>
+      <p class="tool-note"><strong>Contiguous wildcards.</strong> Every wildcard above is a run of <span class="mono-inl">1</span>s at the bottom and nothing else &mdash; in a single octet that is one of <span class="mono-inl">1</span>, <span class="mono-inl">3</span>, <span class="mono-inl">7</span>, <span class="mono-inl">15</span>, <span class="mono-inl">31</span>, <span class="mono-inl">63</span>, <span class="mono-inl">127</span>, <span class="mono-inl">255</span>. Each is one less than the block size, and they are the only values that describe a single run of consecutive addresses.</p>
+      <p class="tool-note">These are also the only wildcards a subnet mask can be inverted into, which is why they are <strong>very nearly all you will ever meet in a real configuration</strong>. A wildcard with a gap in it &mdash; <span class="mono-inl">0.0.0.254</span>, or <span class="mono-inl">0.0.0.225</span> &mdash; is legal, and IOS will do exactly what it says, but it matches a scattered set of addresses rather than a block. Those turn up on Hard.</p>
       <p class="tool-note">Two shorthands mean exactly the same thing as a wildcard: <span class="mono-inl">host 192.168.30.3</span> is <span class="mono-inl">192.168.30.3 0.0.0.0</span>, and <span class="mono-inl">any</span> is <span class="mono-inl">0.0.0.0 255.255.255.255</span>.</p>
     </div>
 
@@ -1806,8 +1809,13 @@ function wcShapeText(ipInt, wcInt){
 function genRange(diff){
   if(diff==='easy'){
     /* One octet's worth of don't-care bits: the everyday case, and the one
-       where an off-by-one on the last address is the usual mistake. */
-    const bits=choice([2,3,4,5]);            /* 4, 8, 16 or 32 addresses */
+       where an off-by-one on the last address is the usual mistake. Every
+       wildcard here is contiguous — one run of 1s at the bottom — which in a
+       single octet means one of 1, 3, 7, 15, 31, 63, 127, 255. Easy draws the
+       whole family rather than the middle of it: 0.0.0.255 is far and away
+       the most common wildcard in real configurations, and 0.0.0.1 is the
+       smallest that still covers more than one address. */
+    const bits=choice([1,2,3,4,5,6,7,8]);    /* wildcard 1, 3, 7 … 255 */
     const size=Math.pow(2,bits), wc=size-1;
     const base=ri(0, (256/size)-1)*size;
     const ip=rangeAddr(ip2int('192.168.'+ri(1,254)+'.'+base), size);
