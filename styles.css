@@ -309,6 +309,20 @@ sup  { font-size: .65em; vertical-align: super; }
 .tip-ic:hover::after, .tip-ic:hover::before,
 .tip-ic:focus::after, .tip-ic:focus::before { opacity: 1; }
 
+/* ── Binary Compare ──────────────────────────────────────────────────────────
+   Two grids. The inputs sit in their own so the labels share a column and the
+   boxes line up; the three binaries sit in another, stacked with nothing
+   between them, which is the whole point — they are only comparable if the
+   bit columns are directly above one another. Set larger than .cli-block's own
+   size because reading a single bit position down three rows is the work.
+   Written .cli-block.nc-cmp, not .nc-cmp: both rules land on the SAME element and
+   .cli-block sets its own font-size, so at equal specificity source order would
+   decide it and .cli-block wins. It paints no background of its own, so
+   it needs no CUSTOM THEME entry — .cli-block is already in both lists. */
+.nc-inputs         { display: grid; grid-template-columns: max-content 1fr; gap: .5rem .85rem; align-items: center; max-width: 400px; margin-bottom: .9rem; }
+.cli-block.nc-cmp  { display: grid; grid-template-columns: max-content max-content; gap: .5rem 1.1rem; align-items: center; font-size: 16px; line-height: 1.55; padding: 14px 16px; }
+.nc-lbl            { font-family: var(--font); font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em; color: var(--text-t); }
+
 /* ── Copy an address chip ─────────────────────────────────────────────────────
    Surfaces above the chip on hover with a triangle pointing down at the one it
    will copy, so it is unambiguous which address you are about to take. The
