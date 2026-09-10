@@ -1726,12 +1726,13 @@ function genRange(diff){
     return {kind:'hard', mode:'chips', opts:opts,
       prompt:'<span class="mono-inl">permit '+int2ip(ip)+' 0.0.0.254</span> uses a <b>non-contiguous</b> '+
         'wildcard — something a subnet mask cannot express. Which of these does it match?',
-      explain:'0.0.0.254 is <span class="mono-inl">11111110</span> in the last octet: every bit is "don\'t care" '+
-        '<b>except bit 0</b>, which must match the address. The address ends in '+(odd?1:0)+
-        ', so this matches every <b>'+(odd?'odd':'even')+'</b> address in 192.168.'+third+
-        '.0 — 128 of them, and not one contiguous block. This is the one case where '+
-        '"last = first + wildcard" does not hold: that shortcut needs the wildcard bits to be '+
-        'contiguous, and these are not.'};
+      explain:'0.0.0.254 is <span class="mono-inl">11111110</span> in the last octet: seven "don\'t care" '+
+        'bits and <b>bit 0 pinned</b>. The rule has not changed — the free bits still take every '+
+        'combination, so 2^7 = <b>128</b> addresses. What changed is that they no longer sit together '+
+        'at the bottom, so those 128 values do not count up one after another. That is all the two '+
+        'sums ever were: what the free bits look like when they are one run at the bottom '+
+        '(0.0.0.31 is five free bits, and 2^5 = 32, which is exactly 31 + 1). The address ends in '+
+        (odd?1:0)+', so these 128 are every <b>'+(odd?'odd':'even')+'</b> address in 192.168.'+third+'.0.'};
   }
   /* Odd/even subnets: the classic "match every other subnet" wildcard. */
   const odd=Math.random()<0.5;
@@ -1743,10 +1744,12 @@ function genRange(diff){
   return {kind:'hard', mode:'chips', opts:opts,
     prompt:'<span class="mono-inl">permit '+int2ip(ip)+' 0.0.254.255</span> is how you match every <i>other</i> '+
       'subnet. Which of these addresses does it match?',
-    explain:'0.0.254.255 frees the whole fourth octet and every bit of the third <b>except bit 0</b>. '+
-      'The address has '+(odd?1:0)+' in the third octet, so only subnets with an '+(odd?'odd':'even')+
-      ' third octet match — 172.'+second+'.'+(odd?'1, 3, 5':'0, 2, 4')+' and so on. There is no '+
-      'first-plus-wildcard sum to do here: that only works on a contiguous wildcard.'};
+    explain:'0.0.254.255 frees the whole fourth octet and every bit of the third <b>except bit 0</b> '+
+      '— fifteen free bits, so 2^15 = <b>32768</b> addresses, counted the same way as always. Only the '+
+      'shape of the answer changes: the free bits are not one run at the bottom, so there is no single '+
+      'first-plus-wildcard to add up. The address has '+(odd?1:0)+' in the third octet, so only subnets '+
+      'with an '+(odd?'odd':'even')+' third octet match — 172.'+second+'.'+
+      (odd?'1, 3, 5':'0, 2, 4')+' and so on.'};
 }
 
 function renderRange(body,qip){
@@ -1772,12 +1775,23 @@ function rangeGrade(reveal){
     const want=[], got=rangePicked.slice().sort(function(a,b){ return a-b; });
     d.opts.forEach(function(o,i){ if(o.ok) want.push(i); });
     ok = !reveal && want.length===got.length && want.every(function(v,i){ return v===got[i]; });
+    /* Green for every address that does match, picked or missed; red for one
+       that was picked and does not. The inline ok/err colour tokens are the
+       idiom the LSA chips already use, and the buttons must NOT be disabled
+       to show it: .cbtn:disabled drops them to opacity .28 and clears the
+       background, and it beats .cbtn.on on order at equal specificity, which
+       is why a graded round came out with no colour at all. (.cbtn.wrong,
+       which the old code set, has never existed in styles.css either.)
+       pointer-events instead of disabled, so a graded chip has no live hover
+       inviting a click — rangeToggle already refuses once state.done is set. */
     d.opts.forEach(function(o,i){
       const el=document.getElementById('rc-'+i);
+      const picked = !reveal && rangePicked.indexOf(i)>=0;
       el.classList.remove('on');
-      if(o.ok) el.classList.add('on');
-      el.disabled=true;
-      if(!reveal && rangePicked.indexOf(i)>=0 && !o.ok) el.classList.add('wrong');
+      el.style.pointerEvents='none';
+      el.style.borderColor = o.ok ? 'var(--ok-bdr)'  : (picked?'var(--err-bdr)' :'');
+      el.style.background  = o.ok ? 'var(--ok-bg)'   : (picked?'var(--err-bg)'  :'');
+      el.style.color       = o.ok ? 'var(--ok-text)' : (picked?'var(--err-text)':'');
     });
     pts = ok?POINTS[state.diff]:0;
   }
