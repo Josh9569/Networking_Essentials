@@ -2203,92 +2203,369 @@ function matchGrade(reveal){
 }
 
 /* ═══ Drill 3: placement ═══════════════════════════════════════════
-   "On which router would you place this ACL? On which interface? In what
-   direction?" — three of the lab's written blanks, answered by clicking a
-   diagram and a direction instead of writing prose. */
-const AC_PLACE_BOXES=[
-  {id:'R1', x:60,  y:96, label:'R1'},
-  {id:'R2', x:250, y:20, label:'R2'},
-  {id:'R3', x:440, y:96, label:'R3'}
+   The whole exam question, not just its last line: read the topology, write
+   the ACL, then say where it goes. It used to ask only "which interface, in
+   which direction?" against three unlabelled router boxes, which is the one
+   part you can guess — a standard ACL goes outbound on the destination's own
+   interface, every time. Writing the entries is where the thinking is.
+
+   The topology is fixed in shape and randomised in numbers, the same call
+   genSumm makes: two routers over a serial link, two LANs behind each. It is
+   hand-laid-out rather than built through rlRenderCanvas, because nothing
+   here drags and the shape never varies — and its SVG carries inline sizing
+   so it is not exposed to the cable-clipping trap at all. */
+const AC_PL = {
+  w: 700, h: 348, rw: 116, rh: 46,
+  r1: {x:190, y:150}, r2: {x:440, y:150},
+  /* Horizontal bands, so nothing has to be eyeballed: host IP, host box, the
+     LAN's own two labels, the router row, the interface labels, then the same
+     again downwards for the two LANs that hang below. */
+  yHostIp: 40, yHostTop: 48, yHostMid: 74, yNet: 116, yLan: 132,
+  yWire: 173, yIf: 186, yBar: 230, yNetDn: 246, yLanDn: 262,
+  yHostDn: 272, yHostIpDn: 342,
+  /* The two side LANs: where their bar sits and where their host box starts. */
+  barL: 130, hostL: 20, barR: 580, hostR: 600, hostW: 90
+};
+/* Which interface of which router faces which LAN, and where its label sits.
+   `wan` is the serial pair; everything else is a LAN edge. */
+const AC_PL_IFACES = [
+  {r:'R1', n:'G0/0',   lan:0},
+  {r:'R1', n:'G0/1',   lan:1},
+  {r:'R1', n:'S0/0/0', lan:null},
+  {r:'R2', n:'S0/0/0', lan:null},
+  {r:'R2', n:'G0/0',   lan:2},
+  {r:'R2', n:'G0/1',   lan:3}
 ];
-let placePickIf=null, placePickDir=null;
-function genPlace(diff){
-  /* Every round is a real policy from Lab 8A or a close variant of it. */
-  const cases=[
-    {src:'192.168.10.0/24 and 192.168.20.0/24', dst:'192.168.30.0/24',
-     router:'R3', iface:'Gi0/1.30', dir:'out',
-     why:'192.168.30.0/24 hangs off R3 Gi0/1.30, so that is the last interface the traffic crosses. A standard ACL only sees the source address, so applying it any earlier would block those two networks from reaching everything beyond that point, not just this one LAN.'},
-    {src:'192.168.40.0/24 and host 192.168.30.3', dst:'192.168.10.0/24',
-     router:'R1', iface:'Gi0/1.10', dir:'out',
-     why:'192.168.10.0/24 is on R1 Gi0/1.10. Placing a standard ACL close to the destination is what keeps its effect limited to the network it is meant to protect.'},
-    {src:'192.168.30.0/24', dst:'192.168.20.0/24',
-     router:'R1', iface:'Gi0/1.20', dir:'out',
-     why:'192.168.20.0/24 is behind R1 Gi0/1.20, and outbound on that subinterface is the closest you can get to the destination.'}
-  ];
-  const c=diff==='easy'?cases[0]:choice(cases);
-  const ifaces=[
-    {r:'R1', n:'Gi0/1.10'},{r:'R1', n:'Gi0/1.20'},{r:'R1', n:'S0/0/0'},
-    {r:'R2', n:'S0/0/0'},{r:'R2', n:'S0/0/1'},
-    {r:'R3', n:'S0/0/1'},{r:'R3', n:'Gi0/1.30'}
-  ];
-  return {kind:diff, cse:c, ifaces:ifaces,
-    prompt:'A <b>standard</b> ACL must allow traffic from <b>'+c.src+'</b> to reach <b>'+c.dst+
-      '</b>. Following best practice, which interface should it be applied to, and in which direction?'};
+
+let placePickRtr=null, placePickIf=null, placePickDir=null;
+
+/* Four LANs, numbered consecutively so the diagram reads like the figure it
+   is modelled on, plus a /30 for the serial link. */
+function acPlNets(){
+  const b=ri(1,250), w=ri(1,254);
+  const lans=[0,1,2,3].map(function(i){
+    return {net:'192.168.'+(b+i)+'.0', pfx:24, wc:'0.0.0.255', name:'LAN'+(i+1)};
+  });
+  lans.forEach(function(l){ l.host=l.net.replace(/0$/, ri(2,254)); });
+  return {lans:lans, wan:'172.16.'+w+'.0', wanPfx:30};
 }
+function acPlIfaceFor(lanIdx){
+  return AC_PL_IFACES.filter(function(f){ return f.lan===lanIdx; })[0];
+}
+
+function genPlace(diff){
+  const t=acPlNets();
+  /* Easy keeps the figure's own roles — a LAN behind R2 protected from the
+     far side — so the tier that introduces the shape always reads the same
+     way. Medium frees the destination. Hard puts one permitted host on the
+     SAME router as the destination, which is the case people place wrongly:
+     the traffic never crosses the serial link, and the answer is still
+     outbound on the destination's interface. */
+  const dst = diff==='easy' ? 3 : ri(0,3);
+  const dstIf = acPlIfaceFor(dst);
+  const others = [0,1,2,3].filter(function(i){ return i!==dst; });
+  const sameSide = others.filter(function(i){ return acPlIfaceFor(i).r===dstIf.r; });
+  const farSide  = others.filter(function(i){ return acPlIfaceFor(i).r!==dstIf.r; });
+
+  let hostLan, netLan;
+  if(diff==='easy'){ hostLan=0; netLan=1; }
+  else if(diff==='hard' && sameSide.length){
+    hostLan=choice(sameSide);
+    netLan=choice(farSide.length?farSide:others.filter(function(i){ return i!==hostLan; }));
+  } else {
+    const pick=shuffle(others.slice());
+    hostLan=pick[0]; netLan=pick[1];
+  }
+
+  const host=t.lans[hostLan].host, netN=t.lans[netLan].net;
+  return {kind:diff, topo:t, dst:dst, hostLan:hostLan, netLan:netLan,
+    router:dstIf.r, iface:dstIf.n, dir:'out',
+    /* Graded semantically, not as strings — see placeGradeAces. */
+    want:[{action:'permit', ip:host,  wc:'0.0.0.0'},
+          {action:'permit', ip:netN,  wc:'0.0.0.255'},
+          {action:'deny',   any:true}],
+    prompt:'Configure a <b>numbered standard ACL</b> that controls access into the <b>'+
+      t.lans[dst].net+'/24</b> LAN. Host <b>'+host+'</b> and every host on <b>'+netN+
+      '/24</b> should be permitted; no other network is. End the list with an explicit '+
+      '<span class="mono-inl">deny any</span>. Use <b>access list 1</b>. Then say which '+
+      'router and interface it is applied to, and in which direction.',
+    why:t.lans[dst].net+'/24 is behind '+dstIf.r+' '+dstIf.n+', so that is the last '+
+      'interface the traffic crosses before it arrives. A standard ACL matches on the '+
+      '<b>source</b> address only, so applying it any earlier would block those sources '+
+      'from reaching everything past that point, not just this one LAN &mdash; which is '+
+      'why the rule is to put a standard ACL as close to the destination as you can.'};
+}
+
+/* ── the figure ─────────────────────────────────────────────────────
+   SVG for the wiring and every label, .dev boxes for the routers and hosts.
+   Inline width/height on the <svg> rather than the #ac-cable-svg rule, so a
+   new diagram can never inherit the 300x150 intrinsic-size clipping bug. */
+function acPlLabel(x,y,txt,anchor,cls){
+  return '<text x="'+x+'" y="'+y+'" text-anchor="'+(anchor||'start')+'" '+
+    'style="font-family:var(--font);font-size:11px;fill:var(--'+(cls||'text-s')+')">'+esc(txt)+'</text>';
+}
+function acPlTopoHtml(d){
+  const t=d.topo, P=AC_PL;
+  const r1cx=P.r1.x+P.rw/2, r2cx=P.r2.x+P.rw/2;
+  const line=function(x1,y1,x2,y2){
+    return '<line x1="'+x1+'" y1="'+y1+'" x2="'+x2+'" y2="'+y2+
+      '" class="cable" style="pointer-events:none"></line>';
+  };
+  /* No viewBox. A viewBox scales the SVG to the canvas but leaves the .dev
+     boxes at raw pixels, so the two layers drift apart and every wire arrives
+     somewhere near its router rather than at it — labels then read as
+     colliding with boxes they are nowhere near. Both layers are drawn at the
+     same fixed size inside one wrapper instead, and acPlFit() scales the
+     wrapper, so there is a single coordinate system by construction. */
+  let svg='<svg style="position:absolute;left:0;top:0;width:'+P.w+'px;height:'+P.h+'px">';
+
+  /* The serial link. Its own label goes ABOVE the wire and the two interface
+     names BELOW it, which is what keeps three strings out of each other's way
+     in the 134px between the routers. */
+  svg+=line(P.r1.x+P.rw, P.yWire, P.r2.x, P.yWire);
+  svg+=acPlLabel((P.r1.x+P.rw+P.r2.x)/2, P.yWire-12, t.wan+'/'+t.wanPfx, 'middle', 'text');
+  svg+=acPlLabel(P.r1.x+P.rw+4, P.yIf, 'S0/0/0');
+  svg+=acPlLabel(P.r2.x-4, P.yIf, 'S0/0/0', 'end');
+
+  /* LAN1 and LAN3: a bar out to the side of the router, with the host above
+     it. Interface names sit BELOW the wire so they clear the bar, which stops
+     at the wire. */
+  [{i:0, bar:P.barL, host:P.hostL, edge:P.r1.x,        dir:-1},
+   {i:2, bar:P.barR, host:P.hostR, edge:P.r2.x+P.rw,   dir: 1}].forEach(function(c){
+    svg+=line(c.bar, P.yHostMid, c.bar, P.yWire);
+    svg+=line(c.bar, P.yWire, c.edge, P.yWire);
+    svg+=line(c.bar, P.yHostMid, c.host+(c.dir<0?P.hostW:0), P.yHostMid);
+    /* dir points away from the router, so the offset must be ADDED to clear
+       its edge — subtracting it tucked the label 4px inside the box. */
+    svg+=acPlLabel(c.edge+c.dir*4, P.yIf, 'G0/0', c.dir<0?'end':'start');
+    svg+=acPlLabel(c.dir<0?c.host:c.host+P.hostW, P.yHostIp, t.lans[c.i].host,
+                   c.dir<0?'start':'end', 'text');
+    svg+=acPlLabel(c.host, P.yNet, t.lans[c.i].net+'/24', 'start', 'text');
+    svg+=acPlLabel(c.host, P.yLan, t.lans[c.i].name, 'start');
+  });
+
+  /* LAN2 and LAN4: straight down from the router to a bar, then to a host. */
+  [{i:1, cx:r1cx}, {i:3, cx:r2cx}].forEach(function(c){
+    svg+=line(c.cx, P.r1.y+P.rh, c.cx, P.yBar);
+    svg+=line(c.cx-58, P.yBar, c.cx+58, P.yBar);
+    svg+=line(c.cx, P.yBar, c.cx, P.yHostDn);
+    svg+=acPlLabel(c.cx+6, P.r1.y+P.rh+16, 'G0/1');
+    svg+=acPlLabel(c.cx, P.yNetDn, t.lans[c.i].net+'/24', 'middle', 'text');
+    svg+=acPlLabel(c.cx, P.yLanDn, t.lans[c.i].name, 'middle');
+    svg+=acPlLabel(c.cx, P.yHostIpDn, t.lans[c.i].host, 'middle', 'text');
+  });
+  svg+='</svg>';
+
+  const dev=function(cls,left,top,w,h,name){
+    return '<div class="dev '+cls+'" style="left:'+left+'px;top:'+top+'px;width:'+w+'px'+
+      (h?';height:'+h+'px':'')+';cursor:default"><div class="dev-name">'+name+'</div></div>';
+  };
+  let boxes='<div style="position:absolute;inset:0">';
+  boxes+=dev('router', P.r1.x, P.r1.y, P.rw, P.rh, 'R1');
+  boxes+=dev('router', P.r2.x, P.r2.y, P.rw, P.rh, 'R2');
+  boxes+=dev('pc', P.hostL, P.yHostTop, P.hostW, 0, 'PC');
+  boxes+=dev('pc', P.hostR, P.yHostTop, P.hostW, 0, 'Server');
+  boxes+=dev('pc', r1cx-P.hostW/2, P.yHostDn, P.hostW, 0, 'PC');
+  boxes+=dev('pc', r2cx-P.hostW/2, P.yHostDn, P.hostW, 0, 'PC');
+  boxes+='</div>';
+
+  return '<div class="lab-card"><div class="lab-toolbar"><div class="legend">'+
+    '<span class="lg lg-note">'+esc(t.lans[d.dst].net)+'/24 is the LAN to protect</span>'+
+    '</div></div><div class="lab-canvas" id="ac-pl-canvas" style="height:'+P.h+'px">'+
+    '<div id="ac-pl-fit" style="position:absolute;left:0;top:0;width:'+P.w+'px;height:'+P.h+
+    'px;transform-origin:0 0">'+svg+boxes+'</div></div></div>';
+}
+
+/* Scale the figure down to whatever width the card actually has, and shrink
+   the canvas to match so there is never leftover space or a scrollbar. Never
+   scales UP: at full width it is drawn at its natural size. */
+function acPlFit(){
+  const vp=document.getElementById('ac-pl-canvas'), g=document.getElementById('ac-pl-fit');
+  if(!vp||!g) return;
+  const avail=vp.clientWidth;
+  if(!avail) return;                    /* a hidden panel measures 0 */
+  const z=Math.min(1, avail/AC_PL.w);
+  g.style.transform='scale('+z+')';
+  vp.style.height=Math.round(AC_PL.h*z)+'px';
+}
+
 function renderPlace(body,qip){
   const d=state.data;
-  placePickIf=null; placePickDir=null;
+  placePickRtr=null; placePickIf=null; placePickDir=null;
   document.getElementById('qprompt').innerHTML=d.prompt;
   qip.style.display='none';
-  let html='<div class="lab-card"><div class="lab-toolbar"><div class="legend">'+
-    '<span class="lg">R1 &mdash; R2 &mdash; R3, with the LANs behind R1 and R3</span></div></div>'+
-    '<div class="lab-canvas" style="height:150px"><svg style="position:absolute;inset:0;width:100%;height:100%">'+
-    '<line x1="124" y1="126" x2="314" y2="50" class="cable" style="pointer-events:none"></line>'+
-    '<line x1="314" y1="50" x2="504" y2="126" class="cable" style="pointer-events:none"></line></svg>'+
-    '<div style="position:absolute;inset:0">';
-  AC_PLACE_BOXES.forEach(function(b){
-    html+='<div class="dev router" style="left:'+b.x+'px;top:'+b.y+'px;width:128px;height:44px;cursor:default">'+
-      '<div class="dev-name">'+b.label+'</div></div>';
+
+  let html=acPlTopoHtml(d);
+  html+='<div class="qlbl" style="margin-top:1rem">The access list</div>'+
+    /* One box per row: an access-list line is long, and reading three of
+       them stacked is how they appear in a running config. No new class —
+       .agrid is a two-column grid and this is the only place that wants one. */
+    '<div class="agrid" style="grid-template-columns:1fr">';
+  for(let i=0;i<3;i++){
+    html+='<div class="afield" id="f-ace'+i+'"><label>Line '+(i+1)+'</label>'+
+      '<input id="a-ace'+i+'" autocomplete="off" spellcheck="false" '+
+      'placeholder="access-list 1 &hellip;"><div class="ahint" id="h-ace'+i+'"></div></div>';
+  }
+  html+='</div>';
+
+  /* Router first, then only that router's interfaces. Six buttons would fit
+     on one row today, but the split is what keeps this readable when a
+     topology with more interfaces turns up, and it stops "R2 G0/1" having to
+     be read as one long label. */
+  html+='<div class="qlbl" style="margin-top:1rem">Router</div><div class="cls-row" style="margin-top:.35rem">';
+  ['R1','R2'].forEach(function(r){
+    html+='<button class="cbtn" id="prtr-'+r+'" onclick="placeSetRouter(\''+r+'\')">'+r+'</button> ';
   });
-  html+='</div></div></div>';
-  html+='<div class="qlbl" style="margin-top:1rem">Interface</div><div class="cls-row" style="margin-top:.35rem">';
-  d.ifaces.forEach(function(f,i){
-    html+='<button class="cbtn" id="pif-'+i+'" onclick="placeSetIf('+i+')">'+f.r+' '+f.n+'</button> ';
-  });
-  html+='</div><div class="qlbl" style="margin-top:1rem">Direction</div><div class="cls-row" style="margin-top:.35rem">'+
-    '<button class="cbtn" id="pdir-in" onclick="placeSetDir(\'in\')">in</button> '+
-    '<button class="cbtn" id="pdir-out" onclick="placeSetDir(\'out\')">out</button></div>';
+  html+='</div><div class="qlbl" style="margin-top:1rem">Interface</div>'+
+    '<div class="cls-row" style="margin-top:.35rem" id="pif-row">'+
+    '<span class="lg lg-note">Pick a router first</span></div>';
+  html+='<div class="qlbl" style="margin-top:1rem">Direction</div><div class="cls-row" style="margin-top:.35rem">'+
+    '<button class="cbtn" id="pdir-in" onclick="placeSetDir(\'in\')">Inbound</button> '+
+    '<button class="cbtn" id="pdir-out" onclick="placeSetDir(\'out\')">Outbound</button></div>';
   body.innerHTML=html;
+  acPlFit();
   setBtns();
 }
-function placeSetIf(i){
+
+function placeIfacesOf(r){
+  return AC_PL_IFACES.filter(function(f){ return f.r===r; });
+}
+function placeSetRouter(r){
   if(state.done) return;
-  placePickIf=i;
-  state.data.ifaces.forEach(function(_,j){ document.getElementById('pif-'+j).classList.toggle('on', i===j); });
+  placePickRtr=r; placePickIf=null;
+  ['R1','R2'].forEach(function(x){ document.getElementById('prtr-'+x).classList.toggle('on', x===r); });
+  const row=document.getElementById('pif-row');
+  row.innerHTML=placeIfacesOf(r).map(function(f){
+    return '<button class="cbtn" id="pif-'+f.n.replace(/\//g,'_')+'" onclick="placeSetIf(\''+f.n+'\')">'+f.n+'</button>';
+  }).join(' ');
+}
+function placeSetIf(n){
+  if(state.done) return;
+  placePickIf=n;
+  placeIfacesOf(placePickRtr).forEach(function(f){
+    document.getElementById('pif-'+f.n.replace(/\//g,'_')).classList.toggle('on', f.n===n);
+  });
 }
 function placeSetDir(dir){
   if(state.done) return;
   placePickDir=dir;
   ['in','out'].forEach(function(x){ document.getElementById('pdir-'+x).classList.toggle('on', x===dir); });
 }
-function placeGrade(reveal){
-  const d=state.data, c=d.cse;
-  const fb=document.getElementById('fb');
-  fb.style.display='block';
-  if(!reveal && (placePickIf===null||!placePickDir)){
-    fb.className='fbanner warn'; fb.textContent='Pick an interface and a direction first.'; return;
-  }
-  const picked = placePickIf!==null ? d.ifaces[placePickIf] : null;
-  const ok = !!(!reveal && picked && picked.r===c.router && picked.n===c.iface && placePickDir===c.dir);
-  d.ifaces.forEach(function(f,j){
-    const el=document.getElementById('pif-'+j);
-    el.classList.remove('on');
-    if(f.r===c.router&&f.n===c.iface) el.classList.add('on');
+
+/* Parse "access-list 1 permit host 10.0.0.1" into the same ACE the CLI would
+   build, so an answer is graded on what it MEANS. `permit host X` and
+   `permit X 0.0.0.0` are the same rule and both score; so is either order of
+   the two permits, since they do not overlap. What is not interchangeable is
+   the deny: it has to be last, because a deny any above a permit makes that
+   permit dead. */
+function placeParseLine(txt){
+  const w=String(txt||'').trim().replace(/\s+/g,' ').split(' ');
+  if(w.length<3) return {err:'not an access-list command'};
+  if(w[0].toLowerCase()!=='access-list') return {err:'should start with access-list'};
+  if(w[1]!=='1') return {err:'the question asks for list 1'};
+  const act=w[2].toLowerCase();
+  if(act!=='permit'&&act!=='deny') return {err:'expected permit or deny'};
+  const p=acParseAce(act, w.slice(3).map(function(s){ return s.toLowerCase(); }));
+  if(p.err) return {err:p.err.replace('% ','').toLowerCase()};
+  return {ace:p.ace, action:act};
+}
+function placeAceEq(got, want){
+  if(!got) return false;
+  if(got.action!==want.action) return false;
+  const wIp = want.any ? 0 : ip2int(want.ip);
+  const wWc = want.any ? 0xFFFFFFFF>>>0 : ip2int(want.wc);
+  return (got.ace.ipInt>>>0)===(wIp>>>0) && (got.ace.wcInt>>>0)===(wWc>>>0);
+}
+function placeGradeAces(reveal){
+  const d=state.data;
+  const lines=[0,1,2].map(function(i){ return document.getElementById('a-ace'+i); });
+  const parsed=lines.map(function(inp){ return placeParseLine(inp.value); });
+  /* The two permits may be written either way round. */
+  const permWant=[d.want[0], d.want[1]];
+  const usedWant=[false,false];
+  const okFlags=[false,false,false];
+  [0,1].forEach(function(i){
+    for(let k=0;k<2;k++){
+      if(!usedWant[k] && placeAceEq(parsed[i], permWant[k])){ usedWant[k]=true; okFlags[i]=true; return; }
+    }
   });
-  ['in','out'].forEach(function(x){ document.getElementById('pdir-'+x).classList.toggle('on', x===c.dir); });
-  scoreRound(reveal, ok, ok?POINTS[state.diff]:0,
-    (reveal?'Skipped. ':ok?'Correct. ':'Not quite. ')+
-    'Apply it to <b>'+c.router+' '+c.iface+'</b>, <b>'+c.dir+'bound</b>. '+c.why);
+  okFlags[2]=placeAceEq(parsed[2], d.want[2]);
+
+  let correct=0;
+  const shown=['access-list 1 permit host '+d.topo.lans[d.hostLan].host,
+               'access-list 1 permit '+d.topo.lans[d.netLan].net+' 0.0.0.255',
+               'access-list 1 deny any'];
+  lines.forEach(function(inp,i){
+    const fld=document.getElementById('f-ace'+i), hnt=document.getElementById('h-ace'+i);
+    inp.disabled=true;
+    const typed=inp.value.trim();
+    if(!reveal && okFlags[i]){ fld.classList.add('ok'); hnt.textContent='✓ Correct'; correct++; }
+    else if(typed===''){ fld.classList.add('show'); inp.value=shown[i]; hnt.textContent='Revealed'; }
+    else { fld.classList.add('bad');
+           hnt.textContent=(parsed[i].err? parsed[i].err+' — ' : '')+'correct: '+shown[i]; }
+  });
+  return correct;
+}
+
+/* Green for the right answer, red for a wrong pick, nothing otherwise —
+   the same inline ok/err tokens the range chips use, for the same two
+   reasons. There is no .cbtn.wrong rule in styles.css (an earlier version of
+   the chip grading set one for a year and it never showed), and a disabled
+   .cbtn drops to opacity .28 with its background cleared, which washes out
+   the very answer being revealed. pointer-events:none locks them instead. */
+function acMarkPick(el, isAnswer, wasPicked){
+  if(!el) return;
+  el.classList.remove('on');
+  el.style.pointerEvents='none';
+  el.style.borderColor = isAnswer ? 'var(--ok-bdr)'  : (wasPicked?'var(--err-bdr)' :'');
+  el.style.background  = isAnswer ? 'var(--ok-bg)'   : (wasPicked?'var(--err-bg)'  :'');
+  el.style.color       = isAnswer ? 'var(--ok-text)' : (wasPicked?'var(--err-text)':'');
+}
+
+function placeGrade(reveal){
+  const d=state.data;
+  if(!reveal && (!placePickRtr||!placePickIf||!placePickDir)){
+    const fb=document.getElementById('fb');
+    fb.style.display='block'; fb.className='fbanner warn';
+    fb.textContent='Pick a router, an interface and a direction first.';
+    return;
+  }
+  const aceCorrect=placeGradeAces(reveal);
+  const placeOk = !!(!reveal && placePickRtr===d.router && placePickIf===d.iface && placePickDir===d.dir);
+  const all = aceCorrect===3 && placeOk;
+
+  /* Show the answer on all three rows. If the learner picked the other
+     router, its interfaces are the ones on screen, so mark the wrong pick
+     there first and then repaint the row for the correct router — otherwise
+     the right interface would have nowhere to be shown. */
+  ['R1','R2'].forEach(function(x){
+    acMarkPick(document.getElementById('prtr-'+x), x===d.router, !reveal && placePickRtr===x);
+  });
+  if(placePickRtr && placePickRtr!==d.router && placePickIf){
+    const wrongEl=document.getElementById('pif-'+placePickIf.replace(/\//g,'_'));
+    acMarkPick(wrongEl, false, !reveal);
+  }
+  if(placePickRtr!==d.router) placeSetRouterDisplay(d.router);
+  placeIfacesOf(d.router).forEach(function(f){
+    acMarkPick(document.getElementById('pif-'+f.n.replace(/\//g,'_')), f.n===d.iface,
+               !reveal && placePickRtr===d.router && placePickIf===f.n);
+  });
+  ['in','out'].forEach(function(x){
+    acMarkPick(document.getElementById('pdir-'+x), x===d.dir, !reveal && placePickDir===x);
+  });
+
+  scoreRound(reveal, all, reveal?0:(all?POINTS[state.diff]:aceCorrect+(placeOk?1:0)),
+    (reveal?'Skipped. ':all?'Correct. ':'Not quite. ')+
+    'Apply it to <b>'+d.router+' '+d.iface+'</b>, <b>'+d.dir+'bound</b>. '+d.why);
+}
+/* Repaint the interface row for a router without registering a pick, so the
+   correct answer can be shown even when the learner chose the other router. */
+function placeSetRouterDisplay(r){
+  const row=document.getElementById('pif-row');
+  if(!row) return;
+  row.innerHTML=placeIfacesOf(r).map(function(f){
+    return '<button class="cbtn" id="pif-'+f.n.replace(/\//g,'_')+'">'+f.n+'</button>';
+  }).join(' ');
 }
 
 /* ─── Round control ─────────────────────────────────────────────── */
