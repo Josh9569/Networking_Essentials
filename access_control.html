@@ -1806,6 +1806,75 @@ function wcShapeText(ipInt, wcInt){
        '</span> are the same rule.' : '');
 }
 
+/* How many range rows the answer sheet always shows. Fixed, and larger than
+   any round needs, because a row per block would hand over the block count —
+   which is the thing being asked. Rows past the answer are left blank. */
+const RANGE_ROWS=4;
+
+/* A wildcard whose low run spans octets, with 0, 1 or 2 free bits ABOVE that
+   run — so it covers 1, 2 or 4 separate ranges. The stray bits stop at bit 20
+   so the first octet never moves and the addresses stay readable: a stray at
+   bit 20 is bit 4 of the second octet, which is what turns 192.168.32.0
+   0.16.31.255 into 192.168.32.0-192.168.63.255 and 192.184.32.0-192.184.63.255. */
+function wcRandSpan(){
+  for(let i=0;i<300;i++){
+    const base=ri(9,16);
+    const nStray=choice([0,0,0,1,1,1,1,2,2]);      /* ~33% / ~44% / ~22% */
+    const spots=[];
+    for(let b=base+1;b<=20;b++) spots.push(b);
+    if(spots.length<nStray) continue;
+    let wc=(Math.pow(2,base)-1)>>>0;
+    shuffle(spots).slice(0,nStray).forEach(function(b){ wc=(wc|Math.pow(2,b))>>>0; });
+    const sh=wcShape(wc);
+    if(sh.base===base && sh.blocks===Math.pow(2,nStray)) return wc;
+  }
+  return ip2int('0.16.31.255');
+}
+function rangeRangesHtml(){
+  let h='<div class="qlbl" style="margin-top:1rem">The ranges it selects</div>'+
+    '<p class="tool-note" style="margin:.2rem 0 .6rem">One row per separate range, '+
+    'lowest first. <b>Leave any rows you do not need blank</b> &mdash; working out how many '+
+    'ranges there are is part of the question.</p><div class="agrid">';
+  for(let i=0;i<RANGE_ROWS;i++){
+    h+='<div class="afield" id="f-rg'+i+'f"><label>Range '+(i+1)+' &mdash; first</label>'+
+       '<input id="a-rg'+i+'f" autocomplete="off" spellcheck="false"><div class="ahint" id="h-rg'+i+'f"></div></div>'+
+       '<div class="afield" id="f-rg'+i+'l"><label>Range '+(i+1)+' &mdash; last</label>'+
+       '<input id="a-rg'+i+'l" autocomplete="off" spellcheck="false"><div class="ahint" id="h-rg'+i+'l"></div></div>';
+  }
+  return h+'</div>';
+}
+/* Each row is right only if BOTH ends are, and a row that should have been
+   left blank counts against you the same way a missing one does — otherwise
+   filling all four every time would score the rounds that need fewer. */
+function rangeGradeRanges(reveal){
+  const d=state.data;
+  let correct=0;
+  for(let i=0;i<RANGE_ROWS;i++){
+    const want=d.ranges[i];
+    ['f','l'].forEach(function(side,k){
+      const inp=document.getElementById('a-rg'+i+side),
+            fld=document.getElementById('f-rg'+i+side),
+            hnt=document.getElementById('h-rg'+i+side);
+      const typed=inp.value.trim();
+      inp.disabled=true;
+      const answer = want ? (k===0?want[0]:want[1]) : '';
+      const good = !reveal && typed.toLowerCase()===answer.toLowerCase();
+      if(good){
+        if(answer===''){ hnt.textContent='\u2713 Correctly left blank'; }
+        else { fld.classList.add('ok'); hnt.textContent='\u2713 Correct'; }
+        correct++;
+      } else if(typed===''){
+        fld.classList.add('show'); inp.value=answer; hnt.textContent=answer?'Revealed':'Revealed — blank';
+      } else {
+        fld.classList.add('bad');
+        hnt.textContent=answer? 'You put '+typed+' — correct: '+answer
+                              : 'You put '+typed+' — this range does not exist';
+      }
+    });
+  }
+  return correct;
+}
+
 function genRange(diff){
   if(diff==='easy'){
     /* One octet's worth of don't-care bits: the everyday case, and the one
@@ -1867,7 +1936,31 @@ function genRange(diff){
      shapes — every other address, every other subnet — and are recognisable
      once seen. The two `bits` rounds are an arbitrary mask, where there is no
      shape to recognise and the binary genuinely has to be read. */
-  const shape=choice(['odd','odd','sub','sub','bits','bitschips']);
+  const shape=choice(['odd','sub','bits','bitschips','ranges','ranges']);
+  if(shape==='ranges'){
+    const wcInt=wcRandSpan(), sh=wcShape(wcInt), starts=wcBlockStarts(wcInt);
+    const base=ip2int('192.168.'+ri(0,255)+'.'+ri(0,255));
+    /* Same alignment lesson as everywhere else: half the time the address
+       given is not the start of its block. */
+    const ip=Math.random()<0.5 ? wcFirst(base,wcInt) : base;
+    const first=wcFirst(ip,wcInt);
+    const ranges=starts.map(function(off){
+      return [int2ip((first+off)>>>0), int2ip((first+off+sh.size-1)>>>0)];
+    });
+    return {kind:'hard', mode:'ranges', ranges:ranges, wcInt:wcInt,
+      prompt:'Which IPv4 addresses does <span class="mono-inl">'+int2ip(ip)+' '+int2ip(wcInt)+
+        '</span> select? Give every range it covers, lowest first.',
+      explain:int2ip(wcInt)+' is <span class="mono-inl">'+
+        [24,16,8,0].map(function(sh2){ return wcBin((wcInt>>>sh2)&255); }).join(' . ')+
+        '</span>. The run of 1s touching bit 0 is '+sh.base+' long, so each range is 2^'+sh.base+
+        ' = <b>'+sh.size+'</b> addresses; '+
+        (sh.stray.length? 'there '+(sh.stray.length===1?'is 1 free bit':'are '+sh.stray.length+' free bits')+
+           ' above that run, so there are 2^'+sh.stray.length+' = <b>'+sh.blocks+'</b> of them, starting at '+
+           int2ip(first)+' plus each combination of those bits (+'+starts.join(', +')+').'
+         : 'and there are no free bits above it, so it is <b>one</b> range and nothing is split.')+
+        ' That gives '+ranges.map(function(r){ return r[0]+' &ndash; '+r[1]; }).join(', ')+
+        ' &mdash; '+sh.total+' addresses in all.'};
+  }
   if(shape==='bits' || shape==='bitschips'){
     const wcOct=wcRandNonContig(), wcInt=ip2int('0.0.0.'+wcOct);
     const sh=wcShape(wcInt), starts=wcBlockStarts(wcInt);
@@ -1947,13 +2040,19 @@ function renderRange(body,qip){
   const wc=(d.prompt.match(/((?:\d{1,3}\.){3}\d{1,3})<\/span>/)||[])[1];
   if(wc && isValidIP(wc) && wcShape(ip2int(wc)).blocks>1 && window.setPreferredTool)
     setPreferredTool('ncref');
-  body.innerHTML = d.mode==='fields' ? fieldsHtml(d.fields) : rangeChipsHtml(d.opts);
+  body.innerHTML = d.mode==='fields' ? fieldsHtml(d.fields)
+                 : d.mode==='ranges' ? rangeRangesHtml()
+                 : rangeChipsHtml(d.opts);
   setBtns();
 }
 function rangeGrade(reveal){
   const d=state.data;
   let ok, pts, tally='';
-  if(d.mode==='fields'){
+  if(d.mode==='ranges'){
+    const correct=rangeGradeRanges(reveal);
+    ok = correct===RANGE_ROWS*2;
+    pts = reveal?0:(ok?POINTS[state.diff]:Math.max(0, correct-2*(RANGE_ROWS-d.ranges.length)));
+  } else if(d.mode==='fields'){
     const correct=gradeFields(d.fields, reveal);
     ok = correct===d.fields.length;
     pts = reveal?0:(ok?POINTS[state.diff]:correct);
