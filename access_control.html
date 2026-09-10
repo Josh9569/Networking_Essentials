@@ -54,7 +54,12 @@
   </div>
 
   <div class="qcard" id="qcard">
-    <div class="qcard-hdr"><div class="qlbl" id="qlbl">ACL</div></div>
+    <div class="qcard-hdr">
+      <div class="qlbl" id="qlbl">ACL</div>
+      <button type="button" class="qcard-pop-btn" id="qcard-pop-btn" title="Pop out instructions to a floating panel" aria-label="Pop out instructions to a floating panel" onclick="LabShared.toggleQcardPopout('qcard','qcard-pop-btn')">
+        <svg viewBox="0 0 24 24"><path d="M11 4H4v16h7M15 8l-4 4 4 4"/></svg>
+      </button>
+    </div>
     <div class="q-prompt" id="qprompt">Loading&hellip;</div>
     <div class="ipdisp" id="qip" style="display:none"></div>
     <div id="qspec"></div>
@@ -2701,6 +2706,10 @@ function updateChips(){
    Skip with the score wiped, so it is hidden there. Kept per topic rather
    than per page, because these pages mix both kinds. */
 const TOPIC_RESET={wild:false, range:false, match:false, place:false, lab:true};
+/* Which topics get the instructions pop-out — the ones with a canvas you
+   scroll down to work, leaving the brief behind. Decided per topic for the
+   same reason TOPIC_RESET is. */
+const TOPIC_POP={wild:false, range:false, match:false, place:true, lab:true};
 function setBtns(){
   const chk=document.getElementById('chkbtn'), rev=document.getElementById('revbtn'), nxt=document.getElementById('nxtbtn');
   nxt.style.display='none';
@@ -2715,6 +2724,17 @@ function render(){
   body.innerHTML='';
   document.getElementById('qspec').innerHTML='';
   document.getElementById('req-list').innerHTML='';
+  /* The pop-out earns its keep only where the brief scrolls out of sight
+     while you work: the ACL Lab's canvas, CLI and checklist, and Placement,
+     whose prompt names the very addresses you have to type into the
+     access-list lines below the figure. The three short drills answer
+     immediately under their own prompt, so it would be a button that moves
+     text nowhere useful — dock it and hide it there, the same call
+     routing_game makes for its non-lab topics and switching_lab for
+     Sandbox. */
+  const popBtn=document.getElementById('qcard-pop-btn');
+  if(TOPIC_POP[state.mode]){ if(popBtn) popBtn.style.display=''; }
+  else { LabShared.dockQcardPopout('qcard','qcard-pop-btn'); if(popBtn) popBtn.style.display='none'; }
   if(window.setPreferredTool) setPreferredTool(TOPIC_REF[state.mode]);
   TOPIC_FNS[state.mode].render(body,qip);
 }
