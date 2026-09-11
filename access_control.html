@@ -1792,16 +1792,28 @@ function wcRandNonContig(){
   }
   return 20;
 }
+/* The rule as three counts of one binary string, in the order you do them:
+   every 1 gives the total; the 1s that run unbroken from the right give the
+   block size; whatever is left over gives how many blocks. The same three
+   numbers wcShape computes, said the way a person counts them. */
+function wcCountsText(wcInt, bin, thing){
+  const sh=wcShape(wcInt), all=sh.base+sh.stray.length, rest=sh.stray.length;
+  return int2ip(wcInt)+' is <span class="mono-inl">'+bin+'</span>. '+
+    '<b>Total addresses</b>: count every 1 &mdash; there '+(all===1?'is 1':'are '+all)+
+    ', so 2^'+all+' = <b>'+sh.total+'</b>. '+
+    '<b>Size of each '+thing+'</b>: count only the 1s that run unbroken from the right &mdash; '+
+    (sh.base===0 ? 'the rightmost bit is a 0, so that run is 0 long' : sh.base+' of them')+
+    ', so 2^'+sh.base+' = <b>'+sh.size+'</b>. '+
+    '<b>Separate '+thing+'s</b>: the 1s left over after that run, '+all+' &minus; '+sh.base+' = '+rest+
+    ', so 2^'+rest+' = <b>'+sh.blocks+'</b>'+
+    (rest ? '' : ' &mdash; every 1 is in the run, so it is one unbroken '+thing)+'. ';
+}
 /* One breakdown, shared by both Hard bits rounds. */
 function wcShapeText(ipInt, wcInt){
   const sh=wcShape(wcInt), first=wcFirst(ipInt,wcInt);
   const starts=wcBlockStarts(wcInt);
-  return int2ip(wcInt)+' is <span class="mono-inl">'+wcBin(wcInt&255)+'</span> in the last octet: '+
-    (sh.base+sh.stray.length)+' free bits, so 2^'+(sh.base+sh.stray.length)+' = <b>'+sh.total+
-    '</b> addresses, counted the same way as always. The free bits are not one run at the bottom, '+
-    'though — the run touching bit 0 is '+sh.base+' long, so each block is 2^'+sh.base+' = <b>'+
-    sh.size+'</b>, and the '+sh.stray.length+' bit'+(sh.stray.length===1?'':'s')+' above it give 2^'+
-    sh.stray.length+' = <b>'+sh.blocks+'</b> separate blocks. '+
+  return wcCountsText(wcInt, wcBin(wcInt&255), 'block')+
+    'The free bits are not one run at the bottom, so those blocks are not one range. '+
     (first!==ipInt ? 'Zeroing the free bits turns '+int2ip(ipInt)+' into '+int2ip(first)+
        ' — that, not the address as written, is where the first block starts. ' : '')+
     'They start at '+int2ip(first)+' plus each combination of those bits (+'+starts.join(', +')+
@@ -1955,16 +1967,11 @@ function genRange(diff){
     return {kind:'hard', mode:'ranges', ranges:ranges, wcInt:wcInt,
       prompt:'Which IPv4 addresses does <span class="mono-inl">'+int2ip(ip)+' '+int2ip(wcInt)+
         '</span> select? Give every range it covers, lowest first.',
-      explain:int2ip(wcInt)+' is <span class="mono-inl">'+
-        [24,16,8,0].map(function(sh2){ return wcBin((wcInt>>>sh2)&255); }).join(' . ')+
-        '</span>. The run of 1s touching bit 0 is '+sh.base+' long, so each range is 2^'+sh.base+
-        ' = <b>'+sh.size+'</b> addresses; '+
-        (sh.stray.length? 'there '+(sh.stray.length===1?'is 1 free bit':'are '+sh.stray.length+' free bits')+
-           ' above that run, so there are 2^'+sh.stray.length+' = <b>'+sh.blocks+'</b> of them, starting at '+
-           int2ip(first)+' plus each combination of those bits (+'+starts.join(', +')+').'
-         : 'and there are no free bits above it, so it is <b>one</b> range and nothing is split.')+
-        ' That gives '+ranges.map(function(r){ return r[0]+' &ndash; '+r[1]; }).join(', ')+
-        ' &mdash; '+sh.total+' addresses in all.'};
+      explain:wcCountsText(wcInt,
+          [24,16,8,0].map(function(sh2){ return wcBin((wcInt>>>sh2)&255); }).join(' . '), 'range')+
+        (sh.stray.length ? 'They start at '+int2ip(first)+' plus each combination of the leftover bits (+'+
+                           starts.join(', +')+'). ' : '')+
+        'That gives '+ranges.map(function(r){ return r[0]+' &ndash; '+r[1]; }).join(', ')+'.'};
   }
   if(shape==='bits' || shape==='bitschips'){
     const wcOct=wcRandNonContig(), wcInt=ip2int('0.0.0.'+wcOct);
