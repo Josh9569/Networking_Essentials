@@ -18,7 +18,7 @@
   <div class="hdr">
     <div>
       <div class="hdr-title">Access Control Trainer</div>
-      <div class="hdr-sub">Standard IPv4 ACLs &mdash; wildcards, matching, placement &amp; a full lab</div>
+      <div class="hdr-sub">Standard ACLs &mdash; wildcards, matching, placement &amp; a full lab in IPv4 or IPv6</div>
     </div>
     <div class="hdr-right">
       <div class="chips">
@@ -48,9 +48,9 @@
   </div>
 
   <div class="diff-row">
-    <span>ACL type:</span>
-    <button class="cbtn on" id="vb-a" onclick="setVer(0,this)">Standard</button>
-    <button class="cbtn" id="vb-b" onclick="setVer(1,this)">Extended</button>
+    <span>Family:</span>
+    <button class="cbtn on" id="vb-a" onclick="setVer(0,this)">IPv4</button>
+    <button class="cbtn" id="vb-b" onclick="setVer(1,this)">IPv6</button>
   </div>
 
   <div class="qcard" id="qcard">
@@ -182,6 +182,23 @@
         </tbody>
       </table>
       <p class="tool-note">IOS numbers ACEs in tens automatically, which is what leaves room to insert a line between two existing ones later. <strong>Tab</strong> completes a command; <strong>&uarr;</strong> and <strong>&darr;</strong> walk the history.</p>
+      <div class="tool-block-title" style="margin-top:1rem">The same lab in IPv6</div>
+      <p class="tool-note">Three things change and nothing else does. There are <strong>no wildcards</strong> &mdash; a network is written with its prefix length, <span class="mono-inl">2001:db8:acad:10::/64</span>. There are <strong>no numbered lists</strong> &mdash; every IPv6 ACL is named. And every entry names a <strong>source and a destination</strong>, because IPv6 has no "standard" list; a policy that only cares about the source says <span class="mono-inl">any</span> for the destination.</p>
+      <table class="ref-table">
+        <thead><tr><th>Command</th><th>Mode</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td class="mono-inl">ipv6 access-list NAME</td><td>config</td><td>Create or edit a named IPv6 ACL, and drop into its own mode</td></tr>
+          <tr><td class="mono-inl">permit ipv6 2001:db8:acad:10::/64 any</td><td>config-ipv6-acl</td><td>A whole prefix. <span class="mono-inl">ipv6</span> is the protocol and is required</td></tr>
+          <tr><td class="mono-inl">permit ipv6 host 2001:db8:acad:30::3 any</td><td>config-ipv6-acl</td><td>One host. Same as <span class="mono-inl">2001:db8:acad:30::3/128</span></td></tr>
+          <tr><td class="mono-inl">permit ipv6 2001:db8:cafe:200::/64 any sequence 30</td><td>config-ipv6-acl</td><td>Insert at a specific sequence number. Note it goes <strong>last</strong>, the opposite of an IPv4 named list</td></tr>
+          <tr><td class="mono-inl">no sequence 30</td><td>config-ipv6-acl</td><td>Delete just that line</td></tr>
+          <tr><td class="mono-inl">deny ipv6 any any</td><td>config-ipv6-acl</td><td>An explicit deny at the end</td></tr>
+          <tr><td class="mono-inl">ipv6 traffic-filter NAME out</td><td>config-if</td><td>Apply an IPv6 ACL to an interface &mdash; not <span class="mono-inl">ip access-group</span></td></tr>
+          <tr><td class="mono-inl">ipv6 access-class NAME in</td><td>config-line</td><td>Apply an IPv6 ACL to the vty lines</td></tr>
+          <tr><td class="mono-inl">show ipv6 access-list</td><td>exec</td><td>Every IPv6 ACL with its entries, counters and sequence numbers</td></tr>
+          <tr><td class="mono-inl">show ipv6 interface Gi0/1.30</td><td>exec</td><td>Which IPv6 ACL is applied to that interface</td></tr>
+        </tbody>
+      </table>
     </div>
   </div>
 
@@ -217,26 +234,77 @@ function cidr2wild(cidr){ return int2ip((~maskInt(cidr))>>>0); }
 function netIntOf(ipInt,cidr){ return (ipInt & maskInt(cidr))>>>0; }
 function bcastIntOf(netI,cidr){ const wc=cidr<=0?0xFFFFFFFF>>>0:(~maskInt(cidr))>>>0; return (netI|wc)>>>0; }
 const isValidIP = LabShared.isValidIP;
+
+/* ── IPv6, for the lab ──
+   An address is held as 32 lowercase hex nibbles with no separators. That
+   is chosen for what the engine needs and nothing more: two spellings of one
+   address compare equal with ===, a /N prefix is simply the first N bits,
+   and zero-padded hex sorts in numeric order. Same 16-bit-group thinking as
+   routing_game's rlV6*, kept flat because nothing here does arithmetic on
+   the groups. */
+function ac6Parse(str){
+  const t=String(str||'').trim().toLowerCase();
+  if(!t||!/^[0-9a-f:]+$/.test(t)||t.indexOf(':::')>=0) return null;
+  const halves=t.split('::');
+  if(halves.length>2) return null;
+  const head=halves[0]?halves[0].split(':'):[];
+  const tail=halves.length===2&&halves[1]?halves[1].split(':'):[];
+  if(halves.length===1&&head.length!==8) return null;
+  if(halves.length===2&&head.length+tail.length>7) return null;
+  const groups=head.concat(new Array(8-head.length-tail.length).fill('0')).concat(tail);
+  for(let i=0;i<8;i++) if(!/^[0-9a-f]{1,4}$/.test(groups[i])) return null;
+  return groups.map(function(g){ return ('0000'+g).slice(-4); }).join('');
+}
+/* RFC 5952 form: lowercase, leading zeros dropped, the longest run of two or
+   more zero groups (the first if tied) becomes :: */
+function ac6Fmt(hex){
+  const g=[]; for(let i=0;i<32;i+=4) g.push(parseInt(hex.slice(i,i+4),16).toString(16));
+  let bs=-1,bl=0,cs=-1,cl=0;
+  g.forEach(function(x,i){
+    if(x==='0'){ if(cs<0){cs=i;cl=0;} cl++; if(cl>bl){bl=cl;bs=cs;} } else cs=-1;
+  });
+  if(bl<2) return g.join(':');
+  return g.slice(0,bs).join(':')+'::'+g.slice(bs+bl).join(':');
+}
+function ac6Net(hex, pfx){
+  const full=pfx>>2, rem=pfx&3;
+  let out=hex.slice(0,full);
+  if(rem) out+=(parseInt(hex[full],16)&(0xF<<(4-rem))&0xF).toString(16);
+  return (out+'00000000000000000000000000000000').slice(0,32);
+}
+
+/* ── the family switch ──
+   The lab runs in one address family at a time, chosen by the Version row.
+   Everything the engine does with an address goes through these four, so the
+   forwarder, the routing lookup and the requirement factories never know
+   which family they are in. A key is a Number for IPv4 and the hex string
+   above for IPv6; both compare with ===. */
+let acFam=4;
+function acKey(str){ return acFam===6 ? ac6Parse(str) : (isValidIP(str) ? ip2int(str) : null); }
+function acNet(key,pfx){ return acFam===6 ? ac6Net(key,pfx) : netIntOf(key,pfx); }
+function acFmt(key){ return acFam===6 ? ac6Fmt(key) : int2ip(key); }
+function acValid(str){ return acKey(str)!==null; }
+function acCanon(str){ const k=acKey(str); return k===null ? null : acFmt(k); }
 const TOPICS=['wild','range','match','place','lab'];
 const TOPIC_LABEL={wild:'Wildcard Masks', range:'Wildcard Ranges', match:'Which ACE Matches?',
                    place:'ACL Placement', lab:'ACL Lab'};
 const POINTS={easy:3, medium:4, hard:6};
 const TOPIC_REF={wild:'wcref', range:'wcref', match:'aclref', place:'aclref', lab:'cmdref'};
 
-/* The "ACL type" row is this page's Version row. Standard ACLs are all Lab
-   8A covers and all this page implements, so the row is greyed out with the
-   label still visible — the same treatment OSPF Cost gives a version choice
-   that would change nothing. Extended ACLs are the obvious next thing and
-   slot straight in here. */
+/* The Version row is the address family, and it is LIVE on the lab: it
+   picks which family the round is built in, the way the RIP lab's row picks
+   the RIP version. The four drills are wildcard arithmetic, which IPv6 does
+   not have, so the row is greyed out there with the labels still showing —
+   the same treatment OSPF Cost gives a choice that would change nothing. */
 const VERSIONS={
-  wild:{opts:[], labels:['Standard','Extended'], note:'wildcards work the same either way'},
-  range:{opts:[], labels:['Standard','Extended'], note:'wildcards work the same either way'},
-  match:{opts:[], labels:['Standard','Extended'], note:'extended matching not built yet'},
-  place:{opts:[], labels:['Standard','Extended'], note:'extended placement not built yet'},
-  lab:{opts:[], labels:['Standard','Extended'], note:'extended ACLs not built yet'}
+  wild:{opts:[], labels:['IPv4','IPv6'], note:'wildcards are an IPv4 idea'},
+  range:{opts:[], labels:['IPv4','IPv6'], note:'wildcards are an IPv4 idea'},
+  match:{opts:[], labels:['IPv4','IPv6'], note:'wildcards are an IPv4 idea'},
+  place:{opts:[], labels:['IPv4','IPv6'], note:'wildcards are an IPv4 idea'},
+  lab:{opts:['4','6'], labels:['IPv4','IPv6'], note:'the same lab in either family'}
 };
 
-let state={ topic:'rand', diff:'easy', ver:'std', score:0, round:1, streak:0,
+let state={ topic:'rand', diff:'easy', ver:'4', score:0, round:1, streak:0,
             done:false, mode:null, data:null, lastTopic:null };
 
 /* ═══ ACL core ═════════════════════════════════════════════════════
@@ -256,6 +324,22 @@ function aceMake(seq, action, kind, ipInt, wcInt){
 function aceHost(seq, action, ip){ return aceMake(seq, action, 'host', ip2int(ip), 0); }
 function aceNet(seq, action, ip, wc){ return aceMake(seq, action, 'net', ip2int(ip), ip2int(wc)); }
 function aceAny(seq, action){ return aceMake(seq, action, 'any', 0, 0xFFFFFFFF); }
+/* An IPv6 ACE names a source AND a destination, each as any / host X / X/len,
+   and matches on prefix length — there are no wildcards in IPv6. */
+function ace6Make(seq, action, src, dst){
+  return {seq:seq, action:action, fam:6, src:src, dst:dst, matches:0};
+}
+function ace6Side(kind, key, pfx){ return {kind:kind, key:key, pfx:pfx}; }
+function ace6SideMatches(side, key){
+  if(side.kind==='any') return true;
+  return acNet(key, side.pfx)===acNet(side.key, side.pfx);
+}
+/* One entry point for the lab, whichever family the ACE is. dstKey is only
+   consulted by IPv6 entries, and may be omitted for a vty check. */
+function aceHits(ace, srcKey, dstKey){
+  if(ace.fam!==6) return aceMatches(ace, srcKey);
+  return ace6SideMatches(ace.src, srcKey) && (dstKey==null || ace6SideMatches(ace.dst, dstKey));
+}
 /* The page's one piece of wildcard arithmetic. A 1-bit is "don't care", so
    the covered block runs from every don't-care bit at 0 up to every one at
    1, and matching is "mask both sides with the inverse". The ACL core and
@@ -293,13 +377,19 @@ function wcBin(oct){
   while(s.length<8) s='0'+s;
   return s;
 }
+function ace6SideText(side){
+  if(side.kind==='any') return 'any';
+  if(side.kind==='host') return 'host '+ac6Fmt(side.key);
+  return ac6Fmt(side.key)+'/'+side.pfx;
+}
 function aceText(ace){
+  if(ace.fam===6) return ace.action+' ipv6 '+ace6SideText(ace.src)+' '+ace6SideText(ace.dst);
   if(ace.kind==='any') return ace.action+' any';
   if(ace.kind==='host') return ace.action+' host '+int2ip(ace.ipInt);
   return ace.action+' '+int2ip(ace.ipInt)+' '+int2ip(ace.wcInt);
 }
-function aclMake(name, numbered){
-  return {name:String(name), numbered:!!numbered, aces:[]};
+function aclMake(name, numbered, fam){
+  return {name:String(name), numbered:!!numbered, fam:fam||4, aces:[]};
 }
 /* IOS hands out sequence numbers in tens, which is exactly what leaves room
    to insert a line between two existing ones later — the whole point of
@@ -321,9 +411,9 @@ function aclRemoveSeq(acl, seq){
    count:true bumps the per-ACE hit counters, so show access-lists reflects
    the traffic the learner has actually sent — the counters in the real lab
    only appear because pings were run. */
-function aclEvaluate(acl, ipInt, count){
+function aclEvaluate(acl, srcKey, count, dstKey){
   for(let i=0;i<acl.aces.length;i++){
-    if(aceMatches(acl.aces[i], ipInt)){
+    if(aceHits(acl.aces[i], srcKey, dstKey)){
       if(count) acl.aces[i].matches++;
       return {action:acl.aces[i].action, ace:acl.aces[i], implicit:false};
     }
@@ -331,6 +421,14 @@ function aclEvaluate(acl, ipInt, count){
   return {action:'deny', ace:null, implicit:true};
 }
 function aclShowLines(acl){
+  /* show ipv6 access-list: IOS prints the address in capitals and puts the
+     sequence number LAST, the opposite of the IPv4 layout. */
+  if(acl.fam===6){
+    return ['IPv6 access list '+acl.name].concat(acl.aces.map(function(a){
+      return '    '+aceText(a).replace(/[0-9a-f:]+(?=\/|\s|$)/g, function(m){ return m.indexOf(':')>=0 ? m.toUpperCase() : m; })+
+        (a.matches?' ('+a.matches+' match'+(a.matches===1?'':'es')+')':'')+' sequence '+a.seq;
+    }));
+  }
   const head='Standard IP access list '+acl.name;
   const rows=acl.aces.map(function(a){
     /* IOS pads the action so permit/deny line up, and only shows a counter
@@ -399,26 +497,35 @@ function acCable(a,b,opts){ acCables.push(Object.assign({a:a.id,b:b.id},opts||{}
    Part 5's "re-address PC-A to 192.168.10.100" be graded without inventing
    a modelled device for every test address. */
 function acSubnetOwner(ipStr){
-  const ipInt=ip2int(ipStr);
+  const key=acKey(ipStr);
+  if(key===null) return null;
   for(const d of acDevices){
     if(d.type!=='router') continue;
     for(const f of d.ifaces){
       if(!f.ip||!f.up||f.loopback) continue;
-      if(netIntOf(ipInt,f.pfx)===netIntOf(ip2int(f.ip),f.pfx)) return {router:d, iface:f};
+      if(acNet(key,f.pfx)===acNet(acKey(f.ip),f.pfx)) return {router:d, iface:f};
     }
   }
   return null;
 }
 function acGatewayFor(pc){ return acSubnetOwner(pc.ip); }
+/* Compared by key, not by string: an IPv6 address has many spellings and a
+   learner will type whichever comes to hand. */
 function acIfaceWithIp(ipStr){
+  const key=acKey(ipStr);
+  if(key===null) return null;
   for(const d of acDevices){
     if(d.type!=='router') continue;
-    const f=d.ifaces.find(function(x){ return x.ip===ipStr&&x.up; });
+    const f=d.ifaces.find(function(x){ return x.up&&x.ip&&acKey(x.ip)===key; });
     if(f) return {router:d, iface:f};
   }
   return null;
 }
-function acPcWithIp(ipStr){ return acDevices.find(function(d){ return d.type==='pc'&&d.ip===ipStr; }); }
+function acPcWithIp(ipStr){
+  const key=acKey(ipStr);
+  if(key===null) return null;
+  return acDevices.find(function(d){ return d.type==='pc'&&acKey(d.ip)===key; })||null;
+}
 
 /* Routing is given. Each route is {netInt, prefix, viaIface, nextHop, code,
    metric} — the metrics are the ones RIP would have converged to in Part 2
@@ -426,26 +533,26 @@ function acPcWithIp(ipStr){ return acDevices.find(function(d){ return d.type==='
    test RIP and carrying a second protocol engine to produce numbers nobody
    grades would be dead weight. */
 function acAddRoute(r, netStr, pfx, viaIfaceName, nextHop, metric){
-  r.routes.push({netInt:ip2int(netStr), prefix:pfx, viaIface:viaIfaceName,
+  r.routes.push({net:acKey(netStr), prefix:pfx, viaIface:viaIfaceName,
                  nextHop:nextHop||null, code:'R', metric:metric==null?1:metric});
 }
 function acRoutingTable(r){
   const t=[];
   r.ifaces.forEach(function(f){
     if(!f.ip||!f.up) return;
-    t.push({code:'C', netInt:netIntOf(ip2int(f.ip),f.pfx), prefix:f.pfx,
+    t.push({code:'C', net:acNet(acKey(f.ip),f.pfx), prefix:f.pfx,
             iface:f.name, nextHop:null, metric:0, _if:f});
   });
   r.routes.forEach(function(rt){
-    t.push({code:rt.code, netInt:rt.netInt, prefix:rt.prefix, iface:rt.viaIface,
+    t.push({code:rt.code, net:rt.net, prefix:rt.prefix, iface:rt.viaIface,
             nextHop:rt.nextHop, metric:rt.metric, _if:acIface(r,rt.viaIface)});
   });
   return t;
 }
-function acBestMatch(dstInt, table){
+function acBestMatch(dstKey, table){
   let best=null;
   table.forEach(function(e){
-    if(((dstInt & maskInt(e.prefix))>>>0)!==e.netInt) return;
+    if(acNet(dstKey,e.prefix)!==e.net) return;
     if(!best||e.prefix>best.prefix) best=e;
   });
   return best;
@@ -456,26 +563,26 @@ function acBestMatch(dstInt, table){
    whole way, because a standard ACL matches on nothing else. An ACL is
    checked twice per hop: inbound on the interface the packet arrives on,
    outbound on the interface it leaves by. */
-function acCheckAcl(router, iface, dir, srcInt, count){
+function acCheckAcl(router, iface, dir, srcKey, count, dstKey){
   const name = dir==='in' ? iface.aclIn : iface.aclOut;
   if(!name) return null;
   const acl=router.acls[name];
   if(!acl) return null;
-  const res=aclEvaluate(acl, srcInt, count);
+  const res=aclEvaluate(acl, srcKey, count, dstKey);
   if(res.action==='permit') return null;
   return {router:router, iface:iface, dir:dir, acl:acl, ace:res.ace, implicit:res.implicit};
 }
 function acBlockReason(b){
-  return int2ip(b.srcInt)+' was dropped by '+b.acl.name+' '+b.dir+'bound on '+
+  return acFmt(b.srcKey)+' was dropped by '+b.acl.name+' '+b.dir+'bound on '+
     b.router.name+' '+b.iface.name+
-    (b.implicit ? ' — nothing in the list matched it, so the implicit deny any caught it'
+    (b.implicit ? ' — nothing in the list matched it, so the implicit deny caught it'
                 : ' — matched "'+aceText(b.ace)+'"');
 }
 /* start: {router, iface} the packet is entering the network from. For a PC
    that is its gateway interface; for a router-sourced ping it is the router
    itself with no ingress interface. */
-function acForward(start, srcInt, dstStr, count){
-  const dstInt=ip2int(dstStr);
+function acForward(start, srcKey, dstStr, count){
+  const dstKey=acKey(dstStr);
   let cur=start.router, ingress=start.iface||null;
   /* A packet the router generates itself is not filtered by an outbound ACL
      on the interface it leaves by — only transit traffic is. That is real
@@ -488,23 +595,23 @@ function acForward(start, srcInt, dstStr, count){
     visited.add(cur.id);
 
     if(ingress){
-      const b=acCheckAcl(cur, ingress, 'in', srcInt, count);
-      if(b){ b.srcInt=srcInt; return {ok:false, blocked:b, reason:acBlockReason(b)}; }
+      const b=acCheckAcl(cur, ingress, 'in', srcKey, count, dstKey);
+      if(b){ b.srcKey=srcKey; return {ok:false, blocked:b, reason:acBlockReason(b)}; }
     }
     /* Reached the destination itself? A packet addressed to one of this
        router's own interfaces is delivered, not forwarded — so an outbound
        ACL never applies to it. */
-    const self=cur.ifaces.find(function(f){ return f.ip===dstStr&&f.up; });
+    const self=cur.ifaces.find(function(f){ return f.up&&f.ip&&acKey(f.ip)===dstKey; });
     if(self) return {ok:true};
 
-    const win=acBestMatch(dstInt, acRoutingTable(cur));
+    const win=acBestMatch(dstKey, acRoutingTable(cur));
     if(!win) return {ok:false, reason:cur.name+' has no route to '+dstStr};
     const out=win._if;
     if(!out) return {ok:false, reason:cur.name+"'s route to "+dstStr+' points at an interface that is not up'};
 
     if(!originated){
-      const b=acCheckAcl(cur, out, 'out', srcInt, count);
-      if(b){ b.srcInt=srcInt; return {ok:false, blocked:b, reason:acBlockReason(b)}; }
+      const b=acCheckAcl(cur, out, 'out', srcKey, count, dstKey);
+      if(b){ b.srcKey=srcKey; return {ok:false, blocked:b, reason:acBlockReason(b)}; }
     }
     originated=false;
 
@@ -520,11 +627,15 @@ function acForward(start, srcInt, dstStr, count){
         return (g&&g.iface===out) ? {ok:true}
           : {ok:false, reason:dstStr+' is not on the segment behind '+cur.name+' '+out.name};
       }
-      if(out.loopback) return out.ip===dstStr ? {ok:true}
+      if(out.loopback) return acKey(out.ip)===dstKey ? {ok:true}
         : {ok:false, reason:'Nothing answers to '+dstStr+' behind '+out.name};
-      const net=netIntOf(ip2int(out.ip),out.pfx);
-      if(dstInt!==net && dstInt!==bcastIntOf(net,out.pfx)) return {ok:true};
-      return {ok:false, reason:dstStr+' is a network or broadcast address, not a host'};
+      const net=acNet(acKey(out.ip),out.pfx);
+      /* The subnet address is nobody's in either family; the all-ones
+         broadcast is an IPv4 idea only — IPv6 has no broadcast. */
+      if(dstKey===net) return {ok:false, reason:dstStr+' is the network address, not a host'};
+      if(acFam===4 && dstKey===bcastIntOf(net,out.pfx))
+        return {ok:false, reason:dstStr+' is the broadcast address, not a host'};
+      return {ok:true};
     }
     const nh=acIfaceWithIp(win.nextHop);
     if(!nh) return {ok:false, reason:'Next hop '+win.nextHop+' is not a live interface'};
@@ -537,7 +648,7 @@ function acForward(start, srcInt, dstStr, count){
    makes "PC-A cannot ping PC-B" fall out of an ACL that only filters one
    direction. */
 function acPing(srcIp, dstStr, count){
-  if(!isValidIP(srcIp)||!isValidIP(dstStr)) return {ok:false, reason:'Invalid address'};
+  if(!acValid(srcIp)||!acValid(dstStr)) return {ok:false, reason:'Invalid address'};
   /* Where a packet from this address enters the network. A router interface
      address means the router originated it; anything else — a modelled PC or
      a bare test address — is a host on whichever connected subnet holds it. */
@@ -547,10 +658,10 @@ function acPing(srcIp, dstStr, count){
   };
   const a=startFor(srcIp), b=startFor(dstStr);
   if(!a) return {ok:false, reason:srcIp+' is not a host or interface on this network'};
-  const there=acForward(a, ip2int(srcIp), dstStr, count);
+  const there=acForward(a, acKey(srcIp), dstStr, count);
   if(!there.ok) return there;
   if(!b) return {ok:false, reason:'Nothing answers to '+dstStr};
-  const back=acForward(b, ip2int(dstStr), srcIp, count);
+  const back=acForward(b, acKey(dstStr), srcIp, count);
   if(!back.ok) return {ok:false, blocked:back.blocked,
     reason:'The request arrived, but the reply could not get back: '+back.reason};
   return {ok:true};
@@ -567,30 +678,36 @@ function acSsh(srcIp, routerIp, count){
   if(!r.vtyAcl) return {ok:true};
   const acl=r.acls[r.vtyAcl];
   if(!acl) return {ok:true};
-  const res=aclEvaluate(acl, ip2int(srcIp), count);
+  const res=aclEvaluate(acl, acKey(srcIp), count, acKey(routerIp));
   if(res.action==='permit') return {ok:true};
   return {ok:false, deniedByVty:true,
     reason:'Refused by '+acl.name+' on '+r.name+"'s vty lines"+
-      (res.implicit?' — the implicit deny any':' — matched "'+aceText(res.ace)+'"')};
+      (res.implicit?' — the implicit deny':' — matched "'+aceText(res.ace)+'"')};
 }
 
 /* ═══ CLI ══════════════════════════════════════════════════════════ */
 const AC_KW={
   enable:{}, configure:{terminal:{}}, end:{}, exit:{}, clear:{},
-  show:{ip:{route:{}, interface:{}}, 'access-lists':{}, 'access-list':{}, run:{}},
+  show:{ip:{route:{}, interface:{}}, ipv6:{'access-list':{}, interface:{}, route:{}},
+        'access-lists':{}, 'access-list':{}, run:{}},
   interface:{},
   ip:{'access-list':{standard:{}}, 'access-group':{}},
+  ipv6:{'access-list':{}, 'traffic-filter':{}, 'access-class':{}},
   'access-list':{},
   line:{vty:{}},
   'access-class':{},
-  permit:{host:{}, any:{}},
-  deny:{host:{}, any:{}},
+  permit:{host:{}, any:{}, ipv6:{host:{}, any:{}}},
+  deny:{host:{}, any:{}, ipv6:{host:{}, any:{}}},
+  sequence:{},
   ping:{},
-  no:{ip:{'access-list':{standard:{}}, 'access-group':{}}, 'access-list':{}, 'access-class':{}}
+  no:{ip:{'access-list':{standard:{}}, 'access-group':{}},
+      ipv6:{'access-list':{}, 'traffic-filter':{}, 'access-class':{}},
+      'access-list':{}, 'access-class':{}, sequence:{}}
 };
 function acPrompt(d){
   return d.name+(d.cm==='conf'?'(config)#':d.cm==='if'?'(config-if)#':
-                 d.cm==='nacl'?'(config-std-nacl)#':d.cm==='line'?'(config-line)#':'#');
+                 d.cm==='nacl'?'(config-std-nacl)#':d.cm==='nacl6'?'(config-ipv6-acl)#':
+                 d.cm==='line'?'(config-line)#':'#');
 }
 /* Parses the tail of a permit/deny into an ACE, minus its sequence number.
    Accepts the three forms Lab 8A uses: "host X", "any", and "X wildcard". */
@@ -606,6 +723,40 @@ function acParseAce(action, parts){
   if(!isValidIP(parts[1])) return {err:'% Invalid wildcard mask'};
   return {ace:aceNet(0, action, parts[0], parts[1])};
 }
+/* One side of an IPv6 entry: any | host X | X/len. Returns where parsing
+   got to, so the destination can pick up after the source. */
+function ac6ParseSide(parts, i){
+  const tok=(parts[i]||'').toLowerCase();
+  if(tok==='any') return {side:ace6Side('any',null,0), next:i+1};
+  if(tok==='host'){
+    const k=ac6Parse(parts[i+1]);
+    if(k===null) return {err:'% Invalid IPv6 host address'};
+    return {side:ace6Side('host',k,128), next:i+2};
+  }
+  const m=/^([0-9a-f:]+)\/(\d{1,3})$/i.exec(parts[i]||'');
+  if(!m) return {err:'% Expected any, host <address>, or <prefix>/<length>'};
+  const k=ac6Parse(m[1]), pfx=+m[2];
+  if(k===null||pfx>128) return {err:'% Invalid IPv6 prefix'};
+  return {side:ace6Side('net',k,pfx), next:i+1};
+}
+/* "permit ipv6 <src> <dst> [sequence N]" — the protocol keyword is not
+   optional in IOS, and the sequence number goes LAST, which is the opposite
+   of an IPv4 named list. Both are the sort of thing a lab should make you
+   type rather than smooth over. */
+function ac6ParseAce(action, parts){
+  if((parts[0]||'').toLowerCase()!=='ipv6')
+    return {err:'% An IPv6 entry names the protocol: "'+action+' ipv6 <source> <destination>"'};
+  const a=ac6ParseSide(parts,1); if(a.err) return a;
+  const b=ac6ParseSide(parts,a.next); if(b.err) return b;
+  let seq=null, i=b.next;
+  if((parts[i]||'').toLowerCase()==='sequence'){
+    if(!/^\d+$/.test(parts[i+1]||'')) return {err:'% "sequence" needs a number'};
+    seq=+parts[i+1]; i+=2;
+  }
+  if(i<parts.length) return {err:'% Invalid input detected'};
+  return {ace:ace6Make(seq||0, action, a.side, b.side), seq:seq};
+}
+
 function acCli(d, line){
   const t=line.trim().replace(/\s+/g,' ');
   if(!t) return '';
@@ -622,19 +773,23 @@ function acCli(d, line){
   /* ── show ── */
   if(M(w[0],'show')||w[0]==='sh'){
     if(w[1]&&(w[1]==='access-lists'||w[1]==='access-list')) return acShowAcls(d);
-    if(w[1]&&M(w[1],'ip')&&w[2]&&M(w[2],'route')) return acShowRoute(d);
-    if(w[1]&&M(w[1],'ip')&&w[2]&&M(w[2],'interface')){
+    const ipw = w[1]&&(w[1]==='ipv6'||M(w[1],'ip'));
+    if(ipw&&w[2]&&M(w[2],'access-list')) return acShowAcls(d);
+    if(ipw&&w[2]&&M(w[2],'route')) return acShowRoute(d);
+    if(ipw&&w[2]&&M(w[2],'interface')){
       if(!raw[3]) return acShowIfBrief(d);
       const f=acIface(d,raw[3]);
       return f ? acShowIface(d,f) : '% Invalid interface';
     }
     if(w[1]&&M(w[1],'run')) return acShowRun(d);
-    return '% Unknown show command — try "show access-lists", "show ip interface <iface>" or "show ip route"';
+    return acFam===6
+      ? '% Unknown show command — try "show ipv6 access-list", "show ipv6 interface <iface>" or "show ipv6 route"'
+      : '% Unknown show command — try "show access-lists", "show ip interface <iface>" or "show ip route"';
   }
 
   /* ── ping, with the extended "source" form ── */
   if(M(w[0],'ping')){
-    if(!raw[1]||!isValidIP(raw[1])) return '% Usage: ping <ip> [source <interface>]';
+    if(!raw[1]||!acValid(raw[1])) return '% Usage: ping <address> [source <interface>]';
     let src=null;
     if(w[2]&&M(w[2],'source')){
       const f=acIface(d,raw[3]);
@@ -642,7 +797,7 @@ function acCli(d, line){
       src=f.ip;
     } else {
       /* With no source given IOS uses the exit interface's address. */
-      const win=acBestMatch(ip2int(raw[1]), acRoutingTable(d));
+      const win=acBestMatch(acKey(raw[1]), acRoutingTable(d));
       src = win && win._if ? win._if.ip : (d.ifaces[0]&&d.ifaces[0].ip);
     }
     if(!src) return '% No usable source address';
@@ -663,6 +818,41 @@ function acCli(d, line){
     d.cm='if'; d.ci=f.name; return '';
   }
   if(M(w[0],'line')&&w[1]&&M(w[1],'vty')){ d.cm='line'; return ''; }
+
+  /* ── family guard: the other family's commands say so rather than
+     half-working. A dual-stack router would accept them, but they would
+     filter traffic this round never sends. ── */
+  const V4_ONLY='% This round is IPv6 — use "ipv6 access-list <name>", "ipv6 traffic-filter" and "ipv6 access-class"';
+  const V6_ONLY='% This round is IPv4 — use "access-list <n>" or "ip access-list standard <name>", "ip access-group" and "access-class"';
+  if(acFam===6 && (w[0]==='access-list' || (M(w[0],'ip')&&w[1]==='access-list') ||
+     (w[0]==='no'&&(w[1]==='access-list'||(M(w[1],'ip')&&w[2]==='access-list'))))) return V4_ONLY;
+  if(acFam===4 && w[0]==='ipv6') return V6_ONLY;
+  if(acFam===4 && w[0]==='no' && w[1]==='ipv6') return V6_ONLY;
+
+  /* ── IPv6 named ACL, global config ── */
+  if(w[0]==='ipv6'&&w[1]==='access-list'){
+    const name=raw[2];
+    if(!name) return '% Give the access list a name';
+    if(!d.acls[name]) d.acls[name]=aclMake(name, false, 6);
+    d.cm='nacl6'; d.ci=name; return '';
+  }
+  if(w[0]==='no'&&w[1]==='ipv6'&&w[2]==='access-list'){ delete d.acls[raw[3]]; return ''; }
+
+  if(d.cm==='nacl6'){
+    const acl=d.acls[d.ci];
+    if(/^\d+$/.test(w[0]))
+      return '% In an IPv6 access list the sequence number goes last: "permit ipv6 <src> <dst> sequence '+w[0]+'"';
+    if(w[0]==='no'&&w[1]==='sequence'){
+      return aclRemoveSeq(acl, +w[2]) ? '' : '% Sequence number not found in this access list';
+    }
+    if(w[0]==='permit'||w[0]==='deny'){
+      const p=ac6ParseAce(w[0], raw.slice(1));
+      if(p.err) return p.err;
+      p.ace.seq = p.seq!=null ? p.seq : aclNextSeq(acl);
+      aclInsert(acl, p.ace);
+      return '';
+    }
+  }
 
   /* ── numbered ACL, global config ── */
   if(w[0]==='access-list'){
@@ -718,6 +908,17 @@ function acCli(d, line){
 
   if(d.cm==='if'){
     const f=acIface(d, d.ci);
+    if(w[0]==='ipv6'&&w[1]==='traffic-filter'){
+      const name=raw[2], dir=w[3];
+      if(!d.acls[name]) return '% Access list '+name+' does not exist yet';
+      if(dir!=='in'&&dir!=='out') return '% Direction must be "in" or "out"';
+      if(dir==='in') f.aclIn=name; else f.aclOut=name;
+      return '';
+    }
+    if(w[0]==='no'&&w[1]==='ipv6'&&w[2]==='traffic-filter'){
+      if(w[4]==='in') f.aclIn=null; else f.aclOut=null;
+      return '';
+    }
     if(M(w[0],'ip')&&w[1]==='access-group'){
       const name=raw[2], dir=w[3];
       if(!d.acls[name]) return '% Access list '+name+' does not exist yet';
@@ -732,6 +933,13 @@ function acCli(d, line){
   }
 
   if(d.cm==='line'){
+    if(w[0]==='ipv6'&&w[1]==='access-class'){
+      const name=raw[2], dir=w[3];
+      if(!d.acls[name]) return '% Access list '+name+' does not exist yet';
+      if(dir!=='in') return '% Use "ipv6 access-class <name> in" to filter inbound sessions';
+      d.vtyAcl=name; return '';
+    }
+    if(w[0]==='no'&&w[1]==='ipv6'&&w[2]==='access-class'){ d.vtyAcl=null; return ''; }
     if(w[0]==='access-class'){
       const name=raw[1], dir=w[2];
       if(!d.acls[name]) return '% Access list '+name+' does not exist yet';
@@ -767,6 +975,16 @@ function acShowAcls(d){
   return out.join('\n');
 }
 function acShowIface(d,f){
+  if(acFam===6){
+    const net=ac6Fmt(ac6Net(ac6Parse(f.ip),f.pfx));
+    return [f.name+' is up, line protocol is up',
+      '  IPv6 is enabled, link-local address is FE80::'+(d.name==='R1'?'1':d.name==='R2'?'2':'3'),
+      '  Global unicast address(es):',
+      '    '+f.ip.toUpperCase()+', subnet is '+net.toUpperCase()+'/'+f.pfx,
+      '  MTU is 1500 bytes',
+      '  Inbound access list '+(f.aclIn||'not set'),
+      '  Outgoing access list '+(f.aclOut||'not set')].join('\n');
+  }
   return [f.name+' is up, line protocol is up',
     '  Internet address is '+f.ip+'/'+f.pfx,
     '  Broadcast address is 255.255.255.255',
@@ -777,6 +995,16 @@ function acShowIface(d,f){
     '  Inbound access list is '+(f.aclIn||'not set')].join('\n');
 }
 function acShowIfBrief(d){
+  /* IPv6 addresses do not fit a 16-column field, so that table gets the
+     wider layout show ipv6 interface brief actually uses. */
+  if(acFam===6){
+    const lines=[];
+    d.ifaces.forEach(function(f){
+      lines.push(f.name+'  [up/up]');
+      lines.push('    '+(f.ip?f.ip.toUpperCase():'unassigned'));
+    });
+    return lines.join('\n');
+  }
   const lines=['Interface                  IP-Address      Status                Protocol'];
   d.ifaces.forEach(function(f){
     lines.push((f.name+'                           ').slice(0,27)+
@@ -787,66 +1015,123 @@ function acShowIfBrief(d){
 function acShowRoute(d){
   const t=acRoutingTable(d);
   const lines=['Codes: C - connected, R - RIP',''];
-  t.slice().sort(function(a,b){ return a.netInt-b.netInt||a.prefix-b.prefix; }).forEach(function(e){
+  /* Keys compare with < in both families: Numbers numerically, and the
+     zero-padded hex strings lexically, which is the same order. */
+  t.slice().sort(function(a,b){ return a.net<b.net?-1:a.net>b.net?1:a.prefix-b.prefix; }).forEach(function(e){
     lines.push(e.code==='C'
-      ? 'C    '+int2ip(e.netInt)+'/'+e.prefix+' is directly connected, '+e.iface
-      : 'R    '+int2ip(e.netInt)+'/'+e.prefix+' [120/'+e.metric+'] via '+e.nextHop+', '+e.iface);
+      ? 'C    '+acFmt(e.net)+'/'+e.prefix+' is directly connected, '+e.iface
+      : 'R    '+acFmt(e.net)+'/'+e.prefix+' [120/'+e.metric+'] via '+e.nextHop+', '+e.iface);
   });
   return lines.join('\n');
 }
 function acShowRun(d){
-  const lines=['!'];
+  const v6=acFam===6, lines=['!'];
   d.ifaces.forEach(function(f){
     lines.push('interface '+f.name);
     if(f.vlan) lines.push(' encapsulation dot1Q '+f.vlan);
-    lines.push(' ip address '+f.ip+' '+cidr2mask(f.pfx));
-    if(f.aclIn) lines.push(' ip access-group '+f.aclIn+' in');
-    if(f.aclOut) lines.push(' ip access-group '+f.aclOut+' out');
+    lines.push(v6 ? ' ipv6 address '+f.ip.toUpperCase()+'/'+f.pfx
+                  : ' ip address '+f.ip+' '+cidr2mask(f.pfx));
+    if(f.aclIn)  lines.push(v6 ? ' ipv6 traffic-filter '+f.aclIn+' in'   : ' ip access-group '+f.aclIn+' in');
+    if(f.aclOut) lines.push(v6 ? ' ipv6 traffic-filter '+f.aclOut+' out' : ' ip access-group '+f.aclOut+' out');
     lines.push('!');
   });
   Object.keys(d.acls).forEach(function(n){
     const acl=d.acls[n];
-    if(acl.numbered) acl.aces.forEach(function(a){ lines.push('access-list '+acl.name+' '+aceText(a)); });
+    if(acl.fam===6){
+      lines.push('ipv6 access-list '+acl.name);
+      acl.aces.forEach(function(a){ lines.push(' '+aceText(a).toUpperCase().replace(/^(PERMIT|DENY) IPV6/, function(m){ return m.toLowerCase(); })+' sequence '+a.seq); });
+    } else if(acl.numbered) acl.aces.forEach(function(a){ lines.push('access-list '+acl.name+' '+aceText(a)); });
     else {
       lines.push('ip access-list standard '+acl.name);
       acl.aces.forEach(function(a){ lines.push(' '+aceText(a)); });
     }
     lines.push('!');
   });
-  if(d.vtyAcl){ lines.push('line vty 0 4'); lines.push(' access-class '+d.vtyAcl+' in'); lines.push('!'); }
+  if(d.vtyAcl){ lines.push('line vty 0 4'); lines.push(v6 ? ' ipv6 access-class '+d.vtyAcl+' in' : ' access-class '+d.vtyAcl+' in'); lines.push('!'); }
   return lines.join('\n');
 }
 
-/* ═══ The Lab 8A topology ══════════════════════════════════════════
-   Cisco's addressing exactly, so anything the learner reads in the real lab
-   lines up with what they see here. Built once per round and handed over
-   already working: VLANs, inter-VLAN routing and RIP are all done, which is
-   where the real lab is by the end of Part 2. */
+/* ═══ The topology, in either family ═══════════════════════════════
+   The IPv4 plan is Cisco's Lab 8A addressing exactly, so anything a learner
+   reads in that lab lines up with what they see here. The IPv6 plan mirrors
+   it one-for-one — 192.168.10.0/24 becomes 2001:db8:acad:10::/64, host .3
+   becomes ::3, router .1 becomes ::1 — so the two rounds are the same
+   exercise in two notations and nothing about the policy has to change.
+   Built once per round and handed over already working: VLANs, inter-VLAN
+   routing and routing are done. The one structural difference is that IPv6
+   has no numbered lists, so the Easy tier's list has a name there. */
+function acNetSpec(fam, ip, wcOrPfx){
+  return fam===6 ? {kind:'net', ip:ip, pfx:wcOrPfx} : {kind:'net', ip:ip, wc:wcOrPfx};
+}
+const AC_PLAN={
+  4:{
+    fam:4, hostPfx:24, lanPfx:24, serPfx:30, loPfx:27, dflt:'0.0.0.0',
+    pcA:'192.168.10.3', pcB:'192.168.20.3', pcC:'192.168.30.3',
+    r1_10:'192.168.10.1', r1_20:'192.168.20.1', r1_99:'192.168.99.1', r1_s:'10.1.1.1',
+    r2_s0:'10.1.1.2', r2_s1:'10.2.2.2', r2_lo:'209.165.200.225',
+    r3_30:'192.168.30.1', r3_100:'192.168.100.1', r3_lo:'192.168.40.1', r3_s:'10.2.2.1',
+    n:{lan10:'192.168.10.0', lan20:'192.168.20.0', lan99:'192.168.99.0', lan30:'192.168.30.0',
+       lan100:'192.168.100.0', lan40:'192.168.40.0', ser12:'10.1.1.0', ser23:'10.2.2.0',
+       isp:'209.165.200.224'},
+    lanWc:'0.0.0.255', ispWc:'0.0.0.31',
+    adminRange:'192.168.10.4', adminRangeSpec:'0.0.0.3', adminRangeText:'192.168.10.4 – 192.168.10.7',
+    testHost:'192.168.10.100', adminTest:'192.168.10.5',
+    easyName:'1', easyTitle:'A numbered standard ACL',
+    easyNaming:'Use <b>1</b> as the access list number.',
+    denyAny:'deny any', hostNote:'a <span class="mono-inl">0.0.0.0</span> wildcard',
+    rangeHint:'four addresses, so the wildcard is 0.0.0.3',
+    applyCmd:'ip access-group', vtyCmd:'access-class'
+  },
+  6:{
+    fam:6, hostPfx:64, lanPfx:64, serPfx:64, loPfx:64, dflt:'::',
+    pcA:'2001:db8:acad:10::3', pcB:'2001:db8:acad:20::3', pcC:'2001:db8:acad:30::3',
+    r1_10:'2001:db8:acad:10::1', r1_20:'2001:db8:acad:20::1', r1_99:'2001:db8:acad:99::1', r1_s:'2001:db8:acad:1::1',
+    r2_s0:'2001:db8:acad:1::2', r2_s1:'2001:db8:acad:2::2', r2_lo:'2001:db8:cafe:200::1',
+    r3_30:'2001:db8:acad:30::1', r3_100:'2001:db8:acad:100::1', r3_lo:'2001:db8:acad:40::1', r3_s:'2001:db8:acad:2::1',
+    n:{lan10:'2001:db8:acad:10::', lan20:'2001:db8:acad:20::', lan99:'2001:db8:acad:99::', lan30:'2001:db8:acad:30::',
+       lan100:'2001:db8:acad:100::', lan40:'2001:db8:acad:40::', ser12:'2001:db8:acad:1::', ser23:'2001:db8:acad:2::',
+       isp:'2001:db8:cafe:200::'},
+    lanWc:64, ispWc:64,
+    adminRange:'2001:db8:acad:10::4', adminRangeSpec:126, adminRangeText:'2001:db8:acad:10::4 – 2001:db8:acad:10::7',
+    testHost:'2001:db8:acad:10::100', adminTest:'2001:db8:acad:10::5',
+    easyName:'LAN30-POLICY', easyTitle:'A named IPv6 ACL',
+    easyNaming:'IPv6 has no numbered lists, so name it <b>LAN30-POLICY</b>.',
+    denyAny:'deny ipv6 any any', hostNote:'a <span class="mono-inl">/128</span> prefix',
+    rangeHint:'four addresses, so the prefix length is /126',
+    applyCmd:'ipv6 traffic-filter', vtyCmd:'ipv6 access-class'
+  }
+};
+function acPlan(){ return AC_PLAN[acFam]; }
+/* The whole-network label a policy names: "192.168.10.0/24" or
+   "2001:db8:acad:10::/64". */
+function acNetLabel(name){ const A=acPlan(); return A.n[name]+'/'+A.lanPfx; }
+
 function acBuildTopology(){
   acReset();
+  const A=acPlan();
   /* R2 sits far enough down the canvas that its loopback stub and the label
      above it still fit — the arm reaches 34px above the box and the text
      another 6 on top of that, so anything less than ~50px of headroom
      clips. Checked by measuring, not by eye. */
   const r1=acAddRouter('R1',120,150), r2=acAddRouter('R2',340,58), r3=acAddRouter('R3',540,150);
   const s1=acAddSwitch('S1',95,250), s3=acAddSwitch('S3',515,250);
-  const pcA=acAddPC('PC-A',30,336,'192.168.10.3',24,'192.168.10.1');
-  const pcB=acAddPC('PC-B',195,336,'192.168.20.3',24,'192.168.20.1');
-  const pcC=acAddPC('PC-C',515,336,'192.168.30.3',24,'192.168.30.1');
+  const pcA=acAddPC('PC-A',30,336,A.pcA,A.hostPfx,A.r1_10);
+  const pcB=acAddPC('PC-B',195,336,A.pcB,A.hostPfx,A.r1_20);
+  const pcC=acAddPC('PC-C',515,336,A.pcC,A.hostPfx,A.r3_30);
 
-  acAddIface(r1,'Gi0/1.10','192.168.10.1',24,{vlan:10,parent:'Gi0/1'});
-  acAddIface(r1,'Gi0/1.20','192.168.20.1',24,{vlan:20,parent:'Gi0/1'});
-  acAddIface(r1,'Gi0/1.99','192.168.99.1',24,{vlan:99,parent:'Gi0/1'});
-  acAddIface(r1,'S0/0/0','10.1.1.1',30,{serial:true});
+  acAddIface(r1,'Gi0/1.10',A.r1_10,A.lanPfx,{vlan:10,parent:'Gi0/1'});
+  acAddIface(r1,'Gi0/1.20',A.r1_20,A.lanPfx,{vlan:20,parent:'Gi0/1'});
+  acAddIface(r1,'Gi0/1.99',A.r1_99,A.lanPfx,{vlan:99,parent:'Gi0/1'});
+  acAddIface(r1,'S0/0/0',A.r1_s,A.serPfx,{serial:true});
 
-  acAddIface(r2,'S0/0/0','10.1.1.2',30,{serial:true});
-  acAddIface(r2,'S0/0/1','10.2.2.2',30,{serial:true});
-  acAddIface(r2,'Lo0','209.165.200.225',27,{loopback:true});
+  acAddIface(r2,'S0/0/0',A.r2_s0,A.serPfx,{serial:true});
+  acAddIface(r2,'S0/0/1',A.r2_s1,A.serPfx,{serial:true});
+  acAddIface(r2,'Lo0',A.r2_lo,A.loPfx,{loopback:true});
 
-  acAddIface(r3,'Gi0/1.30','192.168.30.1',24,{vlan:30,parent:'Gi0/1'});
-  acAddIface(r3,'Gi0/1.100','192.168.100.1',24,{vlan:100,parent:'Gi0/1'});
-  acAddIface(r3,'Lo0','192.168.40.1',24,{loopback:true});
-  acAddIface(r3,'S0/0/1','10.2.2.1',30,{serial:true});
+  acAddIface(r3,'Gi0/1.30',A.r3_30,A.lanPfx,{vlan:30,parent:'Gi0/1'});
+  acAddIface(r3,'Gi0/1.100',A.r3_100,A.lanPfx,{vlan:100,parent:'Gi0/1'});
+  acAddIface(r3,'Lo0',A.r3_lo,A.lanPfx,{loopback:true});
+  acAddIface(r3,'S0/0/1',A.r3_s,A.serPfx,{serial:true});
 
   acCable(r1,r2,{serial:true,aLabel:'S0/0/0',bLabel:'S0/0/0'});
   acCable(r2,r3,{serial:true,aLabel:'S0/0/1',bLabel:'S0/0/1'});
@@ -856,25 +1141,26 @@ function acBuildTopology(){
   acCable(s1,pcB,{aLabel:'F0/7'});
   acCable(s3,pcC,{aLabel:'F0/18'});
 
-  /* What RIPv2 converged to in Part 2. Metrics are hop counts from here. */
-  acAddRoute(r1,'10.2.2.0',30,'S0/0/0','10.1.1.2',1);
-  acAddRoute(r1,'192.168.30.0',24,'S0/0/0','10.1.1.2',2);
-  acAddRoute(r1,'192.168.100.0',24,'S0/0/0','10.1.1.2',2);
-  acAddRoute(r1,'192.168.40.0',24,'S0/0/0','10.1.1.2',2);
-  acAddRoute(r1,'0.0.0.0',0,'S0/0/0','10.1.1.2',1);
+  /* What the routing protocol converged to. Metrics are hop counts. */
+  const N=A.n, L=A.lanPfx, S=A.serPfx;
+  acAddRoute(r1,N.ser23,S,'S0/0/0',A.r2_s0,1);
+  acAddRoute(r1,N.lan30,L,'S0/0/0',A.r2_s0,2);
+  acAddRoute(r1,N.lan100,L,'S0/0/0',A.r2_s0,2);
+  acAddRoute(r1,N.lan40,L,'S0/0/0',A.r2_s0,2);
+  acAddRoute(r1,A.dflt,0,'S0/0/0',A.r2_s0,1);
 
-  acAddRoute(r2,'192.168.10.0',24,'S0/0/0','10.1.1.1',1);
-  acAddRoute(r2,'192.168.20.0',24,'S0/0/0','10.1.1.1',1);
-  acAddRoute(r2,'192.168.99.0',24,'S0/0/0','10.1.1.1',1);
-  acAddRoute(r2,'192.168.30.0',24,'S0/0/1','10.2.2.1',1);
-  acAddRoute(r2,'192.168.100.0',24,'S0/0/1','10.2.2.1',1);
-  acAddRoute(r2,'192.168.40.0',24,'S0/0/1','10.2.2.1',1);
+  acAddRoute(r2,N.lan10,L,'S0/0/0',A.r1_s,1);
+  acAddRoute(r2,N.lan20,L,'S0/0/0',A.r1_s,1);
+  acAddRoute(r2,N.lan99,L,'S0/0/0',A.r1_s,1);
+  acAddRoute(r2,N.lan30,L,'S0/0/1',A.r3_s,1);
+  acAddRoute(r2,N.lan100,L,'S0/0/1',A.r3_s,1);
+  acAddRoute(r2,N.lan40,L,'S0/0/1',A.r3_s,1);
 
-  acAddRoute(r3,'10.1.1.0',30,'S0/0/1','10.2.2.2',1);
-  acAddRoute(r3,'192.168.10.0',24,'S0/0/1','10.2.2.2',2);
-  acAddRoute(r3,'192.168.20.0',24,'S0/0/1','10.2.2.2',2);
-  acAddRoute(r3,'192.168.99.0',24,'S0/0/1','10.2.2.2',2);
-  acAddRoute(r3,'0.0.0.0',0,'S0/0/1','10.2.2.2',1);
+  acAddRoute(r3,N.ser12,S,'S0/0/1',A.r2_s1,1);
+  acAddRoute(r3,N.lan10,L,'S0/0/1',A.r2_s1,2);
+  acAddRoute(r3,N.lan20,L,'S0/0/1',A.r2_s1,2);
+  acAddRoute(r3,N.lan99,L,'S0/0/1',A.r2_s1,2);
+  acAddRoute(r3,A.dflt,0,'S0/0/1',A.r2_s1,1);
 
   return {r1:r1,r2:r2,r3:r3,s1:s1,s3:s3,pcA:pcA,pcB:pcB,pcC:pcC};
 }
@@ -888,8 +1174,36 @@ function acGroup(name){
 function mono(s){ return '<span class="mono-inl">'+esc(s)+'</span>'; }
 function acFindAcl(r,name){ return r.acls[name]||null; }
 
+/* A wanted entry, in whichever family the round is: IPv4 {action, kind, ip,
+   wc} or IPv6 {action, kind, ip, pfx} — an IPv6 policy line always has "any"
+   as its destination here, so only the source is specified. */
+function aceWantMatches(got, w){
+  if(got.action!==w.action) return false;
+  if(acFam===6){
+    if(got.fam!==6 || got.dst.kind!=='any') return false;
+    if(w.kind==='any') return got.src.kind==='any';
+    const pfx = w.kind==='host' ? 128 : w.pfx;
+    return got.src.kind!=='any' && got.src.pfx===pfx && got.src.key===acKey(w.ip);
+  }
+  if(got.fam===6) return false;
+  return got.ipInt===ip2int(w.ip) && got.wcInt===(w.wc==null?0:ip2int(w.wc));
+}
+function aceWantText(w){
+  if(acFam===6){
+    const src = w.kind==='any' ? 'any' : w.kind==='host' ? 'host '+w.ip : w.ip+'/'+w.pfx;
+    return w.action+' ipv6 '+src+' any';
+  }
+  return w.action+' '+(w.kind==='any'?'any':w.ip+(w.wc?' '+w.wc:''));
+}
+/* Shorthands for the three wanted shapes, built in the round's family. */
+function wHost(action, ip){ return {action:action, kind:'host', ip:ip, wc:null, pfx:128}; }
+function wNet(action, netName){
+  const A=acPlan(); return Object.assign({action:action}, acNetSpec(A.fam, A.n[netName], A.lanWc));
+}
+function wAny(action){ return {action:action, kind:'any', ip:acFam===6?'::':'0.0.0.0', wc:'255.255.255.255', pfx:0}; }
+
 /* The ACL exists, and its ACEs are the right ones in the right order.
-   want is a list of {action, kind, ip, wc} in the order they must appear. */
+   want is a list of family-shaped entries in the order they must appear. */
 function acAclReq(router, name, want, note){
   return {group:'ACL', desc:'On '+router.name+', build '+mono(name)+' — '+note,
     test:function(){
@@ -900,11 +1214,9 @@ function acAclReq(router, name, want, note){
           ', the policy needs '+want.length};
       for(let i=0;i<want.length;i++){
         const got=acl.aces[i], w=want[i];
-        const wantInt=ip2int(w.ip), wantWc=w.wc==null?0:ip2int(w.wc);
-        if(got.action!==w.action || got.ipInt!==wantInt || got.wcInt!==wantWc){
+        if(!aceWantMatches(got,w)){
           return {ok:false, reason:'Entry '+(i+1)+' of '+name+' is "'+aceText(got)+
-            '", the policy needs "'+w.action+' '+(w.kind==='any'?'any':w.ip+(w.wc?' '+w.wc:''))+
-            '". Order matters — the first match wins'};
+            '", the policy needs "'+aceWantText(w)+'". Order matters — the first match wins'};
         }
       }
       if(acl.aces.length>want.length)
@@ -923,19 +1235,20 @@ function acAppliedReq(router, ifName, aclName, dir, why){
       if(got===aclName) return {ok:true};
       if(other===aclName)
         return {ok:false, reason:aclName+' is applied '+(dir==='in'?'out':'in')+'bound on '+ifName+
-          ', not '+dir+'bound. A standard ACL filters on source address, so the direction decides which traffic it sees'};
+          ', not '+dir+'bound. The list filters on source address, so the direction decides which traffic it sees'};
       if(got) return {ok:false, reason:ifName+' has '+got+' applied '+dir+'bound, not '+aclName};
       return {ok:false, reason:'Nothing is applied '+dir+'bound on '+router.name+' '+ifName+' yet'};
     }};
 }
 function acVtyReq(router, aclName){
-  return {group:'ACL', desc:'Apply '+mono(aclName)+' to '+router.name+"'s vty lines ("+mono('access-class '+aclName+' in')+')',
+  const cmd=acPlan().vtyCmd;
+  return {group:'ACL', desc:'Apply '+mono(aclName)+' to '+router.name+"'s vty lines ("+mono(cmd+' '+aclName+' in')+')',
     test:function(){
       if(!acFindAcl(router,aclName)) return {ok:false, reason:aclName+' does not exist yet'};
       if(router.vtyAcl!==aclName)
         return {ok:false, reason:router.vtyAcl
           ? router.name+"'s vty lines use "+router.vtyAcl+', not '+aclName
-          : router.name+' has no access-class on its vty lines yet'};
+          : router.name+' has no '+cmd+' on its vty lines yet'};
       return {ok:true};
     }};
 }
@@ -969,8 +1282,7 @@ function acGateAces(router, aclName, n){
     return null;
   };
 }
-/* Reachability, graded as an outcome. Every one of these is a line from the
-   real lab's own verification steps. */
+/* Reachability, graded as an outcome. */
 function acPingReq(fromLabel, srcIp, toLabel, dstIp, shouldWork, why, gate){
   return {group:'Verify',
     desc:(shouldWork?'<b>'+fromLabel+'</b> can ping <b>'+toLabel+'</b>'
@@ -998,9 +1310,10 @@ function acSshReq(fromLabel, srcIp, router, routerIp, shouldWork, gate){
     }};
 }
 /* "Do you have to re-apply the ACL after editing it?" graded as a fact
-   rather than a question: the access-group must still be there afterwards. */
+   rather than a question: the interface binding must still be there afterwards. */
 function acStillAppliedReq(router, ifName, aclName, gate){
-  return {group:'Verify', desc:'The '+mono('ip access-group')+' on '+router.name+' '+mono(ifName)+' is still in place after the edit',
+  const cmd=acPlan().applyCmd;
+  return {group:'Verify', desc:'The '+mono(cmd)+' on '+router.name+' '+mono(ifName)+' is still in place after the edit',
     test:function(){
       if(gate){ const g=gate(); if(g) return {ok:false, reason:g}; }
       const f=acIface(router,ifName);
@@ -1011,113 +1324,132 @@ function acStillAppliedReq(router, ifName, aclName, gate){
 }
 
 /* ═══ Lab tiers ════════════════════════════════════════════════════
-   Easy  = Lab 8A Part 3 Step 1   (numbered ACL 1 on R3)
-   Medium= Lab 8A Part 3 Step 2   (named BRANCH-OFFICE-POLICY on R1)
-   Hard  = Lab 8A Parts 4 and 5   (edit in place, then the vty ACL)   */
+   Easy   a list on R3 protecting LAN 30
+   Medium a named list on R1 protecting LAN 10
+   Hard   edit that list in place, then lock down the vty lines
+   Each tier pre-configures the ones before it, because the policy builds. */
+
+/* The commands the earlier tiers are assumed to have entered, in the round's
+   family — so the config a learner inspects with show run reads the way
+   their own commands would. */
+function acPreconfigEasy(r3){
+  const A=acPlan();
+  if(A.fam===6) acEcho(r3,['configure terminal',
+    'ipv6 access-list '+A.easyName,
+    'permit ipv6 '+A.n.lan10+'/64 any',
+    'permit ipv6 '+A.n.lan20+'/64 any',
+    'deny ipv6 any any','exit',
+    'interface Gi0/1.30','ipv6 traffic-filter '+A.easyName+' out','end']);
+  else acEcho(r3,['configure terminal',
+    'access-list 1 permit '+A.n.lan10+' '+A.lanWc,
+    'access-list 1 permit '+A.n.lan20+' '+A.lanWc,
+    'access-list 1 deny any',
+    'interface Gi0/1.30','ip access-group 1 out','end']);
+}
+function acPreconfigMedium(r1){
+  const A=acPlan();
+  if(A.fam===6) acEcho(r1,['configure terminal',
+    'ipv6 access-list BRANCH-OFFICE-POLICY',
+    'permit ipv6 host '+A.pcC+' any',
+    'permit ipv6 '+A.n.lan40+'/64 any','exit',
+    'interface Gi0/1.10','ipv6 traffic-filter BRANCH-OFFICE-POLICY out','end']);
+  else acEcho(r1,['configure terminal',
+    'ip access-list standard BRANCH-OFFICE-POLICY',
+    'permit host '+A.pcC,
+    'permit '+A.n.lan40+' '+A.lanWc,'exit',
+    'interface Gi0/1.10','ip access-group BRANCH-OFFICE-POLICY out','end']);
+}
 
 function genAclLabEasy(){
-  const t=acBuildTopology();
+  const t=acBuildTopology(), A=acPlan();
   return {
-    kind:'easy', part:'Part 3, Step 1',
-    title:'A numbered standard ACL',
-    goal:'Allow every host on <b>192.168.10.0/24</b> and every host on <b>192.168.20.0/24</b> to reach <b>192.168.30.0/24</b>. The security policy also says an explicit <span class="mono-inl">deny any</span> must sit at the end of every ACL. Use <b>1</b> as the access list number.',
-    note:'A standard ACL matches on the <b>source address only</b>, so best practice is to apply it as close to the <b>destination</b> as possible — anywhere earlier and you would block those sources from reaching everything, not just this one network. Work out which router that means, which interface, and which direction.',
-    hint:'R1 pinging PC-C will stop working once this is applied, and that is correct: R1 sources those packets from 10.1.1.1, which the list does not permit.',
+    kind:'easy',
+    title:A.easyTitle,
+    goal:'Allow every host on <b>'+acNetLabel('lan10')+'</b> and every host on <b>'+acNetLabel('lan20')+
+      '</b> to reach <b>'+acNetLabel('lan30')+'</b>. The security policy also says an explicit '+
+      '<span class="mono-inl">'+A.denyAny+'</span> must sit at the end of every ACL. '+A.easyNaming,
+    note:'The list matches on the <b>source address</b>, so best practice is to apply it as close to the <b>destination</b> as possible — anywhere earlier and you would block those sources from reaching everything, not just this one network. Work out which router that means, which interface, and which direction.',
+    hint:'R1 pinging PC-C will stop working once this is applied, and that is correct: R1 sources those packets from '+A.r1_s+', which the list does not permit.',
     reqs:[].concat(
       acGroup('ACL',
-        acAclReq(t.r3,'1',[
-          {action:'permit', kind:'net', ip:'192.168.10.0', wc:'0.0.0.255'},
-          {action:'permit', kind:'net', ip:'192.168.20.0', wc:'0.0.0.255'},
-          {action:'deny',  kind:'any', ip:'0.0.0.0', wc:'255.255.255.255'}
-        ], 'two permits and an explicit deny any'),
-        acAppliedReq(t.r3,'Gi0/1.30','1','out','closest to the destination')),
-      (function(){ const g=acGateApplied(t.r3,'1','Gi0/1.30','out'); return acGroup('Verify',
-        acPingReq('PC-A','192.168.10.3','PC-C','192.168.30.3',true,null,g),
-        acPingReq('PC-B','192.168.20.3','PC-C','192.168.30.3',true,null,g),
-        acPingReq('R1','10.1.1.1','PC-C','192.168.30.3',false,'R1 sources from 10.1.1.1, which the list does not permit',g)); })()
+        acAclReq(t.r3,A.easyName,[wNet('permit','lan10'), wNet('permit','lan20'), wAny('deny')],
+          'two permits and an explicit '+A.denyAny),
+        acAppliedReq(t.r3,'Gi0/1.30',A.easyName,'out','closest to the destination')),
+      (function(){ const g=acGateApplied(t.r3,A.easyName,'Gi0/1.30','out'); return acGroup('Verify',
+        acPingReq('PC-A',A.pcA,'PC-C',A.pcC,true,null,g),
+        acPingReq('PC-B',A.pcB,'PC-C',A.pcC,true,null,g),
+        acPingReq('R1',A.r1_s,'PC-C',A.pcC,false,'R1 sources from '+A.r1_s+', which the list does not permit',g)); })()
     ),
     topo:t
   };
 }
 
-/* Part 3 Step 1's ACL, already in place — Medium and Hard both build on it. */
-function acPreconfigAcl1(r3){
-  acEcho(r3,['configure terminal',
-    'access-list 1 permit 192.168.10.0 0.0.0.255',
-    'access-list 1 permit 192.168.20.0 0.0.0.255',
-    'access-list 1 deny any',
-    'interface Gi0/1.30','ip access-group 1 out','end']);
-}
-
 function genAclLabMedium(){
-  const t=acBuildTopology();
-  acPreconfigAcl1(t.r3);
+  const t=acBuildTopology(), A=acPlan();
+  acPreconfigEasy(t.r3);
   return {
-    kind:'medium', part:'Part 3, Step 2',
-    title:'A named standard ACL',
-    goal:'Build <b>BRANCH-OFFICE-POLICY</b>: allow every host on <b>192.168.40.0/24</b> to reach <b>192.168.10.0/24</b>, and allow <b>only host PC-C</b> (192.168.30.3) to reach it as well.',
-    note:'Use the <span class="mono-inl">host</span> keyword rather than a <span class="mono-inl">0.0.0.0</span> wildcard. Put PC-C first — order is what makes this list say "only that one host, plus that whole network" rather than something broader. Do <b>not</b> add a deny any yet; Part 4 does that. ACL 1 from the previous step is already configured on R3.',
-    hint:'Two extended pings from R3 prove it: sourcing from Gi0/1.30 (192.168.30.1) must fail, sourcing from Lo0 (192.168.40.1) must work.',
+    kind:'medium',
+    title:'A named ACL',
+    goal:'Build <b>BRANCH-OFFICE-POLICY</b>: allow every host on <b>'+acNetLabel('lan40')+'</b> to reach <b>'+
+      acNetLabel('lan10')+'</b>, and allow <b>only host PC-C</b> ('+A.pcC+') to reach it as well.',
+    note:'Use the <span class="mono-inl">host</span> keyword rather than '+A.hostNote+'. Put PC-C first — order is what makes this list say "only that one host, plus that whole network" rather than something broader. Do <b>not</b> add a '+A.denyAny+' yet; the Hard tier does that. The list from the Easy tier is already configured on R3.',
+    hint:'Two extended pings from R3 prove it: sourcing from Gi0/1.30 ('+A.r3_30+') must fail, sourcing from Lo0 ('+A.r3_lo+') must work.',
     reqs:[].concat(
       acGroup('ACL',
-        acAclReq(t.r1,'BRANCH-OFFICE-POLICY',[
-          {action:'permit', kind:'host', ip:'192.168.30.3', wc:null},
-          {action:'permit', kind:'net', ip:'192.168.40.0', wc:'0.0.0.255'}
-        ], 'host PC-C, then the 192.168.40.0/24 network'),
+        acAclReq(t.r1,'BRANCH-OFFICE-POLICY',[wHost('permit',A.pcC), wNet('permit','lan40')],
+          'host PC-C, then the '+acNetLabel('lan40')+' network'),
         acAppliedReq(t.r1,'Gi0/1.10','BRANCH-OFFICE-POLICY','out','closest to the destination')),
       (function(){ const g=acGateApplied(t.r1,'BRANCH-OFFICE-POLICY','Gi0/1.10','out'); return acGroup('Verify',
-        acPingReq('PC-C','192.168.30.3','PC-A','192.168.10.3',true,null,g),
-        acPingReq('R3 sourcing from Gi0/1.30','192.168.30.1','PC-A','192.168.10.3',false,'only host 192.168.30.3 is permitted, not the whole 192.168.30.0/24 network',g),
-        acPingReq('R3 sourcing from Lo0','192.168.40.1','PC-A','192.168.10.3',true,null,g),
-        acPingReq('PC-A','192.168.10.3','PC-B','192.168.20.3',false,"PC-B's reply leaves R1 via Gi0/1.10, where the list denies it",g)); })()
+        acPingReq('PC-C',A.pcC,'PC-A',A.pcA,true,null,g),
+        acPingReq('R3 sourcing from Gi0/1.30',A.r3_30,'PC-A',A.pcA,false,'only host '+A.pcC+' is permitted, not the whole '+acNetLabel('lan30')+' network',g),
+        acPingReq('R3 sourcing from Lo0',A.r3_lo,'PC-A',A.pcA,true,null,g),
+        acPingReq('PC-A',A.pcA,'PC-B',A.pcB,false,"PC-B's reply leaves R1 via Gi0/1.10, where the list denies it",g)); })()
     ),
     topo:t
   };
 }
 
 function genAclLabHard(){
-  const t=acBuildTopology();
-  acPreconfigAcl1(t.r3);
-  acEcho(t.r1,['configure terminal',
-    'ip access-list standard BRANCH-OFFICE-POLICY',
-    'permit host 192.168.30.3',
-    'permit 192.168.40.0 0.0.0.255',
-    'exit',
-    'interface Gi0/1.10','ip access-group BRANCH-OFFICE-POLICY out','end']);
+  const t=acBuildTopology(), A=acPlan();
+  acPreconfigEasy(t.r3);
+  acPreconfigMedium(t.r1);
+  const ispSpec=Object.assign({action:'permit'}, acNetSpec(A.fam, A.n.isp, A.ispWc));
+  const adminSpec=Object.assign({action:'permit'}, acNetSpec(A.fam, A.adminRange, A.adminRangeSpec));
+  const ispLabel=A.n.isp+'/'+(A.fam===6?64:27);
   return {
-    kind:'hard', part:'Parts 4 and 5',
+    kind:'hard',
     title:'Modify an ACL, then lock down the vty lines',
-    goal:'Management has changed the policy twice. First, <b>209.165.200.224/27</b> now gets full access to 192.168.10.0/24, and every ACL must end with an explicit <span class="mono-inl">deny any</span> — add both to <b>BRANCH-OFFICE-POLICY</b>. Second, build <b>ADMIN-MGT</b> so only the administrator at <b>192.168.10.3</b> and the reserved range <b>192.168.10.4 – 192.168.10.7</b> may SSH into R1, and apply it to the vty lines.',
-    note:'Edit BRANCH-OFFICE-POLICY <b>in place</b> by sequence number — that is Option 2 in the lab, and it is why IOS numbers entries in tens. Deleting and retyping the whole list is how mistakes get made. ACL 1 and BRANCH-OFFICE-POLICY are already configured from the earlier steps.',
-    hint:'192.168.10.4 through 192.168.10.7 is four addresses, so the wildcard is 0.0.0.3. Adding an ACE does not detach the list from the interface.',
+    goal:'Management has changed the policy twice. First, <b>'+ispLabel+'</b> now gets full access to '+acNetLabel('lan10')+
+      ', and every ACL must end with an explicit <span class="mono-inl">'+A.denyAny+'</span> — add both to <b>BRANCH-OFFICE-POLICY</b>. '+
+      'Second, build <b>ADMIN-MGT</b> so only the administrator at <b>'+A.pcA+'</b> and the reserved range <b>'+A.adminRangeText+
+      '</b> may SSH into R1, and apply it to the vty lines.',
+    note:'Edit BRANCH-OFFICE-POLICY <b>in place</b> by sequence number — that is why IOS numbers entries in tens. Deleting and retyping the whole list is how mistakes get made. The lists from the Easy and Medium tiers are already configured.',
+    hint:A.adminRangeText.replace(' – ',' through ')+' is '+A.rangeHint+'. Adding an entry does not detach the list from the interface.',
     reqs:[].concat(
       acGroup('ACL',
-        acAclReq(t.r1,'BRANCH-OFFICE-POLICY',[
-          {action:'permit', kind:'host', ip:'192.168.30.3', wc:null},
-          {action:'permit', kind:'net', ip:'192.168.40.0', wc:'0.0.0.255'},
-          {action:'permit', kind:'net', ip:'209.165.200.224', wc:'0.0.0.31'},
-          {action:'deny',  kind:'any', ip:'0.0.0.0', wc:'255.255.255.255'}
-        ], 'the two existing entries, then the new permit, then deny any'),
-        acAclReq(t.r1,'ADMIN-MGT',[
-          {action:'permit', kind:'host', ip:'192.168.10.3', wc:null},
-          {action:'permit', kind:'net', ip:'192.168.10.4', wc:'0.0.0.3'}
-        ], 'the administrator host, then the reserved range'),
+        acAclReq(t.r1,'BRANCH-OFFICE-POLICY',[wHost('permit',A.pcC), wNet('permit','lan40'), ispSpec, wAny('deny')],
+          'the two existing entries, then the new permit, then '+A.denyAny),
+        acAclReq(t.r1,'ADMIN-MGT',[wHost('permit',A.pcA), adminSpec],
+          'the administrator host, then the reserved range'),
         acVtyReq(t.r1,'ADMIN-MGT')),
       (function(){
         const gb=acGateAces(t.r1,'BRANCH-OFFICE-POLICY',4), gv=acGateVty(t.r1,'ADMIN-MGT');
         return acGroup('Verify',
           acStillAppliedReq(t.r1,'Gi0/1.10','BRANCH-OFFICE-POLICY',gb),
-          acPingReq('R2 sourcing from Lo0','209.165.200.225','PC-A','192.168.10.3',true,null,gb),
-          acSshReq('PC-A','192.168.10.3',t.r1,'192.168.10.1',true,gv),
-          acSshReq('a host at 192.168.10.100','192.168.10.100',t.r1,'192.168.10.1',false,gv),
-          acSshReq('a reserved admin host','192.168.10.5',t.r1,'192.168.10.1',true,gv),
-          acPingReq('PC-A','192.168.10.3','PC-C','192.168.30.3',true,'the earlier ACLs must keep working',gb));
+          acPingReq('R2 sourcing from Lo0',A.r2_lo,'PC-A',A.pcA,true,null,gb),
+          acSshReq('PC-A',A.pcA,t.r1,A.r1_10,true,gv),
+          acSshReq('a host at '+A.testHost,A.testHost,t.r1,A.r1_10,false,gv),
+          acSshReq('a reserved admin host',A.adminTest,t.r1,A.r1_10,true,gv),
+          acPingReq('PC-A',A.pcA,'PC-C',A.pcC,true,'the earlier ACLs must keep working',gb));
       })()
     ),
     topo:t
   };
 }
+/* The Version row picks the family the round is BUILT in, the same way the
+   RIP lab's picks the RIP version — not a display option. */
 function genAclLab(diff){
+  acFam = state.ver==='6' ? 6 : 4;
   return diff==='easy' ? genAclLabEasy() : diff==='medium' ? genAclLabMedium() : genAclLabHard();
 }
 
@@ -1267,7 +1599,7 @@ function acRenderSwitchCfg(d,panel){
   panel.innerHTML=
     '<div class="cfg-hdr"><div class="cfg-name">'+d.name+'</div>'+
     '<button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="acCloseCfg()">Close</button></div>'+
-    '<div class="cli-note">VLANs, access ports and port security are already configured — Part 2 of the lab. This page is about the filtering that goes on top, so there is nothing to change here.</div>';
+    '<div class="cli-note">VLANs, access ports and port security are already configured. This lab is about the filtering that goes on top, so there is nothing to change here.</div>';
 }
 function acRenderPcCfg(d,panel){
   panel.innerHTML=
@@ -1276,21 +1608,21 @@ function acRenderPcCfg(d,panel){
     '<div class="pc-form"><span class="pc-form-lbl">IP Address</span>'+
     '<input type="text" class="custom-ip-inp" value="'+d.ip+'" autocomplete="off" spellcheck="false" oninput="acSetPcIp('+d.id+',this.value)">'+
     '<span class="pc-pfx">/'+d.pfx+'</span></div>'+
-    '<div class="cli-note" style="margin-top:6px">Part 5 has you change this address to test the vty ACL from a permitted and a non-permitted host.</div>'+
+    '<div class="cli-note" style="margin-top:6px">The Hard tier has you change this address to test the vty ACL from a permitted and a non-permitted host.</div>'+
     '<div class="cfg-sec-lbl" style="margin-top:14px">Ping</div>'+
     '<div class="pc-form"><label class="pc-form-lbl">Target IP</label>'+
-    '<input class="custom-ip-inp" id="ac-ping-ip" placeholder="e.g. 192.168.30.3" autocomplete="off" spellcheck="false" onkeydown="if(event.key===\'Enter\')acPingRun()">'+
+    '<input class="custom-ip-inp" id="ac-ping-ip" placeholder="e.g. '+acPlan().pcC+'" autocomplete="off" spellcheck="false" onkeydown="if(event.key===\'Enter\')acPingRun()">'+
     '<button class="rand-btn" id="ac-ping-btn" onclick="acPingRun()">Ping</button></div>'+
     '<pre class="ping-out" id="ac-ping-out"></pre>'+
     '<div class="cfg-sec-lbl" style="margin-top:14px">SSH</div>'+
     '<div class="pc-form"><label class="pc-form-lbl">Router IP</label>'+
-    '<input class="custom-ip-inp" id="ac-ssh-ip" placeholder="e.g. 192.168.10.1" autocomplete="off" spellcheck="false" onkeydown="if(event.key===\'Enter\')acSshRun()">'+
+    '<input class="custom-ip-inp" id="ac-ssh-ip" placeholder="e.g. '+acPlan().r1_10+'" autocomplete="off" spellcheck="false" onkeydown="if(event.key===\'Enter\')acSshRun()">'+
     '<button class="rand-btn" id="ac-ssh-btn" onclick="acSshRun()">SSH</button></div>'+
     '<pre class="ping-out" id="ac-ssh-out"></pre>';
 }
 function acSetPcIp(id,val){
-  const d=acById(id), s=val.trim();
-  if(isValidIP(s)) d.ip=s;
+  const d=acById(id), c=acCanon(val);
+  if(c!==null) d.ip=c;
   acRenderCanvas();
 }
 let acPingGen=0;
@@ -1301,8 +1633,8 @@ function acPingRun(){
   LabShared.runPing({
     inputId:'ac-ping-ip', btnId:'ac-ping-btn', outId:'ac-ping-out',
     resolve:function(dst){
-      if(!isValidIP(dst)) return {msg:'invalid target address'};
-      if(dst===d.ip) return {ok:true};
+      if(!acValid(dst)) return {msg:'invalid target address'};
+      if(acKey(dst)===acKey(d.ip)) return {ok:true};
       /* count:true — the real lab's match counters only appear because
          somebody actually ran these pings. */
       const r=acPing(d.ip, dst, true);
@@ -1320,7 +1652,7 @@ function acSshRun(){
   if(!d||d.type!=='pc') return;
   const ip=(document.getElementById('ac-ssh-ip').value||'').trim();
   const out=document.getElementById('ac-ssh-out');
-  if(!isValidIP(ip)){ out.textContent='Invalid address.'; return; }
+  if(!acValid(ip)){ out.textContent='Invalid address.'; return; }
   const r=acSsh(d.ip, ip, true);
   out.textContent = r.ok
     ? 'Connecting to '+ip+'...\nOpen\nUsername: admin\nPassword: *****\n\nR1>  (connected)'
@@ -1383,27 +1715,30 @@ function acToggleTasks(){
   try{ localStorage.setItem('ne-acl-tasks', acTasksShown()?'0':'1'); }catch(e){}
   acApplyTasksPref();
 }
-const AC_ADDR_ROWS=[
-  ['R1','Gi0/1.10','192.168.10.1/24','VLAN 10 — PC-A'],
-  ['R1','Gi0/1.20','192.168.20.1/24','VLAN 20 — PC-B'],
-  ['R1','Gi0/1.99','192.168.99.1/24','VLAN 99 — management'],
-  ['R1','S0/0/0','10.1.1.1/30','R2 S0/0/0'],
-  ['R2','S0/0/0','10.1.1.2/30','R1 S0/0/0'],
-  ['R2','S0/0/1','10.2.2.2/30','R3 S0/0/1'],
-  ['R2','Lo0','209.165.200.225/27','simulated Internet'],
-  ['R3','Gi0/1.30','192.168.30.1/24','VLAN 30 — PC-C'],
-  ['R3','Gi0/1.100','192.168.100.1/24','VLAN 100 — management'],
-  ['R3','Lo0','192.168.40.1/24','simulated branch LAN'],
-  ['R3','S0/0/1','10.2.2.1/30','R2 S0/0/1'],
-  ['PC-A','NIC','192.168.10.3/24','S1 F0/6'],
-  ['PC-B','NIC','192.168.20.3/24','S1 F0/7'],
-  ['PC-C','NIC','192.168.30.3/24','S3 F0/18']
-];
+function acAddrRows(){
+  const A=acPlan(), L='/'+A.lanPfx, S='/'+A.serPfx;
+  return [
+    ['R1','Gi0/1.10',A.r1_10+L,'VLAN 10 — PC-A'],
+    ['R1','Gi0/1.20',A.r1_20+L,'VLAN 20 — PC-B'],
+    ['R1','Gi0/1.99',A.r1_99+L,'VLAN 99 — management'],
+    ['R1','S0/0/0',A.r1_s+S,'R2 S0/0/0'],
+    ['R2','S0/0/0',A.r2_s0+S,'R1 S0/0/0'],
+    ['R2','S0/0/1',A.r2_s1+S,'R3 S0/0/1'],
+    ['R2','Lo0',A.r2_lo+'/'+A.loPfx,'simulated Internet'],
+    ['R3','Gi0/1.30',A.r3_30+L,'VLAN 30 — PC-C'],
+    ['R3','Gi0/1.100',A.r3_100+L,'VLAN 100 — management'],
+    ['R3','Lo0',A.r3_lo+L,'simulated branch LAN'],
+    ['R3','S0/0/1',A.r3_s+S,'R2 S0/0/1'],
+    ['PC-A','NIC',A.pcA+'/'+A.hostPfx,'S1 F0/6'],
+    ['PC-B','NIC',A.pcB+'/'+A.hostPfx,'S1 F0/7'],
+    ['PC-C','NIC',A.pcC+'/'+A.hostPfx,'S3 F0/18']
+  ];
+}
 function acBriefHtml(d){
-  const rows=AC_ADDR_ROWS.map(function(r){ return '<tr>'+r.map(function(c){ return '<td>'+c+'</td>'; }).join('')+'</tr>'; }).join('');
+  const rows=acAddrRows().map(function(r){ return '<tr>'+r.map(function(c){ return '<td>'+c+'</td>'; }).join('')+'</tr>'; }).join('');
   return '<div class="req-note">'+d.note+'</div>'+
     '<div class="qlbl" style="margin-top:1rem">Addressing Table'+
-    '<span class="tip-ic" tabindex="-1" data-tip="The network is already built and working — VLANs, inter-VLAN routing and RIP were done in Part 2. Your job starts at the filtering.">?</span></div>'+
+    '<span class="tip-ic" tabindex="-1" data-tip="The network is already built and working — VLANs, inter-VLAN routing and RIP are done. Your job starts at the filtering.">?</span></div>'+
     '<table class="rt-table" style="margin-top:.35rem">'+
     '<tr><th>Device</th><th>Interface</th><th>Address</th><th>Connects to</th></tr>'+rows+'</table>'+
     '<button type="button" class="qlbl sec-toggle" id="ac-tasks-btn" style="margin-top:1rem" '+
@@ -1417,7 +1752,7 @@ function acRenderReqs(results){
 }
 function renderAclLab(body,qip){
   const d=state.data;
-  document.getElementById('qprompt').innerHTML='<b>'+d.part+' — '+d.title+'.</b> '+d.goal;
+  document.getElementById('qprompt').innerHTML='<b>'+d.title+'.</b> '+d.goal;
   document.getElementById('qspec').innerHTML=acBriefHtml(d);
   qip.style.display='none';
   body.innerHTML=
