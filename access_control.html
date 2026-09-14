@@ -1512,8 +1512,8 @@ function acRenderCanvas(){
       });
       const tx=document.createElementNS('http://www.w3.org/2000/svg','text');
       tx.setAttribute('x',x); tx.setAttribute('y',yEnd-6);
-      tx.setAttribute('text-anchor','middle'); tx.setAttribute('font-size','10.5');
-      tx.setAttribute('font-family','var(--mono)'); tx.setAttribute('fill','var(--text-s)');
+      tx.setAttribute('text-anchor','middle'); tx.setAttribute('font-size','11');
+      tx.setAttribute('font-family','var(--mono)'); tx.setAttribute('fill','var(--text)');
       tx.textContent=f.name+' '+f.ip+'/'+f.pfx;
       svg.appendChild(tx);
     });
@@ -1546,8 +1546,8 @@ function acEdgeLabel(svg,near,far,text){
   const x=near[0]+(far[0]-near[0])*t, y=near[1]+(far[1]-near[1])*t;
   const tx=document.createElementNS('http://www.w3.org/2000/svg','text');
   tx.setAttribute('x',x); tx.setAttribute('y',y-4);
-  tx.setAttribute('text-anchor','middle'); tx.setAttribute('font-size','10');
-  tx.setAttribute('font-family','var(--mono)'); tx.setAttribute('fill','var(--text-s)');
+  tx.setAttribute('text-anchor','middle'); tx.setAttribute('font-size','11');
+  tx.setAttribute('font-family','var(--mono)'); tx.setAttribute('fill','var(--text)');
   tx.textContent=text;
   svg.appendChild(tx);
 }
