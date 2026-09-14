@@ -1513,7 +1513,7 @@ function acRenderCanvas(){
       const tx=document.createElementNS('http://www.w3.org/2000/svg','text');
       tx.setAttribute('x',x); tx.setAttribute('y',yEnd-6);
       tx.setAttribute('text-anchor','middle'); tx.setAttribute('font-size','10.5');
-      tx.setAttribute('font-family','var(--mono)'); tx.setAttribute('fill','var(--text-t)');
+      tx.setAttribute('font-family','var(--mono)'); tx.setAttribute('fill','var(--text-s)');
       tx.textContent=f.name+' '+f.ip+'/'+f.pfx;
       svg.appendChild(tx);
     });
@@ -1547,7 +1547,7 @@ function acEdgeLabel(svg,near,far,text){
   const tx=document.createElementNS('http://www.w3.org/2000/svg','text');
   tx.setAttribute('x',x); tx.setAttribute('y',y-4);
   tx.setAttribute('text-anchor','middle'); tx.setAttribute('font-size','10');
-  tx.setAttribute('font-family','var(--mono)'); tx.setAttribute('fill','var(--text-t)');
+  tx.setAttribute('font-family','var(--mono)'); tx.setAttribute('fill','var(--text-s)');
   tx.textContent=text;
   svg.appendChild(tx);
 }
