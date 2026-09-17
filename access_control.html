@@ -1803,7 +1803,7 @@ function acLabGrade(reveal){
    generator on this page draws from, so a placeholder is never the answer. */
 const FIELD_PH={
   wc:'e.g. 0.0.0.63', kw:'e.g. host 172.20.5.9', ip:'e.g. 172.20.5.64', pfx:'e.g. 26',
-  n:'e.g. 64', a:'e.g. 172.20.0.0 0.0.255.255', h:'e.g. 172.20.0.0 0.0.255.255',
+  n:'e.g. 64',
   first:'e.g. 172.20.5.64', last:'e.g. 172.20.5.127', count:'e.g. 64',
   total:'e.g. 16', blocks:'e.g. 4', size:'e.g. 4'
 };
@@ -1938,17 +1938,24 @@ function genWild(diff){
               {id:'pfx', label:'Prefix length', answer:String(c.pfx), affix:'/'}],
       explain:c.mask+' has '+c.pfx+' network bits, so it is a /'+c.pfx+'. 255 minus each octet gives the wildcard '+c.wild+'.'};
   }
-  /* Hard: the two shorthands, a range that is not a whole subnet, a range
-     that crosses an octet boundary, and a count from a bare subnet mask. */
-  const which=choice(['short','sub','span','count']);
-  if(which==='short'){
-    const c=wcCase({pfx:32});
-    return {kind:'hard', prompt:'Write the address and wildcard mask that '+mono('any')+' is shorthand for, and the address and wildcard that '+
-      mono('host '+c.ip)+' is shorthand for.',
-      fields:[{id:'a', label:'"any" as address + wildcard', answer:'0.0.0.0 255.255.255.255'},
-              {id:'h', label:'"host '+c.ip+'" as address + wildcard', answer:c.ip+' 0.0.0.0'}],
-      explain:mono('any')+' cares about no bits at all, so every bit is "don\'t care": 0.0.0.0 255.255.255.255. '+
-        mono('host')+' cares about all 32, so none are: '+c.ip+' 0.0.0.0.'};
+  /* Hard: several subnets folded into one ACE, a range that is not a whole
+     subnet, a range that crosses an octet boundary, and a whole subnet from
+     an interface's own address and mask. One answer per box throughout —
+     "address + wildcard in one field" was tried and is a typo generator. */
+  const which=choice(['summ','sub','span','count']);
+  if(which==='summ'){
+    const n=choice([2,4]), c=wcCase({minPfx:18, maxPfx:28});
+    const childPfx=c.pfx+Math.log2(n), childSize=Math.pow(2,32-childPfx);
+    const kids=[]; for(let i=0;i<n;i++) kids.push(mono(int2ip(c.netInt+i*childSize)+'/'+childPfx));
+    return {kind:'hard',
+      prompt:'One ACE must cover all of '+kids.slice(0,-1).join(', ')+' and '+kids[n-1]+
+        ', and nothing else. Give the address, the wildcard mask, and the prefix length.',
+      fields:[{id:'ip', label:'Address', answer:c.net},
+              {id:'wc', label:'Wildcard mask', answer:c.wild},
+              {id:'pfx', label:'Prefix length', answer:String(c.pfx), affix:'/'}],
+      explain:n+' consecutive /'+childPfx+' blocks starting on a /'+c.pfx+' boundary are one /'+c.pfx+' block, '+
+        c.net+'/'+c.pfx+'. Its wildcard '+c.wild+' frees the low '+c.hostBits+' bits, so it covers '+
+        c.first+' through '+c.last+' and nothing outside.'};
   }
   if(which==='sub'){
     const c=wcCase({minPfx:28, maxPfx:31});
