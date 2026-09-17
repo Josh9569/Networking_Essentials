@@ -1802,15 +1802,21 @@ function acLabGrade(reveal){
    before anything is typed. The examples sit in 172.20.5.0, which no
    generator on this page draws from, so a placeholder is never the answer. */
 const FIELD_PH={
-  wc:'e.g. 0.0.0.63', kw:'e.g. host 172.20.5.9', ip:'e.g. 172.20.5.64', pfx:'e.g. /26',
+  wc:'e.g. 0.0.0.63', kw:'e.g. host 172.20.5.9', ip:'e.g. 172.20.5.64', pfx:'e.g. 26',
   n:'e.g. 64', a:'e.g. 172.20.0.0 0.0.255.255', h:'e.g. 172.20.0.0 0.0.255.255',
   first:'e.g. 172.20.5.64', last:'e.g. 172.20.5.127', count:'e.g. 64',
   total:'e.g. 16', blocks:'e.g. 4', size:'e.g. 4'
 };
+/* A field may carry an `affix` — a fixed lead-in such as the "/" of a prefix
+   length, drawn in front of the box so it cannot be deleted and stays
+   visible while typing. The answer is stored WITHOUT it, and typing it
+   anyway is harmless: gradeFields strips a leading affix before comparing. */
 function fieldsHtml(fields){
   return '<div class="agrid">'+fields.map(function(f){
+    const inp='<input id="a-'+f.id+'" placeholder="'+(FIELD_PH[f.id]||'')+'" autocomplete="off" spellcheck="false"'+
+      (f.affix ? ' oninput="affixTrim(this,\''+esc(f.affix)+'\')"' : '')+'>';
     return '<div class="afield" id="f-'+f.id+'"><label>'+esc(f.label)+'</label>'+
-      '<input id="a-'+f.id+'" placeholder="'+(FIELD_PH[f.id]||'')+'" autocomplete="off" spellcheck="false">'+
+      (f.affix ? '<div class="affix-row"><span>'+esc(f.affix)+'</span>'+inp+'</div>' : inp)+
       '<div class="ahint" id="h-'+f.id+'"></div></div>';
   }).join('')+'</div>';
 }
@@ -1819,6 +1825,9 @@ function fieldsHtml(fields){
    "Correct: <that same value>" makes a correct grade look like a broken one,
    and erases the only evidence of what actually went in. Only an empty box
    is filled in, because there is nothing there to preserve. */
+/* Typing the affix anyway (a habitual "/24") would show as "//24" next to
+   the drawn one, so it is dropped as it is typed. */
+function affixTrim(inp, aff){ if(inp.value.indexOf(aff)===0) inp.value=inp.value.slice(aff.length); }
 function gradeFields(fields, reveal){
   const norm=function(s){ return String(s).trim().toLowerCase().replace(/\s+/g,' '); };
   let correct=0;
@@ -1826,7 +1835,9 @@ function gradeFields(fields, reveal){
     const inp=document.getElementById('a-'+f.id),
           fld=document.getElementById('f-'+f.id),
           hnt=document.getElementById('h-'+f.id);
-    const uv=norm(inp.value);
+    const aff=f.affix||'';
+    let uv=norm(inp.value);
+    if(aff && uv.indexOf(aff)===0) uv=uv.slice(aff.length).trim();
     inp.disabled=true;
     if(!reveal && uv!=='' && uv===norm(f.answer)){
       fld.classList.add('ok'); hnt.textContent='✓ Correct'; correct++;
@@ -1834,7 +1845,7 @@ function gradeFields(fields, reveal){
       fld.classList.add('show'); inp.value=f.answer; hnt.textContent='Revealed';
     } else {
       fld.classList.add('bad');
-      hnt.textContent='You put '+inp.value.trim()+' — correct: '+f.answer;
+      hnt.textContent='You put '+aff+uv+' — correct: '+aff+f.answer;
     }
   });
   return correct;
@@ -1878,7 +1889,7 @@ function genWild(diff){
       return {kind:'medium', prompt:'You need an ACE that matches <b>only</b> the single host '+
         '<span class="mono-inl">'+ip+'</span>. Write the wildcard mask, and the keyword IOS lets you use instead.',
         fields:[{id:'wc', label:'Wildcard mask', answer:'0.0.0.0'},
-                {id:'kw', label:'Keyword form', answer:'host '+ip, loose:true}],
+                {id:'kw', label:'Keyword form', answer:'host '+ip}],
         explain:'Every bit must match, so the wildcard is all zeros. '+
           '<span class="mono-inl">host '+ip+'</span> means exactly the same thing and is what the lab asks you to write.'};
     }
@@ -1897,7 +1908,7 @@ function genWild(diff){
     const pfx=choice([24,25,26,27,28,30]);
     return {kind:'medium', prompt:'An ACE reads <span class="mono-inl">permit 172.16.8.0 '+cidr2wild(pfx)+
       '</span>. What prefix length does that wildcard correspond to, and how many addresses does it match?',
-      fields:[{id:'pfx', label:'Prefix length (e.g. /24)', answer:'/'+pfx, loose:true},
+      fields:[{id:'pfx', label:'Prefix length', answer:String(pfx), affix:'/'},
               {id:'n', label:'Addresses matched', answer:String(Math.pow(2,32-pfx))}],
       explain:'Inverting '+cidr2wild(pfx)+' gives '+cidr2mask(pfx)+', which is /'+pfx+' — '+
         Math.pow(2,32-pfx)+' addresses.'};
@@ -1906,8 +1917,8 @@ function genWild(diff){
   const style=choice(['any','odd']);
   if(style==='any'){
     return {kind:'hard', prompt:'Write the address and wildcard mask that <span class="mono-inl">any</span> is shorthand for, and the address and wildcard that <span class="mono-inl">host 10.1.1.1</span> is shorthand for.',
-      fields:[{id:'a', label:'"any" as address + wildcard', answer:'0.0.0.0 255.255.255.255', loose:true},
-              {id:'h', label:'"host 10.1.1.1" as address + wildcard', answer:'10.1.1.1 0.0.0.0', loose:true}],
+      fields:[{id:'a', label:'"any" as address + wildcard', answer:'0.0.0.0 255.255.255.255'},
+              {id:'h', label:'"host 10.1.1.1" as address + wildcard', answer:'10.1.1.1 0.0.0.0'}],
       explain:'<span class="mono-inl">any</span> cares about no bits at all, so every bit is "don\'t care". '+
         '<span class="mono-inl">host</span> cares about all 32, so none are.'};
   }
@@ -1919,7 +1930,7 @@ function genWild(diff){
       'Give the address, the wildcard mask, and the prefix length the pair is equivalent to.',
     fields:[{id:'ip', label:'Address', answer:int2ip(start)},
             {id:'wc', label:'Wildcard mask', answer:'0.0.0.'+(blk-1)},
-            {id:'pfx', label:'Equivalent prefix', answer:'/'+(32-Math.log2(blk)), loose:true}],
+            {id:'pfx', label:'Equivalent prefix', answer:String(32-Math.log2(blk)), affix:'/'}],
     explain:blk+' addresses means the low '+Math.log2(blk)+' bits are "don\'t care" — wildcard 0.0.0.'+
       (blk-1)+', which is the same as a /'+(32-Math.log2(blk))+'.'};
 }

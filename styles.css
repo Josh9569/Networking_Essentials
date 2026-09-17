@@ -291,6 +291,8 @@ sup  { font-size: .65em; vertical-align: super; }
 .afield label      { display: block; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-t); margin-bottom: 5px; }
 .afield input      { width: 100%; font-family: var(--mono); font-size: 14px; background: transparent; border: none; outline: none; color: var(--text); }
 .afield input::placeholder { color: var(--text-t); }
+.afield .affix-row { display: flex; align-items: center; gap: 1px; }
+.afield .affix-row > span { font-family: var(--mono); font-size: 14px; color: var(--text-s); user-select: none; }
 .afield.ok         { border-color: var(--ok-bdr);   background: var(--ok-bg); }
 .afield.bad        { border-color: var(--err-bdr);  background: var(--err-bg); }
 .afield.show       { border-color: var(--warn-bdr); background: var(--warn-bg); }
