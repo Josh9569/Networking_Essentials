@@ -566,7 +566,7 @@ function renderSumm(body,qip){
     body.innerHTML=`${list}${summBitsToolHtml()}
       <div class="afield large" id="f-ans">
         <label>Summarized static route</label>
-        <input id="a-ans" placeholder="ip route <network> <mask> <next-hop>" autocomplete="off" spellcheck="false">
+        <input id="a-ans" placeholder="e.g. ip route 172.20.0.0 255.255.252.0 10.1.1.2" autocomplete="off" spellcheck="false">
         <div class="ahint" id="h-ans"></div>
       </div>`;
     summBuildBits();
@@ -580,7 +580,7 @@ function renderSumm(body,qip){
       ${d.hqNets.map(n=>`<div class="cli-block">${n.network}/${n.prefix}</div>`).join('')}
       <div class="cfg-sec-lbl two-col-full" style="margin-top:.25rem">HQ &harr; ISP link</div>
       <div class="cli-block two-col-full">HQ: ${d.link.aIP}/30 &nbsp;&nbsp; ISP: ${d.link.bIP}/30</div></div>`;
-    body.innerHTML=`${summTopoHtml('medium',d,false)}${topo}${summBitsToolHtml()}${summRouteFieldsHtml(d.routes,'ip route <network> <mask> <next-hop>')}`;
+    body.innerHTML=`${summTopoHtml('medium',d,false)}${topo}${summBitsToolHtml()}${summRouteFieldsHtml(d.routes,'e.g. ip route 172.20.0.0 255.255.252.0 10.1.1.2')}`;
     summBuildBits();
     summTopoFit();
     setBtns();
@@ -596,7 +596,7 @@ function renderSumm(body,qip){
     <div class="cli-block two-col-full">HQ: ${d.ispLink.aIP}/30 &nbsp;&nbsp; ISP: ${d.ispLink.bIP}/30</div>
     <div class="cfg-sec-lbl two-col-full" style="margin-top:.25rem">HQ &harr; BRANCH link</div>
     <div class="cli-block two-col-full">HQ: ${d.branchLink.aIP}/30 &nbsp;&nbsp; BRANCH: ${d.branchLink.bIP}/30</div></div>`;
-  body.innerHTML=`${summTopoHtml('hard',d,false)}${topo}${summBitsToolHtml()}${summRouteFieldsHtml(d.routes,'ip route <network> <mask> <next-hop>')}`;
+  body.innerHTML=`${summTopoHtml('hard',d,false)}${topo}${summBitsToolHtml()}${summRouteFieldsHtml(d.routes,'e.g. ip route 172.20.0.0 255.255.252.0 10.1.1.2')}`;
   summBuildBits();
   summTopoFit();
   setBtns();
@@ -1203,7 +1203,7 @@ function renderSumm6(body,qip){
     body.innerHTML=`${list}
       <div class="afield large" id="f-ans">
         <label>Summarized static route</label>
-        <input id="a-ans" placeholder="ipv6 route <prefix>/<len> <next-hop>" autocomplete="off" spellcheck="false">
+        <input id="a-ans" placeholder="e.g. ipv6 route 2001:db8:ac00::/54 2001:db8:1::2" autocomplete="off" spellcheck="false">
         <div class="ahint" id="h-ans"></div>
       </div>`;
     setBtns();
@@ -1216,7 +1216,7 @@ function renderSumm6(body,qip){
       ${d.hqNets.map(n=>`<div class="cli-block">${n.text}</div>`).join('')}
       <div class="cfg-sec-lbl two-col-full" style="margin-top:.25rem">HQ &harr; ISP link</div>
       <div class="cli-block two-col-full">HQ: ${d.link.aText} &nbsp;&nbsp; ISP: ${d.link.bText}</div></div>`;
-    body.innerHTML=`${summTopoHtml('medium',d,true)}${topo}${summRouteFieldsHtml(d.routes,'ipv6 route <prefix>/<len> <next-hop>')}`;
+    body.innerHTML=`${summTopoHtml('medium',d,true)}${topo}${summRouteFieldsHtml(d.routes,'e.g. ipv6 route 2001:db8:ac00::/54 2001:db8:1::2')}`;
     summTopoFit();
     setBtns();
     return;
@@ -1231,7 +1231,7 @@ function renderSumm6(body,qip){
     <div class="cli-block two-col-full">HQ: ${d.ispLink.aText} &nbsp;&nbsp; ISP: ${d.ispLink.bText}</div>
     <div class="cfg-sec-lbl two-col-full" style="margin-top:.25rem">HQ &harr; BRANCH link</div>
     <div class="cli-block two-col-full">HQ: ${d.branchLink.aText} &nbsp;&nbsp; BRANCH: ${d.branchLink.bText}</div></div>`;
-  body.innerHTML=`${summTopoHtml('hard',d,true)}${topo}${summRouteFieldsHtml(d.routes,'ipv6 route <prefix>/<len> <next-hop>')}`;
+  body.innerHTML=`${summTopoHtml('hard',d,true)}${topo}${summRouteFieldsHtml(d.routes,'e.g. ipv6 route 2001:db8:ac00::/54 2001:db8:1::2')}`;
   summTopoFit();
   setBtns();
 }

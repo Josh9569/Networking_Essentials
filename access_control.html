@@ -1798,10 +1798,19 @@ function acLabGrade(reveal){
    Wildcard Masks and Wildcard Ranges are both "type it in a box" drills, so
    they share the markup and the grading; all four drills share the way a
    round is banked and announced. */
+/* One example per field id, so every box shows the shape of what it wants
+   before anything is typed. The examples sit in 172.20.5.0, which no
+   generator on this page draws from, so a placeholder is never the answer. */
+const FIELD_PH={
+  wc:'e.g. 0.0.0.63', kw:'e.g. host 172.20.5.9', ip:'e.g. 172.20.5.64', pfx:'e.g. /26',
+  n:'e.g. 64', a:'e.g. 172.20.0.0 0.0.255.255', h:'e.g. 172.20.0.0 0.0.255.255',
+  first:'e.g. 172.20.5.64', last:'e.g. 172.20.5.127', count:'e.g. 64',
+  total:'e.g. 16', blocks:'e.g. 4', size:'e.g. 4'
+};
 function fieldsHtml(fields){
   return '<div class="agrid">'+fields.map(function(f){
     return '<div class="afield" id="f-'+f.id+'"><label>'+esc(f.label)+'</label>'+
-      '<input id="a-'+f.id+'" autocomplete="off" spellcheck="false">'+
+      '<input id="a-'+f.id+'" placeholder="'+(FIELD_PH[f.id]||'')+'" autocomplete="off" spellcheck="false">'+
       '<div class="ahint" id="h-'+f.id+'"></div></div>';
   }).join('')+'</div>';
 }
@@ -2203,9 +2212,9 @@ function rangeRangesHtml(){
     'ranges there are is part of the question.</p><div class="agrid">';
   for(let i=0;i<RANGE_ROWS;i++){
     h+='<div class="afield" id="f-rg'+i+'f"><label>Range '+(i+1)+' &mdash; first</label>'+
-       '<input id="a-rg'+i+'f" autocomplete="off" spellcheck="false"><div class="ahint" id="h-rg'+i+'f"></div></div>'+
+       '<input id="a-rg'+i+'f" placeholder="e.g. 172.20.5.64" autocomplete="off" spellcheck="false"><div class="ahint" id="h-rg'+i+'f"></div></div>'+
        '<div class="afield" id="f-rg'+i+'l"><label>Range '+(i+1)+' &mdash; last</label>'+
-       '<input id="a-rg'+i+'l" autocomplete="off" spellcheck="false"><div class="ahint" id="h-rg'+i+'l"></div></div>';
+       '<input id="a-rg'+i+'l" placeholder="e.g. 172.20.5.67" autocomplete="off" spellcheck="false"><div class="ahint" id="h-rg'+i+'l"></div></div>';
   }
   return h+'</div>';
 }
@@ -2869,7 +2878,7 @@ function renderPlace(body,qip){
   for(let i=0;i<3;i++){
     html+='<div class="afield" id="f-ace'+i+'"><label>Line '+(i+1)+'</label>'+
       '<input id="a-ace'+i+'" autocomplete="off" spellcheck="false" '+
-      'placeholder="access-list 1 &hellip;"><div class="ahint" id="h-ace'+i+'"></div></div>';
+      'placeholder="e.g. access-list 1 permit 172.20.5.0 0.0.0.255"><div class="ahint" id="h-ace'+i+'"></div></div>';
   }
   html+='</div>';
 
