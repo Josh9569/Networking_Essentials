@@ -1868,71 +1868,119 @@ function scoreRound(reveal, ok, pts, html){
    times, and it is the one piece of ACL arithmetic people actually get
    wrong. Graded as typed answers because a wildcard mask has exactly one
    right form — this is the same .afield pattern the summaries topics use. */
-function acRandNet(){
-  return choice([10,172,192,192,192,209]) + '.' +
-    (Math.random()<0.5?168:ri(0,255)) + '.' + ri(0,255) + '.0';
+/* ═══ Wildcard cases ════════════════════════════════════════════════
+   One generator produces every "address + wildcard" question on this page.
+   wcCase() draws a random address and prefix length and works the whole
+   solution out from them — network, subnet mask, wildcard, first and last
+   address, count — so a drill never carries a list of pre-baked answers: it
+   asks for whichever of those fields it wants and prints the rest in its
+   explanation. Pure (no DOM, no page state), so any future task that needs
+   "an address, a wildcard, and the answer" starts here rather than rolling
+   its own. Constrain it with opts: {pfx} or {minPfx,maxPfx} for the block
+   size, {ipInt} to build the case around a given address. */
+function wcRandIp(){
+  const a=choice([10,172,192,192,203,198,209,64,100,156]);
+  const b=a===172?ri(16,31):a===192?168:ri(0,255);
+  return ((a<<24)|(b<<16)|(ri(0,255)<<8)|ri(1,254))>>>0;
+}
+function wcCase(opts){
+  opts=opts||{};
+  const pfx=opts.pfx!=null?opts.pfx:ri(opts.minPfx!=null?opts.minPfx:8, opts.maxPfx!=null?opts.maxPfx:30);
+  const ipInt=opts.ipInt!=null?opts.ipInt:wcRandIp();
+  const wildInt=(~maskInt(pfx))>>>0, netInt=netIntOf(ipInt,pfx);
+  return {pfx:pfx, hostBits:32-pfx, count:Math.pow(2,32-pfx),
+          ipInt:ipInt, ip:int2ip(ipInt),
+          netInt:netInt, net:int2ip(netInt),
+          mask:cidr2mask(pfx), wild:int2ip(wildInt), wildInt:wildInt,
+          first:int2ip(netInt), last:int2ip(wcLast(netInt,wildInt))};
 }
 function genWild(diff){
   if(diff==='easy'){
-    const pfx=choice([8,16,24,25,26,27,28,29,30]);
-    const net=int2ip(netIntOf(ip2int(acRandNet()),pfx));
-    return {kind:'easy', prompt:'Which wildcard mask matches every host on '+
-      '<span class="mono-inl">'+net+'/'+pfx+'</span>?',
-      fields:[{id:'wc', label:'Wildcard mask', answer:cidr2wild(pfx)}],
-      explain:'A wildcard mask is the inverse of the subnet mask. /'+pfx+' is '+
-        cidr2mask(pfx)+', and 255 minus each octet gives '+cidr2wild(pfx)+'.'};
+    const c=wcCase({minPfx:8, maxPfx:30});
+    return {kind:'easy', prompt:'Which wildcard mask matches every host on '+mono(c.net+'/'+c.pfx)+'?',
+      fields:[{id:'wc', label:'Wildcard mask', answer:c.wild}],
+      explain:'A wildcard mask is the inverse of the subnet mask. /'+c.pfx+' is '+c.mask+
+        ', and 255 minus each octet gives '+c.wild+'.'};
   }
   if(diff==='medium'){
-    const which=choice(['host','range','back']);
+    const which=choice(['host','range','back','mask']);
     if(which==='host'){
-      const ip=int2ip(netIntOf(ip2int(acRandNet()),24)+ri(2,250));
-      return {kind:'medium', prompt:'You need an ACE that matches <b>only</b> the single host '+
-        '<span class="mono-inl">'+ip+'</span>. Write the wildcard mask, and the keyword IOS lets you use instead.',
-        fields:[{id:'wc', label:'Wildcard mask', answer:'0.0.0.0'},
-                {id:'kw', label:'Keyword form', answer:'host '+ip}],
-        explain:'Every bit must match, so the wildcard is all zeros. '+
-          '<span class="mono-inl">host '+ip+'</span> means exactly the same thing and is what the lab asks you to write.'};
+      const c=wcCase({pfx:32});
+      return {kind:'medium', prompt:'You need an ACE that matches <b>only</b> the single host '+mono(c.ip)+
+        '. Write the wildcard mask, and the keyword IOS lets you use instead.',
+        fields:[{id:'wc', label:'Wildcard mask', answer:c.wild},
+                {id:'kw', label:'Keyword form', answer:'host '+c.ip}],
+        explain:'Every bit must match, so the wildcard is all zeros: '+c.ip+' 0.0.0.0. '+mono('host '+c.ip)+
+          ' means exactly the same thing and is what the lab asks you to write.'};
     }
     if(which==='range'){
-      const base=netIntOf(ip2int(acRandNet()),24);
-      const blk=choice([4,8,16]), start=base+choice([4,8,16,32,64]);
-      const wc=blk-1;
-      return {kind:'medium', prompt:'Reserved administrative addresses run from '+
-        '<span class="mono-inl">'+int2ip(start)+'</span> to <span class="mono-inl">'+int2ip(start+blk-1)+
-        '</span>. Which address and wildcard mask match exactly that range?',
-        fields:[{id:'ip', label:'Address', answer:int2ip(start)},
-                {id:'wc', label:'Wildcard mask', answer:'0.0.0.'+wc}],
-        explain:'That is '+blk+' consecutive addresses starting on a '+blk+'-address boundary, so the last '+
-          Math.log2(blk)+' bits are "don\'t care" — wildcard 0.0.0.'+wc+'.'};
+      const c=wcCase({minPfx:25, maxPfx:30});
+      return {kind:'medium', prompt:'Reserved administrative addresses run from '+mono(c.first)+' to '+mono(c.last)+
+        '. Which address and wildcard mask match exactly that range?',
+        fields:[{id:'ip', label:'Address', answer:c.first},
+                {id:'wc', label:'Wildcard mask', answer:c.wild}],
+        explain:'That is '+c.count+' consecutive addresses starting on a '+c.count+'-address boundary, so the last '+
+          c.hostBits+' bits are "don\'t care" — wildcard '+c.wild+', the same block as '+c.net+'/'+c.pfx+'.'};
     }
-    const pfx=choice([24,25,26,27,28,30]);
-    return {kind:'medium', prompt:'An ACE reads <span class="mono-inl">permit 172.16.8.0 '+cidr2wild(pfx)+
-      '</span>. What prefix length does that wildcard correspond to, and how many addresses does it match?',
-      fields:[{id:'pfx', label:'Prefix length', answer:String(pfx), affix:'/'},
-              {id:'n', label:'Addresses matched', answer:String(Math.pow(2,32-pfx))}],
-      explain:'Inverting '+cidr2wild(pfx)+' gives '+cidr2mask(pfx)+', which is /'+pfx+' — '+
-        Math.pow(2,32-pfx)+' addresses.'};
+    if(which==='back'){
+      const c=wcCase({minPfx:16, maxPfx:30});
+      return {kind:'medium', prompt:'An ACE reads '+mono('permit '+c.net+' '+c.wild)+
+        '. What prefix length does that wildcard correspond to, and how many addresses does it match?',
+        fields:[{id:'pfx', label:'Prefix length', answer:String(c.pfx), affix:'/'},
+                {id:'n', label:'Addresses matched', answer:String(c.count)}],
+        explain:'Inverting '+c.wild+' gives '+c.mask+', which is /'+c.pfx+' — '+c.count+' addresses, '+
+          c.first+' through '+c.last+'.'};
+    }
+    const c=wcCase({minPfx:8, maxPfx:30});
+    return {kind:'medium', prompt:'A network is configured with subnet mask '+mono(c.mask)+
+      '. Write the wildcard mask an ACE would use for it, and the prefix length.',
+      fields:[{id:'wc', label:'Wildcard mask', answer:c.wild},
+              {id:'pfx', label:'Prefix length', answer:String(c.pfx), affix:'/'}],
+      explain:c.mask+' has '+c.pfx+' network bits, so it is a /'+c.pfx+'. 255 minus each octet gives the wildcard '+c.wild+'.'};
   }
-  /* Hard: the two shorthands, and a range that is not a whole subnet. */
-  const style=choice(['any','odd']);
-  if(style==='any'){
-    return {kind:'hard', prompt:'Write the address and wildcard mask that <span class="mono-inl">any</span> is shorthand for, and the address and wildcard that <span class="mono-inl">host 10.1.1.1</span> is shorthand for.',
+  /* Hard: the two shorthands, a range that is not a whole subnet, a range
+     that crosses an octet boundary, and a count from a bare subnet mask. */
+  const which=choice(['short','sub','span','count']);
+  if(which==='short'){
+    const c=wcCase({pfx:32});
+    return {kind:'hard', prompt:'Write the address and wildcard mask that '+mono('any')+' is shorthand for, and the address and wildcard that '+
+      mono('host '+c.ip)+' is shorthand for.',
       fields:[{id:'a', label:'"any" as address + wildcard', answer:'0.0.0.0 255.255.255.255'},
-              {id:'h', label:'"host 10.1.1.1" as address + wildcard', answer:'10.1.1.1 0.0.0.0'}],
-      explain:'<span class="mono-inl">any</span> cares about no bits at all, so every bit is "don\'t care". '+
-        '<span class="mono-inl">host</span> cares about all 32, so none are.'};
+              {id:'h', label:'"host '+c.ip+'" as address + wildcard', answer:c.ip+' 0.0.0.0'}],
+      explain:mono('any')+' cares about no bits at all, so every bit is "don\'t care": 0.0.0.0 255.255.255.255. '+
+        mono('host')+' cares about all 32, so none are: '+c.ip+' 0.0.0.0.'};
   }
-  const base=netIntOf(ip2int(acRandNet()),24);
-  const blk=choice([2,4,8]), start=base+choice([16,32,64,128]);
+  if(which==='sub'){
+    const c=wcCase({minPfx:28, maxPfx:31});
+    return {kind:'hard',
+      prompt:'A policy must permit only '+mono(c.first)+' through '+mono(c.last)+', and nothing else on that subnet. '+
+        'Give the address, the wildcard mask, and the prefix length the pair is equivalent to.',
+      fields:[{id:'ip', label:'Address', answer:c.first},
+              {id:'wc', label:'Wildcard mask', answer:c.wild},
+              {id:'pfx', label:'Equivalent prefix', answer:String(c.pfx), affix:'/'}],
+      explain:c.count+' addresses from '+c.first+' means the low '+c.hostBits+' bits are "don\'t care" — wildcard '+c.wild+
+        ', which is the same as '+c.first+'/'+c.pfx+'.'};
+  }
+  if(which==='span'){
+    const c=wcCase({minPfx:17, maxPfx:23});
+    return {kind:'hard',
+      prompt:'One ACE has to cover every address from '+mono(c.first)+' to '+mono(c.last)+
+        '. Give the address, the wildcard mask, and the prefix length.',
+      fields:[{id:'ip', label:'Address', answer:c.first},
+              {id:'wc', label:'Wildcard mask', answer:c.wild},
+              {id:'pfx', label:'Prefix length', answer:String(c.pfx), affix:'/'}],
+      explain:'That range is '+c.count+' addresses, the block '+c.first+'/'+c.pfx+'. The wildcard frees the low '+c.hostBits+
+        ' bits, which spills past the last octet: '+c.wild+' (the inverse of '+c.mask+').'};
+  }
+  const c=wcCase({minPfx:12, maxPfx:28});
   return {kind:'hard',
-    prompt:'A policy must permit only <span class="mono-inl">'+int2ip(start)+'</span> through '+
-      '<span class="mono-inl">'+int2ip(start+blk-1)+'</span>, and nothing else on that subnet. '+
-      'Give the address, the wildcard mask, and the prefix length the pair is equivalent to.',
-    fields:[{id:'ip', label:'Address', answer:int2ip(start)},
-            {id:'wc', label:'Wildcard mask', answer:'0.0.0.'+(blk-1)},
-            {id:'pfx', label:'Equivalent prefix', answer:String(32-Math.log2(blk)), affix:'/'}],
-    explain:blk+' addresses means the low '+Math.log2(blk)+' bits are "don\'t care" — wildcard 0.0.0.'+
-      (blk-1)+', which is the same as a /'+(32-Math.log2(blk))+'.'};
+    prompt:'An interface is addressed '+mono(c.ip)+' with subnet mask '+mono(c.mask)+
+      '. Write the ACE address and wildcard that match its whole subnet, and how many addresses that is.',
+    fields:[{id:'ip', label:'Address', answer:c.net},
+            {id:'wc', label:'Wildcard mask', answer:c.wild},
+            {id:'n', label:'Addresses matched', answer:String(c.count)}],
+    explain:c.mask+' is /'+c.pfx+', so the subnet is '+c.net+' and the wildcard is '+c.wild+
+      '. '+c.hostBits+' host bits give 2^'+c.hostBits+' = '+c.count+' addresses.'};
 }
 function renderWild(body,qip){
   const d=state.data;
