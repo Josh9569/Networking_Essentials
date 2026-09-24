@@ -18,7 +18,7 @@
   <div class="hdr">
     <div>
       <div class="hdr-title">Access Control Trainer</div>
-      <div class="hdr-sub">Standard ACLs &mdash; wildcards, matching, placement &amp; a full lab in IPv4 or IPv6</div>
+      <div class="hdr-sub">Standard ACLs and NAT &mdash; wildcards, matching, placement, and two full labs</div>
     </div>
     <div class="hdr-right">
       <div class="chips">
@@ -38,6 +38,8 @@
     <button class="cbtn" id="tb-match" onclick="setTopic('match',this)">Which ACE Matches?</button>
     <button class="cbtn" id="tb-place" onclick="setTopic('place',this)">Placement</button>
     <button class="cbtn" id="tb-lab" onclick="setTopic('lab',this)">ACL Lab</button>
+    <button class="cbtn" id="tb-terms" onclick="setTopic('terms',this)">NAT Terms</button>
+    <button class="cbtn" id="tb-nat" onclick="setTopic('nat',this)">NAT Lab</button>
   </div>
 
   <div class="diff-row">
@@ -48,9 +50,10 @@
   </div>
 
   <div class="diff-row">
-    <span>Family:</span>
+    <span id="vb-lbl">Family:</span>
     <button class="cbtn on" id="vb-a" onclick="setVer(0,this)">IPv4</button>
     <button class="cbtn" id="vb-b" onclick="setVer(1,this)">IPv6</button>
+    <button class="cbtn" id="vb-c" onclick="setVer(2,this)" style="display:none">PAT</button>
   </div>
 
   <div class="qcard" id="qcard">
@@ -98,6 +101,10 @@
         <label class="opt-row" onclick="toggleTool('cmdref')">
           <span class="opt-row-label">ACL Command Reference</span>
           <div class="tog"><input type="checkbox" id="tog-cmdref" checked><span class="tog-track"></span></div>
+        </label>
+        <label class="opt-row" onclick="toggleTool('natref')">
+          <span class="opt-row-label">NAT Reference</span>
+          <div class="tog"><input type="checkbox" id="tog-natref" checked><span class="tog-track"></span></div>
         </label>
       </div>
     </div>
@@ -200,6 +207,48 @@
         </tbody>
       </table>
     </div>
+
+    <div class="tool-block" id="t-natref">
+      <div class="tool-block-title">NAT Reference</div>
+      <p class="tool-note">NAT rewrites the <strong>source address</strong> of a packet crossing from an <span class="mono-inl">ip nat inside</span> interface to an <span class="mono-inl">ip nat outside</span> one, and rewrites the destination of the reply coming back. It exists because the ISP has no route to your private addresses &mdash; a packet from <span class="mono-inl">192.168.1.20</span> gets to the Internet fine; it is the reply that has nowhere to go.</p>
+      <table class="ref-table">
+        <thead><tr><th>Term</th><th>Meaning</th><th>In the lab</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Inside local</strong></td><td>The inside host's address as the LAN sees it &mdash; set by the network administrator (or DHCP)</td><td class="cidr-col">192.168.1.20</td></tr>
+          <tr><td><strong>Inside global</strong></td><td>The inside host's address as the Internet sees it &mdash; assigned by the NAT router from its static map or pool</td><td class="cidr-col">209.165.200.225</td></tr>
+          <tr><td><strong>Outside global</strong></td><td>The far host's address as the Internet sees it</td><td class="cidr-col">192.31.7.1</td></tr>
+          <tr><td><strong>Outside local</strong></td><td>The far host's address as the LAN sees it &mdash; the same, unless the outside is being translated too</td><td class="cidr-col">192.31.7.1</td></tr>
+        </tbody>
+      </table>
+      <table class="ref-table">
+        <thead><tr><th></th><th>Static</th><th>Dynamic</th><th>PAT (overload)</th></tr></thead>
+        <tbody>
+          <tr><td>Mapping</td><td>One fixed private &harr; public pair</td><td>One public address per host, lent from a pool while in use</td><td>Many hosts share one public address, told apart by port</td></tr>
+          <tr><td>Reachable from outside</td><td>Yes &mdash; permanent, both directions</td><td>No</td><td>No</td></tr>
+          <tr><td>Runs out</td><td>Never</td><td>When the pool is empty &mdash; the next host is dropped</td><td>When the first address runs out of ports; then it moves to the next</td></tr>
+          <tr><td>Used for</td><td>Servers that must be reached from the Internet</td><td>Rare in practice</td><td>Almost every home and office router</td></tr>
+        </tbody>
+      </table>
+      <table class="ref-table">
+        <thead><tr><th>Command</th><th>Mode</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td class="mono-inl">ip address 209.165.201.18 255.255.255.252</td><td>config-if</td><td>Address an interface. <span class="mono-inl">no shutdown</span> brings a physical one up</td></tr>
+          <tr><td class="mono-inl">ip route 0.0.0.0 0.0.0.0 209.165.201.17</td><td>config</td><td>Gateway's default route to the ISP</td></tr>
+          <tr><td class="mono-inl">ip route 209.165.200.224 255.255.255.224 209.165.201.18</td><td>config</td><td>The ISP's route to the company's public block &mdash; it points at Gateway, because the block is not on any interface</td></tr>
+          <tr><td class="mono-inl">ip nat inside</td><td>config-if</td><td>This interface faces the private network</td></tr>
+          <tr><td class="mono-inl">ip nat outside</td><td>config-if</td><td>This interface faces the ISP. Translation only happens between an inside and an outside interface</td></tr>
+          <tr><td class="mono-inl">ip nat inside source static 192.168.1.20 209.165.200.225</td><td>config</td><td>Static NAT: inside local first, then inside global</td></tr>
+          <tr><td class="mono-inl">access-list 1 permit 192.168.1.0 0.0.0.255</td><td>config</td><td>Which inside addresses get translated. A standard ACL &mdash; NAT only looks at the source</td></tr>
+          <tr><td class="mono-inl">ip nat pool NAT_POOL 209.165.200.242 209.165.200.254 netmask 255.255.255.224</td><td>config</td><td>The public addresses to lend out, with the netmask of the block they sit in. The name is case-sensitive</td></tr>
+          <tr><td class="mono-inl">ip nat inside source list 1 pool NAT_POOL</td><td>config</td><td>Dynamic NAT: bind the list to the pool</td></tr>
+          <tr><td class="mono-inl">ip nat inside source list 1 pool NAT_POOL overload</td><td>config</td><td>PAT with a pool: every host shares the first address, by port</td></tr>
+          <tr><td class="mono-inl">show ip nat translations</td><td>exec</td><td>The translation table. Dynamic and PAT entries only appear once traffic has made them</td></tr>
+          <tr><td class="mono-inl">show ip nat statistics</td><td>exec</td><td>Which interfaces are inside and outside, hits and misses, and pool usage</td></tr>
+          <tr><td class="mono-inl">clear ip nat translation *</td><td>exec</td><td>Drop every dynamic translation and hand the pool addresses back</td></tr>
+        </tbody>
+      </table>
+      <p class="tool-note">ICMP has no ports, so a translation shows the ping's identifier in the port position. SSH is tcp to well-known port 22. The type buttons above pick which NAT the round is built for; there is no IPv6 in this lab, because IPv6 was designed so that every host has a public address and NAT is not needed.</p>
+    </div>
   </div>
 
 </div>
@@ -285,11 +334,11 @@ function acNet(key,pfx){ return acFam===6 ? ac6Net(key,pfx) : netIntOf(key,pfx);
 function acFmt(key){ return acFam===6 ? ac6Fmt(key) : int2ip(key); }
 function acValid(str){ return acKey(str)!==null; }
 function acCanon(str){ const k=acKey(str); return k===null ? null : acFmt(k); }
-const TOPICS=['wild','range','match','place','lab'];
+const TOPICS=['wild','range','match','place','lab','terms','nat'];
 const TOPIC_LABEL={wild:'Wildcard Masks', range:'Wildcard Ranges', match:'Which ACE Matches?',
-                   place:'ACL Placement', lab:'ACL Lab'};
+                   place:'ACL Placement', lab:'ACL Lab', terms:'NAT Terms', nat:'NAT Lab'};
 const POINTS={easy:3, medium:4, hard:6};
-const TOPIC_REF={wild:'wcref', range:'wcref', match:'aclref', place:'aclref', lab:'cmdref'};
+const TOPIC_REF={wild:'wcref', range:'wcref', match:'aclref', place:'aclref', lab:'cmdref', terms:'natref', nat:'natref'};
 
 /* The Version row is the address family, and it is LIVE on the lab: it
    picks which family the round is built in, the way the RIP lab's row picks
@@ -297,14 +346,26 @@ const TOPIC_REF={wild:'wcref', range:'wcref', match:'aclref', place:'aclref', la
    not have, so the row is greyed out there with the labels still showing —
    the same treatment OSPF Cost gives a choice that would change nothing. */
 const VERSIONS={
-  wild:{opts:[], labels:['IPv4','IPv6'], note:'wildcards are an IPv4 idea'},
-  range:{opts:[], labels:['IPv4','IPv6'], note:'wildcards are an IPv4 idea'},
-  match:{opts:[], labels:['IPv4','IPv6'], note:'wildcards are an IPv4 idea'},
-  place:{opts:[], labels:['IPv4','IPv6'], note:'wildcards are an IPv4 idea'},
-  lab:{opts:['4','6'], labels:['IPv4','IPv6'], note:'the same lab in either family'}
+  wild:{row:'Family', opts:[], labels:['IPv4','IPv6'], note:'wildcards are an IPv4 idea'},
+  range:{row:'Family', opts:[], labels:['IPv4','IPv6'], note:'wildcards are an IPv4 idea'},
+  match:{row:'Family', opts:[], labels:['IPv4','IPv6'], note:'wildcards are an IPv4 idea'},
+  place:{row:'Family', opts:[], labels:['IPv4','IPv6'], note:'wildcards are an IPv4 idea'},
+  lab:{row:'Family', opts:['4','6'], labels:['IPv4','IPv6'], note:'the same lab in either family'},
+  /* On the NAT topics the row is the NAT type. Three buttons; the third is
+     hidden on every other topic. */
+  terms:{row:'Type', opts:[], labels:['Static','Dynamic','PAT'], note:'the terms are the same for all three'},
+  nat:{row:'Type', opts:['static','dynamic','pat'], labels:['Static','Dynamic','PAT'], note:'which NAT the round is built for'}
 };
+/* Each topic remembers its own choice on the row, so switching from the
+   IPv6 ACL lab to the NAT lab and back does not lose either. */
+function verOf(mode){
+  const cfg=VERSIONS[mode];
+  if(!cfg||!cfg.opts.length) return null;
+  const v=state.vers[mode];
+  return cfg.opts.indexOf(v)>=0 ? v : cfg.opts[0];
+}
 
-let state={ topic:'rand', diff:'easy', ver:'4', score:0, round:1, streak:0,
+let state={ topic:'rand', diff:'easy', ver:'4', vers:{}, score:0, round:1, streak:0,
             done:false, mode:null, data:null, lastTopic:null };
 
 /* ═══ ACL core ═════════════════════════════════════════════════════
@@ -454,7 +515,7 @@ function acById(id){ return acDevices.find(function(d){ return d.id===id; }); }
 
 function acAddRouter(name,x,y){
   const d={id:acNid++, type:'router', name:name, x:x, y:y,
-    ifaces:[], acls:{}, vtyAcl:null, routes:[],
+    ifaces:[], acls:{}, vtyAcl:null, routes:[], nat:natNew(),
     cm:'exec', ci:null, cl:null, log:[], hist:[], hi:0};
   acDevices.push(d); return d;
 }
@@ -469,12 +530,19 @@ function acAddIface(r, name, ip, pfx, opts){
     parent:opts.parent||null,       /* the physical port it rides on */
     loopback:!!opts.loopback,
     serial:!!opts.serial,
+    nat:null,                       /* 'inside' | 'outside' for the NAT lab */
     aclIn:null, aclOut:null};
   r.ifaces.push(f); return f;
 }
+/* Any spelling IOS would take: "g0/1", "Gi0/1", "GigabitEthernet 0/1". */
+function acIfNorm(name){
+  return String(name).toLowerCase().replace(/\s+/g,'')
+    .replace(/^(gigabitethernet|gig|gi|g)(?=\d)/,'g').replace(/^(fastethernet|fa|f)(?=\d)/,'f')
+    .replace(/^(serial|se|s)(?=\d)/,'s').replace(/^(loopback|lo)(?=\d)/,'lo');
+}
 function acIface(r, name){
-  const n=String(name).toLowerCase();
-  return r.ifaces.find(function(f){ return f.name.toLowerCase()===n; })||null;
+  const n=acIfNorm(name);
+  return r.ifaces.find(function(f){ return acIfNorm(f.name)===n; })||null;
 }
 function acAddSwitch(name,x,y){
   const d={id:acNid++, type:'switch', name:name, x:x, y:y, ports:[]};
@@ -543,9 +611,19 @@ function acRoutingTable(r){
     t.push({code:'C', net:acNet(acKey(f.ip),f.pfx), prefix:f.pfx,
             iface:f.name, nextHop:null, metric:0, _if:f});
   });
+  /* A route by next hop is only installed while that next hop sits on a
+     connected network that is up; by exit interface, while that interface
+     is. Resolved here, every time, so the order routes and addresses are
+     typed in does not matter. */
   r.routes.forEach(function(rt){
-    t.push({code:rt.code, net:rt.net, prefix:rt.prefix, iface:rt.viaIface,
-            nextHop:rt.nextHop, metric:rt.metric, _if:acIface(r,rt.viaIface)});
+    let f=rt.viaIface?acIface(r,rt.viaIface):null;
+    if(!rt.viaIface&&rt.nextHop){
+      const k=acKey(rt.nextHop);
+      f=r.ifaces.find(function(x){ return x.up&&x.ip&&x.pfx!=null&&!x.loopback&&acNet(k,x.pfx)===acNet(acKey(x.ip),x.pfx); })||null;
+    }
+    if(!f||!f.up||!f.ip) return;
+    t.push({code:rt.code, net:rt.net, prefix:rt.prefix, iface:f.name,
+            nextHop:rt.nextHop, metric:rt.metric, _if:f});
   });
   return t;
 }
@@ -580,9 +658,14 @@ function acBlockReason(b){
 }
 /* start: {router, iface} the packet is entering the network from. For a PC
    that is its gateway interface; for a router-sourced ping it is the router
-   itself with no ingress interface. */
-function acForward(start, srcKey, dstStr, count){
-  const dstKey=acKey(dstStr);
+   itself with no ingress interface. pkt carries the protocol and ports —
+   NAT needs them, an ACL does not. Returns where the packet was delivered
+   ({at, dst}) and what it looked like when it got there ({src, sport}),
+   because after NAT those are not what it started with and the reply has
+   to be addressed to the translated form. */
+function acForward(start, srcKey, dstKey, count, pkt){
+  pkt=pkt||{proto:'icmp',sport:1,dport:1};
+  let sport=pkt.sport, dport=pkt.dport;
   let cur=start.router, ingress=start.iface||null;
   /* A packet the router generates itself is not filtered by an outbound ACL
      on the interface it leaves by — only transit traffic is. That is real
@@ -590,25 +673,39 @@ function acForward(start, srcKey, dstStr, count){
      interface whose own outbound list would have denied the source. */
   let originated = !start.iface;
   const visited=new Set();
-  for(let hop=0; hop<10; hop++){
+  const dstDisp=function(){ return acFmt(dstKey); };
+  for(let hop=0; hop<12; hop++){
     if(visited.has(cur.id)) return {ok:false, reason:'Routing loop at '+cur.name};
     visited.add(cur.id);
 
     if(ingress){
       const b=acCheckAcl(cur, ingress, 'in', srcKey, count, dstKey);
       if(b){ b.srcKey=srcKey; return {ok:false, blocked:b, reason:acBlockReason(b)}; }
+      /* outside → inside: an inside global on the way in becomes the inside
+         local it belongs to, before the router looks up where to send it. */
+      if(ingress.nat==='outside' && natEnabled(cur)){
+        const t=natIn(cur, {dst:dstKey, dport:dport, proto:pkt.proto, scratch:pkt.scratch});
+        if(t){ dstKey=t.dst; dport=t.dport; }
+      }
     }
     /* Reached the destination itself? A packet addressed to one of this
        router's own interfaces is delivered, not forwarded — so an outbound
        ACL never applies to it. */
     const self=cur.ifaces.find(function(f){ return f.up&&f.ip&&acKey(f.ip)===dstKey; });
-    if(self) return {ok:true};
+    if(self) return {ok:true, at:{router:cur, iface:null}, dst:dstKey, dport:dport, src:srcKey, sport:sport};
 
     const win=acBestMatch(dstKey, acRoutingTable(cur));
-    if(!win) return {ok:false, reason:cur.name+' has no route to '+dstStr};
+    if(!win) return {ok:false, reason:cur.name+' has no route to '+dstDisp()};
     const out=win._if;
-    if(!out) return {ok:false, reason:cur.name+"'s route to "+dstStr+' points at an interface that is not up'};
+    if(!out) return {ok:false, reason:cur.name+"'s route to "+dstDisp()+' points at an interface that is not up'};
 
+    /* inside → outside: the source is translated after routing and before
+       the outbound ACL, which is the order IOS does it in. */
+    if(ingress && ingress.nat==='inside' && out.nat==='outside' && natEnabled(cur)){
+      const t=natOut(cur, {src:srcKey, sport:sport, proto:pkt.proto, dst:dstKey, dport:dport, scratch:pkt.scratch}, count);
+      if(t&&t.drop) return {ok:false, natDrop:true, reason:t.reason};
+      if(t){ srcKey=t.src; sport=t.sport; }
+    }
     if(!originated){
       const b=acCheckAcl(cur, out, 'out', srcKey, count, dstKey);
       if(b){ b.srcKey=srcKey; return {ok:false, blocked:b, reason:acBlockReason(b)}; }
@@ -616,26 +713,45 @@ function acForward(start, srcKey, dstStr, count){
     originated=false;
 
     if(win.code==='C'){
+      /* A serial link has exactly one thing on the far end — the other
+         router — so a packet routed onto it arrives there, whether or not
+         the address is that router's own. */
+      if(out.serial){
+        if(ingress===out) return {ok:false, reason:'Nothing answers to '+dstDisp()+' on the '+out.name+' link'};
+        const peer=acSerialPeer(cur,out);
+        if(peer){ ingress=peer.iface; cur=peer.router; continue; }
+      }
       /* Last hop. A modelled PC has to actually sit on this segment; any
          other address is accepted as long as it is a valid host address
          inside the subnet, because Part 5 has you move a host to an
          arbitrary address and the question being asked is about filtering,
          not about which addresses happen to be occupied. */
-      const pc=acPcWithIp(dstStr);
+      const done={ok:true, at:{router:cur, iface:out}, dst:dstKey, dport:dport, src:srcKey, sport:sport};
+      const pc=acPcWithIp(dstDisp());
       if(pc){
         const g=acGatewayFor(pc);
-        return (g&&g.iface===out) ? {ok:true}
-          : {ok:false, reason:dstStr+' is not on the segment behind '+cur.name+' '+out.name};
+        return (g&&g.iface===out) ? done
+          : {ok:false, reason:dstDisp()+' is not on the segment behind '+cur.name+' '+out.name};
       }
-      if(out.loopback) return acKey(out.ip)===dstKey ? {ok:true}
-        : {ok:false, reason:'Nothing answers to '+dstStr+' behind '+out.name};
+      if(out.loopback) return acKey(out.ip)===dstKey ? done
+        : {ok:false, reason:'Nothing answers to '+dstDisp()+' behind '+out.name};
+      /* The NAT lab has every host modelled, so an address nobody owns is
+         nobody's — it is the ACL lab that tests arbitrary host addresses. */
+      if(acLabKind==='nat') return {ok:false, reason:'Nothing answers to '+dstDisp()+' on '+cur.name+' '+out.name};
       const net=acNet(acKey(out.ip),out.pfx);
       /* The subnet address is nobody's in either family; the all-ones
          broadcast is an IPv4 idea only — IPv6 has no broadcast. */
-      if(dstKey===net) return {ok:false, reason:dstStr+' is the network address, not a host'};
+      if(dstKey===net) return {ok:false, reason:dstDisp()+' is the network address, not a host'};
       if(acFam===4 && dstKey===bcastIntOf(net,out.pfx))
-        return {ok:false, reason:dstStr+' is the broadcast address, not a host'};
-      return {ok:true};
+        return {ok:false, reason:dstDisp()+' is the broadcast address, not a host'};
+      return done;
+    }
+    /* A route by exit interface alone has no next hop to look up; on a
+       serial link the far end is the only thing there is. */
+    if(!win.nextHop){
+      const peer=out.serial?acSerialPeer(cur,out):null;
+      if(!peer) return {ok:false, reason:cur.name+"'s route to "+dstDisp()+' points out '+out.name+', but nothing answers on the far side'};
+      ingress=peer.iface; cur=peer.router; continue;
     }
     const nh=acIfaceWithIp(win.nextHop);
     if(!nh) return {ok:false, reason:'Next hop '+win.nextHop+' is not a live interface'};
@@ -644,27 +760,56 @@ function acForward(start, srcKey, dstStr, count){
   }
   return {ok:false, reason:'Too many hops'};
 }
+/* The router interface at the other end of a serial link. */
+function acSerialPeer(r, f){
+  const net=acNet(acKey(f.ip),f.pfx);
+  for(const d of acDevices){
+    if(d.type!=='router'||d===r) continue;
+    const g=d.ifaces.find(function(x){ return x.serial&&x.up&&x.ip&&acNet(acKey(x.ip),x.pfx)===net; });
+    if(g) return {router:d, iface:g};
+  }
+  return null;
+}
+let acIcmpId=0;
 /* A ping is only successful if the echo REPLY gets home too, which is what
    makes "PC-A cannot ping PC-B" fall out of an ACL that only filters one
-   direction. */
-function acPing(srcIp, dstStr, count){
+   direction — and what makes a private address with no NAT fail: the
+   request arrives, the reply has no route. The reply starts from wherever
+   the request was delivered, addressed to whatever the request looked like
+   when it got there. */
+function acPing(srcIp, dstStr, count, pkt){
   if(!acValid(srcIp)||!acValid(dstStr)) return {ok:false, reason:'Invalid address'};
   /* Where a packet from this address enters the network. A router interface
      address means the router originated it; anything else — a modelled PC or
      a bare test address — is a host on whichever connected subnet holds it. */
-  const startFor=function(ip){
-    const hit=acIfaceWithIp(ip);
-    return hit ? {router:hit.router, iface:null} : acSubnetOwner(ip);
-  };
-  const a=startFor(srcIp), b=startFor(dstStr);
+  const hit=acIfaceWithIp(srcIp), srcPc=acPcWithIp(srcIp);
+  if(acLabKind==='nat' && !hit && !srcPc) return {ok:false, reason:'Nothing on the network has address '+srcIp+' — is that PC addressed?'};
+  if(srcPc){ const x=acPcProblem(srcPc); if(x) return {ok:false, reason:x}; }
+  const a = hit ? {router:hit.router, iface:null} : acSubnetOwner(srcIp);
   if(!a) return {ok:false, reason:srcIp+' is not a host or interface on this network'};
-  const there=acForward(a, acKey(srcIp), dstStr, count);
+  const id = pkt&&pkt.sport!=null ? pkt.sport : (count ? ++acIcmpId : 1);
+  const req={proto:(pkt&&pkt.proto)||'icmp', sport:id, dport:pkt&&pkt.dport!=null?pkt.dport:id, scratch:count?null:[]};
+  const there=acForward(a, acKey(srcIp), acKey(dstStr), count, req);
   if(!there.ok) return there;
-  if(!b) return {ok:false, reason:'Nothing answers to '+dstStr};
-  const back=acForward(b, acKey(dstStr), srcIp, count);
+  const dstPc=acPcWithIp(acFmt(there.dst));
+  if(dstPc){ const x=acPcProblem(dstPc); if(x) return {ok:false, reason:'The request arrived, but '+dstPc.name+' cannot reply: '+x}; }
+  const rep={proto:req.proto, sport:there.dport, dport:there.sport, scratch:req.scratch};
+  const back=acForward(there.at, there.dst, there.src, count, rep);
   if(!back.ok) return {ok:false, blocked:back.blocked,
     reason:'The request arrived, but the reply could not get back: '+back.reason};
   return {ok:true};
+}
+/* A host only gets off its LAN through a default gateway that is really
+   the router on its subnet — the thing a PC's settings exist to say. */
+function acPcProblem(pc){
+  if(!pc.ip) return pc.name+' has no IP address';
+  if(pc.pfx==null) return pc.name+' has no subnet mask';
+  const own=acSubnetOwner(pc.ip);
+  if(!own) return 'No router interface is up on '+pc.name+"'s subnet";
+  if(!pc.gw) return pc.name+' has no default gateway';
+  if(acKey(pc.gw)!==acKey(own.iface.ip)) return pc.name+"'s default gateway is "+pc.gw+', but the router on its subnet is '+own.iface.ip;
+  if(pc.pfx!==own.iface.pfx) return pc.name+"'s mask is a /"+pc.pfx+' but the LAN is a /'+own.iface.pfx;
+  return null;
 }
 /* SSH to a router: it has to be routable, and then the vty access-class
    decides. Modelled as reachability plus the ACL — the page is not testing
@@ -688,10 +833,12 @@ function acSsh(srcIp, routerIp, count){
 /* ═══ CLI ══════════════════════════════════════════════════════════ */
 const AC_KW={
   enable:{}, configure:{terminal:{}}, end:{}, exit:{}, clear:{},
-  show:{ip:{route:{}, interface:{}}, ipv6:{'access-list':{}, interface:{}, route:{}},
+  show:{ip:{route:{}, interface:{}, nat:{translations:{}, statistics:{}}}, ipv6:{'access-list':{}, interface:{}, route:{}},
         'access-lists':{}, 'access-list':{}, run:{}},
   interface:{},
-  ip:{'access-list':{standard:{}}, 'access-group':{}},
+  shutdown:{}, clock:{rate:{}},
+  ip:{'access-list':{standard:{}}, 'access-group':{}, address:{}, route:{},
+      nat:{inside:{source:{static:{}, list:{}}}, outside:{}, pool:{}}},
   ipv6:{'access-list':{}, 'traffic-filter':{}, 'access-class':{}},
   'access-list':{},
   line:{vty:{}},
@@ -700,7 +847,7 @@ const AC_KW={
   deny:{host:{}, any:{}, ipv6:{host:{}, any:{}}},
   sequence:{},
   ping:{},
-  no:{ip:{'access-list':{standard:{}}, 'access-group':{}},
+  no:{shutdown:{}, ip:{'access-list':{standard:{}}, 'access-group':{}, address:{}, route:{}, nat:{inside:{}, outside:{}, pool:{}}},
       ipv6:{'access-list':{}, 'traffic-filter':{}, 'access-class':{}},
       'access-list':{}, 'access-class':{}, sequence:{}}
 };
@@ -768,6 +915,11 @@ function acCli(d, line){
   if(M(w[0],'configure')||w[0]==='conf'){ d.cm='conf'; d.ci=null; return ''; }
   if(M(w[0],'end')){ d.cm='exec'; d.ci=null; return ''; }
   if(M(w[0],'exit')){ d.cm = d.cm==='exec' ? 'exec' : 'conf'; d.ci=null; return ''; }
+  if(M(w[0],'clear')&&M(w[1],'ip')&&w[2]==='nat'){
+    if(acLabKind!=='nat') return '% NAT is not part of this lab — see the NAT Lab topic';
+    if(w[3]!=='translation'||w[4]!=='*') return '% Usage: clear ip nat translation *';
+    natClear(d); return '';
+  }
   if(w[0]==='cls'||M(w[0],'clear')){ d.log.length=0; return ''; }
 
   /* ── show ── */
@@ -776,6 +928,12 @@ function acCli(d, line){
     const ipw = w[1]&&(w[1]==='ipv6'||M(w[1],'ip'));
     if(ipw&&w[2]&&M(w[2],'access-list')) return acShowAcls(d);
     if(ipw&&w[2]&&M(w[2],'route')) return acShowRoute(d);
+    if(ipw&&w[2]==='nat'){
+      if(acLabKind!=='nat') return '% NAT is not part of this lab — see the NAT Lab topic';
+      if(w[3]&&M(w[3],'translations')) return natShowTranslations(d);
+      if(w[3]&&M(w[3],'statistics')) return natShowStats(d);
+      return '% Try "show ip nat translations" or "show ip nat statistics"';
+    }
     if(ipw&&w[2]&&M(w[2],'interface')){
       if(!raw[3]) return acShowIfBrief(d);
       const f=acIface(d,raw[3]);
@@ -819,6 +977,9 @@ function acCli(d, line){
   }
   if(M(w[0],'line')&&w[1]&&M(w[1],'vty')){ d.cm='line'; return ''; }
 
+  /* ── addressing, shutdown and static routes: the NAT lab's Hard tier ── */
+  if(acLabKind==='nat'){ const b=natBaseCli(d, w, raw); if(b!==null) return b; }
+
   /* ── family guard: the other family's commands say so rather than
      half-working. A dual-stack router would accept them, but they would
      filter traffic this round never sends. ── */
@@ -828,6 +989,12 @@ function acCli(d, line){
      (w[0]==='no'&&(w[1]==='access-list'||(M(w[1],'ip')&&w[2]==='access-list'))))) return V4_ONLY;
   if(acFam===4 && w[0]==='ipv6') return V6_ONLY;
   if(acFam===4 && w[0]==='no' && w[1]==='ipv6') return V6_ONLY;
+
+  /* ── NAT: everything starting "ip nat", in interface or global config ── */
+  if((M(w[0],'ip')&&w[1]==='nat') || (w[0]==='no'&&M(w[1],'ip')&&w[2]==='nat')){
+    if(acLabKind!=='nat') return '% NAT is not part of this lab — see the NAT Lab topic';
+    return natCli(d, w, raw);
+  }
 
   /* ── IPv6 named ACL, global config ── */
   if(w[0]==='ipv6'&&w[1]==='access-list'){
@@ -985,8 +1152,8 @@ function acShowIface(d,f){
       '  Inbound access list '+(f.aclIn||'not set'),
       '  Outgoing access list '+(f.aclOut||'not set')].join('\n');
   }
-  return [f.name+' is up, line protocol is up',
-    '  Internet address is '+f.ip+'/'+f.pfx,
+  return [f.name+(f.up?' is up, line protocol is up':' is administratively down, line protocol is down'),
+    f.ip?'  Internet address is '+f.ip+'/'+f.pfx:'  Internet protocol processing disabled',
     '  Broadcast address is 255.255.255.255',
     '  MTU is 1500 bytes',
     '  Helper address is not set',
@@ -1008,18 +1175,23 @@ function acShowIfBrief(d){
   const lines=['Interface                  IP-Address      Status                Protocol'];
   d.ifaces.forEach(function(f){
     lines.push((f.name+'                           ').slice(0,27)+
-      ((f.ip||'unassigned')+'                ').slice(0,16)+'up                    up');
+      ((f.ip||'unassigned')+'                ').slice(0,16)+
+      (f.up?'up                    up':'administratively down down'));
   });
   return lines.join('\n');
 }
 function acShowRoute(d){
   const t=acRoutingTable(d);
-  const lines=['Codes: C - connected, R - RIP',''];
+  const lines=['Codes: C - connected, S - static, R - RIP, * - candidate default',''];
+  const dflt=t.find(function(e){ return e.prefix===0; });
+  if(acFam===4) lines.push(dflt ? 'Gateway of last resort is '+(dflt.nextHop||'0.0.0.0')+' to network 0.0.0.0' : 'Gateway of last resort is not set', '');
   /* Keys compare with < in both families: Numbers numerically, and the
      zero-padded hex strings lexically, which is the same order. */
   t.slice().sort(function(a,b){ return a.net<b.net?-1:a.net>b.net?1:a.prefix-b.prefix; }).forEach(function(e){
     lines.push(e.code==='C'
       ? 'C    '+acFmt(e.net)+'/'+e.prefix+' is directly connected, '+e.iface
+      : e.code==='S'
+      ? (e.prefix===0?'S*   ':'S    ')+acFmt(e.net)+'/'+e.prefix+(e.nextHop?' [1/0] via '+e.nextHop:' is directly connected, '+e.iface)
       : 'R    '+acFmt(e.net)+'/'+e.prefix+' [120/'+e.metric+'] via '+e.nextHop+', '+e.iface);
   });
   return lines.join('\n');
@@ -1029,12 +1201,20 @@ function acShowRun(d){
   d.ifaces.forEach(function(f){
     lines.push('interface '+f.name);
     if(f.vlan) lines.push(' encapsulation dot1Q '+f.vlan);
-    lines.push(v6 ? ' ipv6 address '+f.ip.toUpperCase()+'/'+f.pfx
-                  : ' ip address '+f.ip+' '+cidr2mask(f.pfx));
+    if(!f.ip) lines.push(' no ip address');
+    else lines.push(v6 ? ' ipv6 address '+f.ip.toUpperCase()+'/'+f.pfx
+                       : ' ip address '+f.ip+' '+cidr2mask(f.pfx));
+    if(!f.up) lines.push(' shutdown');
     if(f.aclIn)  lines.push(v6 ? ' ipv6 traffic-filter '+f.aclIn+' in'   : ' ip access-group '+f.aclIn+' in');
     if(f.aclOut) lines.push(v6 ? ' ipv6 traffic-filter '+f.aclOut+' out' : ' ip access-group '+f.aclOut+' out');
+    if(f.nat) lines.push(' ip nat '+f.nat);
     lines.push('!');
   });
+  const statics=d.routes.filter(function(rt){ return rt.code==='S'; });
+  statics.forEach(function(rt){ lines.push('ip route '+int2ip(rt.net)+' '+cidr2mask(rt.prefix)+' '+(rt.nextHop||rt.viaIface)); });
+  if(statics.length) lines.push('!');
+  const natLines=natRunLines(d);
+  if(natLines.length){ natLines.forEach(function(l){ lines.push(l); }); lines.push('!'); }
   Object.keys(d.acls).forEach(function(n){
     const acl=d.acls[n];
     if(acl.fam===6){
@@ -1449,8 +1629,879 @@ function genAclLabHard(){
 /* The Version row picks the family the round is BUILT in, the same way the
    RIP lab's picks the RIP version — not a display option. */
 function genAclLab(diff){
-  acFam = state.ver==='6' ? 6 : 4;
+  acFam = state.ver==='6' ? 6 : 4; acLabKind='acl';
   return diff==='easy' ? genAclLabEasy() : diff==='medium' ? genAclLabMedium() : genAclLabHard();
+}
+
+/* ═══ NAT ══════════════════════════════════════════════════════════
+   The second lab on this page, and the reason the page is named for the
+   area rather than for ACLs: on IOS a NAT rule IS an ACL ("ip nat inside
+   source list 1 …"), so the rule evaluates through the same aclEvaluate the
+   filtering does.
+
+   It follows the course's two NAT labs: Lab 10A (static, then dynamic NAT)
+   and Lab 10B (NAT pool overload — PAT). Same topology in both: a LAN behind
+   Gateway, a /30 serial link to ISP, and the Internet simulated by ISP's
+   Lo0, 192.31.7.1. The company's public block is NOT on any interface — it
+   is 209.165.200.224/27 (10A) or /29 (10B), and ISP reaches it through a
+   static route pointing at Gateway. ISP has no route to 192.168.1.0/24, and
+   never will: an untranslated ping arrives and its reply has nowhere to go,
+   so NAT is what makes it work. Nothing special-cases that.
+
+   The Type row is the lab's own split — Static | Dynamic | PAT — and
+   difficulty is how much is done for you. Easy and Medium arrive addressed
+   and routed and jump straight to NAT: Easy spells out every value, Medium
+   gives the scenario and makes you work them out, as the lab does. Hard
+   arrives bare: every interface, every PC and both routes are yours before
+   NAT can do anything. The basic router settings the labs open with
+   (hostname, passwords, banner, SSH) are left out — they are not NAT. */
+let acLabKind='acl';   /* 'acl' or 'nat' — which lab the current round is */
+const NAT_PLAN={
+  lanNet:'192.168.1.0', lanWc:'0.0.0.255', lanPfx:24, lanMask:'255.255.255.0',
+  gw_lan:'192.168.1.1', gw_wan:'209.165.201.18', isp_wan:'209.165.201.17',
+  wanPfx:30, wanMask:'255.255.255.252',
+  lo:'192.31.7.1', loPfx:32, loMask:'255.255.255.255',
+  pcA:'192.168.1.20', pcB:'192.168.1.21', pcC:'192.168.1.22',
+  pubNet:'209.165.200.224', pool:'NAT_POOL',
+  /* Lab 10A: a /27, split into a static range and a dynamic one. */
+  a:{pubPfx:27, pubMask:'255.255.255.224', staticG:'209.165.200.225', staticLast:'209.165.200.241',
+     poolFirst:'209.165.200.242', poolLast:'209.165.200.254'},
+  /* Lab 10B: a /29 — six usable addresses, all in the pool. */
+  b:{pubPfx:29, pubMask:'255.255.255.248', poolFirst:'209.165.200.225', poolLast:'209.165.200.230'}
+};
+
+/* bare: the Hard tier — no addresses anywhere, interfaces shut, no routes. */
+function natBuildTopology(kind, bare){
+  acReset();
+  const P=NAT_PLAN, pat=kind==='pat', pub=pat?P.b:P.a;
+  const v=function(x){ return bare?'':x; };
+  const gw=acAddRouter('Gateway',150,56), isp=acAddRouter('ISP',540,60);
+  const s1=acAddSwitch('S1',70,192);
+  const list=[['PC-A',P.pcA],['PC-B',P.pcB]].concat(pat?[['PC-C',P.pcC]]:[]);
+  const pcs=list.map(function(p,i){ return acAddPC(p[0], 20+i*150, 336, v(p[1]), bare?null:P.lanPfx, v(P.gw_lan)); });
+  [[gw,'G0/1',P.gw_lan,P.lanPfx,{}],
+   [gw,'S0/0/1',P.gw_wan,P.wanPfx,{serial:true}],
+   [isp,'S0/0/0',P.isp_wan,P.wanPfx,{serial:true}],
+   [isp,'Lo0',P.lo,P.loPfx,{loopback:true}]].forEach(function(x){
+    const f=acAddIface(x[0], x[1], v(x[2]), bare?null:x[3], x[4]);
+    /* A loopback is up the moment it exists; a physical port starts shut. */
+    f.up = !bare || f.loopback;
+  });
+  acCable(gw,isp,{serial:true,aLabel:'S0/0/1',bLabel:'S0/0/0'});
+  acCable(gw,s1,{aLabel:'G0/1',bLabel:'F0/5'});
+  pcs.forEach(function(pc,i){ acCable(s1,pc,{aLabel:'F0/'+(6+i)}); });
+  if(!bare){
+    acAddStatic(gw,'0.0.0.0',0,P.isp_wan,null);
+    acAddStatic(isp,P.pubNet,pub.pubPfx,P.gw_wan,null);
+  }
+  const t={gw:gw, isp:isp, s1:s1, pcs:pcs, pcA:pcs[0], pcB:pcs[1]};
+  if(pat) t.pcC=pcs[2];
+  return t;
+}
+function natAddrRows(kind){
+  const P=NAT_PLAN, pat=kind==='pat';
+  const rows=[
+    ['Gateway','G0/1',P.gw_lan,P.lanMask,'N/A'],
+    ['Gateway','S0/0/1',P.gw_wan,P.wanMask,'N/A'],
+    ['ISP','S0/0/0 (DCE)',P.isp_wan,P.wanMask,'N/A'],
+    ['ISP','Lo0',P.lo,P.loMask,'N/A'],
+    [pat?'PC-A':'PC-A (simulated server)','NIC',P.pcA,P.lanMask,P.gw_lan],
+    ['PC-B','NIC',P.pcB,P.lanMask,P.gw_lan]];
+  if(pat) rows.push(['PC-C','NIC',P.pcC,P.lanMask,P.gw_lan]);
+  return rows;
+}
+const NAT_ADDR_HEAD=['Device','Interface','IP Address','Subnet Mask','Default Gateway'];
+
+/* ── the translation engine ──
+   A router's NAT state is r.nat: statics [{local, global}], pools {name:
+   {first, last, mask}}, rules [{acl, pool|iface, overload}], and table —
+   the translations, which only traffic creates. Two row shapes live in the
+   table: a binding {proto:null, il, ig} is a pool address lent to one inside
+   host for as long as it is in use, and a flow {proto, il, ilPort, ig, igPort,
+   og, ogPort} is one conversation. Static bindings are not stored — they are
+   derived from statics when shown, which is why they appear the moment the
+   command is typed, as on IOS. */
+function natNew(){ return {statics:[], pools:{}, rules:[], table:[], hits:0, misses:0}; }
+function natEnabled(r){
+  return r.ifaces.some(function(f){ return f.nat==='inside'; }) && r.ifaces.some(function(f){ return f.nat==='outside'; });
+}
+function natPoolAddrs(pool){
+  const out=[]; for(let k=ip2int(pool.first); k<=ip2int(pool.last); k++) out.push(k); return out;
+}
+function natRuleFor(r, srcKey){
+  for(const rule of r.nat.rules){
+    const acl=r.acls[rule.acl];
+    if(!acl) continue;
+    if(aclEvaluate(acl, srcKey, false).action==='permit') return rule;
+  }
+  return null;
+}
+/* A free port on this global address for this protocol: the original if
+   nobody else on the same global has it, otherwise the next from 1024 —
+   which is what IOS does, and why the first PAT entry usually shows the
+   source port unchanged. */
+function natFreePort(r, ig, proto, want, scratch){
+  const used=r.nat.table.concat(scratch||[]).filter(function(e){ return e.proto===proto && e.ig===ig; }).map(function(e){ return e.igPort; });
+  if(used.indexOf(want)<0) return want;
+  let p=1024; while(used.indexOf(p)>=0) p++; return p;
+}
+/* inside → outside. Returns {src, sport} for a translated packet, null to
+   pass it through untranslated (no rule matched — IOS does the same), or
+   {drop, reason} when a rule matched but the pool is empty. With count
+   false nothing is recorded: the graders ask "would this work" without
+   leaving a translation behind that the learner did not create. */
+function natOut(r, pkt, count){
+  const N=r.nat, src=acFmt(pkt.src);
+  const store=function(rows){
+    if(count){ N.hits++; rows.forEach(function(row){ natRecord(N.table, row); }); }
+    else if(pkt.scratch) rows.forEach(function(row){ natRecord(pkt.scratch, row); });
+  };
+  const flow=function(igKey, sport, kind){
+    return {proto:pkt.proto, il:src, ilPort:pkt.sport, ig:int2ip(igKey), igPort:sport,
+            og:acFmt(pkt.dst), ogPort:pkt.dport, kind:kind};
+  };
+  const st=N.statics.find(function(s){ return s.local===src; });
+  if(st){
+    const g=ip2int(st.global);
+    store([flow(g, pkt.sport, 'static')]);
+    return {src:g, sport:pkt.sport};
+  }
+  const rule=natRuleFor(r, pkt.src);
+  if(!rule) return null;
+  let igKey, overload=!!rule.overload, rows=[];
+  if(rule.iface){
+    const f=acIface(r, rule.iface);
+    if(!f||!f.ip) return {drop:true, reason:r.name+"'s NAT rule points at "+rule.iface+', which has no address'};
+    igKey=ip2int(f.ip); overload=true;
+  } else {
+    const pool=N.pools[rule.pool];
+    if(!pool) return {drop:true, reason:'pool '+rule.pool+' does not exist on '+r.name};
+    const addrs=natPoolAddrs(pool);
+    const known=N.table.concat(pkt.scratch||[]);
+    const have=known.find(function(e){ return e.proto===null && e.il===src; });
+    if(have) igKey=ip2int(have.ig);
+    else if(overload) igKey=addrs[0];
+    else {
+      const taken=known.filter(function(e){ return e.proto===null; }).map(function(e){ return ip2int(e.ig); });
+      igKey=addrs.find(function(a){ return taken.indexOf(a)<0; });
+      if(igKey==null){
+        if(count) N.misses++;
+        return {drop:true, reason:r.name+' could not translate '+src+' — pool '+rule.pool+' has no free address ('+
+          addrs.length+' of '+addrs.length+' lent out). One-to-one NAT gives each inside host a whole public address'};
+      }
+      rows.push({proto:null, il:src, ig:int2ip(igKey)});
+    }
+  }
+  const sport = overload ? natFreePort(r, int2ip(igKey), pkt.proto, pkt.sport, pkt.scratch) : pkt.sport;
+  rows.push(flow(igKey, sport, overload?'pat':'dynamic'));
+  store(rows);
+  return {src:igKey, sport:sport};
+}
+function natRecord(list, row){
+  const dup=list.find(function(e){ return e.proto===row.proto && e.il===row.il && e.ilPort===row.ilPort &&
+    e.ig===row.ig && e.igPort===row.igPort && e.og===row.og; });
+  if(!dup) list.push(row);
+}
+/* outside → inside: a packet arriving on an outside interface addressed to
+   an inside global is handed to the inside local it belongs to. */
+function natIn(r, pkt){
+  const N=r.nat, dst=acFmt(pkt.dst), known=N.table.concat(pkt.scratch||[]);
+  const st=N.statics.find(function(s){ return s.global===dst; });
+  if(st) return {dst:ip2int(st.local), dport:pkt.dport};
+  const flow=known.find(function(e){ return e.proto===pkt.proto && e.ig===dst && e.igPort===pkt.dport; });
+  if(flow) return {dst:ip2int(flow.il), dport:flow.ilPort};
+  const bind=known.find(function(e){ return e.proto===null && e.ig===dst; });
+  if(bind) return {dst:ip2int(bind.il), dport:pkt.dport};
+  return null;
+}
+/* Clearing drops every entry traffic made; the static maps stay, because
+   they live in the configuration, not in the table. */
+function natClear(r){ r.nat.table=[]; }
+function natSnapshot(r){ return {table:r.nat.table.slice(), hits:r.nat.hits, misses:r.nat.misses}; }
+function natRestore(r, s){ r.nat.table=s.table; r.nat.hits=s.hits; r.nat.misses=s.misses; }
+
+/* ── show output ── shared with the NAT Terms drill, which prints the same
+   table for the learner to read. */
+function natPad(s,n){ s=String(s==null?'':s); while(s.length<n) s+=' '; return s; }
+function natTableLines(statics, table){
+  const lines=['Pro  Inside global          Inside local           Outside local          Outside global'];
+  statics.forEach(function(s){ lines.push('---  '+natPad(s.global,23)+natPad(s.local,23)+natPad('---',23)+'---'); });
+  table.forEach(function(e){
+    if(e.proto===null){ lines.push('---  '+natPad(e.ig,23)+natPad(e.il,23)+natPad('---',23)+'---'); return; }
+    lines.push(natPad(e.proto,5)+natPad(e.ig+':'+e.igPort,23)+natPad(e.il+':'+e.ilPort,23)+
+               natPad(e.og+':'+e.ogPort,23)+e.og+':'+e.ogPort);
+  });
+  return lines;
+}
+function natShowTranslations(r){
+  const N=r.nat;
+  if(!N.statics.length&&!N.table.length) return '(no translations)';
+  return natTableLines(N.statics, N.table).join('\n');
+}
+function natShowStats(r){
+  const N=r.nat;
+  const flows=N.table.filter(function(e){ return e.proto!==null; }), binds=N.table.filter(function(e){ return e.proto===null; });
+  const ins=r.ifaces.filter(function(f){ return f.nat==='inside'; }).map(function(f){ return f.name; });
+  const outs=r.ifaces.filter(function(f){ return f.nat==='outside'; }).map(function(f){ return f.name; });
+  const lines=['Total active translations: '+(N.statics.length+N.table.length)+' ('+N.statics.length+' static, '+
+    (binds.length+flows.length)+' dynamic; '+flows.length+' extended)',
+    'Outside interfaces:', '  '+(outs.join(', ')||'(none)'),
+    'Inside interfaces:', '  '+(ins.join(', ')||'(none)'),
+    'Hits: '+N.hits+'  Misses: '+N.misses,
+    'Dynamic mappings:'];
+  if(!N.rules.length) lines.push('  (none)');
+  N.rules.forEach(function(rule,i){
+    lines.push('-- Inside Source');
+    lines.push('[Id: '+(i+1)+'] access-list '+rule.acl+' '+(rule.pool?'pool '+rule.pool:'interface '+rule.iface)+(rule.overload?' overload':'')+' refcount '+flows.length);
+    if(rule.pool&&N.pools[rule.pool]){
+      const p=N.pools[rule.pool], n=natPoolAddrs(p).length;
+      /* Addresses in use, however they were lent: a binding (one-to-one) or
+         a shared PAT address — which is why overload shows "allocated 1". */
+      const used=new Set(N.table.filter(function(b){ return ip2int(b.ig)>=ip2int(p.first)&&ip2int(b.ig)<=ip2int(p.last); })
+        .map(function(b){ return b.ig; })).size;
+      lines.push(' pool '+rule.pool+': netmask '+p.mask);
+      lines.push('        start '+p.first+' end '+p.last);
+      lines.push('        type generic, total addresses '+n+', allocated '+used+' ('+Math.round(100*used/n)+'%), misses '+N.misses);
+    }
+  });
+  return lines.join('\n');
+}
+function natRunLines(r){
+  const N=r.nat, out=[];
+  N.statics.forEach(function(s){ out.push('ip nat inside source static '+s.local+' '+s.global); });
+  Object.keys(N.pools).forEach(function(n){ const p=N.pools[n]; out.push('ip nat pool '+n+' '+p.first+' '+p.last+' netmask '+p.mask); });
+  N.rules.forEach(function(rule){
+    out.push('ip nat inside source list '+rule.acl+' '+(rule.pool?'pool '+rule.pool:'interface '+rule.iface)+(rule.overload?' overload':''));
+  });
+  return out;
+}
+/* What the router box on the canvas says under its name. */
+function natSummary(r){
+  const N=r.nat, bits=[];
+  if(N.statics.length) bits.push('static');
+  N.rules.forEach(function(rule){ bits.push(rule.overload?'PAT':'dynamic'); });
+  if(!bits.length) return natEnabled(r)?'NAT: no rules':'no NAT';
+  const flows=N.table.filter(function(e){ return e.proto!==null; }).length;
+  return 'NAT: '+bits.join(' + ')+(flows?' · '+flows+' xlat':'');
+}
+
+/* ── CLI ── everything that starts "ip nat" / "no ip nat", in interface or
+   global config. Refused outside a NAT round rather than half-accepted. */
+function natCli(d, w, raw){
+  const neg = w[0]==='no';
+  const a = neg ? w.slice(1) : w, ra = neg ? raw.slice(1) : raw;   /* a[0]='ip', a[1]='nat' */
+  const N=d.nat;
+  if(d.cm==='if'){
+    const f=acIface(d, d.ci);
+    if(a[2]==='inside'||a[2]==='outside'){
+      if(a.length>3) return '% In interface mode it is just "ip nat inside" or "ip nat outside"';
+      f.nat = neg ? (f.nat===a[2]?null:f.nat) : a[2];
+      return '';
+    }
+    return '% In interface mode: "ip nat inside" or "ip nat outside"';
+  }
+  if(d.cm!=='conf') return '% NAT is configured in global configuration mode';
+  if(a[2]==='pool'){
+    const name=ra[3];
+    if(!name) return '% Usage: ip nat pool <name> <first> <last> netmask <mask>';
+    if(neg){ delete N.pools[name]; return ''; }
+    if(!isValidIP(a[4])||!isValidIP(a[5])) return '% Usage: ip nat pool <name> <first> <last> netmask <mask>';
+    let mask=null;
+    if(a[6]==='netmask'&&isValidIP(a[7])) mask=a[7];
+    else if(a[6]==='prefix-length'&&/^\d+$/.test(a[7]||'')) mask=cidr2mask(+a[7]);
+    else return '% The pool needs "netmask <mask>" (or "prefix-length <n>") after the last address';
+    if(ip2int(a[5])<ip2int(a[4])) return '% The end address is lower than the start address';
+    const first=a[4], last=a[5], pfx=natPfxOfMask(mask);
+    if(pfx===null) return '% Invalid netmask';
+    if(netIntOf(ip2int(first),pfx)!==netIntOf(ip2int(last),pfx))
+      return '% Start and end address are not in the same network under that netmask';
+    N.pools[name]={first:first, last:last, mask:mask};
+    return '';
+  }
+  if(a[2]==='inside'&&a[3]==='source'){
+    if(a[4]==='static'){
+      if(!isValidIP(a[5])||!isValidIP(a[6])) return '% Usage: ip nat inside source static <inside-local> <inside-global>';
+      if(neg){ N.statics=N.statics.filter(function(s){ return !(s.local===a[5]&&s.global===a[6]); }); return ''; }
+      if(N.statics.some(function(s){ return s.global===a[6]&&s.local!==a[5]; })) return '% '+a[6]+' is already mapped to another inside address';
+      N.statics=N.statics.filter(function(s){ return s.local!==a[5]; });
+      N.statics.push({local:a[5], global:a[6]});
+      return '';
+    }
+    if(a[4]==='list'){
+      const acl=ra[5];
+      if(!acl) return '% Usage: ip nat inside source list <acl> pool <name> [overload]  |  ... interface <iface> overload';
+      if(neg){ N.rules=N.rules.filter(function(x){ return x.acl!==acl; }); natClear(d); return ''; }
+      if(!d.acls[acl]) return '% Access list '+acl+' does not exist yet — it decides which inside addresses get translated';
+      let rule;
+      if(a[6]==='pool'){
+        if(!ra[7]) return '% Name the pool';
+        if(!N.pools[ra[7]]) return '% Pool '+ra[7]+' does not exist yet — define it with "ip nat pool" first';
+        if(a[8]&&a[8]!=='overload') return '% The only option after the pool is "overload"';
+        rule={acl:acl, pool:ra[7], iface:null, overload:a[8]==='overload'};
+      } else if(a[6]==='interface'){
+        const f=acIface(d, ra[7]);
+        if(!f) return '% Invalid interface';
+        if(a[8]!=='overload') return '% Translating to one interface address only works with "overload" — many hosts share it by port';
+        rule={acl:acl, pool:null, iface:f.name, overload:true};
+      } else return '% After the list: "pool <name> [overload]" or "interface <iface> overload"';
+      /* Re-entering the rule for the same list replaces it, as IOS does. */
+      N.rules=N.rules.filter(function(x){ return x.acl!==acl; });
+      N.rules.push(rule); natClear(d);
+      return '';
+    }
+    return '% After "ip nat inside source": "static <local> <global>" or "list <acl> pool|interface …"';
+  }
+  if((a[2]==='inside'||a[2]==='outside')&&a.length===3) return '% "ip nat '+a[2]+'" goes on an interface — enter interface mode first';
+  if(a[2]==='outside') return '% Outside source translation is not part of this lab';
+  return '% Usage: ip nat inside source static … | ip nat inside source list … | ip nat pool … | (config-if) ip nat inside|outside';
+}
+function natPfxOfMask(mask){
+  const n=ip2int(mask); let p=0;
+  while(p<32 && ((n>>>(31-p))&1)) p++;
+  for(let b=p;b<32;b++) if((n>>>(31-b))&1) return null;
+  return p;
+}
+
+
+/* ── addressing and routing CLI — the NAT lab only ──
+   The ACL lab hands you a finished network; on the NAT lab's Hard tier you
+   build it, so these commands exist here and nowhere else. Returns null
+   when the line is not one of them, so acCli carries on. */
+function natBaseCli(d, w, raw){
+  const neg=w[0]==='no', a=neg?w.slice(1):w, ra=neg?raw.slice(1):raw;
+  const isIp=function(t){ return t==='ip'; };
+  if(d.cm==='if'){
+    const f=acIface(d, d.ci);
+    if(a[0]==='shutdown'||a[0]==='shut'){ f.up = neg || f.loopback; return ''; }
+    if(a[0]==='clock'&&a[1]==='rate') return '';
+    if(isIp(a[0])&&a[1]==='address'){
+      if(neg){ f.ip=''; f.pfx=null; return ''; }
+      if(!isValidIP(a[2])||!isValidIP(a[3])) return '% Usage: ip address <address> <subnet-mask>';
+      const p=natPfxOfMask(a[3]);
+      if(p===null) return '% '+a[3]+' is not a valid subnet mask';
+      const k=ip2int(a[2]);
+      if(p<31 && (k===netIntOf(k,p) || k===bcastIntOf(netIntOf(k,p),p)))
+        return '% '+a[2]+' is the '+(k===netIntOf(k,p)?'network':'broadcast')+' address of that subnet, not a host address';
+      const clash=d.ifaces.find(function(x){
+        if(x===f||!x.ip||x.pfx==null) return false;
+        const m=Math.min(x.pfx,p); return netIntOf(ip2int(x.ip),m)===netIntOf(k,m);
+      });
+      if(clash) return '% '+a[2]+'/'+p+' overlaps with '+clash.name;
+      f.ip=a[2]; f.pfx=p; return '';
+    }
+    return null;
+  }
+  if(d.cm==='conf'&&isIp(a[0])&&a[1]==='route'){
+    const use='% Usage: ip route <network> <mask> <next-hop | exit interface>';
+    if(!isValidIP(a[2])||!isValidIP(a[3])||!ra[4]) return use;
+    const p=natPfxOfMask(a[3]);
+    if(p===null) return '% '+a[3]+' is not a valid mask';
+    const net=ip2int(a[2]);
+    if(netIntOf(net,p)!==net) return '% Inconsistent address and mask — '+a[2]+' is not the network address of a /'+p+' (that would be '+int2ip(netIntOf(net,p))+')';
+    let nh=null, via=null;
+    if(isValidIP(a[4])) nh=a[4];
+    else { const f=acIface(d, ra[4]); if(!f) return '% Invalid next hop or interface'; via=f.name; }
+    d.routes=d.routes.filter(function(rt){ return !(rt.code==='S'&&rt.net===net&&rt.prefix===p&&(neg||(rt.nextHop===nh&&rt.viaIface===via))); });
+    if(!neg) d.routes.push({net:net, prefix:p, viaIface:via, nextHop:nh, code:'S', metric:0});
+    return '';
+  }
+  return null;
+}
+/* Routes are resolved when the table is built, not when they are typed:
+   a static route whose next hop is not on a connected network yet is
+   configured but not installed, exactly as on IOS — which is what lets
+   Hard take the commands in any order. */
+function acAddStatic(r, netStr, pfx, nextHop, viaIface){
+  r.routes.push({net:acKey(netStr), prefix:pfx, viaIface:viaIface||null, nextHop:nextHop||null, code:'S', metric:0});
+}
+
+/* ── the PC panel on the NAT lab: address, mask, gateway; ping; SSH ── */
+let natSshPort=1024;
+function natRenderPcCfg(d, panel){
+  const val=function(x){ return esc(x||''); };
+  panel.innerHTML=
+    '<div class="cfg-hdr"><div class="cfg-name">'+d.name+'</div>'+
+    '<button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="acCloseCfg()">Close</button></div>'+
+    '<div class="pc-form"><span class="pc-form-lbl">IP Address</span>'+
+    '<input type="text" class="custom-ip-inp" value="'+val(d.ip)+'" placeholder="e.g. 172.20.5.9" autocomplete="off" spellcheck="false" oninput="natSetPc('+d.id+',\'ip\',this.value)"></div>'+
+    '<div class="pc-form"><span class="pc-form-lbl">Subnet Mask</span>'+
+    '<input type="text" class="custom-ip-inp" value="'+val(d.pfx!=null?cidr2mask(d.pfx):'')+'" placeholder="e.g. 255.255.255.0" autocomplete="off" spellcheck="false" oninput="natSetPc('+d.id+',\'mask\',this.value)"></div>'+
+    '<div class="pc-form"><span class="pc-form-lbl">Default Gateway</span>'+
+    '<input type="text" class="custom-ip-inp" value="'+val(d.gw)+'" placeholder="e.g. 172.20.5.1" autocomplete="off" spellcheck="false" oninput="natSetPc('+d.id+',\'gw\',this.value)"></div>'+
+    '<div class="cli-note" style="margin-top:6px">Pinging and SSHing create the translations — do them from here, then read <b>show ip nat translations</b> on Gateway.</div>'+
+    '<div class="cfg-sec-lbl" style="margin-top:14px">Ping</div>'+
+    '<div class="pc-form"><label class="pc-form-lbl">Target IP</label>'+
+    '<input class="custom-ip-inp" id="ac-ping-ip" placeholder="e.g. '+NAT_PLAN.lo+'" autocomplete="off" spellcheck="false" onkeydown="if(event.key===\'Enter\')acPingRun()">'+
+    '<button class="rand-btn" id="ac-ping-btn" onclick="acPingRun()">Ping</button></div>'+
+    '<pre class="ping-out" id="ac-ping-out"></pre>'+
+    '<div class="cfg-sec-lbl" style="margin-top:14px">SSH</div>'+
+    '<div class="pc-form"><label class="pc-form-lbl">Host</label>'+
+    '<input class="custom-ip-inp" id="ac-ssh-ip" placeholder="e.g. '+NAT_PLAN.lo+'" autocomplete="off" spellcheck="false" onkeydown="if(event.key===\'Enter\')natSshRun()">'+
+    '<button class="rand-btn" id="ac-ssh-btn" onclick="natSshRun()">SSH</button></div>'+
+    '<pre class="ping-out" id="ac-ssh-out"></pre>';
+}
+function natSetPc(id, field, v){
+  const d=acById(id); v=String(v).trim();
+  if(field==='ip') d.ip = isValidIP(v) ? v : '';
+  else if(field==='gw') d.gw = isValidIP(v) ? v : '';
+  else { const p=isValidIP(v)?natPfxOfMask(v):null; d.pfx=p; }
+  acRenderCanvas();
+}
+/* An SSH session is a tcp conversation to port 22 from a fresh ephemeral
+   port — which is the tcp row Lab 10A has you read off the table. */
+function natSshRun(){
+  const d=acSelected!=null?acById(acSelected):null;
+  if(!d||d.type!=='pc') return;
+  const ip=(document.getElementById('ac-ssh-ip').value||'').trim();
+  const out=document.getElementById('ac-ssh-out');
+  if(!isValidIP(ip)){ out.textContent='Invalid address.'; return; }
+  if(!acIfaceWithIp(ip)){ out.textContent='Trying '+ip+' ...\n% Connection refused — nothing at '+ip+' is listening on port 22'; return; }
+  natSshPort = natSshPort>=4999 ? 1025 : natSshPort+1;
+  const r=acPing(d.ip, ip, true, {proto:'tcp', sport:natSshPort, dport:22});
+  out.textContent = r.ok
+    ? 'Trying '+ip+' ... Open\n\nUser Access Verification\nUsername: admin\nPassword: \n\n(connected from '+d.ip+' port '+natSshPort+' to port 22)'
+    : 'Trying '+ip+' ...\n% Connection timed out\n\n('+r.reason+')';
+  acRenderCanvas();
+}
+
+/* ── requirement factories ── */
+function natIfAddrReq(r, ifName, ip, mask){
+  const pfx=natPfxOfMask(mask), lo=/^lo/i.test(ifName);
+  return {group:'Addressing', desc:'Address '+r.name+' '+mono(ifName)+' as '+mono(ip+' '+mask)+(lo?'':' and bring it up'),
+    test:function(){
+      const f=acIface(r,ifName);
+      if(!f.ip) return {ok:false, reason:ifName+' has no address yet'};
+      if(f.ip!==ip) return {ok:false, reason:ifName+' is '+f.ip+', the addressing table says '+ip};
+      if(f.pfx!==pfx) return {ok:false, reason:ifName+' has mask '+cidr2mask(f.pfx)+', the table says '+mask};
+      if(!f.up) return {ok:false, reason:ifName+' is administratively down — enter "no shutdown" on it'};
+      return {ok:true};
+    }};
+}
+function natPcAddrReq(pc, ip, mask, gw){
+  return {group:'Addressing', desc:'Address '+pc.name+' as '+mono(ip+' '+mask)+', gateway '+mono(gw),
+    test:function(){
+      if(pc.ip!==ip) return {ok:false, reason:pc.ip?pc.name+' is '+pc.ip+', the table says '+ip:pc.name+' has no address yet — click it on the canvas'};
+      if(pc.pfx!==natPfxOfMask(mask)) return {ok:false, reason:pc.name+"'s subnet mask should be "+mask};
+      if(pc.gw!==gw) return {ok:false, reason:pc.gw?pc.name+"'s default gateway is "+pc.gw+', it should be '+gw:pc.name+' has no default gateway yet'};
+      return {ok:true};
+    }};
+}
+function natRouteIn(r, net, pfx){
+  return acRoutingTable(r).find(function(e){ return e.code==='S'&&e.net===ip2int(net)&&e.prefix===pfx; })||null;
+}
+/* A static route that was typed but is not in the table — its next hop is
+   not on any connected network yet — says so rather than "missing". */
+function natRouteWhy(r, net, pfx){
+  const typed=r.routes.find(function(x){ return x.code==='S'&&x.net===ip2int(net)&&x.prefix===pfx; });
+  if(typed) return 'The route is configured but not installed — '+(typed.nextHop?'its next hop '+typed.nextHop+' is not on any network '+r.name+' is connected to yet':'its exit interface is down or has no address');
+  const other=r.routes.filter(function(x){ return x.code==='S'; });
+  if(other.length) return r.name+' has '+other.map(function(x){ return int2ip(x.net)+'/'+x.prefix; }).join(', ')+' — not '+net+'/'+pfx;
+  return r.name+' has no static route to '+net+'/'+pfx+' yet';
+}
+function natRouteReq(r, net, pfx, ifName, desc){
+  return {group:'Routing', desc:desc,
+    test:function(){
+      const e=natRouteIn(r, net, pfx);
+      if(!e) return {ok:false, reason:natRouteWhy(r, net, pfx)};
+      if(e.iface!==ifName) return {ok:false, reason:'The route leaves by '+e.iface+' — the way there is '+ifName};
+      return {ok:true};
+    }};
+}
+function natIfaceReq(r, ifName, role){
+  return {group:'NAT', desc:'Mark '+r.name+' '+mono(ifName)+' as the NAT <b>'+role+'</b> interface',
+    test:function(){
+      const f=acIface(r,ifName);
+      if(f.nat===role) return {ok:true};
+      if(f.nat) return {ok:false, reason:ifName+' is marked "ip nat '+f.nat+'", but it faces the '+(role==='inside'?'LAN':'ISP')+' — it should be '+role};
+      return {ok:false, reason:'"ip nat '+role+'" has not been entered on '+ifName+' yet'};
+    }};
+}
+function natStaticReq(r, local, global, desc){
+  return {group:'NAT', desc:desc||'Static NAT on '+r.name+': '+mono(local)+' &harr; '+mono(global),
+    test:function(){
+      const s=r.nat.statics.find(function(x){ return x.local===local; });
+      if(s&&s.global===global) return {ok:true};
+      if(s) return {ok:false, reason:local+' is mapped to '+s.global+' — the server gets '+global};
+      const g=r.nat.statics.find(function(x){ return x.global===global; });
+      if(g) return {ok:false, reason:global+' is mapped to '+g.local+' — the server is '+local+'. Inside local comes first in the command'};
+      return {ok:false, reason:'No static translation for '+local+' yet'};
+    }};
+}
+function natPoolReq(r, name, first, last, mask, desc){
+  return {group:'NAT', desc:desc||'Define pool '+mono(name)+': '+mono(first)+' &ndash; '+mono(last)+', netmask '+mono(mask),
+    test:function(){
+      const p=r.nat.pools[name];
+      if(!p){
+        const names=Object.keys(r.nat.pools);
+        const near=names.find(function(n){ return n.toLowerCase()===name.toLowerCase(); });
+        if(near) return {ok:false, reason:'The pool is called '+near+' — pool names are case-sensitive, and the policy names it '+name};
+        return {ok:false, reason:names.length?'The pool is called '+names.join(', ')+', the policy names it '+name:'No pool defined yet'};
+      }
+      if(p.first!==first||p.last!==last) return {ok:false, reason:name+' runs '+p.first+' – '+p.last+', but the addresses for it are '+first+' – '+last};
+      if(p.mask!==mask) return {ok:false, reason:name+' has netmask '+p.mask+' — those addresses sit in a /'+natPfxOfMask(mask)+', so it is '+mask};
+      return {ok:true};
+    }};
+}
+function natRuleReq(r, want){
+  const target = want.pool ? 'pool '+want.pool : 'interface '+want.iface;
+  return {group:'NAT', desc:'Bind '+mono('access-list '+want.acl)+' to '+mono(target)+(want.overload?' with '+mono('overload'):''),
+    test:function(){
+      const rule=r.nat.rules.find(function(x){ return x.acl===want.acl; })||r.nat.rules[0];
+      if(!rule) return {ok:false, reason:'No "ip nat inside source list" rule on '+r.name+' yet'};
+      if(rule.acl!==want.acl) return {ok:false, reason:'The rule uses access-list '+rule.acl+', the policy uses '+want.acl};
+      if(want.pool&&rule.pool!==want.pool) return {ok:false, reason:rule.pool?'The rule uses pool '+rule.pool+', not '+want.pool:'The rule translates to interface '+rule.iface+' — this lab hands out addresses from pool '+want.pool};
+      if(want.overload&&!rule.overload) return {ok:false, reason:'The rule has no "overload" — without it each inside host takes a whole public address'};
+      if(!want.overload&&rule.overload) return {ok:false, reason:'The rule says overload — dynamic NAT gives each host its own public address, one-to-one'};
+      return {ok:true};
+    }};
+}
+/* Until the interfaces are marked and the rule or static exists, the Verify
+   rows say what is missing instead of judging a network nobody has
+   configured — the same gate idea as the ACL lab. */
+function natGate(r, opts){
+  return function(){
+    if(!natEnabled(r)) return 'Mark the inside and outside interfaces first — NAT only happens between them';
+    if(opts.static && !r.nat.statics.length) return 'Add the static translation first';
+    if(opts.rule && !r.nat.rules.length) return 'Bind the access list to the pool first';
+    return null;
+  };
+}
+/* What a host's packets look like when they reach the Internet. */
+function natLeavesAsReq(label, srcIp, global, what, gate){
+  return {group:'Verify', desc:'<b>'+label+'</b> reaches the Internet as <b>'+global+'</b>'+(what?' — '+what:''),
+    test:function(){
+      if(gate){ const g=gate(); if(g) return {ok:false, reason:g}; }
+      const a=acPcWithIp(srcIp);
+      if(!a) return {ok:false, reason:'Nothing on the LAN has address '+srcIp+' yet'};
+      const bad=acPcProblem(a); if(bad) return {ok:false, reason:bad};
+      const res=acForward(acSubnetOwner(srcIp), acKey(srcIp), acKey(NAT_PLAN.lo), false, {proto:'icmp',sport:1,dport:1,scratch:[]});
+      if(!res.ok) return {ok:false, reason:res.reason};
+      const got=acFmt(res.src);
+      if(got===global) return {ok:true};
+      if(got===srcIp) return {ok:false, reason:'It still arrives as '+srcIp+' — nothing translated it'};
+      return {ok:false, reason:'It arrives as '+got+', not '+global};
+    }};
+}
+/* A ping that should fail, and fail for the NAT reason: the reply dies at
+   ISP because nobody routes a private address. Failing for any other
+   reason (an unaddressed PC, a missing route) is not a pass. */
+function natUnreachReq(label, srcIp, toLabel, dstIp, why, gate){
+  return {group:'Verify', desc:'<b>'+label+'</b> <b>cannot</b> reach '+toLabel+(why?' — '+why:''),
+    test:function(){
+      if(gate){ const g=gate(); if(g) return {ok:false, reason:g}; }
+      const r=acPing(srcIp, dstIp, false);
+      if(r.ok) return {ok:false, reason:dstIp+' is reachable from '+srcIp+' — the lab says it should not be'};
+      if(/has no route to 192\.168\./.test(r.reason)) return {ok:true};
+      return {ok:false, reason:'It fails, but for another reason: '+r.reason};
+    }};
+}
+/* The translation table only fills when traffic crosses Gateway, so these
+   rows need the learner to have actually pinged or SSHed from the PC. */
+function natEntryReq(r, label, il, proto, gate, check){
+  const act = proto==='tcp' ? 'SSH from '+label+' to '+NAT_PLAN.lo : 'ping '+NAT_PLAN.lo+' from '+label;
+  return {group:'Verify', desc:mono('show ip nat translations')+' shows <b>'+label+'</b>\'s '+(proto==='tcp'?'tcp':'ICMP')+' translation'+(check?' — '+check.desc:''),
+    test:function(){
+      if(gate){ const g=gate(); if(g) return {ok:false, reason:g}; }
+      const e=r.nat.table.filter(function(x){ return x.proto===proto && x.il===il; }).pop();
+      if(!e) return {ok:false, reason:'No '+proto+' entry for '+il+' — translations are made by traffic, not by configuration. '+act.charAt(0).toUpperCase()+act.slice(1)+', then look again'};
+      if(check&&!check.test(e)) return {ok:false, reason:check.fail(e)};
+      return {ok:true};
+    }};
+}
+function natConcurrentReq(r, hosts, gate, extra){
+  const names=hosts.map(function(h){ return '<b>'+h.label+'</b>'; });
+  return {group:'Verify', desc:names.slice(0,-1).join(', ')+' and '+names[names.length-1]+' can all reach '+NAT_PLAN.lo+' <b>at the same time</b>'+(extra&&extra.desc?' — '+extra.desc:''),
+    test:function(){
+      if(gate){ const g=gate(); if(g) return {ok:false, reason:g}; }
+      const snap=natSnapshot(r), got=[];
+      let fail=null;
+      hosts.forEach(function(h,i){
+        if(fail) return;
+        const res=acPing(h.ip, NAT_PLAN.lo, true, {proto:'icmp', sport:900+i});
+        if(!res.ok) fail=h.label+': '+res.reason;
+        else got.push(r.nat.table.filter(function(e){ return e.proto!==null&&e.il===h.ip; }).pop());
+      });
+      const extraFail = !fail && extra && extra.test ? extra.test(got) : null;
+      natRestore(r, snap);
+      if(fail) return {ok:false, reason:fail};
+      if(extraFail) return {ok:false, reason:extraFail};
+      return {ok:true};
+    }};
+}
+/* PAT's signature: every host shares one inside global, told apart by port. */
+const natPatCheck={
+  desc:'one public address, a different port each',
+  test:function(got){
+    const igs=new Set(got.map(function(e){ return e.ig; })), ports=new Set(got.map(function(e){ return e.igPort; }));
+    if(igs.size!==1) return 'They used '+igs.size+' different public addresses ('+Array.from(igs).join(', ')+') — PAT shares one';
+    if(ports.size!==got.length) return 'Two hosts were given the same port on '+Array.from(igs)[0]+', which cannot be told apart';
+    return null;
+  }
+};
+/* Dynamic NAT's signature: one whole public address each. */
+const natOneEachCheck={
+  desc:'a different public address each',
+  test:function(got){
+    const igs=new Set(got.map(function(e){ return e.ig; }));
+    if(igs.size!==got.length) return 'Two hosts share a public address — that is PAT, dynamic NAT hands out one address per host';
+    return null;
+  }
+};
+/* Lab 10B's reading: after every PC has pinged, the table holds three
+   inside locals, one inside global, three ports. */
+function natAllEntriesReq(r, hosts, global, gate){
+  return {group:'Verify', desc:'After every PC has pinged '+NAT_PLAN.lo+', '+mono('show ip nat translations')+' holds '+hosts.length+' inside locals, <b>one</b> inside global and '+hosts.length+' ports',
+    test:function(){
+      if(gate){ const g=gate(); if(g) return {ok:false, reason:g}; }
+      const rows=hosts.map(function(h){ return r.nat.table.filter(function(e){ return e.proto==='icmp'&&e.il===h.ip; }).pop(); });
+      const missing=hosts.filter(function(h,i){ return !rows[i]; }).map(function(h){ return h.label; });
+      if(missing.length) return {ok:false, reason:'No translation yet for '+missing.join(', ')+' — ping '+NAT_PLAN.lo+' from '+(missing.length>1?'each':'it')+', then look again'};
+      const igs=new Set(rows.map(function(e){ return e.ig; }));
+      if(igs.size!==1||!igs.has(global)) return {ok:false, reason:'The inside globals are '+Array.from(igs).join(', ')+' — with overload they should all be '+global};
+      return {ok:true};
+    }};
+}
+
+/* ── the rounds ── */
+function natPre(r, lines){ acEcho(r, ['configure terminal'].concat(lines, ['end'])); }
+const natLanWant=[Object.assign({action:'permit'}, acNetSpec(4, NAT_PLAN.lanNet, NAT_PLAN.lanWc))];
+const NAT_TIP='The network is built and routed: Gateway has a default route to ISP, and ISP has a static route to the company\'s public block pointing back at Gateway. ISP has no route to 192.168.1.0/24, and never will — that is what NAT is for.';
+const NAT_TIP_HARD='Nothing is configured: every interface is unaddressed and shut down, the PCs have no addresses, and neither router has a route. Build it from this table, then do the NAT.';
+/* Hard: the addressing table, both routes, and the LAN pinging its gateway
+   — Part 1 of both labs, minus the router basics. */
+function natHardReqs(t, kind){
+  const P=NAT_PLAN, pub=kind==='pat'?P.b:P.a;
+  const addr=[natIfAddrReq(t.gw,'G0/1',P.gw_lan,P.lanMask), natIfAddrReq(t.gw,'S0/0/1',P.gw_wan,P.wanMask),
+              natIfAddrReq(t.isp,'S0/0/0',P.isp_wan,P.wanMask), natIfAddrReq(t.isp,'Lo0',P.lo,P.loMask)]
+    .concat(t.pcs.map(function(pc,i){ return natPcAddrReq(pc,[P.pcA,P.pcB,P.pcC][i],P.lanMask,P.gw_lan); }));
+  return [].concat(acGroup.apply(null,['Addressing'].concat(addr)),
+    acGroup('Routing',
+      natRouteReq(t.gw,'0.0.0.0',0,'S0/0/1','On Gateway, a <b>default route</b> to ISP'),
+      natRouteReq(t.isp,P.pubNet,pub.pubPfx,'S0/0/0','On ISP, a static route to the company\'s public block <b>'+P.pubNet+'/'+pub.pubPfx+'</b>, pointing at Gateway'),
+      acPingReq('PC-A',P.pcA,'Gateway G0/1',P.gw_lan,true,'the LAN works before NAT is involved')));
+}
+function natBase(kind, diff){
+  const t=natBuildTopology(kind, diff==='hard');
+  return {kind:diff, nat:kind, topo:t, addr:natAddrRows(kind), addrHead:NAT_ADDR_HEAD,
+          tip:diff==='hard'?NAT_TIP_HARD:NAT_TIP, reqs:diff==='hard'?natHardReqs(t,kind):[]};
+}
+const NAT_HARD_NOTE='<b>Nothing is configured.</b> Address every router interface from the table (and <span class="mono-inl">no shutdown</span> the physical ones), address all the PCs, and give Gateway its default route and ISP its route to the public block. Only then can NAT do anything. Router basics (hostname, passwords, SSH) are left out — this lab is about the addressing and the NAT.';
+
+/* Lab 10A, Part 2 — static NAT for the server. */
+function genNatStatic(diff){
+  const P=NAT_PLAN, A=P.a, d=natBase('static', diff), gw=d.topo.gw;
+  const g=natGate(gw,{static:true});
+  const g2=function(){ const x=g(); if(x) return x;
+    return acPing(P.pcA,P.lo,false).ok ? null : 'Get PC-A out first — this row only means something once its static translation works'; };
+  const easy=diff==='easy';
+  d.title='Static NAT';
+  d.goal = easy
+    ? 'PC-A is a server that must be reachable from the Internet. Map its inside local address <b>'+P.pcA+'</b> to the inside global address <b>'+A.staticG+'</b> on Gateway, and mark <b>G0/1</b> as NAT inside and <b>S0/0/1</b> as NAT outside.'
+    : 'The ISP has allocated <b>'+P.pubNet+'/'+A.pubPfx+'</b> to the company: <b>.225 – .241</b> are for static allocation, <b>.242 – .254</b> for dynamic. PC-A simulates a server that must be reachable from the Internet at a constant address — give it the <b>first</b> static address, and tell Gateway which side is inside and which is outside.';
+  d.note=(diff==='hard'?NAT_HARD_NOTE+' ':'')+'A static translation is a permanent one-to-one map, and it works both ways: PC-A goes out as its public address, and anything sent to that address comes in to PC-A. It only applies to packets crossing from an <b>inside</b> interface to an <b>outside</b> one.';
+  d.hint='Then from PC-A: ping '+P.lo+' and SSH to it, and read show ip nat translations on Gateway after each. From ISP, ping '+A.staticG+'.';
+  d.reqs=d.reqs.concat(
+    acGroup('NAT', natIfaceReq(gw,'G0/1','inside'), natIfaceReq(gw,'S0/0/1','outside'),
+      natStaticReq(gw,P.pcA,A.staticG, easy?null:'Static NAT on Gateway: PC-A '+mono(P.pcA)+' to the first static public address')),
+    acGroup('Verify',
+      natLeavesAsReq('PC-A',P.pcA,A.staticG,null,g),
+      acPingReq('PC-A',P.pcA,'ISP Lo0 ('+P.lo+')',P.lo,true,null,g),
+      natEntryReq(gw,'PC-A',P.pcA,'icmp',g,{desc:'ping '+P.lo+' from PC-A first',
+        test:function(e){ return e.ig===A.staticG; }, fail:function(e){ return 'PC-A was translated to '+e.ig+', not '+A.staticG; }}),
+      natEntryReq(gw,'PC-A',P.pcA,'tcp',g,{desc:'SSH from PC-A to '+P.lo+' — a tcp entry to port 22',
+        test:function(e){ return e.ogPort===22; }, fail:function(e){ return 'That tcp entry goes to port '+e.ogPort+', SSH is 22'; }}),
+      acPingReq('ISP',P.isp_wan,'PC-A at its public address '+A.staticG,A.staticG,true,'a static map works from the outside in, too',g),
+      natUnreachReq('ISP',P.isp_wan,"PC-A's inside local address "+P.pcA,P.pcA,'nobody on the Internet routes a private address',g2),
+      natUnreachReq('PC-B',P.pcB,'ISP Lo0',P.lo,'only PC-A is mapped, so PC-B still leaves as '+P.pcB,g2)));
+  return d;
+}
+
+/* Lab 10A, Part 3 — dynamic NAT for the rest of the LAN. On Easy and
+   Medium, Part 2's static NAT is already in place, as it is in the lab. */
+function genNatDynamic(diff){
+  const P=NAT_PLAN, A=P.a, d=natBase('dynamic', diff), gw=d.topo.gw, hard=diff==='hard', easy=diff==='easy';
+  if(!hard) natPre(gw, ['interface G0/1','ip nat inside','exit','interface S0/0/1','ip nat outside','exit',
+                        'ip nat inside source static '+P.pcA+' '+A.staticG]);
+  const g=natGate(gw,{rule:true});
+  const want={acl:'1', pool:P.pool, iface:null, overload:false};
+  d.title='Dynamic NAT';
+  d.goal = easy
+    ? 'PC-A already has its static translation from the last step. Now let the rest of the LAN out: <b>access-list 1</b> permits <b>'+P.lanNet+'/24</b>, pool <b>'+P.pool+'</b> is <b>'+A.poolFirst+' – '+A.poolLast+'</b> with netmask <b>'+A.pubMask+'</b>, and the rule binds the list to the pool.'
+    : 'The ISP has allocated <b>'+P.pubNet+'/'+A.pubPfx+'</b> to the company: <b>.225 – .241</b> are for static allocation, <b>.242 – .254</b> for dynamic. '+
+      (hard ? 'PC-A simulates a server and gets the <b>first static</b> address; the rest of the LAN ' : 'PC-A is already statically mapped to the first static address. The rest of the LAN ')+
+      'must borrow addresses from the dynamic range: <b>access-list 1</b> for the LAN, a pool called <b>'+P.pool+'</b> for the range, and the rule that binds them.';
+  d.note=(hard?NAT_HARD_NOTE+' ':'')+'The pool needs the netmask of the network its addresses sit in — the whole /'+A.pubPfx+', not the size of the range. Pool names are case-sensitive, and the rule refuses a list or pool that does not exist yet.'+
+    (hard?'':' Clearing the old translations first (<span class="mono-inl">clear ip nat translation *</span>) is how the lab starts this part.');
+  d.hint='Then from PC-B: ping '+P.lo+' and SSH to it, and read show ip nat translations on Gateway. show ip nat statistics shows the pool.';
+  const nat=[natAclReqNat(gw),
+    natPoolReq(gw,P.pool,A.poolFirst,A.poolLast,A.pubMask, easy?null:'Define pool '+mono(P.pool)+' — the dynamic range, with the netmask of the public block'),
+    natRuleReq(gw,want)];
+  if(hard) nat.unshift(natIfaceReq(gw,'G0/1','inside'), natIfaceReq(gw,'S0/0/1','outside'),
+                       natStaticReq(gw,P.pcA,A.staticG,'Static NAT on Gateway: PC-A '+mono(P.pcA)+' to the first static public address'));
+  d.reqs=d.reqs.concat(acGroup.apply(null,['NAT'].concat(nat)),
+    acGroup('Verify',
+      natLeavesAsReq('PC-B',P.pcB,A.poolFirst,'the first address in the pool',g),
+      acPingReq('PC-B',P.pcB,'ISP Lo0 ('+P.lo+')',P.lo,true,null,g),
+      natEntryReq(gw,'PC-B',P.pcB,'icmp',g,{desc:'ping '+P.lo+' from PC-B first',
+        test:function(e){ return ip2int(e.ig)>=ip2int(A.poolFirst)&&ip2int(e.ig)<=ip2int(A.poolLast); },
+        fail:function(e){ return 'PC-B was translated to '+e.ig+', which is not in '+P.pool; }}),
+      natEntryReq(gw,'PC-B',P.pcB,'tcp',g,{desc:'SSH from PC-B to '+P.lo+' — a tcp entry to port 22',
+        test:function(e){ return e.ogPort===22; }, fail:function(e){ return 'That tcp entry goes to port '+e.ogPort+', SSH is 22'; }}),
+      natLeavesAsReq('PC-A',P.pcA,A.staticG,'its static map is checked before the pool',g),
+      natConcurrentReq(gw,[{label:'PC-A',ip:P.pcA},{label:'PC-B',ip:P.pcB}],g,natOneEachCheck)));
+  return d;
+}
+
+/* Lab 10B — NAT pool overload. A /29 is six usable addresses, and
+   working out which six, and the mask, is Medium's arithmetic. */
+function genNatPat(diff){
+  const P=NAT_PLAN, B=P.b, d=natBase('pat', diff), gw=d.topo.gw, hard=diff==='hard', easy=diff==='easy';
+  const g=natGate(gw,{rule:true});
+  const g2=function(){ const x=g(); if(x) return x;
+    return acPing(P.pcA,P.lo,false).ok ? null : 'Get the LAN out first — this row only means something once PAT works'; };
+  const want={acl:'1', pool:P.pool, iface:null, overload:true};
+  const hosts=[{label:'PC-A',ip:P.pcA},{label:'PC-B',ip:P.pcB},{label:'PC-C',ip:P.pcC}];
+  d.title='PAT — NAT pool overload';
+  d.goal = easy
+    ? 'Translate the whole LAN, <b>'+P.lanNet+'/24</b>, through a pool of public addresses shared by port: <b>access-list 1</b> for the LAN, pool <b>'+P.pool+'</b> = <b>'+B.poolFirst+' – '+B.poolLast+'</b> netmask <b>'+B.pubMask+'</b>, bound with <b>overload</b>, and G0/1 inside, S0/0/1 outside.'
+    : 'The ISP has allocated <b>'+P.pubNet+'/'+B.pubPfx+'</b> to the company. Translate the whole LAN through a pool called <b>'+P.pool+'</b> made of <b>every usable address</b> in that block, overloaded, so the three PCs share them by port.';
+  d.note=(hard?NAT_HARD_NOTE+' ':'')+'With <span class="mono-inl">overload</span> the router uses the first address in the pool and tells hosts apart by port; it only moves to the next address once that one runs out of ports. '+
+    (easy?'':'A /'+B.pubPfx+' has '+Math.pow(2,32-B.pubPfx)+' addresses; the first is the network and the last the broadcast.');
+  d.hint='Then ping '+P.lo+' from every PC, and read show ip nat translations and show ip nat statistics on Gateway.';
+  d.reqs=d.reqs.concat(
+    acGroup('NAT', natAclReqNat(gw),
+      natPoolReq(gw,P.pool,B.poolFirst,B.poolLast,B.pubMask, easy?null:'Define pool '+mono(P.pool)+' — every usable address in the /'+B.pubPfx+', with its netmask'),
+      natRuleReq(gw,want), natIfaceReq(gw,'G0/1','inside'), natIfaceReq(gw,'S0/0/1','outside')),
+    acGroup('Verify',
+      natLeavesAsReq('PC-A',P.pcA,B.poolFirst,'the first address in the pool',g),
+      natConcurrentReq(gw,hosts,g,natPatCheck),
+      natAllEntriesReq(gw,hosts,B.poolFirst,g),
+      natUnreachReq('ISP',P.isp_wan,"PC-A's inside local address "+P.pcA,P.pcA,'the ISP has no route to a private address',g2)));
+  return d;
+}
+function natAclReqNat(gw){ return acAclReq(gw,'1',natLanWant,'permit '+NAT_PLAN.lanNet+'/24, the addresses to translate'); }
+function genNatLab(diff){
+  acFam=4; acLabKind='nat';
+  const k=state.ver;
+  return k==='dynamic' ? genNatDynamic(diff) : k==='pat' ? genNatPat(diff) : genNatStatic(diff);
+}
+
+/* ═══ Drill: NAT Terms ══════════════════════════════════════════════
+   The questions Labs 10A and 10B ask, as their own drill: the four address
+   roles, who assigns which, what the ports in a translation mean, and what
+   PAT's table says. Every round is generated — a random private host, a
+   public address from the documentation ranges, random ports — and every
+   answer can be read back off what is printed. One answer per box. */
+function natRandPrivate(){
+  const a=choice([10,172,192]);
+  const b=a===172?ri(16,31):a===192?168:ri(0,255);
+  return a+'.'+b+'.'+ri(0,255)+'.'+ri(2,254);
+}
+function natRandPublic(){
+  const base=choice(['209.165.200.224','209.165.201.0','209.165.202.128']);
+  return int2ip(ip2int(base)+ri(1,30));
+}
+function natRandServer(){ return choice(['203.0.113.','192.31.7.','198.18.4.'])+ri(1,254); }
+function natRandPort(){ return ri(49152,65535); }
+const NAT_WHO=['The network administrator, in the host\'s own settings (or DHCP)',
+               'The NAT router, from its static map or pool',
+               'The destination server, when it replies',
+               'The ISP\'s router, as the packet passes through'];
+function genNatTerms(diff){
+  const il=natRandPrivate(), ig=natRandPublic(), og=natRandServer();
+  const shape = diff==='easy' ? choice(['roles','who']) : diff==='medium' ? choice(['row','ports','inbound']) : choice(['clash','count']);
+  if(shape==='roles'){
+    return {kind:'easy', prompt:'A PC at '+mono(il)+' opens a web page on a server at '+mono(og)+'. On the way out, the NAT router rewrites the PC\'s address to '+mono(ig)+'. Name the four addresses as NAT sees them.',
+      fields:[{id:'il', label:'Inside local', answer:il},
+              {id:'ig', label:'Inside global', answer:ig},
+              {id:'ol', label:'Outside local', answer:og},
+              {id:'og', label:'Outside global', answer:og}],
+      explain:'<b>Inside</b> is the PC\'s side, <b>outside</b> is the server\'s; <b>local</b> is how an address looks on the LAN, <b>global</b> how it looks on the Internet. The PC is '+il+' locally and '+ig+' globally. The server is '+og+' from both sides, because only the inside is being translated.'};
+  }
+  if(shape==='who'){
+    const opts=shuffle(NAT_WHO.slice());
+    return {kind:'easy', prompt:'A PC at '+mono(il)+' reaches the Internet as '+mono(ig)+'.',
+      fields:[{id:'wil', label:'Who assigns the inside local address '+il+'?', choices:opts, answer:NAT_WHO[0]},
+              {id:'wig', label:'Who assigns the inside global address '+ig+'?', choices:opts, answer:NAT_WHO[1]}],
+      explain:'The inside local address is the host\'s own address, set by '+NAT_WHO[0].charAt(0).toLowerCase()+NAT_WHO[0].slice(1)+'. The inside global is handed out by '+NAT_WHO[1].charAt(0).toLowerCase()+NAT_WHO[1].slice(1)+' — the ISP allocated the block, but it is the router\'s NAT configuration that assigns an address from it to a host.'};
+  }
+  if(shape==='row'){
+    const srvL=natRandPrivate(), srvG=natRandPublic(), ilPort=natRandPort();
+    const rows=natTableLines([{local:srvL, global:srvG}],
+      [{proto:'tcp', il:il, ilPort:ilPort, ig:ig, igPort:ilPort, og:og, ogPort:80}]);
+    return {kind:'medium', table:rows.join('\n'), prompt:'The NAT router\'s translation table is below. Read the <b>tcp</b> row.',
+      fields:[{id:'il', label:'Which LAN host opened the connection?', answer:il},
+              {id:'ig', label:'Which address does the server reply to?', answer:ig},
+              {id:'og', label:'Which server was contacted?', answer:og}],
+      explain:'Inside global is what the world sees ('+ig+'), inside local is who it really is ('+il+'), and the outside columns are the far end ('+og+', port 80 — a web server). The row of dashes is a static translation, permanent and not tied to any conversation.'};
+  }
+  if(shape==='ports'){
+    /* Lab 10A: a ping, then an SSH, from the same host. */
+    const id=ri(1,40), sp=ri(1025,4000);
+    const rows=natTableLines([{local:il, global:ig}],
+      [{proto:'icmp', il:il, ilPort:id, ig:ig, igPort:id, og:og, ogPort:id},
+       {proto:'tcp', il:il, ilPort:sp, ig:ig, igPort:sp, og:og, ogPort:22}]);
+    return {kind:'medium', table:rows.join('\n'), prompt:'The host at '+mono(il)+' pinged '+mono(og)+', then SSHed to it. The NAT router\'s table is below.',
+      fields:[{id:'icmp', label:'What port number was used in the ICMP exchange?', answer:String(id)},
+              {id:'proto', label:'What protocol carried the SSH session?', answer:'tcp'},
+              {id:'wk', label:'Which well-known port did the SSH session connect to?', answer:'22'}],
+      explain:'ICMP has no ports, so NAT uses the echo identifier in their place — '+id+' here, shown after each address. SSH runs over <b>tcp</b> to well-known port <b>22</b>; the host\'s own side, '+sp+', is an ephemeral port it picked. Both conversations share the static inside global '+ig+'.'};
+  }
+  if(shape==='inbound'){
+    /* Lab 10A: the ISP pings the server's static public address. */
+    const isp=int2ip(ip2int('209.165.201.16')+ri(1,2)), id=ri(1,40);
+    const rows=natTableLines([{local:il, global:ig}],
+      [{proto:'icmp', il:il, ilPort:id, ig:ig, igPort:id, og:isp, ogPort:id}]);
+    return {kind:'medium', table:rows.join('\n'), prompt:'Someone on the ISP router pinged '+mono(ig)+', and it worked. The NAT router\'s table is below.',
+      fields:[{id:'ol', label:'Outside local address', answer:isp},
+              {id:'il', label:'Which inside host answered?', answer:il},
+              {id:'why', label:'Why could the outside reach it?', choices:['It has a static translation, which works in both directions','Dynamic NAT keeps a pool address reserved for it','PAT opened a port for it automatically','The ISP has a route to its private address'], answer:'It has a static translation, which works in both directions'}],
+      explain:'The outside local and outside global are the same, '+isp+' — the ISP\'s own address, untranslated because only the inside is. The ping reached '+ig+' and the static map turned it into '+il+'. Only a static map works from outside in: a dynamic or PAT entry exists only after the inside host has started the conversation.'};
+  }
+  if(shape==='clash'){
+    const hosts=[], used=new Set();
+    while(hosts.length<3){ const h=natRandPrivate(); if(!used.has(h)){ used.add(h); hosts.push(h); } }
+    const ports=[];
+    while(ports.length<2){ const p=natRandPort(); if(ports.indexOf(p)<0) ports.push(p); }
+    /* The second host's original port collides with the first's, so PAT
+       has to hand it a new one — what the port column exists to show. */
+    const flows=[{proto:'tcp', il:hosts[0], ilPort:ports[0], ig:ig, igPort:ports[0], og:og, ogPort:443},
+                 {proto:'tcp', il:hosts[1], ilPort:ports[0], ig:ig, igPort:1024, og:natRandServer(), ogPort:80},
+                 {proto:'tcp', il:hosts[2], ilPort:ports[1], ig:ig, igPort:ports[1], og:og, ogPort:80}];
+    const ask=ri(0,2), other=(ask+1)%3;
+    return {kind:'hard', table:natTableLines([], flows).join('\n'), prompt:'The NAT router is doing PAT. Its translation table is below.',
+      fields:[{id:'port', label:'Source port the server sees for '+hosts[ask], answer:String(flows[ask].igPort)},
+              {id:'il', label:'Which LAN host is behind '+ig+':'+flows[other].igPort+'?', answer:hosts[other]}],
+      explain:'Every row shares one inside global, '+ig+' — that is PAT. What tells the hosts apart is the port after it: '+hosts[ask]+' is seen from port '+flows[ask].igPort+', and '+ig+':'+flows[other].igPort+' maps back to '+hosts[other]+'. '+hosts[1]+' asked for port '+ports[0]+' but '+hosts[0]+' already had it on '+ig+', so the router gave it 1024 instead.'};
+  }
+  /* Lab 10B's own questions: count what the table holds. Sometimes a
+     server's static map shares the table, which changes two of the counts. */
+  const n=ri(2,4), withStatic=Math.random()<0.5, hosts=[], used=new Set();
+  while(hosts.length<n){ const h=natRandPrivate(); if(!used.has(h)){ used.add(h); hosts.push(h); } }
+  const srvL=natRandPrivate(), srvG=int2ip(ip2int(ig)+1);
+  const flows=hosts.map(function(h,i){ return {proto:'icmp', il:h, ilPort:1, ig:ig, igPort:i, og:og, ogPort:1}; });
+  const rows=natTableLines(withStatic?[{local:srvL, global:srvG}]:[], flows);
+  const nLocal=n+(withStatic?1:0), nGlobal=withStatic?2:1;
+  const ans='It fails — the ISP has no route to a private address';
+  return {kind:'hard', table:rows.join('\n'), prompt:'Every PC on the LAN pinged '+mono(og)+' through a NAT pool with overload. The NAT router\'s table is below.',
+    fields:[{id:'nil', label:'How many inside local addresses are listed?', answer:String(nLocal)},
+            {id:'nig', label:'How many inside global addresses are listed?', answer:String(nGlobal)},
+            {id:'nport', label:'How many port numbers are paired with an inside global?', answer:String(n)},
+            {id:'ping', label:'Result of the ISP pinging '+hosts[0]+' (an inside local)?', choices:[ans,'It works — NAT translates it on the way in','It works — overload keeps a port open for it','It fails — access-list 1 blocks it'], answer:ans}],
+    explain:'Count the columns, not the rows: '+nLocal+' different inside locals'+(withStatic?' (the '+n+' PCs and the server '+srvL+')':'')+', but only '+nGlobal+' inside global'+(nGlobal>1?'s':'')+' — '+ig+(withStatic?' for every PC and '+srvG+' for the server':'')+'. The '+n+' PCs are told apart by '+n+' port numbers, '+flows.map(function(f){ return f.igPort; }).join(', ')+'. Pinging an inside local from the Internet fails: '+hosts[0]+' is private, and the ISP has no route to it — only a static map lets the outside in, and even then only to the public address.'};
+}
+function renderNatTerms(body,qip){
+  const d=state.data;
+  document.getElementById('qprompt').innerHTML=d.prompt;
+  qip.style.display='none';
+  body.innerHTML=(d.table?'<pre class="ping-out" style="margin:0 0 1rem">'+esc(d.table)+'</pre>':'')+fieldsHtml(d.fields);
+  setBtns();
+}
+function natTermsGrade(reveal){
+  const d=state.data;
+  const correct=gradeFields(d.fields, reveal), all=correct===d.fields.length;
+  scoreRound(reveal, all, reveal?0:(all?POINTS[state.diff]:correct),
+    (reveal?'Skipped. ':all?'Correct! ':'Not quite. ')+d.explain);
 }
 
 /* ═══ Canvas ═══════════════════════════════════════════════════════
@@ -1514,7 +2565,7 @@ function acRenderCanvas(){
       tx.setAttribute('x',x); tx.setAttribute('y',yEnd-6);
       tx.setAttribute('text-anchor','middle'); tx.setAttribute('font-size','11');
       tx.setAttribute('font-family','var(--mono)'); tx.setAttribute('fill','var(--text)');
-      tx.textContent=f.name+' '+f.ip+'/'+f.pfx;
+      tx.textContent=f.ip ? f.name+' '+f.ip+'/'+f.pfx : f.name+' (no address)';
       svg.appendChild(tx);
     });
   });
@@ -1531,12 +2582,12 @@ function acRenderCanvas(){
       const bits=[];
       if(applied) bits.push(applied+' ACL'+(applied===1?'':'s')+' applied');
       if(d.vtyAcl) bits.push('vty '+d.vtyAcl);
-      el.innerHTML='<div class="dev-name">'+d.name+'</div><div class="dev-sub">'+
-        (bits.length?esc(bits.join(' · ')):'no ACLs')+'</div>';
+      const sub = acLabKind==='nat' ? natSummary(d) : (bits.length?bits.join(' · '):'no ACLs');
+      el.innerHTML='<div class="dev-name">'+d.name+'</div><div class="dev-sub">'+esc(sub)+'</div>';
     } else if(d.type==='switch'){
       el.innerHTML='<div class="dev-name">'+d.name+'</div><div class="dev-sub">switch</div>';
     } else {
-      el.innerHTML='<div class="dev-name">'+d.name+'</div><div class="dev-sub">'+d.ip+'</div>';
+      el.innerHTML='<div class="dev-name">'+d.name+'</div><div class="dev-sub">'+(d.ip||'no IP')+'</div>';
     }
     layer.appendChild(el);
   });
@@ -1566,13 +2617,16 @@ function acRefreshCfg(){
   else acRenderSwitchCfg(d,panel);
 }
 function acIfaceTableHtml(d){
-  let html='<table class="port-table"><thead><tr><th>Interface</th><th>Address</th><th>ACL in</th><th>ACL out</th></tr></thead><tbody>';
+  const nat=acLabKind==='nat';
+  let html='<table class="port-table"><thead><tr><th>Interface</th><th>Address</th>'+
+    (nat?'<th>NAT</th>':'<th>ACL in</th><th>ACL out</th>')+'</tr></thead><tbody>';
   d.ifaces.forEach(function(f){
-    html+='<tr><td class="pt-name">'+f.name+'</td><td class="pt-conn">'+f.ip+'/'+f.pfx+'</td>'+
-      '<td class="pt-conn">'+(f.aclIn||'—')+'</td><td class="pt-conn">'+(f.aclOut||'—')+'</td></tr>';
+    html+='<tr><td class="pt-name">'+f.name+'</td><td class="pt-conn">'+(f.ip?f.ip+'/'+f.pfx:'unassigned')+(f.up?'':' · shut')+'</td>'+
+      (nat ? '<td class="pt-conn">'+(f.nat||'—')+'</td>'
+           : '<td class="pt-conn">'+(f.aclIn||'—')+'</td><td class="pt-conn">'+(f.aclOut||'—')+'</td>')+'</tr>';
   });
   html+='</tbody></table>';
-  html+='<div class="cli-note" style="margin-top:8px">vty lines: '+(d.vtyAcl?'<b>access-class '+esc(d.vtyAcl)+' in</b>':'no access-class')+'</div>';
+  if(!nat) html+='<div class="cli-note" style="margin-top:8px">vty lines: '+(d.vtyAcl?'<b>access-class '+esc(d.vtyAcl)+' in</b>':'no access-class')+'</div>';
   return html;
 }
 function acAclListHtml(d){
@@ -1591,6 +2645,8 @@ function acRenderRouterCfg(d,panel){
     '<button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="acCloseCfg()">Close</button></div>'+
     '<div class="cfg-grid"><div>'+
       '<div class="cfg-sec-lbl">Interfaces</div>'+acIfaceTableHtml(d)+
+      (acLabKind==='nat' ? '<div class="cfg-sec-lbl" style="margin-top:14px">Translations</div>'+
+        '<pre class="ping-out" style="margin:0">'+esc(natShowTranslations(d))+'</pre>' : '')+
       '<div class="cfg-sec-lbl" style="margin-top:14px">Access Lists</div>'+acAclListHtml(d)+
     '</div><div><div class="cfg-sec-lbl">CLI</div>'+acTermHtml()+'</div></div>';
   acRenderTerm();
@@ -1602,6 +2658,7 @@ function acRenderSwitchCfg(d,panel){
     '<div class="cli-note">VLANs, access ports and port security are already configured. This lab is about the filtering that goes on top, so there is nothing to change here.</div>';
 }
 function acRenderPcCfg(d,panel){
+  if(acLabKind==='nat') return natRenderPcCfg(d,panel);
   panel.innerHTML=
     '<div class="cfg-hdr"><div class="cfg-name">'+d.name+'</div>'+
     '<button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="acCloseCfg()">Close</button></div>'+
@@ -1633,11 +2690,14 @@ function acPingRun(){
   LabShared.runPing({
     inputId:'ac-ping-ip', btnId:'ac-ping-btn', outId:'ac-ping-out',
     resolve:function(dst){
+      if(!d.ip) return {msg:d.name+' has no IP address'};
       if(!acValid(dst)) return {msg:'invalid target address'};
       if(acKey(dst)===acKey(d.ip)) return {ok:true};
       /* count:true — the real lab's match counters only appear because
-         somebody actually ran these pings. */
+         somebody actually ran these pings, and a NAT translation only
+         exists because a packet crossed the router. */
       const r=acPing(d.ip, dst, true);
+      acRenderCanvas();
       if(!r.ok) return {ok:false};
       d._arp=d._arp||new Set();
       const firstTime=!d._arp.has(dst);
@@ -1735,12 +2795,13 @@ function acAddrRows(){
   ];
 }
 function acBriefHtml(d){
-  const rows=acAddrRows().map(function(r){ return '<tr>'+r.map(function(c){ return '<td>'+c+'</td>'; }).join('')+'</tr>'; }).join('');
+  const rows=(d.addr||acAddrRows()).map(function(r){ return '<tr>'+r.map(function(c){ return '<td>'+c+'</td>'; }).join('')+'</tr>'; }).join('');
+  const tip=d.tip||'The network is already built and working — VLANs, inter-VLAN routing and RIP are done. Your job starts at the filtering.';
   return '<div class="req-note">'+d.note+'</div>'+
     '<div class="qlbl" style="margin-top:1rem">Addressing Table'+
-    '<span class="tip-ic" tabindex="-1" data-tip="The network is already built and working — VLANs, inter-VLAN routing and RIP are done. Your job starts at the filtering.">?</span></div>'+
+    '<span class="tip-ic" tabindex="-1" data-tip="'+esc(tip)+'">?</span></div>'+
     '<table class="rt-table" style="margin-top:.35rem">'+
-    '<tr><th>Device</th><th>Interface</th><th>Address</th><th>Connects to</th></tr>'+rows+'</table>'+
+    '<tr>'+(d.addrHead||['Device','Interface','Address','Connects to']).map(function(h){ return '<th>'+h+'</th>'; }).join('')+'</tr>'+rows+'</table>'+
     '<button type="button" class="qlbl sec-toggle" id="ac-tasks-btn" style="margin-top:1rem" '+
     'aria-expanded="'+acTasksShown()+'" aria-controls="req-list" onclick="acToggleTasks()">Tasks'+
     '<svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></button>';
@@ -1757,7 +2818,7 @@ function renderAclLab(body,qip){
   qip.style.display='none';
   body.innerHTML=
     '<div class="lab-card"><div class="lab-toolbar">'+
-      '<div class="legend"><span class="lg">Click a router to open its CLI · click a PC to ping or SSH</span></div>'+
+      '<div class="legend"><span class="lg">Click a router to open its CLI · click a PC to ping'+(acLabKind==='nat'?'':' or SSH')+'</span></div>'+
     '</div>'+
     '<div class="lab-canvas" id="ac-canvas" style="height:'+AC_CANVAS_H+'px"><svg id="ac-cable-svg"></svg><div id="ac-dev-layer"></div></div>'+
     '<div class="lab-hint" id="ac-hint">'+esc(d.hint)+'</div>'+
@@ -1805,7 +2866,9 @@ const FIELD_PH={
   wc:'e.g. 0.0.0.63', kw:'e.g. host 172.20.5.9', ip:'e.g. 172.20.5.64', pfx:'e.g. 26',
   n:'e.g. 64',
   first:'e.g. 172.20.5.64', last:'e.g. 172.20.5.127', count:'e.g. 64',
-  total:'e.g. 16', blocks:'e.g. 4', size:'e.g. 4'
+  total:'e.g. 16', blocks:'e.g. 4', size:'e.g. 4',
+  il:'e.g. 172.20.5.9', ig:'e.g. 198.51.100.7', ol:'e.g. 198.51.100.40', og:'e.g. 198.51.100.40',
+  port:'e.g. 1030', icmp:'e.g. 7', proto:'e.g. udp', wk:'e.g. 443', nil:'e.g. 5', nig:'e.g. 3', nport:'e.g. 5'
 };
 /* A field may carry an `affix` — a fixed lead-in such as the "/" of a prefix
    length, drawn in front of the box so it cannot be deleted and stays
@@ -1813,6 +2876,11 @@ const FIELD_PH={
    anyway is harmless: gradeFields strips a leading affix before comparing. */
 function fieldsHtml(fields){
   return '<div class="agrid">'+fields.map(function(f){
+    /* A question whose answer is a sentence is picked, not typed. */
+    if(f.choices) return '<div class="afield two-col-full" id="f-'+f.id+'"><label>'+esc(f.label)+'</label>'+
+      '<div class="cls-row" id="a-'+f.id+'" data-v="" style="margin:.3rem 0 0;flex-wrap:wrap;gap:6px">'+
+      f.choices.map(function(c){ return '<button type="button" class="cbtn" data-c="'+esc(c)+'" onclick="pickChoice(\''+f.id+'\',this)">'+esc(c)+'</button>'; }).join('')+
+      '</div><div class="ahint" id="h-'+f.id+'"></div></div>';
     const inp='<input id="a-'+f.id+'" placeholder="'+(FIELD_PH[f.id]||'')+'" autocomplete="off" spellcheck="false"'+
       (f.affix ? ' oninput="affixTrim(this,\''+esc(f.affix)+'\')"' : '')+'>';
     return '<div class="afield" id="f-'+f.id+'"><label>'+esc(f.label)+'</label>'+
@@ -1828,6 +2896,12 @@ function fieldsHtml(fields){
 /* Typing the affix anyway (a habitual "/24") would show as "//24" next to
    the drawn one, so it is dropped as it is typed. */
 function affixTrim(inp, aff){ if(inp.value.indexOf(aff)===0) inp.value=inp.value.slice(aff.length); }
+function pickChoice(id, btn){
+  const row=document.getElementById('a-'+id);
+  if(row.dataset.locked) return;
+  row.dataset.v=btn.dataset.c;
+  Array.prototype.forEach.call(row.children, function(b){ b.classList.toggle('on', b===btn); });
+}
 function gradeFields(fields, reveal){
   const norm=function(s){ return String(s).trim().toLowerCase().replace(/\s+/g,' '); };
   let correct=0;
@@ -1835,6 +2909,14 @@ function gradeFields(fields, reveal){
     const inp=document.getElementById('a-'+f.id),
           fld=document.getElementById('f-'+f.id),
           hnt=document.getElementById('h-'+f.id);
+    if(f.choices){
+      const got=inp.dataset.v||''; inp.dataset.locked='1';
+      Array.prototype.forEach.call(inp.children, function(b){ acMarkPick(b, b.dataset.c===f.answer, b.dataset.c===got); });
+      if(!reveal&&got===f.answer){ fld.classList.add('ok'); hnt.textContent='✓ Correct'; correct++; }
+      else if(!got){ fld.classList.add('show'); hnt.textContent='Revealed'; }
+      else { fld.classList.add('bad'); hnt.textContent='Not that one — the answer is in green'; }
+      return;
+    }
     const aff=f.affix||'';
     let uv=norm(inp.value);
     if(aff && uv.indexOf(aff)===0) uv=uv.slice(aff.length).trim();
@@ -3114,7 +4196,9 @@ const TOPIC_FNS={
   range:{gen:genRange,   render:renderRange,  grade:rangeGrade},
   match:{gen:genMatch,   render:renderMatch,  grade:matchGrade},
   place:{gen:genPlace,   render:renderPlace,  grade:placeGrade},
-  lab:  {gen:genAclLab,  render:renderAclLab, grade:acLabGrade}
+  lab:  {gen:genAclLab,  render:renderAclLab, grade:acLabGrade},
+  terms:{gen:genNatTerms, render:renderNatTerms, grade:natTermsGrade},
+  nat:  {gen:genNatLab,  render:renderAclLab, grade:acLabGrade}
 };
 function pickTopic(){
   if(state.topic!=='rand') return state.topic;
@@ -3126,6 +4210,7 @@ function loadQ(){
   state.done=false;
   const t=pickTopic();
   state.mode=t;
+  state.ver=verOf(t);
   syncVersionButtons();
   state.data=TOPIC_FNS[t].gen(state.diff);
   render();
@@ -3141,11 +4226,11 @@ function updateChips(){
    configured, or a grid of answer fields. On a one-click drill it is just
    Skip with the score wiped, so it is hidden there. Kept per topic rather
    than per page, because these pages mix both kinds. */
-const TOPIC_RESET={wild:false, range:false, match:false, place:false, lab:true};
+const TOPIC_RESET={wild:false, range:false, match:false, place:false, lab:true, terms:false, nat:true};
 /* Which topics get the instructions pop-out — the ones with a canvas you
    scroll down to work, leaving the brief behind. Decided per topic for the
    same reason TOPIC_RESET is. */
-const TOPIC_POP={wild:false, range:false, match:false, place:true, lab:true};
+const TOPIC_POP={wild:false, range:false, match:false, place:true, lab:true, terms:false, nat:true};
 function setBtns(){
   const chk=document.getElementById('chkbtn'), rev=document.getElementById('revbtn'), nxt=document.getElementById('nxtbtn');
   nxt.style.display='none';
@@ -3189,7 +4274,7 @@ function resetGame(){ state.score=0; state.round=1; state.streak=0; loadQ(); }
 /* ─── Controls ──────────────────────────────────────────────────── */
 function setTopic(t,btn){
   state.topic=t;
-  document.querySelectorAll('#tb-rand,#tb-wild,#tb-range,#tb-match,#tb-place,#tb-lab').forEach(function(b){ b.classList.remove('on'); });
+  document.querySelectorAll('#tb-rand,#tb-wild,#tb-range,#tb-match,#tb-place,#tb-lab,#tb-terms,#tb-nat').forEach(function(b){ b.classList.remove('on'); });
   btn.classList.add('on');
   loadQ();
 }
@@ -3201,18 +4286,22 @@ function setDiff(d,btn){
 }
 function setVer(i,btn){
   const cfg=VERSIONS[state.mode];
-  if(!cfg||!cfg.opts.length) return;
-  state.ver=cfg.opts[i];
-  document.querySelectorAll('#vb-a,#vb-b').forEach(function(b){ b.classList.remove('on'); });
+  if(!cfg||!cfg.opts.length||i>=cfg.opts.length) return;
+  state.vers[state.mode]=cfg.opts[i];
+  document.querySelectorAll('#vb-a,#vb-b,#vb-c').forEach(function(b){ b.classList.remove('on'); });
   btn.classList.add('on');
   loadQ();
 }
+/* The row is per-topic: relabelled, enabled only where the choice changes
+   the round, and showing as many buttons as the topic has labels. */
 function syncVersionButtons(){
-  const cfg=VERSIONS[state.mode]||{opts:[],labels:['—','—']};
-  const btns=[document.getElementById('vb-a'),document.getElementById('vb-b')];
+  const cfg=VERSIONS[state.mode]||{row:'Family', opts:[], labels:['—','—']};
+  const btns=[document.getElementById('vb-a'),document.getElementById('vb-b'),document.getElementById('vb-c')];
   const live=cfg.opts.length>0;
+  document.getElementById('vb-lbl').textContent=cfg.row+':';
   btns.forEach(function(b,i){
-    b.textContent=cfg.labels[i];
+    b.style.display = i<cfg.labels.length ? '' : 'none';
+    b.textContent=cfg.labels[i]||'';
     b.disabled=!live;
     b.classList.toggle('on', live ? cfg.opts[i]===state.ver : i===0);
   });
@@ -3226,7 +4315,7 @@ function toggleTool(id){
   const cb=document.getElementById('tog-'+id);
   cb.checked=!cb.checked;
   document.getElementById('t-'+id).style.display=cb.checked?'':'none';
-  const any=['wcref','aclref','cmdref'].some(function(t){ return document.getElementById('tog-'+t).checked; });
+  const any=['wcref','ncref','aclref','cmdref','natref'].some(function(t){ return document.getElementById('tog-'+t).checked; });
   document.getElementById('toolsec').style.display=any?'':'none';
   if(window.saveOptionsState) saveOptionsState();
 }
