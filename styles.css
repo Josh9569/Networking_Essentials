@@ -764,7 +764,9 @@ sup  { font-size: .65em; vertical-align: super; }
 .az-val    { font-family: var(--mono); color: var(--text); word-break: break-all; }
 
 /* ── VLSM custom config – parent network section ───────────────────────────── */
-.custom-parent-sec   { border: 1px solid var(--border); border-radius: var(--r); padding: 12px; margin-bottom: .85rem; }
+/* A section of the custom card, not a box inside it — the same divider the
+   subnet-count row below uses. */
+.custom-parent-sec   { padding-bottom: .85rem; border-bottom: 1px solid var(--border); margin-bottom: .85rem; }
 .custom-sec-lbl      { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--text-t); margin-bottom: 8px; }
 .custom-src-btns     { display: flex; gap: 6px; margin-bottom: 10px; }
 .custom-src-btn      { padding: 4px 12px; border-radius: var(--r); border: 1px solid var(--border-m); background: transparent; cursor: pointer; font-size: 13px; font-family: var(--font); color: var(--text-s); transition: all .15s; }
