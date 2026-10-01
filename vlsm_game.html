@@ -85,7 +85,7 @@
 
     <div class="custom-count-row">
       <span class="custom-count-lbl">Number of subnets</span>
-      <input class="custom-num-inp" type="number" id="c-count" min="2" max="8" value="4" oninput="renderCustomHosts()">
+      <input class="custom-num-inp" type="number" id="c-count" min="2" max="30" value="4" oninput="renderCustomHosts()">
       <button class="rand-btn" onclick="randCount()" title="Randomise">&#9654; Random</button>
     </div>
 
@@ -219,11 +219,10 @@ function genVLSM(){
     }
 
     let cur=parentIPNum;
-    const CLRS=['a','b','c','d','e','f','g','h'];
     const subnets=blocks.map((blk,i)=>{
       const cidr=32-Math.round(Math.log2(blk));
       const netN=cur, bcN=cur+blk-1; cur+=blk;
-      return{ label:String.fromCharCode(65+i), cls:CLRS[i], hostsNeeded:sorted[i],
+      return{ label:subLabel(i), cls:subCls(i), hostsNeeded:sorted[i],
         cidr, mask:cidr2mask(cidr), network:int2ip(netN), broadcast:int2ip(bcN),
         first:int2ip(netN+1), last:int2ip(bcN-1), usable:blk-2 };
     });
@@ -276,14 +275,13 @@ function genVLSM(){
   chosen.sort((a,b)=>b-a);
 
   let cur=parentIPNum;
-  const CLRS=['a','b','c','d','e','f','g','h'];
   const subnets=chosen.map((blk,i)=>{
     const cidr=32-Math.round(Math.log2(blk));
     const maxH=blk-2;
     const minH=Math.max(1,Math.ceil(blk/2)-1);
     const hostsNeeded=ri(minH,maxH);
     const netN=cur, bcN=cur+blk-1; cur+=blk;
-    return{ label:String.fromCharCode(65+i), cls:CLRS[i], hostsNeeded, cidr,
+    return{ label:subLabel(i), cls:subCls(i), hostsNeeded, cidr,
       mask:cidr2mask(cidr), network:int2ip(netN), broadcast:int2ip(bcN),
       first:int2ip(netN+1), last:int2ip(bcN-1), usable:maxH };
   });
@@ -292,7 +290,13 @@ function genVLSM(){
 }
 
 /* ── Custom config ──────────────────────────────── */
+/* Custom mode allows up to 30 subnets. There are eight badge colours, so
+   they repeat, and names run A–Z then AA, AB… rather than off the end of
+   the alphabet into punctuation. */
+const MAX_SUBNETS=30;
 const CLRS_CSS=['a','b','c','d','e','f','g','h'];
+function subCls(i){ return CLRS_CSS[i%CLRS_CSS.length]; }
+function subLabel(i){ return i<26 ? String.fromCharCode(65+i) : String.fromCharCode(64+Math.floor(i/26))+String.fromCharCode(65+i%26); }
 
 function showCustomConfig(){
   document.getElementById('custom-card').style.display='';
@@ -313,7 +317,7 @@ function hideCustomConfig(){
 }
 
 function renderCustomHosts(){
-  const count=Math.min(8, Math.max(2, parseInt(document.getElementById('c-count').value)||4));
+  const count=Math.min(MAX_SUBNETS, Math.max(2, parseInt(document.getElementById('c-count').value)||4));
   /* Pad or trim customHosts to match count */
   while(customHosts.length<count) customHosts.push(randHostVal());
   customHosts=customHosts.slice(0,count);
@@ -323,10 +327,10 @@ function renderCustomHosts(){
   for(let i=0;i<count;i++){
     const row=document.createElement('div');
     row.className='custom-host-row';
-    const cls=CLRS_CSS[i];
+    const cls=subCls(i);
     row.innerHTML=`
-      <div class="chr-badge sub-ltr ${cls}">${String.fromCharCode(65+i)}</div>
-      <span class="chr-lbl">Subnet ${String.fromCharCode(65+i)}</span>
+      <div class="chr-badge sub-ltr ${cls}">${subLabel(i)}</div>
+      <span class="chr-lbl">Subnet ${subLabel(i)}</span>
       <input class="custom-num-inp" type="number" id="ch-${i}" min="1" max="1022" value="${customHosts[i]}">
       <span class="chr-unit">hosts</span>
       <button class="rand-btn" onclick="randHost(${i})" title="Randomise">&#9654;</button>`;
@@ -427,7 +431,7 @@ function startCustom(){
   }
 
   /* Collect host counts ─────────────────────────────────── */
-  const count=Math.min(8,Math.max(2,parseInt(document.getElementById('c-count').value)||4));
+  const count=Math.min(MAX_SUBNETS,Math.max(2,parseInt(document.getElementById('c-count').value)||4));
   let hosts=[];
   for(let i=0;i<count;i++){
     const v=parseInt(document.getElementById('ch-'+i)?.value)||1;
