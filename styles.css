@@ -634,7 +634,7 @@ sup  { font-size: .65em; vertical-align: super; }
 .custom-card        { background: var(--surface); border: 1px solid var(--border); border-radius: var(--rl); padding: 1.25rem 1.5rem; margin-bottom: 1rem; }
 .custom-card-title  { font-size: 12px; font-weight: 500; letter-spacing: .07em; text-transform: uppercase; color: var(--text-t); margin-bottom: 1rem; }
 .custom-count-row   { display: flex; align-items: center; gap: 10px; padding-bottom: .85rem; border-bottom: 1px solid var(--border); margin-bottom: .85rem; }
-.custom-count-lbl   { font-size: 14px; color: var(--text); font-weight: 500; flex: 1; }
+.custom-count-lbl   { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--text-t); flex: 1; }   /* the same subheading as .custom-sec-lbl */
 .custom-num-inp     { font-family: var(--mono); font-size: 15px; font-weight: 500; background: var(--surface-s); border: 1px solid var(--border-m); border-radius: var(--r); padding: 5px 10px; width: 72px; text-align: center; color: var(--text); outline: none; -moz-appearance: textfield; appearance: textfield; }
 .custom-num-inp::-webkit-outer-spin-button,
 .custom-num-inp::-webkit-inner-spin-button { -webkit-appearance: none; }
@@ -764,9 +764,9 @@ sup  { font-size: .65em; vertical-align: super; }
 .az-val    { font-family: var(--mono); color: var(--text); word-break: break-all; }
 
 /* ── VLSM custom config – parent network section ───────────────────────────── */
-/* A section of the custom card, not a box inside it — the same divider the
-   subnet-count row below uses. */
-.custom-parent-sec   { padding-bottom: .85rem; border-bottom: 1px solid var(--border); margin-bottom: .85rem; }
+/* A section of the custom card, not a box inside it, and no divider before
+   the subnet count — the two are settings of the same challenge. */
+.custom-parent-sec   { margin-bottom: .85rem; }
 .custom-sec-lbl      { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--text-t); margin-bottom: 8px; }
 .custom-src-btns     { display: flex; gap: 6px; margin-bottom: 10px; }
 .custom-src-btn      { padding: 4px 12px; border-radius: var(--r); border: 1px solid var(--border-m); background: transparent; cursor: pointer; font-size: 13px; font-family: var(--font); color: var(--text-s); transition: all .15s; }
