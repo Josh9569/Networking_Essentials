@@ -84,9 +84,11 @@
     </div>
 
     <div class="custom-count-row">
-      <span class="custom-count-lbl">Number of subnets (maximum of 30)</span>
-      <input class="custom-num-inp" type="number" id="c-count" min="2" max="30" value="4" oninput="renderCustomHosts()" onchange="clampCount()">
-      <button class="rand-btn" onclick="randCount()" title="Randomise">&#9654; Random</button>
+      <div class="custom-sec-lbl">Number of subnets (maximum of 30)</div>
+      <div class="custom-count-ctl">
+        <input class="custom-num-inp" type="number" id="c-count" min="2" max="30" value="4" oninput="renderCustomHosts()" onchange="clampCount()">
+        <button class="rand-btn" onclick="randCount()" title="Randomise">&#9654; Random</button>
+      </div>
     </div>
 
     <div class="custom-hosts" id="c-hosts"></div>
