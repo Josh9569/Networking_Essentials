@@ -10,6 +10,7 @@
 <script src="options.js"></script>
 <script src="answer-keys.js"></script>
 <script src="lab-shared.js"></script>
+<script src="net-ospf.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -37,6 +38,7 @@
     <button class="cbtn" id="tb-lsa" onclick="setTopic('lsa',this)">OSPF LSAs</button>
     <button class="cbtn" id="tb-rip" onclick="setTopic('rip',this)">RIP</button>
     <button class="cbtn" id="tb-riplab" onclick="setTopic('riplab',this)">RIP Lab</button>
+    <button class="cbtn" id="tb-ospflab" onclick="setTopic('ospflab',this)">OSPF Lab</button>
   </div>
 
   <div class="diff-row">
@@ -92,6 +94,10 @@
         <label class="opt-row" onclick="toggleTool('ripcmd')">
           <span class="opt-row-label">RIP Command Reference</span>
           <div class="tog"><input type="checkbox" id="tog-ripcmd" checked><span class="tog-track"></span></div>
+        </label>
+        <label class="opt-row" onclick="toggleTool('ospfcmd')">
+          <span class="opt-row-label">OSPF Command Reference</span>
+          <div class="tog"><input type="checkbox" id="tog-ospfcmd" checked><span class="tog-track"></span></div>
         </label>
       </div>
     </div>
@@ -158,6 +164,29 @@
       <p class="tool-note"><strong>Tab</strong> completes a command; <strong>&uarr;</strong> and <strong>&darr;</strong> walk the history.</p>
     </div>
 
+    <div class="tool-block" id="t-ospfcmd">
+      <div class="tool-block-title">OSPF Command Reference</div>
+      <p class="tool-note">OSPFv2 puts interfaces into areas with <span class="mono-inl">network</span> statements under the process; OSPFv3 does it <strong>on each interface</strong>. Both need a router ID &mdash; OSPFv3 on an IPv6-only router has no IPv4 address to borrow one from, so it must be set. A new router ID only takes effect once the process restarts if neighbours are already up.</p>
+      <table class="ref-table">
+        <thead><tr><th>OSPFv2</th><th>OSPFv3</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td class="mono-inl">&mdash;</td><td class="mono-inl">ipv6 unicast-routing</td><td>Turn on IPv6 routing &mdash; nothing OSPFv3 does works without it</td></tr>
+          <tr><td class="mono-inl">router ospf 1</td><td class="mono-inl">ipv6 router ospf 1</td><td>Start the process and enter router-configuration mode</td></tr>
+          <tr><td class="mono-inl">router-id 1.1.1.1</td><td class="mono-inl">router-id 1.1.1.1</td><td>Set the router ID (a 32-bit number written like an IPv4 address in both)</td></tr>
+          <tr><td class="mono-inl">network 10.1.1.0 0.0.0.3 area 0</td><td class="mono-inl">ipv6 ospf 1 area 0</td><td>Run OSPF on an interface, in an area. v2: under the process, by address and wildcard; v3: under the interface</td></tr>
+          <tr><td class="mono-inl">passive-interface Gi0/0</td><td class="mono-inl">passive-interface Gi0/0</td><td>Advertise the network but send no hellos there &mdash; for LANs with no OSPF neighbours</td></tr>
+          <tr><td class="mono-inl">default-information originate</td><td class="mono-inl">default-information originate</td><td>Advertise this router's default route; the others learn it as O*E2 / OE2</td></tr>
+          <tr><td class="mono-inl">ip ospf cost 10</td><td class="mono-inl">ipv6 ospf cost 10</td><td>Override an interface's cost (interface mode)</td></tr>
+          <tr><td class="mono-inl">clear ip ospf process</td><td class="mono-inl">clear ipv6 ospf process</td><td>Restart the process &mdash; how a changed router ID takes effect</td></tr>
+          <tr><td class="mono-inl">show ip ospf neighbor</td><td class="mono-inl">show ipv6 ospf neighbor</td><td>Adjacencies: FULL means routes are being exchanged</td></tr>
+          <tr><td class="mono-inl">show ip ospf interface brief</td><td class="mono-inl">show ipv6 ospf interface brief</td><td>Which interfaces run OSPF, in which area, at what cost</td></tr>
+          <tr><td class="mono-inl">show ip protocols</td><td class="mono-inl">show ipv6 protocols</td><td>Router ID, areas, networks and passive interfaces</td></tr>
+          <tr><td class="mono-inl">show ip route</td><td class="mono-inl">show ipv6 route</td><td>O intra-area, O IA / OI inter-area, O*E2 / OE2 the external default</td></tr>
+        </tbody>
+      </table>
+      <p class="tool-note">Neighbours only form when both interfaces are in the <strong>same area</strong> (and, in v2, the same subnet), <strong>neither is passive</strong>, and the two router IDs <strong>differ</strong>.</p>
+    </div>
+
     <div class="tool-block" id="t-lsa">
       <div class="tool-block-title">LSA Type Reference</div>
       <p class="tool-note">Who originates each LSA, and how far it floods. The rules are identical in OSPFv2 and OSPFv3 &mdash; v3 renumbers the types and adds two of its own.</p>
@@ -196,12 +225,12 @@ function choice(arr){ return arr[ri(0,arr.length-1)]; }
 function shuffle(arr){ for(let i=arr.length-1;i>0;i--){ const j=ri(0,i); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
 function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
-const TOPICS=['ospf','lsa','rip','riplab'];
-const TOPIC_LABEL={ospf:'OSPF Cost', lsa:'OSPF LSAs', rip:'RIP', riplab:'RIP Lab'};
+const TOPICS=['ospf','lsa','rip','riplab','ospflab'];
+const TOPIC_LABEL={ospf:'OSPF Cost', lsa:'OSPF LSAs', rip:'RIP', riplab:'RIP Lab', ospflab:'OSPF Lab'};
 const POINTS={easy:3, medium:4, hard:6};
 /* Which reference each topic most wants at hand — options.js floats it to
    the top of both the menu and the column. */
-const TOPIC_REF={ospf:'cost', lsa:'lsa', rip:'rip', riplab:'ripcmd'};
+const TOPIC_REF={ospf:'cost', lsa:'lsa', rip:'rip', riplab:'ripcmd', ospflab:'ospfcmd'};
 
 /* The Version row is per-topic: OSPFv2/v3 changes what an LSA is called and
    adds two types, but changes nothing at all about cost arithmetic, so the
@@ -217,7 +246,10 @@ const VERSIONS={
      all — it is the default). Hard is two different labs, because every RIPv1
      limitation has the same fix, "use v2", and a v1 round whose answer is
      "switch to v2" would not be a v1 round. See genRipLabHardV1. */
-  riplab:{opts:['v1','v2'], labels:['RIPv1','RIPv2']}
+  riplab:{opts:['v1','v2'], labels:['RIPv1','RIPv2']},
+  /* Live: OSPFv2 builds the lab in IPv4 with network statements, OSPFv3 the
+     same lab in IPv6 with per-interface configuration. */
+  ospflab:{opts:['v2','v3'], labels:['OSPFv2','OSPFv3']}
 };
 
 let state={ topic:'rand', diff:'easy', ver:'v2', score:0, round:1, streak:0,
@@ -714,9 +746,17 @@ function osIfaceRows(d){
     return {name:osIfaceName(i), neighbour:p.via, bw:h.bw, cost:h.cost, override:!!h.override};
   });
 }
+/* The four commands the drill's read-only CLI offers (OS_CMDS), by shape:
+   anything else gets IOS's caret rather than being matched by its prefix. */
+const OS_GRAMMAR=LabShared.cliGrammar([
+  'show ip ospf interface [brief|<if>]', 'show ip protocols', 'show running-config [\\| section ospf]',
+  'show interfaces [<if>]', 'help', '?'
+]);
 function osCliRun(cmd){
   const d=state.data, t=cmd.trim().toLowerCase().replace(/\s+/g,' ');
   if(!t) return '';
+  const bad=LabShared.cliCheck(OS_GRAMMAR, 'R1#', cmd);
+  if(bad) return bad;
   if(t==='?'||t==='help') return OS_CMDS.map(function(c){ return '  '+c; }).join('\n');
   const ifs=osIfaceRows(d);
 
@@ -1636,7 +1676,8 @@ function rpById(id){ return rpDevices.find(function(d){ return d.id===id; }); }
 function rpAddRouter(x,y){
   rpRtCount++;
   const d={ id:rpNid++, type:'router', name:'R'+rpRtCount, x:x, y:y,
-    ports:Array.from({length:RP_PORTN},function(_,i){ return {name:'Gi0/'+i, ip:null, pfx:null, up:false}; }),
+    ports:Array.from({length:RP_PORTN},function(_,i){ return {name:'Gi0/'+i, ip:null, pfx:null, up:false,
+      ip6:null, pfx6:null, ll6:null, cost:null, area2:null, area6:null}; }),
     /* Loopbacks live in their own array rather than in ports[], so the
        fixed port-row geometry and every cable calculation stay untouched.
        They are always up and never cabled; what makes them interesting is
@@ -1651,12 +1692,14 @@ function rpAddRouter(x,y){
        way "network 172.16.0.0" really behaves — IOS silently rounds
        whatever you type down to its major network, and this does too. */
     rip:{on:false, version:1, autoSummary:true, networks:[], passive:[], defaultOriginate:false},
+    /* The OSPF Lab's processes and IPv6 state (see the OSPF Lab section). */
+    ospf:opNew(), ospf6:opNew(), unicast6:false, static6Default:null,
     cm:'exec', ci:null, log:[], hist:[], hi:0 };
   rpDevices.push(d); return d;
 }
 function rpAddPC(x,y){
   rpPcCount++;
-  const d={ id:rpNid++, type:'pc', name:'PC'+rpPcCount, x:x, y:y, ip:null, pfx:24 };
+  const d={ id:rpNid++, type:'pc', name:'PC'+rpPcCount, x:x, y:y, ip:null, pfx:24, ip6:null };
   rpDevices.push(d); return d;
 }
 function rpAddSwitch(x,y){
@@ -1668,7 +1711,8 @@ function rpAddSwitch(x,y){
 /* Loopbacks are addressed at creation and are up from the moment they
    exist, like the real thing. name is Loopback0, Loopback1, ... */
 function rpAddLoopback(r, ip, pfx){
-  const lb={name:'Loopback'+r.loopbacks.length, ip:ip, pfx:pfx, up:true, loopback:true};
+  const lb={name:'Loopback'+r.loopbacks.length, ip:ip, pfx:pfx, up:true, loopback:true,
+    ip6:null, pfx6:null, ll6:null, cost:null, area2:null, area6:null};
   r.loopbacks.push(lb);
   rpInvalidate();
   return lb;
@@ -1875,7 +1919,7 @@ function rpConverge(){
    the topologies are small enough that converging from scratch is free. */
 let rpRipCache=null;
 function rpRip(){ if(!rpRipCache) rpRipCache=rpConverge(); return rpRipCache; }
-function rpInvalidate(){ rpRipCache=null; }
+function rpInvalidate(){ rpRipCache=null; opInvalidate(); }
 
 /* Connected first, then everything RIP learned. */
 function rpRoutingTable(r){
@@ -1891,6 +1935,13 @@ function rpRoutingTable(r){
                 iface:r.staticDefault.ifaceName||'', nextHop:r.staticDefault.nextHop||null,
                 _static:r.staticDefault});
   }
+  opRoutesOf(r,4).forEach(function(e){
+    if(e.pfx===0 && r.staticDefault) return;
+    e.via.forEach(function(v){
+      table.push({code:e.code, netInt:e.net, prefix:e.pfx, ad:110, metric:e.metric,
+                  iface:v.iface, nextHop:v.nextHop, _ifaceIdx:r.ports.findIndex(function(p){ return p.name===v.iface; })});
+    });
+  });
   (rpRip()[r.id]||[]).forEach(function(e){
     /* A learned default never displaces a configured one. */
     if(e.prefix===0 && r.staticDefault) return;
@@ -2029,30 +2080,57 @@ function rpParseLoopback(d, text){
 }
 const RP_KW={
   enable:{}, configure:{terminal:{}}, end:{}, exit:{}, clear:{},
-  show:{ip:{route:{}, protocols:{}, interface:{brief:{}}}, run:{}},
+  show:{ip:{route:{}, protocols:{}, interface:{brief:{}}, ospf:{neighbor:{}, interface:{brief:{}}}},
+        ipv6:{route:{}, protocols:{}, interface:{brief:{}}, ospf:{neighbor:{}, interface:{brief:{}}}}, run:{}},
   interface:{},
   shutdown:{},
-  ip:{address:{}, route:{}},
-  router:{rip:{}},
+  ip:{address:{}, route:{}, ospf:{cost:{}}},
+  ipv6:{'unicast-routing':{}, router:{ospf:{}}, address:{}, ospf:{cost:{}}, route:{}},
+  router:{rip:{}, ospf:{}},
+  'router-id':{},
   version:{},
   network:{},
   'auto-summary':{},
   'passive-interface':{},
   'default-information':{originate:{}},
-  no:{shutdown:{}, ip:{address:{}, route:{}}, 'auto-summary':{}, 'passive-interface':{},
-      router:{rip:{}}, version:{}, network:{}, 'default-information':{originate:{}}}
+  no:{shutdown:{}, ip:{address:{}, route:{}, ospf:{}}, 'auto-summary':{}, 'passive-interface':{},
+      router:{rip:{}, ospf:{}}, version:{}, network:{}, 'default-information':{originate:{}},
+      ipv6:{'unicast-routing':{}, router:{ospf:{}}, address:{}, ospf:{}, route:{}}, 'router-id':{}}
 };
+/* Every command rpCli understands, by shape: RIP, addressing and the IPv6
+   default route here, OSPF from net-ospf.js. A line that fits none of them
+   gets IOS's caret (see cliGrammar in lab-shared.js). */
+const RP_GRAMMAR=LabShared.cliGrammar([
+  'enable', 'configure [terminal]', 'end', 'exit', 'cls', 'clear',
+  'show ip route', 'show ip protocols', 'show ip interface [brief]', 'show running-config',
+  'show ipv6 route', 'show ipv6 interface [brief]',
+  'interface <if>', 'router rip', 'no router rip',
+  'shutdown', 'no shutdown', 'ip address <ip> <ip>', 'no ip address [<ip> <ip>]',
+  'ip route <ip> <ip> <ip>|<if>', 'no ip route [<ip> <ip> [<ip>|<if>]]',
+  'version 1|2', 'no version [1|2]', 'network <ip>', 'no network <ip>', 'auto-summary', 'no auto-summary',
+  'ipv6 route <v6p> <v6>|<if>', 'no ipv6 route [<v6p> [<v6>|<if>]]',
+  'ipv6 address <v6p>', 'ipv6 address <v6> link-local', 'no ipv6 address [<v6p>]', 'ipv6 enable'
+]).concat(NetOspf.GRAMMAR);
 function rpCli(d, line){
   const t=line.trim().replace(/\s+/g,' ');
-  if(!t) return '';
-  const w=t.toLowerCase().split(' ');
   const M=function(tok,cand){ return tok&&cand.indexOf(tok)===0; };
+  if(d.cm==='opclear'){ rpInvalidate(); return opCli(d,t,t.toLowerCase().split(' '),M); }
+  if(!t) return '';
+  const pp=LabShared.cliPipe(rpPromptFor(d), line);
+  if(pp) return pp.err||LabShared.cliFilter(rpCli(d,pp.base),pp);
+  const bad=LabShared.cliCheck(RP_GRAMMAR, rpPromptFor(d), line);
+  if(bad) return bad;
+  /* "do" runs an exec command from any configuration mode */
+  if(/^do\s/i.test(t)) return rpCli(d, t.slice(3));
+  const w=t.toLowerCase().split(' ');
   rpInvalidate();
 
   if(M(w[0],'enable')){ d.cm='exec'; d.ci=null; return ''; }
   if(M(w[0],'configure')||w[0]==='conf'){ d.cm='conf'; d.ci=null; return ''; }
   if(M(w[0],'end')){ d.cm='exec'; d.ci=null; return ''; }
-  if(M(w[0],'exit')){ d.cm = (d.cm==='if'||d.cm==='rip') ? 'conf' : 'exec'; d.ci=null; return ''; }
+  if(M(w[0],'exit')){ d.cm = (d.cm==='if'||d.cm==='rip'||d.cm==='ospf'||d.cm==='ospf6') ? 'conf' : 'exec'; d.ci=null; return ''; }
+  const os=opCli(d,t,w,M);
+  if(os!==null) return os;
   if(w[0]==='cls'||M(w[0],'clear')){ d.log.length=0; return ''; }
 
   if(M(w[0],'show')||w[0]==='sh'){
@@ -2169,7 +2247,8 @@ function rpCli(d, line){
   return '% Invalid input detected';
 }
 function rpPromptFor(d){
-  return d.name+(d.cm==='conf'?'(config)#':d.cm==='if'?'(config-if)#':d.cm==='rip'?'(config-router)#':'#');
+  if(d.cm==='opclear') return 'Reset ALL OSPF processes? [no]:';
+  return d.name+(d.cm==='conf'?'(config)#':d.cm==='if'?'(config-if)#':d.cm==='rip'||d.cm==='ospf'?'(config-router)#':d.cm==='ospf6'?'(config-rtr)#':'#');
 }
 function rpEchoCli(d, cmds){
   cmds.forEach(function(c){
@@ -2184,8 +2263,8 @@ function rpShowRoute(d){
   const t=rpRoutingTable(d);
   if(!t.length) return 'No routes.';
   const def=t.find(function(e){ return e.prefix===0; });
-  const lines=['Codes: C - connected, S - static, R - RIP',
-    '       * - candidate default',''];
+  const lines=['Codes: C - connected, S - static, R - RIP, O - OSPF, IA - OSPF inter area',
+    '       E2 - OSPF external type 2, * - candidate default',''];
   lines.push(def
     ? 'Gateway of last resort is '+(def.nextHop||'0.0.0.0')+' to network 0.0.0.0'
     : 'Gateway of last resort is not set');
@@ -2195,6 +2274,10 @@ function rpShowRoute(d){
       lines.push('C    '+int2ip(e.netInt)+'/'+e.prefix+' is directly connected, '+e.iface);
     } else if(e.code==='S*'){
       lines.push('S*   0.0.0.0/0 is directly connected, '+e.iface);
+    } else if(e.code==='O*E2'){
+      lines.push('O*E2 0.0.0.0/0 [110/1] via '+e.nextHop+', '+e.iface);
+    } else if(e.code==='O'||e.code==='O IA'){
+      lines.push((e.code==='O'?'O    ':'O IA ')+int2ip(e.netInt)+'/'+e.prefix+' [110/'+e.metric+'] via '+e.nextHop+', '+e.iface);
     } else if(e.prefix===0){
       lines.push('R*   0.0.0.0/0 [120/'+e.metric+'] via '+e.nextHop+', '+e.iface);
     } else {
@@ -2237,9 +2320,11 @@ function rpShowRun(d){
   d.ports.concat(d.loopbacks).forEach(function(p){
     lines.push('interface '+p.name);
     lines.push(p.ip ? ' ip address '+p.ip+' '+cidr2mask(p.pfx) : ' no ip address');
+    opIfRunLines(d,p).forEach(function(l){ lines.push(l); });
     if(!p.up&&!p.loopback) lines.push(' shutdown');
     lines.push('!');
   });
+  opRunLines(d).forEach(function(l){ lines.push(l); });
   if(d.rip.on){
     lines.push('router rip');
     if(d.rip.version===2) lines.push(' version 2');
@@ -2799,13 +2884,32 @@ function genRipLab(diff){
 function rpDevSize(d){
   if(d.type==='router') return [RP_W,RP_H];
   if(d.type==='switch') return [LabShared.SW_W,LabShared.SW_H];
-  const label=d.ip?d.ip:'no IP';
+  const label=d.ip?d.ip:d.ip6?op6Up(d.ip6):'no IP';
   return [Math.max(LabShared.PC_W, Math.round(label.length*6.4)+24), LabShared.PC_H];
 }
 function rpFixedPortPos(d,i){
-  if(d.type==='router'){ const pad=20, span=RP_W-2*pad; return [pad+i*(span/(RP_PORTN-1)), RP_H]; }
-  if(d.type==='switch'){ const pad=20, span=LabShared.SW_W-2*pad; return [pad+i*(span/(RP_SW_PORTN-1)), LabShared.SW_H]; }
+  const k=d.slots?d.slots[i]:i;
+  if(d.type==='router'){ const pad=20, span=RP_W-2*pad; return [pad+k*(span/(RP_PORTN-1)), RP_H]; }
+  if(d.type==='switch'){ const pad=20, span=LabShared.SW_W-2*pad; return [pad+k*(span/(RP_SW_PORTN-1)), LabShared.SW_H]; }
   return null;
+}
+/* Draw each box's ports in the order their cables leave (LabShared.portSlots)
+   — Gi0/0 is still Gi0/0, it just sits on the side its PC is on. Run once per
+   round, when the round's own cables exist; devices are laid out in order, so
+   a later one sees the slots an earlier one settled on. */
+function rpLayoutSlots(){
+  rpDevices.forEach(function(d){ d.slots=null; });
+  rpDevices.forEach(function(d){
+    if(d.type!=='router'&&d.type!=='switch') return;
+    const sz=rpDevSize(d), row=d.y+sz[1];
+    const far=d.ports.map(function(_,i){
+      const c=rpPortCable(d.id,i); if(!c) return null;
+      const o=rpOtherEnd(c,d.id), od=rpById(o.d), os=rpDevSize(od), fp=rpFixedPortPos(od,o.i);
+      if(fp) return {x:od.x+fp[0], kind:'u'};
+      return {x:od.x+os[0]/2, kind:od.y+os[1]/2<row?'up':'down'};
+    });
+    d.slots=LabShared.portSlots(far, d.x+sz[0]/2);
+  });
 }
 function rpPortPos(d,i){
   const fixed=rpFixedPortPos(d,i);
@@ -2829,13 +2933,19 @@ function rpRenderCanvas(){
   if(!svg||!layer) return;
   svg.innerHTML=''; layer.innerHTML='';
 
-  rpCables.forEach(function(c){
-    const A=rpById(c.a.d), B=rpById(c.b.d);
-    const pa=rpPortPos(A,c.a.i), pb=rpPortPos(B,c.b.i);
+  /* Router and switch ports sit on the bottom edge of the box, so a cable
+     between two of them is routed down-across-up (LabShared.cablePaths)
+     instead of drawn straight along the port row or through a box. */
+  const rpBox=function(d){ const s=rpDevSize(d); return {l:d.x, t:d.y, r:d.x+s[0], b:d.y+s[1]}; };
+  const rpRoutes=LabShared.cablePaths(rpCables.map(function(c){
+    const A=rpById(c.a.d), B=rpById(c.b.d), pa=rpPortPos(A,c.a.i), pb=rpPortPos(B,c.b.i);
+    return {ax:A.x+pa[0], ay:A.y+pa[1], bx:B.x+pb[0], by:B.y+pb[1],
+      aDown:!!rpFixedPortPos(A,c.a.i), bDown:!!rpFixedPortPos(B,c.b.i), aBox:rpBox(A), bBox:rpBox(B)};
+  }));
+  rpCables.forEach(function(c,ci){
     ['cable','cable-hit'].forEach(function(cls){
-      const l=document.createElementNS('http://www.w3.org/2000/svg','line');
-      l.setAttribute('x1',A.x+pa[0]); l.setAttribute('y1',A.y+pa[1]);
-      l.setAttribute('x2',B.x+pb[0]); l.setAttribute('y2',B.y+pb[1]);
+      const l=document.createElementNS('http://www.w3.org/2000/svg','path');
+      l.setAttribute('d',rpRoutes[ci]);
       l.setAttribute('class',cls); l.dataset.cid=c.id;
       svg.appendChild(l);
     });
@@ -2874,7 +2984,7 @@ function rpRenderCanvas(){
       tx.setAttribute('text-anchor','middle');
       tx.setAttribute('font-size','11'); tx.setAttribute('font-family','var(--mono)');
       tx.setAttribute('fill','currentColor');
-      tx.textContent=lb.name+' '+lb.ip+'/'+lb.pfx;
+      tx.textContent=lb.name+' '+(lb.ip?lb.ip+'/'+lb.pfx:op6Up(lb.ip6)+'/'+lb.pfx6);
       svg.appendChild(tx);
     });
   });
@@ -2887,13 +2997,15 @@ function rpRenderCanvas(){
     el.style.width=size[0]+'px'; el.style.height=size[1]+'px';
     el.dataset.did=d.id;
     if(d.type==='router'){
-      const up=d.ports.filter(function(p){ return p.ip&&p.up; }).length;
-      const rip=d.rip.on ? 'RIPv'+d.rip.version : 'no RIP';
+      const up=d.ports.filter(function(p){ return (p.ip||p.ip6)&&p.up; }).length;
+      const rip=state.mode==='ospflab'
+        ? (d.ospf.on?'OSPF':d.ospf6.on&&d.unicast6?'OSPFv3':'no OSPF')
+        : (d.rip.on ? 'RIPv'+d.rip.version : 'no RIP');
       el.innerHTML='<div class="dev-name">'+d.name+'</div><div class="dev-sub">'+up+'/'+RP_PORTN+' up · '+rip+'</div>';
     } else if(d.type==='switch'){
       el.innerHTML='<div class="dev-name">'+d.name+'</div><div class="dev-sub">unmanaged switch</div>';
     } else {
-      el.innerHTML='<div class="dev-name">'+d.name+'</div><div class="dev-sub">'+(d.ip?d.ip:'no IP')+'</div>';
+      el.innerHTML='<div class="dev-name">'+d.name+'</div><div class="dev-sub">'+(d.ip?d.ip:d.ip6?op6Up(d.ip6):'no IP')+'</div>';
     }
     layer.appendChild(el);
 
@@ -2904,11 +3016,11 @@ function rpRenderCanvas(){
       const pel=document.createElement('span');
       let cls='port';
       if(rpPending&&rpPending.d===d.id&&rpPending.i===i) cls+=' p-pending';
-      else if(p&&p.ip&&p.up) cls+=' p-acc';
+      else if(p&&(p.ip||p.ip6)&&p.up) cls+=' p-acc';
       pel.className=cls;
       pel.style.left=(d.x+pos[0]-7)+'px'; pel.style.top=(d.y+pos[1]-7)+'px';
       pel.dataset.did=d.id; pel.dataset.pi=i;
-      pel.title = p ? p.name+(p.ip?' '+p.ip+'/'+p.pfx:'')+(p.up?'':' (down)') : 'Eth0';
+      pel.title = p ? p.name+(p.ip?' '+p.ip+'/'+p.pfx:p.ip6?' '+op6Up(p.ip6)+'/'+p.pfx6:'')+(p.up?'':' (down)') : 'Eth0';
       layer.appendChild(pel);
     });
   });
@@ -3025,17 +3137,37 @@ function rpRenderRouterCfg(d,panel){
   panel.innerHTML=
     '<div class="cfg-hdr"><div class="cfg-name">'+d.name+'</div>'+
     '<button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="rpCloseCfg()">Close</button></div>'+
-    '<div class="cfg-grid"><div>'+
+    (state.mode==='ospflab' ? '<div class="cfg-grid stack"><div>'+
+      '<div class="cfg-sec-lbl">Interfaces</div>'+
+      (helper ? rpPortTableHtml(d) : '<div class="cli-note">'+(state.data&&state.data.fam===6?'IPv6 round':'Hard mode')+' — interfaces are configured through the CLI.</div>')+
+      '<div class="cli-note" style="margin-top:10px">'+(state.data&&state.data.fam===6?'OSPFv3':'OSPF')+' is configured from the CLI — the process, the router ID, '+
+        (state.data&&state.data.fam===6?'"ipv6 ospf 1 area" on each interface':'"network &lt;address&gt; &lt;wildcard&gt; area &lt;n&gt;"')+', passive interfaces and the default route.</div>'+
+      '</div><div><div class="cfg-sec-lbl">CLI</div>'+rpTermHtml()+'</div></div>' :
+    '<div class="cfg-grid stack"><div>'+
       '<div class="cfg-sec-lbl">Interfaces</div>'+
       (helper ? rpPortTableHtml(d) : '<div class="cli-note">Hard mode — address interfaces through the CLI (interface, ip address, no shutdown).</div>')+
       '<div class="cfg-sec-lbl" style="margin-top:14px">Default Route</div>'+
       (helper ? rpDefaultRouteFormHtml(d) : '<div class="cli-note">Hard mode — CLI only (ip route 0.0.0.0 0.0.0.0 &lt;interface&gt;).</div>')+
       '<div class="cfg-sec-lbl" style="margin-top:14px">RIP</div>'+
       (helper ? rpRipFormHtml(d) : '<div class="cli-note">Hard mode — configure RIP through the CLI (router rip, version, network, no auto-summary, default-information originate).</div>')+
-    '</div><div><div class="cfg-sec-lbl">CLI</div>'+rpTermHtml()+'</div></div>';
+    '</div><div><div class="cfg-sec-lbl">CLI</div>'+rpTermHtml()+'</div></div>');
   rpRenderTerm();
 }
 function rpRenderPcCfg(d,panel){
+  if(state.data&&state.data.fam===6){
+    panel.innerHTML=
+      '<div class="cfg-hdr"><div class="cfg-name">'+d.name+'</div>'+
+      '<button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="rpCloseCfg()">Close</button></div>'+
+      '<div class="pc-form"><span class="pc-form-lbl">IPv6 Address</span>'+
+      '<input type="text" class="custom-ip-inp" value="'+(d.ip6?op6Up(d.ip6):'')+'" autocomplete="off" spellcheck="false" oninput="opSetPcIp6('+d.id+',this.value)">'+
+      '<span class="pc-pfx">/64</span></div>'+
+      '<div class="cfg-sec-lbl" style="margin-top:14px">Ping</div>'+
+      '<div class="pc-form"><label class="pc-form-lbl">Target IPv6</label>'+
+      '<input class="custom-ip-inp" id="rp-ping-ip" placeholder="e.g. 2001:DB8:ACAD:30::10" autocomplete="off" spellcheck="false" onkeydown="if(event.key===\'Enter\')rpPingRun()">'+
+      '<button class="rand-btn" id="rp-ping-btn" onclick="rpPingRun()">Ping</button></div>'+
+      '<pre class="ping-out" id="rp-ping-out"></pre>';
+    return;
+  }
   panel.innerHTML=
     '<div class="cfg-hdr"><div class="cfg-name">'+d.name+'</div>'+
     '<button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="rpCloseCfg()">Close</button></div>'+
@@ -3127,6 +3259,11 @@ function rpSetPcIp(did,val){
   }
   rpRenderCanvas();
 }
+function opSetPcIp6(did,val){
+  const d=rpById(did), k=op6Parse(val.trim());
+  if(k!=null) d.ip6=op6Fmt(k); else if(!val.trim()) d.ip6=null;
+  rpRenderCanvas();
+}
 let rpPingGen=0;
 function rpPingRun(){
   const d=rpSelected!=null?rpById(rpSelected):null;
@@ -3135,6 +3272,12 @@ function rpPingRun(){
   LabShared.runPing({
     inputId:'rp-ping-ip', btnId:'rp-ping-btn', outId:'rp-ping-out',
     resolve:function(dst){
+      if(state.data&&state.data.fam===6){
+        if(!d.ip6) return {msg:d.name+' has no IPv6 address'};
+        if(op6Parse(dst)==null) return {msg:'invalid IPv6 address'};
+        if(op6Parse(dst)===op6Parse(d.ip6)) return {ok:true};
+        return opResolvePing6(d,dst).ok?{ok:true}:{ok:false};
+      }
       if(!d.ip||!isValidIP(d.ip)) return {msg:d.name+' has no valid IP'};
       if(!isValidIP(dst)) return {msg:'invalid target address'};
       if(dst===d.ip) return {ok:true};
@@ -3159,7 +3302,7 @@ function rpRenderTerm(){
   if(!d||d.type!=='router') return;
   const log=document.getElementById('rp-term-log');
   if(!log) return;
-  log.innerHTML=d.log.slice(-16).map(function(l){
+  log.innerHTML=d.log.slice(-300).map(function(l){
     return '<div class="tl'+(l.charAt(0)==='%'?' terr':'')+'">'+esc(l)+'</div>';
   }).join('');
   log.scrollTop=log.scrollHeight;
@@ -3247,6 +3390,7 @@ function renderRipLab(body,qip){
   });
   document.getElementById('rp-cable-svg').addEventListener('click', rpOnCableClick);
   setBtns('lab');
+  rpLayoutSlots();
   rpRenderCanvas();
   rpRenderReqs(null);
 }
@@ -3281,6 +3425,452 @@ function rpGrade(reveal){
   finishRound();
 }
 
+/* ═══ OSPF Lab ═════════════════════════════════════════════════════
+   The link-state half of this page, on the RIP Lab's own devices, canvas,
+   config panel and terminal: an OSPF router is an rp* router with ospf (v2)
+   and ospf6 (v3) processes beside its rip one. The engine — adjacency, SPF,
+   the OSPF CLI and show commands — is net-ospf.js, shared with the
+   troubleshooting trainer; this page hands it a view of the rp* devices and
+   keeps what belongs to its own model: IPv6 addressing, the IPv6 default
+   route, and IPv6 forwarding over rpL2Neighbors. */
+const {OP_FAM, opNew, opProc, opRidStr, opParseArea, op6Parse, op6Fmt, op6Net, op6Up}=NetOspf;
+function opAllPorts(r){ return r.ports.concat(r.loopbacks); }
+function opRouters(){ return rpDevices.filter(function(d){ return d.type==='router'; }); }
+function opParseRtrIf(d,text){
+  const lb=rpParseLoopback(d,text);
+  if(lb>=0) return d.loopbacks[lb];
+  const i=rpParseIfName(text);
+  return i>=0?d.ports[i]:null;
+}
+const OSPF=NetOspf.create({
+  routers:opRouters,
+  ifaces:opAllPorts,
+  neighbors:function(r,f){
+    const i=r.ports.indexOf(f); if(i<0) return [];
+    return rpL2Neighbors(r.id,i).filter(function(n){ return n.dev.type==='router'; })
+      .map(function(n){ return {router:n.dev, iface:n.dev.ports[n.port]}; });
+  },
+  parseIf:opParseRtrIf,
+  currentIf:function(d){ return d.cl!=null?d.loopbacks[d.cl]:d.ci!=null?d.ports[d.ci]:null; },
+  staticDefault:function(r,fam){ return !!(fam===6?r.static6Default:r.staticDefault); },
+  fullIf:function(n){ return n.replace(/^Gi/,'GigabitEthernet'); }
+});
+const {opLL, opRid, opIfArea, opIsPassive, opIfCost, opNeighbors, opInvalidate, opSpf, opRoutesOf,
+       opShowNbr, opShowIfBriefTable, opShowIf, opShowProtocols, opStart, ospfCli, ospfRunLines, ospfIfRunLines}=OSPF;
+
+/* ── IPv6 forwarding, the keyed twin of rpForward ── */
+function opTable6(r){
+  const t=[];
+  opAllPorts(r).forEach(function(p){
+    if(!p.up||!p.ip6) return;
+    const k=op6Parse(p.ip6);
+    t.push({code:'C', net:op6Net(k,p.pfx6), pfx:p.pfx6, iface:p.name, _port:p});
+  });
+  if(r.static6Default) t.push({code:'S', net:OP_FAM[6].zero, pfx:0, iface:r.static6Default.ifaceName||'', nextHop:r.static6Default.nextHop||null, _static:r.static6Default});
+  opRoutesOf(r,6).forEach(function(e){
+    e.via.forEach(function(v){ t.push({code:e.code==='O*E2'?'OE2':e.code==='O IA'?'OI':'O', net:e.net, pfx:e.pfx, metric:e.metric,
+      iface:v.iface, nextHop:v.nextHop, _ifaceIdx:r.ports.findIndex(function(p){ return p.name===v.iface; })}); });
+  });
+  return t;
+}
+function opAllBest6(dstKey,t){
+  let b=null;
+  t.forEach(function(e){ if(op6Net(dstKey,e.pfx)!==e.net) return; if(!b||e.pfx>b.pfx) b=e; });
+  return b?t.filter(function(e){ return e.pfx===b.pfx&&e.net===b.net; }):[];
+}
+function opPcWithIp6(key){ return rpDevices.find(function(d){ return d.type==='pc'&&d.ip6&&op6Parse(d.ip6)===key; }); }
+function opForward6(router, dstKey, visited, depth){
+  const dstStr=op6Fmt(dstKey).toUpperCase();
+  if(depth>10) return {ok:false, reason:'Too many hops — the packet is looping'};
+  if(visited.has(router.id)) return {ok:false, reason:'Routing loop detected at '+router.name};
+  visited.add(router.id);
+  if(opAllPorts(router).some(function(p){ return p.up&&p.ip6&&op6Parse(p.ip6)===dstKey; })) return {ok:true};
+  const paths=opAllBest6(dstKey, opTable6(router));
+  if(!paths.length) return {ok:false, reason:router.name+' has no IPv6 route to '+dstStr};
+  for(const w of paths){
+    if(w.code==='C'){
+      if(w._port.loopback) return {ok:false, reason:'Nothing answers to '+dstStr+' behind '+router.name+' '+w.iface};
+      const idx=router.ports.indexOf(w._port);
+      const pc=opPcWithIp6(dstKey);
+      const seg=rpL2Neighbors(router.id,idx);
+      const there=pc ? seg.some(function(n){ return n.dev===pc; })
+        : seg.some(function(n){ return n.dev.type==='router'&&opAllPorts(n.dev).some(function(p){ return p.up&&p.ip6&&op6Parse(p.ip6)===dstKey; }); });
+      if(!there) return {ok:false, reason:dstStr+' is not actually reachable out of '+router.name+' '+w.iface};
+      continue;
+    }
+    if(w.code==='S'&&!w.nextHop){
+      const via=rpIfaceByName(router,w._static.ifaceName)||router.loopbacks.find(function(p){ return p.name===w._static.ifaceName; });
+      if(via&&via.loopback) return {ok:false, reason:dstStr+' matched only the default route on '+router.name+', which points at '+via.name+' — the simulated Internet, so nothing replies'};
+      return {ok:false, reason:router.name+"'s IPv6 default route has no usable exit"};
+    }
+    const idx=w._ifaceIdx!=null?w._ifaceIdx:router.ports.findIndex(function(p){ return p.name===w.iface; });
+    const nb=rpL2Neighbors(router.id,idx).find(function(n){ return n.dev.type==='router'&&opLL(n.dev,n.dev.ports[n.port])===w.nextHop; });
+    if(!nb) return {ok:false, reason:'Next hop '+w.nextHop+' is not on '+router.name+' '+w.iface};
+    const rr=opForward6(nb.dev, dstKey, new Set(visited), depth+1);
+    if(!rr.ok) return paths.length>1 ? {ok:false, reason:router.name+' load-balances, and the path via '+w.nextHop+' fails: '+rr.reason} : rr;
+  }
+  return {ok:true};
+}
+function opResolvePing6(pc, dstStr){
+  const dk=op6Parse(dstStr||'');
+  if(!pc.ip6) return {ok:false, reason:pc.name+' has no IPv6 address'};
+  if(dk==null) return {ok:false, reason:'Invalid IPv6 address'};
+  const nbs=rpL2Neighbors(pc.id,0).filter(function(n){ return n.dev.type==='router'; });
+  if(!nbs.length) return {ok:false, reason:pc.name+' has no router on its segment'};
+  const gw=nbs[0].dev, gp=gw.ports[nbs[0].port];
+  if(!gp.ip6||!gp.up) return {ok:false, reason:gw.name+' '+gp.name+' has no IPv6 address or is down'};
+  if(!gw.unicast6) return {ok:false, reason:gw.name+' is not routing IPv6 — "ipv6 unicast-routing" is off, so it will not forward for '+pc.name};
+  if(op6Net(op6Parse(pc.ip6),64)!==op6Net(op6Parse(gp.ip6),gp.pfx6)) return {ok:false, reason:pc.name+"'s address is not on "+gw.name+' '+gp.name+"'s prefix"};
+  return opForward6(gw, dk, new Set(), 0);
+}
+/* both directions, in whichever family the round is */
+function opPingBoth(a,b,fam){
+  if(fam===6){
+    if(!a.ip6||!b.ip6) return {ok:false, reason:'Both PCs need an IPv6 address'};
+    const t=opResolvePing6(a,b.ip6); if(!t.ok) return t;
+    const k=opResolvePing6(b,a.ip6); return k.ok?k:{ok:false, reason:'The reply cannot get back from '+b.name+' — '+k.reason};
+  }
+  const t=rpResolvePing(a,b.ip); if(!t.ok) return t;
+  const k=rpResolvePing(b,a.ip); return k.ok?k:{ok:false, reason:'The reply cannot get back from '+b.name+' — '+k.reason};
+}
+
+/* ── show output this page owns: the IPv6 table and brief over its model ── */
+function rpFullIf(n){ return n.replace(/^Gi/,'GigabitEthernet'); }
+function opShowRoute6(r){
+  const t=opTable6(r);
+  const L=['IPv6 Routing Table - default - '+t.length+' entries',
+    'Codes: C - Connected, L - Local, S - Static, O - OSPF Intra, OI - OSPF Inter, OE2 - OSPF ext 2',''];
+  t.slice().sort(function(a,b){ return a.net<b.net?-1:a.net>b.net?1:a.pfx-b.pfx; }).forEach(function(e){
+    const pre=OP_FAM[6].fmt(e.net)+'/'+e.pfx;
+    if(e.code==='C'){ L.push('C   '+pre+' [0/0]','     via '+rpFullIf(e.iface)+', directly connected');
+      L.push('L   '+op6Fmt(op6Parse(e._port.ip6)).toUpperCase()+'/128 [0/0]','     via '+rpFullIf(e.iface)+', receive'); }
+    else if(e.code==='S') L.push('S   ::/0 [1/0]','     via '+(e.nextHop?e.nextHop.toUpperCase():rpFullIf(e.iface))+(e.nextHop?'':', directly connected'));
+    else L.push(e.code.padEnd(4)+pre+' [110/'+e.metric+']'+(e.code==='OE2'?', tag 1':''),'     via '+e.nextHop.toUpperCase()+', '+rpFullIf(e.iface));
+  });
+  return L.join('\n');
+}
+function opShowIfBrief6(r){
+  const L=[];
+  opAllPorts(r).forEach(function(p){
+    L.push(rpFullIf(p.name).padEnd(23)+'['+(p.up?'up':'administratively down')+'/'+(p.up?'up':'down')+']');
+    if(p.ip6){ L.push('    '+opLL(r,p).toUpperCase()); L.push('    '+op6Up(p.ip6)); }
+    else L.push('    unassigned');
+  });
+  return L.join('\n');
+}
+
+
+/* ── CLI ── OSPF from the shared engine, then this page's IPv6 addressing
+   and default route; null when the line is none of these. */
+function opCli(d,t,w,M){
+  const o=ospfCli(d,t,w,M);
+  if(o!==null) return o;
+  const raw=t.split(' ');
+  if(M(w[0],'show')||w[0]==='sh'){
+    if(w[1]==='ipv6'&&w[2]&&M(w[2],'route')) return opShowRoute6(d);
+    if(w[1]==='ipv6'&&w[2]&&M(w[2],'interface')) return opShowIfBrief6(d);
+    return null;
+  }
+  if(w[0]==='ipv6'&&w[1]&&M(w[1],'route')){
+    if(raw[2]!=='::/0') return '% This lab only models the IPv6 default route — "ipv6 route ::/0 <interface | next-hop>"';
+    const a=raw[3]; if(!a) return '% Give an exit interface or a next-hop address';
+    const via=opParseRtrIf(d,a);
+    if(via) d.static6Default={ifaceName:via.name, nextHop:null};
+    else if(op6Parse(a)!=null) d.static6Default={ifaceName:null, nextHop:op6Fmt(op6Parse(a))};
+    else return '% Invalid exit interface or next-hop address';
+    return '';
+  }
+  if(w[0]==='no'&&w[1]==='ipv6'&&w[2]&&M(w[2],'route')){ d.static6Default=null; return ''; }
+  if(d.cm==='if'){
+    const p=d.cl!=null?d.loopbacks[d.cl]:d.ports[d.ci];
+    if(w[0]==='ipv6'&&w[1]&&M(w[1],'address')){
+      const a=raw[2]||'';
+      if(w[3]&&M(w[3],'link-local')){ const k=op6Parse(a); if(k==null||k.slice(0,4)!=='fe80') return '% Invalid link-local address'; p.ll6=op6Fmt(k); return ''; }
+      const m=/^([0-9a-f:]+)\/(\d{1,3})$/i.exec(a);
+      const k=m?op6Parse(m[1]):null;
+      if(!m||k==null||+m[2]>128) return '% Usage: ipv6 address <address>/<prefix-length>';
+      p.ip6=op6Fmt(k); p.pfx6=+m[2];
+      return '';
+    }
+    if(w[0]==='no'&&w[1]==='ipv6'&&w[2]&&M(w[2],'address')){ p.ip6=null; p.pfx6=null; return ''; }
+    if(w[0]==='ipv6'&&w[1]&&M(w[1],'enable')) return '';
+  }
+  return null;
+}
+function opRunLines(d){
+  const L=ospfRunLines(d);
+  if(d.static6Default) L.push('ipv6 route ::/0 '+(d.static6Default.ifaceName||d.static6Default.nextHop.toUpperCase()),'!');
+  return L;
+}
+function opIfRunLines(d,p){
+  const L=[];
+  if(p.ip6) L.push(' ipv6 address '+op6Up(p.ip6)+'/'+p.pfx6);
+  if(p.ll6) L.push(' ipv6 address '+p.ll6.toUpperCase()+' link-local');
+  return L.concat(ospfIfRunLines(d,p));
+}
+
+/* ── Requirement factories ── outcome first, as in the RIP lab */
+function opGroup(name){ const rs=Array.prototype.slice.call(arguments,1); rs.forEach(function(r){ r.group=name; }); return rs; }
+function opV(fam){ return fam===6?'OSPFv3':'OSPF'; }
+function opRidReq(r,fam,rid){
+  return {group:opV(fam), desc:'Run '+opV(fam)+' process 1 on '+r.name+' with router ID '+rpMono(int2ip(rid)),
+    test:function(){
+      const pr=opProc(r,fam);
+      if(fam===6&&!r.unicast6) return {ok:false, reason:r.name+' is not routing IPv6 — "ipv6 unicast-routing"'};
+      if(!pr.on) return {ok:false, reason:'No '+opV(fam)+' process on '+r.name+' yet'};
+      const cur=opRid(r,fam);
+      if(cur===rid) return {ok:true};
+      if(pr.rid===rid) return {ok:false, reason:r.name+' has router-id '+int2ip(rid)+' configured but is still using '+opRidStr(cur)+' — "clear '+(fam===6?'ipv6':'ip')+' ospf process" makes it take effect'};
+      return {ok:false, reason:cur==null?r.name+"'s process has no router ID — set one with router-id":r.name+' is using router ID '+opRidStr(cur)+', not '+int2ip(rid)};
+    }};
+}
+function opAreaReq(r,fam,ifs,area){
+  const names=ifs.map(function(p){ return p.name; }).join(' and ');
+  return {group:opV(fam), desc:r.name+' runs '+opV(fam)+' on '+names+' in area '+area,
+    test:function(){
+      for(const p of ifs){
+        const a=opIfArea(r,p,fam);
+        if(a===area) continue;
+        if(a!=null) return {ok:false, reason:r.name+' '+p.name+' is in area '+a+', the design puts it in area '+area};
+        if(fam===4&&opProc(r,4).on&&p.ip&&!opProc(r,4).networks.some(function(n){ return ((ip2int(p.ip)&~n.wc)>>>0)===((n.net&~n.wc)>>>0); }))
+          return {ok:false, reason:'No network statement on '+r.name+' matches '+p.name+' ('+p.ip+') — check the address and the wildcard'};
+        return {ok:false, reason:r.name+' '+p.name+' is not running '+opV(fam)+(fam===6?' — "ipv6 ospf 1 area '+area+'" on the interface':'')};
+      }
+      return {ok:true};
+    }};
+}
+function opPassiveReq(r,fam,p){
+  return {group:opV(fam), desc:'Make '+r.name+' '+p.name+' passive — no '+opV(fam)+' neighbours on a LAN',
+    test:function(){
+      if(opIfArea(r,p,fam)==null) return {ok:false, reason:r.name+' '+p.name+' has to be in '+opV(fam)+' first — passive stops the hellos, not the advertising'};
+      return opIsPassive(r,p,fam)?{ok:true}:{ok:false, reason:r.name+' is still sending hellos out '+p.name+' — "passive-interface '+p.name+'"'};
+    }};
+}
+function opNbrReq(r,fam,others){
+  return {group:'Verify', desc:r.name+' has FULL adjacencies with '+others.map(function(o){ return o.name; }).join(' and '),
+    test:function(){
+      const nbs=opNeighbors(r,fam);
+      for(const o of others){
+        const e=nbs.find(function(x){ return x.nb===o; });
+        if(!e) return {ok:false, reason:r.name+' is not even trying to reach '+o.name+' — is the link in '+opV(fam)+' on '+r.name+'?'};
+        if(e.state!=='FULL'){
+          const back=opNeighbors(o,fam).find(function(x){ return x.nb===r; });
+          return {ok:false, reason:'No adjacency with '+o.name+': '+(e.why||(back&&back.why)||'down')};
+        }
+      }
+      return {ok:true};
+    }};
+}
+function opRouteReq(r,fam,net,pfx,code,label){
+  const F=OP_FAM[fam];
+  return {group:'Verify', desc:r.name+' learns '+rpMono(label)+' as an '+rpMono(code)+' route',
+    test:function(){
+      const hit=opRoutesOf(r,fam).find(function(e){ return e.net===net&&e.pfx===pfx; });
+      if(!hit) return {ok:false, reason:r.name+' has no '+opV(fam)+' route to '+label+' yet'};
+      if(hit.code!==code) return {ok:false, reason:r.name+' has it as '+hit.code+', the design makes it '+code+' — check which area each interface is in'};
+      return {ok:true};
+    }};
+}
+function opDefaultReq(r,fam){
+  return {group:'Verify', desc:r.name+' learns the default route '+rpMono(fam===6?'::/0':'0.0.0.0/0')+' as '+rpMono(fam===6?'OE2':'O*E2'),
+    test:function(){
+      const hit=opRoutesOf(r,fam).find(function(e){ return e.pfx===0; });
+      return hit?{ok:true}:{ok:false, reason:r.name+' has no default — the router with the Internet link has to have a default route and "default-information originate"'};
+    }};
+}
+function opOrigReq(r,fam,lb){
+  const cmd=fam===6?'ipv6 route ::/0 '+lb.name:'ip route 0.0.0.0 0.0.0.0 '+lb.name;
+  return {group:opV(fam), desc:'On '+r.name+': a default route out '+lb.name+' ('+rpMono(cmd)+'), advertised with '+rpMono('default-information originate'),
+    test:function(){
+      const s=fam===6?r.static6Default:r.staticDefault;
+      if(!s) return {ok:false, reason:r.name+' has no default route — "'+cmd+'"'};
+      if(s.ifaceName!==lb.name) return {ok:false, reason:r.name+"'s default route points at "+(s.ifaceName||s.nextHop)+', not '+lb.name};
+      if(!opProc(r,fam).defOrig) return {ok:false, reason:r.name+' is not advertising it — "default-information originate" under the '+opV(fam)+' process'};
+      return {ok:true};
+    }};
+}
+/* Gated, like rpNoNetworkReq: until the process runs, "the ISP link is not
+   in OSPF" is green for an empty config. */
+function opNoIspReq(r,fam,lb){
+  return {group:opV(fam), desc:'Keep '+r.name+' '+lb.name+' (the ISP link) <b>out</b> of '+opV(fam),
+    test:function(){
+      if(opRid(r,fam)==null) return {ok:false, reason:'Configure '+r.name+"'s "+opV(fam)+' process first — then this is about what you leave out of it'};
+      return opIfArea(r,lb,fam)==null?{ok:true}:{ok:false, reason:lb.name+' is in area '+opIfArea(r,lb,fam)+' — the ISP block is not yours to advertise; the default route is how the network reaches it'};
+    }};
+}
+function opPingReq(a,b,fam){
+  return {group:'Verify', desc:'<b>'+a.name+'</b> can ping <b>'+b.name+'</b>'+(fam===6?' over IPv6':''),
+    test:function(){ const r=opPingBoth(a,b,fam); return r.ok?{ok:true}:{ok:false, reason:r.reason}; }};
+}
+
+/* ── Tiers ──
+   One topology for all of them — R1 and R3 each with a LAN, R2 in the middle
+   with the Internet behind a loopback — so the tiers differ in what is asked,
+   not in what has to be read. Everything is cabled and addressed: the round
+   is about OSPF. Easy is one area; Medium splits it, R2 becoming the ABR,
+   and adds the Internet; Hard arrives configured as Medium leaves it, with
+   two faults and a ticket. */
+const OP6_SITES=['acad','cafe','beef','f00d','c0de'];
+function opBuild(fam){
+  rpResetTopo(); opInvalidate();
+  const pc1=rpAddPC(40,55), r1=rpAddRouter(190,150), r2=rpAddRouter(375,150), r3=rpAddRouter(560,150), pc3=rpAddPC(fam===6?600:660,55);
+  rpAddCable(pc1.id,0, r1.id,0); rpAddCable(r1.id,1, r2.id,1); rpAddCable(r2.id,2, r3.id,1); rpAddCable(r3.id,0, pc3.id,0);
+  const t={fam:fam, pc1:pc1, pc3:pc3, r1:r1, r2:r2, r3:r3, rids:[ip2int('1.1.1.1'),ip2int('2.2.2.2'),ip2int('3.3.3.3')]};
+  if(fam===6){
+    const site=choice(OP6_SITES);
+    const lanA=ri(10,49), lanB=ri(50,99), w1=ri(1,4), w2=ri(5,9);
+    const pre='2001:db8:'+site+':';
+    t.n={lan1:pre+lanA+'::', lan3:pre+lanB+'::', w1:pre+w1+'::', w2:pre+w2+'::', isp:'2001:db8:face:'+ri(1,99)+'::'};
+    const set=function(r,i,net,h){ const p=r.ports[i]; p.ip6=op6Fmt(op6Parse(net+h)); p.pfx6=64; p.up=true; };
+    set(r1,0,t.n.lan1,'1'); set(r1,1,t.n.w1,'1'); set(r2,1,t.n.w1,'2'); set(r2,2,t.n.w2,'1'); set(r3,1,t.n.w2,'2'); set(r3,0,t.n.lan3,'1');
+    pc1.ip6=op6Fmt(op6Parse(t.n.lan1+'10')); pc3.ip6=op6Fmt(op6Parse(t.n.lan3+'10'));
+    t.lb=rpAddLoopback(r2,null,null); t.lb.ip6=op6Fmt(op6Parse(t.n.isp+'1')); t.lb.pfx6=64;
+    const k=function(s){ return op6Parse(s); };
+    t.k={lan1:k(t.n.lan1), lan3:k(t.n.lan3), w1:k(t.n.w1), w2:k(t.n.w2)}; t.pfx={lan:64, wan:64};
+    t.label=function(n){ return op6Fmt(t.k[n]).toUpperCase()+'/64'; };
+  } else {
+    const lans=rpPickLans(2), wans=rpPickWans(2), isp=rpPickIsp();
+    rpSetPort(r1,0,rpHost(lans[0],1),24); rpSetPort(r1,1,rpHost(wans[0],1),30);
+    rpSetPort(r2,1,rpHost(wans[0],2),30); rpSetPort(r2,2,rpHost(wans[1],1),30);
+    rpSetPort(r3,1,rpHost(wans[1],2),30); rpSetPort(r3,0,rpHost(lans[1],1),24);
+    pc1.ip=rpHost(lans[0],10); pc3.ip=rpHost(lans[1],10);
+    t.lb=rpAddLoopback(r2,isp.host,isp.pfx);
+    t.k={lan1:lans[0], lan3:lans[1], w1:wans[0], w2:wans[1]}; t.pfx={lan:24, wan:30}; t.isp=isp;
+    t.label=function(n){ return rpCidr(t.k[n], n.indexOf('lan')===0?24:30); };
+  }
+  rpInvalidate(); opInvalidate();
+  return t;
+}
+function opAddr(t,areas){
+  const fam=t.fam, A=function(i){ return areas?' · area '+areas[i]:''; };
+  const a=function(p){ return fam===6?op6Up(p.ip6)+'/64':p.ip+'/'+p.pfx; };
+  const rows=[
+    [t.pc1.name,'NIC',fam===6?op6Up(t.pc1.ip6)+'/64':t.pc1.ip+'/24',t.r1.name+' Gi0/0'],
+    [t.r1.name,'Gi0/0',a(t.r1.ports[0]),t.pc1.name+A(0)],
+    [t.r1.name,'Gi0/1',a(t.r1.ports[1]),t.r2.name+' Gi0/1'+A(1)],
+    [t.r2.name,'Gi0/1',a(t.r2.ports[1]),t.r1.name+' Gi0/1'+A(1)],
+    [t.r2.name,'Gi0/2',a(t.r2.ports[2]),t.r3.name+' Gi0/1'+A(2)],
+    [t.r3.name,'Gi0/1',a(t.r3.ports[1]),t.r2.name+' Gi0/2'+A(2)],
+    [t.r3.name,'Gi0/0',a(t.r3.ports[0]),t.pc3.name+A(3)],
+    [t.pc3.name,'NIC',fam===6?op6Up(t.pc3.ip6)+'/64':t.pc3.ip+'/24',t.r3.name+' Gi0/0']];
+  if(t.withIsp) rows.splice(5,0,[t.r2.name,t.lb.name,fam===6?op6Up(t.lb.ip6)+'/64':t.lb.ip+'/'+t.lb.pfx,'ISP (simulated)']);
+  return rows;
+}
+function opRidNote(t){ return 'Router IDs: '+t.r1.name+' <b>1.1.1.1</b>, '+t.r2.name+' <b>2.2.2.2</b>, '+t.r3.name+' <b>3.3.3.3</b>.'; }
+function genOspfLabEasy(fam){
+  const t=opBuild(fam), r=[t.r1,t.r2,t.r3];
+  const v=opV(fam);
+  return {
+    kind:'easy', helper:fam===4, fam:fam, ver:fam,
+    title:v+' in a single area',
+    goal:'Everything is cabled and addressed. Run '+v+' process 1 on all three routers, every interface in <b>area 0</b>, so '+t.pc1.name+' can reach '+t.pc3.name+'.',
+    note:opRidNote(t)+' '+(fam===6
+      ? 'OSPFv3 is configured <b>on the interface</b>: <span class="mono-inl">ipv6 unicast-routing</span> first, then <span class="mono-inl">ipv6 router ospf 1</span> with a <span class="mono-inl">router-id</span> — these routers have no IPv4 address to borrow one from — then <span class="mono-inl">ipv6 ospf 1 area 0</span> on each interface.'
+      : 'A <span class="mono-inl">network</span> statement takes the address and a <b>wildcard</b>, the inverse of the mask — <span class="mono-inl">0.0.0.255</span> for a /24, <span class="mono-inl">0.0.0.3</span> for a /30 — plus the area. Set <span class="mono-inl">router-id</span> before any neighbours come up; once they have, a new ID waits for <span class="mono-inl">clear ip ospf process</span>.')+
+      ' The two LAN interfaces have no OSPF neighbours: make them passive.',
+    addr:opAddr(t,null),
+    reqs:[].concat(
+      opGroup(v, opRidReq(t.r1,fam,t.rids[0]), opAreaReq(t.r1,fam,[t.r1.ports[0],t.r1.ports[1]],0), opPassiveReq(t.r1,fam,t.r1.ports[0]),
+        opRidReq(t.r2,fam,t.rids[1]), opAreaReq(t.r2,fam,[t.r2.ports[1],t.r2.ports[2]],0),
+        opRidReq(t.r3,fam,t.rids[2]), opAreaReq(t.r3,fam,[t.r3.ports[0],t.r3.ports[1]],0), opPassiveReq(t.r3,fam,t.r3.ports[0])),
+      opGroup('Verify', opNbrReq(t.r2,fam,[t.r1,t.r3]),
+        opRouteReq(t.r1,fam,t.k.lan3,t.pfx.lan,'O',t.label('lan3')),
+        opRouteReq(t.r3,fam,t.k.lan1,t.pfx.lan,'O',t.label('lan1')),
+        opPingReq(t.pc1,t.pc3,fam))
+    )};
+}
+/* Medium's design: R1's side is area 1, R3's side area 0, R2 the ABR. */
+const OP_AREAS=[1,1,0,0];
+function opMediumReqs(t){
+  const fam=t.fam, v=opV(fam);
+  return [].concat(
+    opGroup(v, opRidReq(t.r1,fam,t.rids[0]), opAreaReq(t.r1,fam,[t.r1.ports[0],t.r1.ports[1]],1), opPassiveReq(t.r1,fam,t.r1.ports[0]),
+      opRidReq(t.r2,fam,t.rids[1]), opAreaReq(t.r2,fam,[t.r2.ports[1]],1), opAreaReq(t.r2,fam,[t.r2.ports[2]],0),
+      opNoIspReq(t.r2,fam,t.lb), opOrigReq(t.r2,fam,t.lb),
+      opRidReq(t.r3,fam,t.rids[2]), opAreaReq(t.r3,fam,[t.r3.ports[0],t.r3.ports[1]],0), opPassiveReq(t.r3,fam,t.r3.ports[0])),
+    opGroup('Verify', opNbrReq(t.r2,fam,[t.r1,t.r3]),
+      opRouteReq(t.r1,fam,t.k.lan3,t.pfx.lan,'O IA',t.label('lan3')),
+      opRouteReq(t.r3,fam,t.k.lan1,t.pfx.lan,'O IA',t.label('lan1')),
+      opDefaultReq(t.r1,fam), opDefaultReq(t.r3,fam),
+      opPingReq(t.pc1,t.pc3,fam)));
+}
+function genOspfLabMedium(fam){
+  const t=opBuild(fam); t.withIsp=true;
+  const v=opV(fam);
+  return {
+    kind:'medium', helper:fam===4, fam:fam, ver:fam,
+    title:'Multi-area '+v+' and a way out',
+    goal:'Run '+v+' across all three routers in two areas — '+t.r1.name+'\'s side is <b>area 1</b>, '+t.r3.name+'\'s side <b>area 0</b>, '+t.r2.name+' the ABR between them — and give the network a default route out through '+t.r2.name+'.',
+    note:opRidNote(t)+' <b>'+t.r2.name+' '+t.lb.name+' is the link to the ISP</b> and must stay out of '+v+': point a default route at it ('+rpMono(fam===6?'ipv6 route ::/0 '+t.lb.name:'ip route 0.0.0.0 0.0.0.0 '+t.lb.name)+') and use <span class="mono-inl">default-information originate</span> so the others learn it. Routes that cross the ABR show as <span class="mono-inl">'+(fam===6?'OI':'O IA')+'</span>, the default as <span class="mono-inl">'+(fam===6?'OE2':'O*E2')+'</span>. LAN interfaces are passive.',
+    addr:opAddr(t,OP_AREAS),
+    reqs:opMediumReqs(t)};
+}
+/* Hard: Medium's finished configuration, broken twice. Each fault leaves a
+   different fingerprint — show ip ospf neighbor, show ip ospf interface,
+   show ip protocols, show ip route — and the ticket only says what fails. */
+function opConfigure(t){
+  const fam=t.fam, r=[t.r1,t.r2,t.r3];
+  r.forEach(function(x){ x.log.length=0; });
+  if(fam===6){
+    r.forEach(function(x,i){ rpEchoCli(x,['configure terminal','ipv6 unicast-routing','ipv6 router ospf 1','router-id '+int2ip(t.rids[i]),'exit']); });
+    const ifa=function(x,i,a){ rpEchoCli(x,['interface Gi0/'+i,'ipv6 ospf 1 area '+a,'exit']); };
+    ifa(t.r1,0,1); ifa(t.r1,1,1); ifa(t.r2,1,1); ifa(t.r2,2,0); ifa(t.r3,1,0); ifa(t.r3,0,0);
+    rpEchoCli(t.r1,['ipv6 router ospf 1','passive-interface Gi0/0','end']);
+    rpEchoCli(t.r3,['ipv6 router ospf 1','passive-interface Gi0/0','end']);
+    rpEchoCli(t.r2,['ipv6 route ::/0 '+t.lb.name,'ipv6 router ospf 1','default-information originate','end']);
+  } else {
+    const wc=function(p){ return int2ip((~maskInt(p))>>>0); };
+    const net=function(x,i){ return int2ip(netIntOf(ip2int(x.ports[i].ip),x.ports[i].pfx))+' '+wc(x.ports[i].pfx); };
+    rpEchoCli(t.r1,['configure terminal','router ospf 1','router-id 1.1.1.1','network '+net(t.r1,0)+' area 1','network '+net(t.r1,1)+' area 1','passive-interface Gi0/0','end']);
+    rpEchoCli(t.r2,['configure terminal','ip route 0.0.0.0 0.0.0.0 '+t.lb.name,'router ospf 1','router-id 2.2.2.2','network '+net(t.r2,1)+' area 1','network '+net(t.r2,2)+' area 0','default-information originate','end']);
+    rpEchoCli(t.r3,['configure terminal','router ospf 1','router-id 3.3.3.3','network '+net(t.r3,1)+' area 0','network '+net(t.r3,0)+' area 0','passive-interface Gi0/0','end']);
+  }
+  r.forEach(function(x){ x.log.length=0; x.cm='exec'; });
+  opInvalidate(); rpInvalidate();
+}
+const OP_FAULTS={
+  /* the far side of one link put in the wrong area */
+  area:function(t){ const fam=t.fam;
+    if(fam===6) t.r3.ports[1].area6=1;
+    else { const n=t.r3.ospf.networks.find(function(x){ return x.net===netIntOf(ip2int(t.r3.ports[1].ip),30); }); n.area=1; } },
+  /* a transit interface made passive */
+  passive:function(t){ opProc(t.r2,t.fam).passive.push(choice(['Gi0/1','Gi0/2'])); },
+  /* R3 given R2's router ID, so the two can never become neighbours */
+  rid:function(t){ const pr=opProc(t.r3,t.fam); pr.rid=t.rids[1]; pr.ridActive=t.rids[1]; },
+  /* the ISP default no longer advertised */
+  orig:function(t){ opProc(t.r2,t.fam).defOrig=false; },
+  /* a LAN no longer in OSPF (v2: wrong wildcard; v3: interface command missing) */
+  lan:function(t){
+    if(t.fam===6) t.r3.ports[0].area6=null;
+    else { const pr=t.r3.ospf, n=pr.networks.find(function(x){ return x.net===netIntOf(ip2int(t.r3.ports[0].ip),24); });
+      n.net=ip2int(t.r3.ports[0].ip.replace(/\d+$/,'0')); n.wc=0; } },
+  /* v3 only: one router never had ipv6 unicast-routing */
+  unicast:function(t){ t.r1.unicast6=false; }
+};
+function genOspfLabHard(fam){
+  const t=opBuild(fam); t.withIsp=true;
+  opConfigure(t);
+  const pool=Object.keys(OP_FAULTS).filter(function(f){ return f!=='unicast'||fam===6; });
+  const faults=shuffle(pool).slice(0,2);
+  faults.forEach(function(f){ OP_FAULTS[f](t); });
+  opInvalidate(); rpInvalidate();
+  const v=opV(fam), ping=opPingReq(t.pc1,t.pc3,fam);
+  const gate=function(){ return ping.test().ok?null:'Get '+t.pc1.name+' talking to '+t.pc3.name+' first — this checks the fix kept the design'; };
+  const gated=function(r){ return {group:r.group, desc:r.desc, test:function(){ const g=gate(); return g?{ok:false,reason:g}:r.test(); }}; };
+  const design=opMediumReqs(t).filter(function(r){ return r.group!=='Verify'; }).map(gated);
+  return {
+    kind:'hard', helper:false, fam:fam, ver:fam, faults:faults,
+    title:'Ticket: '+v+' is broken',
+    goal:'<b>Ticket:</b> users on '+t.pc1.name+' cannot reach '+t.pc3.name+'. The design in the table — areas, router IDs, passive LANs, the default from '+t.r2.name+' — is correct; the configuration is not. Find the two faults with show commands and fix them.',
+    note:opRidNote(t)+' Work from the neighbours outward: <span class="mono-inl">show '+(fam===6?'ipv6':'ip')+' ospf neighbor</span>, <span class="mono-inl">show '+(fam===6?'ipv6':'ip')+' ospf interface brief</span>, <span class="mono-inl">show '+(fam===6?'ipv6':'ip')+' protocols</span>, <span class="mono-inl">show '+(fam===6?'ipv6':'ip')+' route</span>, and <span class="mono-inl">show run</span>. Hard mode is <b>CLI only</b>.',
+    addr:opAddr(t,OP_AREAS),
+    reqs:[].concat(opGroup('Verify', ping, gated(opDefaultReq(t.r1,fam))), design)};
+}
+function genOspfLab(diff){
+  const fam=state.ver==='v3'?6:4;
+  return diff==='easy'?genOspfLabEasy(fam):diff==='medium'?genOspfLabMedium(fam):genOspfLabHard(fam);
+}
+
 /* ─── Round control ─────────────────────────────────────────────── */
 /* One table rather than a generate/render/grade if-chain apiece: adding a
    topic means adding a row here and a button in the bar, and there is no
@@ -3290,7 +3880,8 @@ const TOPIC_FNS={
   ospf:  {gen:genOspf,   render:renderOspf,   grade:osGrade},
   lsa:   {gen:genLsa,    render:renderLsa,    grade:lsaGrade},
   rip:   {gen:genRip,    render:renderRip,    grade:ripGrade},
-  riplab:{gen:genRipLab, render:renderRipLab, grade:rpGrade}
+  riplab:{gen:genRipLab, render:renderRipLab, grade:rpGrade},
+  ospflab:{gen:genOspfLab, render:renderRipLab, grade:rpGrade}
 };
 function pickTopic(){
   if(state.topic!=='rand') return state.topic;
@@ -3317,7 +3908,7 @@ function updateChips(){
    configured, or a grid of answer fields. On a one-click drill it is just
    Skip with the score wiped, so it is hidden there. Kept per topic rather
    than per page, because these pages mix both kinds. */
-const TOPIC_RESET={ospf:false, lsa:false, rip:false, riplab:true};
+const TOPIC_RESET={ospf:false, lsa:false, rip:false, riplab:true, ospflab:true};
 function setBtns(mode){
   const chk=document.getElementById('chkbtn'), rev=document.getElementById('revbtn'), nxt=document.getElementById('nxtbtn');
   nxt.style.display='none';
@@ -3356,7 +3947,7 @@ function resetGame(){ state.score=0; state.round=1; state.streak=0; loadQ(); }
 /* ─── Controls ──────────────────────────────────────────────────── */
 function setTopic(t,btn){
   state.topic=t;
-  document.querySelectorAll('#tb-rand,#tb-ospf,#tb-lsa,#tb-rip,#tb-riplab').forEach(b=>b.classList.remove('on'));
+  document.querySelectorAll('#tb-rand,#tb-ospf,#tb-lsa,#tb-rip,#tb-riplab,#tb-ospflab').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
   loadQ();
 }
@@ -3404,7 +3995,7 @@ function toggleTool(id){
   const cb=document.getElementById('tog-'+id);
   cb.checked=!cb.checked;
   document.getElementById('t-'+id).style.display=cb.checked?'':'none';
-  const any=['cost','lsa','rip','ripcmd'].some(t=>document.getElementById('tog-'+t).checked);
+  const any=['cost','lsa','rip','ripcmd','ospfcmd'].some(t=>document.getElementById('tog-'+t).checked);
   document.getElementById('toolsec').style.display=any?'':'none';
   if(window.saveOptionsState) saveOptionsState();
 }

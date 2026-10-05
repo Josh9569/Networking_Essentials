@@ -240,10 +240,56 @@
      actual layout work is CSS (.qcard.popped in styles.css). */
   var POPOUT_SVG = '<svg viewBox="0 0 24 24"><path d="M11 4H4v16h7M15 8l-4 4 4 4"/></svg>';
   var DOCK_SVG = '<svg viewBox="0 0 24 24"><path d="M11 4H4v16h7M13 8l4 4-4 4"/></svg>';
+  /* The floating panel's left edge widens it by dragging, into whatever
+     gutter is spare (up to 16px short of the viewport edge) and never below
+     the width its content naturally takes. The width is a CSS variable
+     (--pop-w, see .qcard.popped in styles.css) remembered per page, so the
+     panel comes back at the learner's width next round and next visit. */
+  var POP_EDGE = 8;
+  function popWidthKey() { return 'ne-popout-w:' + location.pathname.split('/').pop(); }
+  function bindPopoutResize(qcard) {
+    if (qcard.dataset.popResize) return;
+    qcard.dataset.popResize = '1';
+    var drag = null;
+    function floating() { return qcard.classList.contains('popped') && getComputedStyle(qcard).position === 'fixed'; }
+    function onEdge(e) { return floating() && e.clientX <= qcard.getBoundingClientRect().left + POP_EDGE; }
+    qcard.addEventListener('mousemove', function (e) { if (!drag) qcard.classList.toggle('pop-edge', onEdge(e)); });
+    qcard.addEventListener('mouseleave', function () { if (!drag) qcard.classList.remove('pop-edge'); });
+    qcard.addEventListener('mousedown', function (e) {
+      if (e.button !== 0 || !onEdge(e)) return;
+      e.preventDefault();
+      /* the content-sized width, measured without the learner's width */
+      var had = qcard.style.getPropertyValue('--pop-w');
+      qcard.style.removeProperty('--pop-w');
+      var natural = qcard.getBoundingClientRect().width;
+      if (had) qcard.style.setProperty('--pop-w', had);
+      var r = qcard.getBoundingClientRect();
+      drag = { x: e.clientX, w: r.width, min: natural, max: Math.max(natural, r.right - 16) };
+      document.body.classList.add('pop-resizing');
+    });
+    window.addEventListener('mousemove', function (e) {
+      if (!drag) return;
+      var w = Math.max(drag.min, Math.min(drag.max, drag.w + (drag.x - e.clientX)));
+      qcard.style.setProperty('--pop-w', Math.round(w) + 'px');
+    });
+    window.addEventListener('mouseup', function () {
+      if (!drag) return;
+      drag = null;
+      document.body.classList.remove('pop-resizing');
+      qcard.classList.remove('pop-edge');
+      try { localStorage.setItem(popWidthKey(), qcard.style.getPropertyValue('--pop-w')); } catch (err) {}
+    });
+  }
   function toggleQcardPopout(qcardId, btnId) {
     var qcard = document.getElementById(qcardId);
     if (!qcard) return;
     var popped = qcard.classList.toggle('popped');
+    if (popped) {
+      bindPopoutResize(qcard);
+      var saved = null;
+      try { saved = localStorage.getItem(popWidthKey()); } catch (err) {}
+      if (saved && !qcard.style.getPropertyValue('--pop-w')) qcard.style.setProperty('--pop-w', saved);
+    }
     var btn = document.getElementById(btnId);
     if (btn) {
       btn.innerHTML = popped ? DOCK_SVG : POPOUT_SVG;
@@ -263,7 +309,362 @@
     if (btn) { btn.innerHTML = POPOUT_SVG; btn.title = 'Pop out instructions to a floating panel'; btn.setAttribute('aria-label', btn.title); }
   }
 
+  /* ---------- styled dropdowns ----------
+     A native <select>'s open list is painted by the browser (white in one,
+     low-contrast grey in another, never translucent), so in every lab config
+     panel a mouse press on a <select> opens .sel-menu instead. The <select>
+     stays the source of truth: picking an item sets its value and fires a
+     real "change", so the existing onchange handlers run unchanged, and the
+     keyboard still drives the native control. One delegated listener, since
+     the panels rebuild their selects on every render. */
+  var selMenu = null;
+  function closeSelMenu() { if (selMenu) { selMenu.remove(); selMenu = null; } }
+  function openSelMenu(sel) {
+    closeSelMenu();
+    var r = sel.getBoundingClientRect();
+    var m = document.createElement('div');
+    m.className = 'sel-menu';
+    Array.prototype.forEach.call(sel.options, function (o) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'sel-item' + (o.selected ? ' on' : '');
+      b.textContent = o.textContent;
+      if (o.title) b.title = o.title;
+      b.disabled = o.disabled;
+      b.addEventListener('mousedown', function (e) { e.preventDefault(); });
+      b.addEventListener('click', function () {
+        closeSelMenu();
+        if (sel.value === o.value) return;
+        sel.value = o.value;
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      m.appendChild(b);
+    });
+    m.style.left = r.left + 'px';
+    m.style.top = (r.bottom + 4) + 'px';
+    m.style.minWidth = r.width + 'px';
+    document.body.appendChild(m);
+    /* flip above when there is no room below */
+    var mr = m.getBoundingClientRect();
+    if (mr.bottom > window.innerHeight - 8) m.style.top = Math.max(8, r.top - mr.height - 4) + 'px';
+    m._sel = sel;
+    selMenu = m;
+  }
+  document.addEventListener('mousedown', function (e) {
+    var sel = e.target.closest && e.target.closest('.cfg-panel select');
+    if (sel && !sel.disabled) {
+      e.preventDefault();
+      sel.focus();
+      if (selMenu && selMenu._sel === sel) closeSelMenu(); else openSelMenu(sel);
+      return;
+    }
+    if (selMenu && !selMenu.contains(e.target)) closeSelMenu();
+  }, true);
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeSelMenu(); });
+  window.addEventListener('scroll', closeSelMenu, true);
+  window.addEventListener('resize', closeSelMenu);
+
+  /* ---------- multi-line paste into a lab CLI ----------
+     A terminal box is a single-line <input>, so a pasted block would arrive
+     as one line with its newlines stripped. Instead, every line that ends in
+     a newline is run as its own command, through the lab's own Enter
+     handling — so each is echoed with its prompt, history and errors work,
+     and a two-line exchange (crypto key generate rsa / 1024, clear ip ospf
+     process / yes) answers itself. A last line with no newline is left in
+     the box unsent, as a real console would. The box is looked up by id
+     before every line because three labs rebuild it after each command. */
+  document.addEventListener('paste', function (e) {
+    var t = e.target;
+    if (!t || !t.classList || !t.classList.contains('term-in')) return;
+    var text = (e.clipboardData || window.clipboardData).getData('text') || '';
+    if (!/[\r\n]/.test(text)) return;
+    e.preventDefault();
+    var lines = (t.value.slice(0, t.selectionStart) + text).replace(/\r\n?/g, '\n').split('\n');
+    var rest = lines.pop() + t.value.slice(t.selectionEnd);
+    var id = t.id;
+    lines.forEach(function (line) {
+      var inp = document.getElementById(id);
+      if (!inp) return;
+      inp.focus();
+      inp.value = line;
+      inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    });
+    var inp = document.getElementById(id);
+    if (inp) { inp.value = rest; inp.focus(); }
+  });
+
+  /* ---------- command grammar ----------
+     IOS answers a line it cannot parse with a caret under the first word it
+     could not place, then "% Invalid input detected at '^' marker." A lab's
+     handlers only look at the words they need, so without this a line with
+     extra or misplaced words ("switchport mode access 80") ran silently.
+     Each CLI lists the shapes of the commands it knows; a line that fits none
+     of them is refused before any handler sees it. A line that merely stops
+     short is passed through, so a handler's own usage message still answers
+     "switchport access vlan" on its own.
+
+     Pattern syntax, words separated by spaces:
+       keyword      matched by abbreviation ("sh" fits "show")
+       a|b          either word (or type)
+       <type>       n, ip, v6, v6p (address/len), addr (ip or v6), word,
+                    if (one or two words: "g0/1", "GigabitEthernet 0/1"),
+                    mac, area (n or ip), vlist (the rest: a VLAN list),
+                    line (the rest: free text), any (the rest: the handler
+                    parses it, e.g. an ACE)
+       [ ... ]      optional
+       ( a b | c )  one of several sequences
+     Shape only, never mode: the handlers already say "select an interface
+     first" and the like, which helps a learner more than a caret would. */
+  var IF_TYPES = ['fastethernet', 'gigabitethernet', 'ethernet', 'serial', 'loopback', 'port-channel', 'vlan'];
+  var V6_RE = /^[0-9a-f]*:[0-9a-f:.]*$/i, IFNUM_RE = /^\d+(\/\d+)*(\.\d+)?$/;
+  function ifWord(w) { w = w.toLowerCase(); return IF_TYPES.some(function (t) { return t.indexOf(w) === 0; }); }
+  function cliCompile(src) {
+    var toks = src.replace(/([\[\]()])/g, ' $1 ').trim().split(/\s+/), i = 0;
+    function seq(stop) {
+      var out = [];
+      while (i < toks.length && stop.indexOf(toks[i]) < 0) {
+        var t = toks[i++];
+        if (t === '[') { out.push({ t: 'opt', seq: seq([']']) }); i++; }
+        else if (t === '(') {
+          var alts = [seq(['|', ')'])];
+          while (toks[i] === '|') { i++; alts.push(seq(['|', ')'])); }
+          i++; out.push({ t: 'alt', seqs: alts });
+        } else if (t === '\\|') out.push({ t: 'el', alts: [{ kw: '|' }] });   /* a literal pipe */
+        else out.push({ t: 'el', alts: t.split('|').map(function (a) {
+          var m = /^<(\w+)>$/.exec(a); return m ? { ty: m[1] } : { kw: a.toLowerCase() };
+        }) });
+      }
+      return out;
+    }
+    return seq([]);
+  }
+  function cliGrammar(patterns) { return patterns.map(cliCompile); }
+  function typeEnds(ty, toks, i) {
+    var t = toks[i], n = toks.length, m;
+    switch (ty) {
+      case 'n': return /^\d+$/.test(t) ? [i + 1] : [];
+      case 'ip': return isValidIP(t) ? [i + 1] : [];
+      case 'v6': return V6_RE.test(t) ? [i + 1] : [];
+      case 'v6p': m = /^(.+)\/\d{1,3}$/.exec(t); return m && V6_RE.test(m[1]) ? [i + 1] : [];
+      case 'addr': return isValidIP(t) || V6_RE.test(t) ? [i + 1] : [];
+      case 'area': return /^\d+$/.test(t) || isValidIP(t) ? [i + 1] : [];
+      case 'mac': return /^[0-9a-f]{4}\.[0-9a-f]{4}\.[0-9a-f]{4}$/i.test(t) ? [i + 1] : [];
+      case 'word': return [i + 1];
+      case 'if':
+        var out = [];
+        m = /^([a-z][a-z-]*)?(\d+(\/\d+)*(\.\d+)?)$/i.exec(t);
+        if (m && (m[1] ? ifWord(m[1]) : t.indexOf('/') > 0)) out.push(i + 1);
+        if (/^[a-z][a-z-]*$/i.test(t) && ifWord(t) && i + 1 < n && IFNUM_RE.test(toks[i + 1])) out.push(i + 2);
+        return out;
+      case 'vlist': return /^[\d,\-\s]+$/.test(toks.slice(i).join(' ')) ? [n] : [];
+      default: return [n];
+    }
+  }
+  function matchEl(node, i, ctx) {
+    var toks = ctx.toks, out = [];
+    if (i >= toks.length) { ctx.short = true; return out; }
+    var tok = toks[i].toLowerCase();
+    node.alts.forEach(function (a) {
+      var ends = a.ty ? typeEnds(a.ty, toks, i)
+        : (a.kw === tok || (a.kw !== '*' && a.kw.indexOf(tok) === 0)) ? [i + 1] : [];
+      ends.forEach(function (e) { if (out.indexOf(e) < 0) out.push(e); });
+    });
+    if (!out.length && i > ctx.far) ctx.far = i;
+    return out;
+  }
+  function matchSeq(seq, j, i, ctx) {
+    if (j === seq.length) return [i];
+    var node = seq[j], starts = [], out = [];
+    if (node.t === 'opt') starts = [i].concat(matchSeq(node.seq, 0, i, ctx));
+    else if (node.t === 'alt') node.seqs.forEach(function (s) { starts = starts.concat(matchSeq(s, 0, i, ctx)); });
+    else starts = matchEl(node, i, ctx);
+    starts.forEach(function (p) {
+      matchSeq(seq, j + 1, p, ctx).forEach(function (e) { if (out.indexOf(e) < 0) out.push(e); });
+    });
+    return out;
+  }
+  /* null when the line fits (or only stops short); otherwise IOS's caret
+     error. The caret lines up with the echo every lab prints, "<prompt>
+     <line>", so pass the prompt that was shown. A leading "do" is skipped. */
+  function cliCheck(grammar, prompt, line) {
+    var raw = String(line == null ? '' : line), toks = raw.trim().split(/\s+/).filter(Boolean);
+    if (!toks.length) return null;
+    var shift = toks.length > 1 && toks[0].toLowerCase() === 'do' ? 1 : 0;
+    var t = toks.slice(shift), ctx = { toks: t, far: -1, short: false };
+    for (var k = 0; k < grammar.length; k++) {
+      var ends = matchSeq(grammar[k], 0, 0, ctx);
+      if (ends.indexOf(t.length) >= 0) return null;
+      ends.forEach(function (e) { if (e > ctx.far) ctx.far = e; });
+    }
+    if (ctx.short) return null;
+    return cliCaretAt(prompt, raw, Math.max(0, ctx.far) + shift);
+  }
+
+  /* ---------- output filters: show ... | include|exclude|begin|section ----------
+     cliPipe splits a piped show command into the command and its filter (or
+     IOS's error for a malformed filter); cliFilter applies the filter to the
+     command's output. A page's CLI entry runs the command on its own, so the
+     grammar never sees the pipe:
+       const pp=LabShared.cliPipe(prompt, line);
+       if(pp) return pp.err || LabShared.cliFilter(run(pp.base), pp);
+     Only show commands take a filter, as on IOS. */
+  var PIPE_KINDS = ['include', 'exclude', 'begin', 'section'];
+  function cliCaretAt(prompt, raw, at) {
+    var re = /\S+/g, m, idx = 0, col = raw.length;
+    while ((m = re.exec(raw))) { if (idx === at) { col = m.index; break; } idx++; }
+    return new Array(String(prompt || '').length + 2 + col).join(' ') + "^\n% Invalid input detected at '^' marker.";
+  }
+  function cliPipe(prompt, line) {
+    var raw = String(line == null ? '' : line), cut = raw.indexOf('|');
+    if (cut < 0) return null;
+    var toks = raw.trim().split(/\s+/), first = (toks[0] || '').toLowerCase();
+    if (first === 'do' && toks[1]) first = toks[1].toLowerCase();
+    if (first.length < 2 || 'show'.indexOf(first) !== 0) return null;
+    var base = raw.slice(0, cut), after = raw.slice(cut + 1).trim().split(/\s+/).filter(Boolean);
+    var at = base.trim().split(/\s+/).length + (raw.charAt(cut + 1) === ' ' || !after.length ? 1 : 0);
+    if (!after.length) return { err: '% Incomplete command.' };
+    var kind = PIPE_KINDS.filter(function (k) { return k.indexOf(after[0].toLowerCase()) === 0; })[0];
+    if (!kind) return { err: cliCaretAt(prompt, raw, at) };
+    if (after.length < 2) return { err: '% Incomplete command.' };
+    return { base: base, kind: kind, pat: after.slice(1).join(' ') };
+  }
+  function cliFilter(out, p) {
+    var text = String(out == null ? '' : out), lines = text.split('\n');
+    if (lines.some(function (l) { return /^%|^\s*\^$/.test(l); })) return text;   /* an error passes through */
+    var re; try { re = new RegExp(p.pat); } catch (e) { re = { test: function (s) { return s.indexOf(p.pat) >= 0; } }; }
+    if (p.kind === 'include') return lines.filter(function (l) { return re.test(l); }).join('\n');
+    if (p.kind === 'exclude') return lines.filter(function (l) { return !re.test(l); }).join('\n');
+    if (p.kind === 'begin') { var i = 0; while (i < lines.length && !re.test(lines[i])) i++; return lines.slice(i).join('\n'); }
+    /* section: a matching line and everything indented under it */
+    var keep = [], depth = -1;
+    lines.forEach(function (l) {
+      var ind = l.length - l.replace(/^\s+/, '').length;
+      if (depth >= 0 && ind > depth && l.trim()) { keep.push(l); return; }
+      depth = -1;
+      if (re.test(l)) { keep.push(l); depth = ind; }
+    });
+    return keep.join('\n');
+  }
+
+  /* ---------- routed cables ----------
+     Switch and router ports sit on the bottom edge of the box, so a straight
+     line between two of them lies along the port row (devices level) or cuts
+     through a box (devices staggered). cablePaths routes such a cable the way
+     a tidy rack is cabled: down from its port, across, and up into the other
+     port from below. When the drop from the higher port would run through the
+     lower box, the cable goes down the side of that box instead (a corridor
+     14px clear of it). A cable from a bottom port to a free end ABOVE it (a PC
+     sitting higher than its router) would cut straight up through its own
+     box, so it drops, runs out to the nearer side and climbs that corridor.
+     Horizontal runs that overlap step down one level each, narrowest first,
+     so bundles nest instead of stacking and nested cables never cross. Any
+     other cable with a free end (a PC below, a single-port router) stays a
+     straight line.
+       ends: [{ax, ay, bx, by, aDown, bDown, aBox, bBox}]  ->  path strings
+       (a box is {l, t, r, b}: the down end's own box, for the corridors) */
+  function roundedPath(pts, R) {
+    var d = 'M' + pts[0][0] + ' ' + pts[0][1];
+    for (var i = 1; i < pts.length; i++) {
+      var p = pts[i];
+      if (i === pts.length - 1) { d += 'L' + p[0] + ' ' + p[1]; break; }
+      var a = pts[i - 1], c = pts[i + 1];
+      var l1 = Math.hypot(p[0] - a[0], p[1] - a[1]), l2 = Math.hypot(c[0] - p[0], c[1] - p[1]);
+      var r = Math.min(R, l1 / 2, l2 / 2);
+      if (r < 1) { d += 'L' + p[0] + ' ' + p[1]; continue; }
+      var bx = p[0] - (p[0] - a[0]) / l1 * r, by = p[1] - (p[1] - a[1]) / l1 * r;
+      var ex = p[0] + (c[0] - p[0]) / l2 * r, ey = p[1] + (c[1] - p[1]) / l2 * r;
+      d += 'L' + bx + ' ' + by + 'Q' + p[0] + ' ' + p[1] + ' ' + ex + ' ' + ey;
+    }
+    return d;
+  }
+  function cablePaths(ends) {
+    var BASE = 16, STEP = 11, GAP = 14, out = [], runs = [], routes = [];
+    function run(base, x1, x2) { var h = { base: base, lo: Math.min(x1, x2), hi: Math.max(x1, x2) }; runs.push(h); return h; }
+    ends.forEach(function (e, i) {
+      var a = { x: e.ax, y: e.ay, box: e.aBox }, b = { x: e.bx, y: e.by, box: e.bBox };
+      if (!(e.aDown && e.bDown)) {
+        /* one bottom port, one free end */
+        var dn = e.aDown ? a : e.bDown ? b : null, fr = dn === a ? b : a, bx = dn && dn.box;
+        if (!bx || fr.y >= dn.y - 2) { out[i] = 'M' + e.ax + ' ' + e.ay + 'L' + e.bx + ' ' + e.by; return; }
+        var cx = fr.x < (bx.l + bx.r) / 2 ? bx.l - GAP : bx.r + GAP;
+        routes.push({ i: i, rev: dn !== a, h: [run(dn.y, dn.x, cx)], build: function (h) {
+          var pts = [[dn.x, dn.y], [dn.x, h[0].y], [cx, h[0].y]];
+          /* a free end over the box itself: climb past the top before turning in */
+          if (fr.x > bx.l - GAP && fr.x < bx.r + GAP) pts.push([cx, Math.min(fr.y, bx.t - GAP)]);
+          pts.push([fr.x, fr.y]);
+          return pts;
+        } });
+        return;
+      }
+      /* hi = the higher port, lo = the lower */
+      var aHi = a.y <= b.y, hi = aHi ? a : b, lo = aHi ? b : a, lb = lo.box;
+      if (lo.y - hi.y >= 40 && lb && hi.x > lb.l - 8 && hi.x < lb.r + 8) {
+        /* the drop would hit the lower box: across to its nearer side first */
+        var sx = (hi.x - lb.l < lb.r - hi.x) ? lb.l - GAP : lb.r + GAP;
+        routes.push({ i: i, rev: !aHi, h: [run(hi.y, hi.x, sx), run(lo.y, sx, lo.x)], build: function (h) {
+          return [[hi.x, hi.y], [hi.x, h[0].y], [sx, h[0].y], [sx, h[1].y], [lo.x, h[1].y], [lo.x, lo.y]];
+        } });
+      } else {
+        routes.push({ i: i, rev: !aHi, h: [run(Math.max(hi.y, lo.y), hi.x, lo.x)], build: function (h) {
+          return [[hi.x, hi.y], [hi.x, h[0].y], [lo.x, h[0].y], [lo.x, lo.y]];
+        } });
+      }
+    });
+    /* levels: narrowest first, each one step below any overlapping run on its row */
+    runs.sort(function (p, q) { return (p.hi - p.lo) - (q.hi - q.lo); });
+    var placed = [];
+    runs.forEach(function (h) {
+      var lvl = 0;
+      placed.forEach(function (o) { if (o.lo <= h.hi && h.lo <= o.hi && Math.abs(o.base - h.base) < 40) lvl = Math.max(lvl, o.lvl + 1); });
+      h.lvl = lvl; h.y = h.base + BASE + lvl * STEP; placed.push(h);
+    });
+    routes.forEach(function (rt) {
+      var pts = rt.build(rt.h);
+      /* a route is built from its own natural end; put it back in a-to-b order */
+      if (rt.rev) pts.reverse();
+      out[rt.i] = roundedPath(pts, 8);
+    });
+    return out;
+  }
+
+  /* ---------- port slots ----------
+     Which slot along a box's bottom edge each port is drawn in. A port keeps
+     its name and number; only where its circle sits changes, so that every
+     cable leaves on the side it is heading for and the cables out of one box
+     don't cross each other. From each edge inwards: cables that climb the
+     corridor beside the box (a free end above), then routed cables to other
+     bottom ports — nearest far end at the edge, so cables to farther devices
+     nest round them — then straight cables down to a free end below. Uncabled
+     ports keep their own order in the slots left over in the middle.
+     A page computes this once, when the round's cables exist, and keeps it,
+     so ports never move while the learner is cabling.
+       far: per port, null (uncabled) or {x, kind}: x is the far end's x;
+            kind 'up' (free end above the port), 'u' (another bottom port)
+            or 'down' (free end below)
+       cx:  the box's own centre x            ->  slot index per port */
+  function portSlots(far, cx) {
+    var RANK = { up: 0, u: 1, down: 2 }, idx = far.map(function (_, i) { return i; });
+    function side(left) {
+      return idx.filter(function (i) { return far[i] && (far[i].x < cx) === left; })
+        .sort(function (p, q) {
+          var A = far[p], B = far[q], dA = Math.abs(A.x - cx), dB = Math.abs(B.x - cx);
+          if (A.kind !== B.kind) return RANK[A.kind] - RANK[B.kind];
+          return (A.kind === 'u' ? dA - dB : dB - dA) || p - q;
+        });
+    }
+    var order = side(true).concat(idx.filter(function (i) { return !far[i]; }), side(false).reverse());
+    var slot = [];
+    order.forEach(function (p, k) { slot[p] = k; });
+    return slot;
+  }
+
   window.LabShared = {
+    cablePaths: cablePaths,
+    portSlots: portSlots,
+    cliGrammar: cliGrammar,
+    cliCheck: cliCheck,
+    cliPipe: cliPipe,
+    cliFilter: cliFilter,
     isValidIP: isValidIP,
     toggleQcardPopout: toggleQcardPopout,
     dockQcardPopout: dockQcardPopout,

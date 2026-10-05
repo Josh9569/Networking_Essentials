@@ -10,6 +10,7 @@
 <script src="options.js"></script>
 <script src="answer-keys.js"></script>
 <script src="lab-shared.js"></script>
+<script src="net-switch.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -19,7 +20,7 @@
   <div class="hdr">
     <div>
       <div class="hdr-title">Switching Lab</div>
-      <div class="hdr-sub">Cable devices, configure VLANs, trunks &amp; EtherChannel, identify STP roles</div>
+      <div class="hdr-sub">Cable devices, configure VLANs, trunks, EtherChannel &amp; port security, identify STP roles</div>
     </div>
     <div class="hdr-right">
       <div class="chips">
@@ -43,6 +44,7 @@
     <button class="cbtn" onclick="setTopic('vlan',this)">VLANs</button>
     <button class="cbtn" onclick="setTopic('trunk',this)">Trunking</button>
     <button class="cbtn" onclick="setTopic('ether',this)">EtherChannel</button>
+    <button class="cbtn" onclick="setTopic('psec',this)">Port Security</button>
     <button class="cbtn" onclick="setTopic('stp',this)">STP</button>
     <button class="cbtn" onclick="setTopic('all',this)">Everything</button>
   </div>
@@ -103,7 +105,7 @@
         <button class="rand-btn" onclick="closeCfg()">Close &times;</button>
       </span>
     </div>
-    <div class="cfg-grid" id="cfg-sw">
+    <div class="cfg-grid stack" id="cfg-sw">
       <div>
         <div id="vlan-mgr" style="display:none">
           <div class="cfg-sec-lbl">VLAN Management</div>
@@ -120,7 +122,7 @@
         <div id="pt-wrap">
           <div class="cfg-sec-lbl">Port Configuration</div>
           <table class="port-table">
-            <thead><tr><th>Port</th><th>Mode</th><th>VLAN</th><th>Ch-Grp</th><th>Connected To</th></tr></thead>
+            <thead><tr><th>Port</th><th>Up</th><th>Mode</th><th>VLAN</th><th>Channel</th><th>Connected To</th></tr></thead>
             <tbody id="pt-body"></tbody>
           </table>
           <div class="svi-row">
@@ -156,6 +158,10 @@
                oninput="uiSetPCIP(this.value)" autocomplete="off" spellcheck="false">
         <span class="pc-pfx">/ 24</span>
         <span class="pc-ip-hint" id="pc-ip-hint"></span>
+      </div>
+      <div class="pc-form">
+        <label class="pc-form-lbl">MAC Address</label>
+        <span class="mono-inl" id="pc-mac"></span>
       </div>
       <div class="cfg-sec-lbl" style="margin-top:14px">Ping</div>
       <div class="pc-form">
@@ -223,8 +229,26 @@
         <li class="rule-item"><div class="rule-num">4</div><div class="rule-body">
           <strong>EtherChannel</strong> bundles multiple physical links into one logical link
           (more bandwidth, no STP blocking between them). Every member port on a switch must share the
-          same <em>channel-group number</em> and identical configuration.
-          <div class="rule-ex">channel-group 1 mode on</div>
+          same <em>channel-group number</em> and the same trunk settings as its <strong>port-channel</strong>
+          interface, or it is suspended. The two ends must agree on a mode: <strong>LACP</strong>
+          (<code>active</code> with <code>active</code> or <code>passive</code>), <strong>PAgP</strong>
+          (<code>desirable</code> with <code>desirable</code> or <code>auto</code>), or <code>on</code> at both
+          ends. passive+passive and auto+auto never bundle.
+          <div class="rule-ex">channel-group 1 mode active &middot; interface port-channel 1</div>
+        </div></li>
+        <li class="rule-item"><div class="rule-num">5</div><div class="rule-body">
+          A trunk carries <strong>every</strong> VLAN until you restrict its <strong>allowed list</strong>. A VLAN
+          missing from the list at either end does not cross the link. Use <code>add</code> to extend the list
+          without retyping it &mdash; a bare list replaces what was there.
+          <div class="rule-ex">switchport trunk allowed vlan 10,20 &middot; switchport trunk allowed vlan add 99</div>
+        </div></li>
+        <li class="rule-item"><div class="rule-num">6</div><div class="rule-body">
+          <strong>Port security</strong> limits which MAC addresses an access port accepts. Addresses are learned
+          from traffic (or typed in); <code>sticky</code> writes learned ones into the running config. A frame from
+          one address too many is a <strong>violation</strong>: <code>shutdown</code> (the default) err-disables
+          the port, <code>restrict</code> drops and counts it, <code>protect</code> drops it silently. An
+          err-disabled port only recovers with <code>shutdown</code> then <code>no shutdown</code>.
+          <div class="rule-ex">switchport port-security &middot; switchport port-security mac-address sticky</div>
         </div></li>
       </ul>
     </div>
@@ -270,14 +294,31 @@
           <tr><td class="cmd">switchport mode access</td><td>Make the port an access port (<code>sw mo ac</code>)</td></tr>
           <tr><td class="cmd">switchport access vlan &lt;n&gt;</td><td>Assign VLAN (<code>sw ac vl 10</code>)</td></tr>
           <tr><td class="cmd">switchport mode trunk</td><td>Make the port a trunk (<code>sw mo tr</code>)</td></tr>
-          <tr><td class="cmd">channel-group &lt;n&gt; mode on</td><td>Add port to EtherChannel n</td></tr>
+          <tr><td class="cmd">interface range fa0/&lt;a&gt; - &lt;b&gt;</td><td>Select several ports at once (<code>int ra fa0/1-2</code>)</td></tr>
+          <tr><td class="cmd">shutdown / no shutdown</td><td>Disable / enable the selected port (or SVI)</td></tr>
+          <tr><td class="cmd">channel-group &lt;n&gt; mode active|passive|desirable|auto|on</td><td>Add port to EtherChannel n (LACP / PAgP / static)</td></tr>
+          <tr><td class="cmd">interface port-channel &lt;n&gt;</td><td>Configure the bundle itself &mdash; changes apply to every member</td></tr>
+          <tr><td class="cmd">switchport trunk allowed vlan &lt;list&gt;</td><td>Set the VLANs a trunk carries (<code>add</code> / <code>remove</code> / <code>all</code> / <code>none</code>)</td></tr>
+          <tr><td class="cmd">switchport port-security</td><td>Turn on port security (access ports only)</td></tr>
+          <tr><td class="cmd">switchport port-security maximum &lt;n&gt;</td><td>How many MAC addresses the port may hold</td></tr>
+          <tr><td class="cmd">switchport port-security mac-address sticky</td><td>Learn addresses into the running config</td></tr>
+          <tr><td class="cmd">switchport port-security mac-address &lt;H.H.H&gt;</td><td>Add a static secure address</td></tr>
+          <tr><td class="cmd">switchport port-security violation shutdown|restrict|protect</td><td>What a violation does</td></tr>
+          <tr><td class="cmd">clear port-security sticky|dynamic|all [interface fa0/&lt;n&gt;]</td><td>Forget learned secure addresses</td></tr>
           <tr><td class="cmd">no switchport access vlan</td><td>Return port to VLAN 1</td></tr>
           <tr><td class="cmd">switchport trunk native vlan &lt;n&gt;</td><td>Set the trunk's native (untagged) VLAN</td></tr>
           <tr><td class="cmd">no channel-group</td><td>Remove from EtherChannel</td></tr>
           <tr><td class="cmd">show vlan brief</td><td>Show VLAN &rarr; port table</td></tr>
           <tr><td class="cmd">show run</td><td>Show this switch's port config</td></tr>
+          <tr><td class="cmd">show interfaces status</td><td>Every port: connected / notconnect / disabled / err-disabled, and its VLAN</td></tr>
+          <tr><td class="cmd">show interfaces trunk</td><td>Trunking ports, native VLAN and allowed list</td></tr>
+          <tr><td class="cmd">show interfaces fa0/&lt;n&gt; switchport</td><td>One port's mode, access VLAN, native VLAN and allowed list</td></tr>
+          <tr><td class="cmd">show etherchannel summary</td><td>Each bundle, its protocol and member flags (P bundled, I stand-alone, s suspended, D down)</td></tr>
+          <tr><td class="cmd">show port-security [interface fa0/&lt;n&gt; | address]</td><td>Secure ports, learned addresses and violation counts</td></tr>
+          <tr><td class="cmd">show ip interface brief</td><td>Up/down state of every port and the SVI</td></tr>
           <tr><td class="cmd">interface vlan &lt;n&gt;</td><td>Enter SVI config, for the switch management IP</td></tr>
-          <tr><td class="cmd">ip address &lt;ip&gt;</td><td>Set the management IP on the SVI</td></tr>
+          <tr><td class="cmd">ip address &lt;ip&gt; 255.255.255.0</td><td>Set the management IP on the SVI</td></tr>
+          <tr><td class="cmd">ip default-gateway &lt;ip&gt;</td><td>Where the switch sends traffic for other subnets (the router, .1)</td></tr>
           <tr><td class="cmd">clear</td><td>Clear the terminal display (config is kept)</td></tr>
           <tr><td class="cmd">spanning-tree vlan &lt;n&gt; root primary</td><td>Set this switch's priority to 24576 (favoured as root)</td></tr>
           <tr><td class="cmd">spanning-tree vlan &lt;n&gt; root secondary</td><td>Set this switch's priority to 28672 (backup root)</td></tr>
@@ -319,24 +360,51 @@ let pending=null, selected=null, qclick=null;   /* qclick: 'root' | 'port' */
 let swCount=0, pcCount=0, rtCount=0;
 let labZoom=1, qsel=null;
 
+/* The switch engine — port state, VLANs, trunks, EtherChannel, port
+   security, the IOS CLI and its show commands, L2 reachability, STP — lives
+   in net-switch.js, shared with the troubleshooting trainer. This page keeps
+   the topology and hands the engine a view of it. */
+const SWE=NetSwitch.create({
+  devices:()=>devices, cables:()=>cables, byId:id=>byId(id),
+  portCable:(d,i)=>portCable(d,i), otherEnd:(c,d)=>otherEnd(c,d),
+  onIpChange:()=>refreshIPConflicts()
+});
+const {psNew, portUp, portLinkUp, effMode, modeName, portStatus, fullIf, vlanListHas, parseVlanList, vlanListStr, normVlanList, chModesOk, swCfgKey, chMismatch, chPeers, chLocal, chanState, macOk, macUp, psAllows, psFrame, prompt_, portKind, portIdx, parseIf, parseIfRange, portSpan, parseNamedIf, clearIf, ifPortIdx, ifTargets, newPo, cli, swShutdown, swSwitchport, swAllowed, swChannelGroup, psCmd, psNo, swShow, vlanName, swIfCfgLines, swShowRun, sviState, sviUp, poUp, swShowIpBrief, swShowInterfaces, swIfLine, swSwitchportDetail, swShowTrunk, swShowEther, swShowPsec, pcUplink, pcPortOk, linkPasses, l2SwitchReach, reach, bid, bidLess, computeSTP, CH_MODES, CH_PROTO, PS_KW, KW, NO_IF, PS_USAGE}=SWE;
+
 function byId(id){ return devices.find(d=>d.id===id); }
 
 function addSwitch(x,y,opts={}){
   swCount++;
-  const d={ id:nid++, type:'switch', name:opts.name||('SW'+swCount), x, y,
+  const d=Object.assign({ id:nid++, type:'switch', name:opts.name||('SW'+swCount), x, y,
     priority:opts.priority??32768, mac:opts.mac??genMac(),
-    ports:Array.from({length:PORTN},(_,i)=>({name:'Fa0/'+(i+1),mode:'access',vlan:1,ch:0,native:1})),
-    priLabel:opts.priLabel||null, hwNote:opts.hwNote||null, vlans:new Set([1]), vlanNames:{},
-    ip:null, ipVlan:null,
-    cm:'exec', ci:null, cv:null, log:[], hist:[], hi:0 };
+    priLabel:opts.priLabel||null, hwNote:opts.hwNote||null },
+    SWE.newSwitchState(Array.from({length:PORTN},(_,i)=>'Fa0/'+(i+1))));
   devices.push(d); return d;
 }
 function addPC(x,y,opts={}){
   pcCount++;
   const d={ id:nid++, type:'pc', name:opts.name||('PC'+pcCount), x, y,
-    ip:opts.ip??null, pfx:24,
+    ip:opts.ip??null, pfx:24, mac:opts.mac??genMac(),
     ports:[{name:'Eth0',mode:'access',vlan:1,ch:0}] };
   devices.push(d); return d;
+}
+/* The bottom-row slot for a router the learner cables in: on the canvas and
+   clear of the PCs if any slot is, else the one they cover least, nearest the
+   middle. */
+function addRouterBelow(){
+  const y=246;
+  const cover=x=>devices.reduce((t,d)=>{
+    if(d.type!=='pc') return t;
+    const [w,h]=devSize(d);
+    const ox=Math.min(x+RT_W,d.x+w+6)-Math.max(x,d.x-6), oy=Math.min(y+RT_H,d.y+h+6)-Math.max(y,d.y-6);
+    return t+(ox>0&&oy>0?ox*oy:0);
+  },0);
+  let best=null;
+  for(let x=5;x<=PC_ROW_R-RT_W;x+=15){
+    const c=cover(x), k=[c,Math.abs(x-320)];
+    if(!best||k[0]<best.k[0]||(k[0]===best.k[0]&&k[1]<best.k[1])) best={x,k};
+  }
+  return addRouter(best.x,y);
 }
 function addRouter(x,y,opts={}){
   rtCount++;
@@ -406,12 +474,18 @@ function render(){
   const layer=document.getElementById('dev-layer');
   svg.innerHTML=''; layer.innerHTML='';
 
-  cables.forEach(c=>{
+  /* Switch ports are on the box's bottom edge, so switch-to-switch cables
+     are routed down-across-up (LabShared.cablePaths) rather than drawn
+     straight along the port row, where they stacked on each other. */
+  const routes=LabShared.cablePaths(cables.map(c=>{
+    const A=byId(c.a.d), B=byId(c.b.d), [ax,ay]=portPos(A,c.a.i), [bx,by]=portPos(B,c.b.i);
+    const box=d=>{ const [w,h]=devSize(d); return {l:d.x, t:d.y, r:d.x+w, b:d.y+h}; };
+    return {ax:A.x+ax, ay:A.y+ay, bx:B.x+bx, by:B.y+by, aDown:A.type==='switch', bDown:B.type==='switch', aBox:box(A), bBox:box(B)};
+  }));
+  cables.forEach((c,ci)=>{
     const A=byId(c.a.d), B=byId(c.b.d);
-    const [ax,ay]=portPos(A,c.a.i), [bx,by]=portPos(B,c.b.i);
-    const l=document.createElementNS('http://www.w3.org/2000/svg','line');
-    l.setAttribute('x1',A.x+ax); l.setAttribute('y1',A.y+ay);
-    l.setAttribute('x2',B.x+bx); l.setAttribute('y2',B.y+by);
+    const l=document.createElementNS('http://www.w3.org/2000/svg','path');
+    l.setAttribute('d',routes[ci]);
     const pa=A.ports[c.a.i], pb=B.ports[c.b.i];
     let cls='cable';
     if(pa.ch>0&&pb.ch>0) cls+=' chan';
@@ -421,9 +495,8 @@ function render(){
     l.dataset.cid=c.id;
     svg.appendChild(l);
     /* invisible wide line so cables are easy to click */
-    const hl=document.createElementNS('http://www.w3.org/2000/svg','line');
-    hl.setAttribute('x1',A.x+ax); hl.setAttribute('y1',A.y+ay);
-    hl.setAttribute('x2',B.x+bx); hl.setAttribute('y2',B.y+by);
+    const hl=document.createElementNS('http://www.w3.org/2000/svg','path');
+    hl.setAttribute('d',routes[ci]);
     hl.setAttribute('class','cable-hit');
     hl.dataset.cid=c.id;
     svg.appendChild(hl);
@@ -456,11 +529,13 @@ function render(){
       if(p.mode==='trunk') pc+=' p-trunk';
       else if(p.vlan>1) pc+=' p-acc';
       if(p.ch>0) pc+=' p-chan';
+      const down=d.type==='switch'&&!portUp(d,i);
+      if(down) pc+=' p-down';
       if(pending&&pending.d===d.id&&pending.i===i) pc+=' p-pending';
       if(p._mark) pc+=' '+p._mark;
       s.className=pc;
       s.style.left=(px-7)+'px'; s.style.top=(py-7)+'px';
-      s.title=p.name+(d.type==='switch'?` — ${p.mode}${p.mode==='access'?' vlan '+p.vlan:''}${p.ch>0?' ch'+p.ch:''}`:'');
+      s.title=p.name+(d.type==='switch'?` — ${modeName(p.mode)}${p.mode!=='trunk'?' vlan '+p.vlan:''}${p.ch>0?' ch'+p.ch:''}${down?' — '+portStatus(d,i):''}`:'');
       s.dataset.did=d.id; s.dataset.pi=i;
       el.appendChild(s);
     });
@@ -579,6 +654,7 @@ function buildPCForm(){
   const d=byId(selected); if(!d||d.type!=='pc') return;
   refreshIPConflicts();
   document.getElementById('pc-ip').value=d.ip||'';
+  document.getElementById('pc-mac').textContent=macUp(d.mac);
   const hint=document.getElementById('pc-ip-hint');
   if(d.ip&&d._ipConflict){ hint.textContent='\u26a0 Duplicate IP on the network \u2014 change it'; hint.className='pc-ip-hint bad'; }
   else { hint.textContent=''; hint.className='pc-ip-hint'; }
@@ -621,15 +697,27 @@ function uiSetSVI(){
   buildPortTable(); render();
 }
 /* ── ping ── */
+/* The switch's gateway is usable when it is the router's .1 on the SVI's own
+   subnet — anything else and the reply to an off-subnet ping goes nowhere. */
+function swGwOk(sw){
+  return !!sw.gw&&sameSubnet(sw.gw,sw.ip,24)&&+sw.gw.split('.')[3]===1;
+}
 function swPingReach(pc,sw){
   if(pc._ipConflict||sw._ipConflict) return false;
   const up=pcUplink(pc);
-  if(!up||up.port.mode!=='access') return false;
-  if(sw.ip==null||sw.ipVlan==null) return false;
+  if(!up||!pcPortOk(up,pc)) return false;
+  if(sw.ip==null||sw.ipVlan==null||!sviUp(sw)) return false;
   if(sameSubnet(pc.ip,sw.ip,24))
     return up.port.vlan===sw.ipVlan && l2SwitchReach(up.sw,sw.ipVlan,sw);
-  const att=routerAttach(); if(!att) return false;
-  return l2SwitchReach(up.sw,up.port.vlan,att.sw) && l2SwitchReach(sw,sw.ipVlan,att.sw);
+  const att=routerAttach(); if(!att||!swGwOk(sw)) return false;
+  return vlanToRouter(up.sw,up.port.vlan,att) && vlanToRouter(sw,sw.ipVlan,att);
+}
+/* A frame from this PC arrives at its switch port: the side-effecting half of
+   pcPortOk, so port security learns (or trips) on real traffic. */
+function pcSends(pc){
+  const up=pcUplink(pc);
+  if(!up||effMode(up.sw,up.i)!=='access'||!portLinkUp(up.sw,up.i)) return false;
+  return psFrame(up.sw,up.i,pc.mac);
 }
 function doPing(src,dst){
   if(!src.ip||!isValidIP(src.ip)) return {msg:'source PC has no valid IP'};
@@ -637,10 +725,15 @@ function doPing(src,dst){
   if(dst===src.ip) return {ok:true};
   const tpc=devices.find(x=>x.type==='pc'&&x.ip===dst&&x!==src);
   const tsw=!tpc?devices.find(x=>x.type==='switch'&&x.ip===dst):null;
+  /* the echo (or the ARP ahead of it) leaves the PC whether or not anything
+     answers, so the source's own port sees it first */
+  pcSends(src);
   let ok;
-  if(tpc) ok=routedReach(src,tpc);
+  if(tpc) ok=routedReach(src,tpc)&&pcSends(tpc);
   else if(tsw) ok=swPingReach(src,tsw);
   else ok=false;
+  render();
+  if(selected!=null){ const sd=byId(selected); if(sd&&sd.type==='switch'){ buildPortTable(); renderTerm(); } }
   if(!ok) return {ok:false};
   /* first contact with a new destination: the initial echo times out
      while ARP resolves the MAC address, exactly like a real host. */
@@ -675,15 +768,21 @@ function buildPortTable(){
     let conn='—';
     if(c){ const o=otherEnd(c,d.id); const od=byId(o.d); conn=od.name+' '+od.ports[o.i].name; }
     const tr=document.createElement('tr');
+    const st=portStatus(d,i);
     tr.innerHTML=
       `<td class="pt-name">${p.name}</td>`+
+      `<td><input type="checkbox" ${p.shut?'':'checked'} title="${st}" onchange="uiSetShut(${i},!this.checked)"></td>`+
       `<td><select onchange="uiSetMode(${i},this.value)">`+
         `<option value="access"${p.mode==='access'?' selected':''}>access</option>`+
         `<option value="trunk"${p.mode==='trunk'?' selected':''}>trunk</option>`+
+        `<option value="dynamic"${p.mode==='dynamic'?' selected':''} title="dynamic auto, the IOS default">dynamic</option>`+
       `</select></td>`+
       `<td><input type="number" min="1" max="4094" value="${p.vlan}" ${p.mode==='trunk'?'disabled':''} onchange="uiSetVlan(${i},this.value)"></td>`+
-      `<td><input type="number" min="0" max="8" value="${p.ch}" onchange="uiSetCh(${i},this.value)"></td>`+
-      `<td class="pt-conn">${conn}</td>`;
+      `<td class="pt-chan"><input type="number" min="0" max="6" value="${p.ch}" onchange="uiSetCh(${i},this.value,this.nextElementSibling.value)">`+
+        `<select onchange="uiSetCh(${i},this.previousElementSibling.value,this.value)">`+
+        CH_MODES.map(m=>`<option value="${m}"${(p.chMode||'active')===m?' selected':''}>${m}</option>`).join('')+
+        `</select></td>`+
+      `<td class="pt-conn">${conn}${st==='err-disabled'?' <span class="ip-bad">err-disabled</span>':''}</td>`;
     tb.appendChild(tr);
   });
   const sv=document.getElementById('svi-vlan'), si=document.getElementById('svi-ip');
@@ -737,9 +836,21 @@ function echoCli(d,cmds){
   });
   if(selected===d.id) renderTerm();
 }
+/* The helper form edits what an engineer would: a bundle member's VLAN
+   settings are changed on its port-channel interface, which carries them to
+   every member, rather than on the one port (which would only suspend it). */
+function uiIfCmd(d,i){
+  const p=d.ports[i];
+  return p.ch>0&&d.pos[p.ch] ? 'interface port-channel '+p.ch : 'interface '+p.name.toLowerCase();
+}
 function uiSetMode(i,v){
   const d=byId(selected);
-  echoCli(d,['interface '+d.ports[i].name.toLowerCase(),'switchport mode '+v]);
+  echoCli(d,[uiIfCmd(d,i),'switchport mode '+(v==='dynamic'?'dynamic auto':v)]);
+  buildPortTable(); render();
+}
+function uiSetShut(i,shut){
+  const d=byId(selected);
+  echoCli(d,['interface '+d.ports[i].name.toLowerCase(), shut?'shutdown':'no shutdown']);
   buildPortTable(); render();
 }
 function uiSetVlan(i,v){
@@ -754,25 +865,21 @@ function uiSetVlan(i,v){
     render();
     return;
   }
-  echoCli(d,['interface '+d.ports[i].name.toLowerCase(),'switchport access vlan '+n]);
+  echoCli(d,[uiIfCmd(d,i),'switchport access vlan '+n]);
   buildPortTable(); render();
 }
-function uiSetCh(i,v){
+function uiSetCh(i,v,mode){
   const d=byId(selected);
-  const n=Math.max(0,Math.min(8,parseInt(v)||0));
+  const n=Math.max(0,Math.min(6,parseInt(v)||0));
   echoCli(d,['interface '+d.ports[i].name.toLowerCase(),
-             n>0?('channel-group '+n+' mode on'):'no channel-group']);
+             n>0?('channel-group '+n+' mode '+(mode||'active')):'no channel-group']);
   buildPortTable(); render();
 }
 
-/* ═══ CLI ═════════════════════════════════════════════════════════════════ */
-function prompt_(d){
-  return d.name+(d.cm==='conf'?'(config)':d.cm==='if'||d.cm==='svi'?'(config-if)':d.cm==='vlan'?'(config-vlan)':'')+'#';
-}
 function renderTerm(){
   const d=byId(selected); if(!d) return;
   const log=document.getElementById('term-log');
-  log.innerHTML=d.log.slice(-14).map(l=>`<div class="tl${l.startsWith('%')?' terr':''}">${l.replace(/</g,'&lt;')}</div>`).join('');
+  log.innerHTML=d.log.slice(-300).map(l=>`<div class="tl${l.startsWith('%')?' terr':''}">${l.replace(/</g,'&lt;')}</div>`).join('');
   log.scrollTop=log.scrollHeight;
   document.getElementById('term-prompt').textContent=prompt_(d);
 }
@@ -804,266 +911,8 @@ document.getElementById('term-in').addEventListener('keydown',e=>{
   }
 });
 
-/* Tab-completion keyword tree. The walker itself (LabShared.tabComplete)
-   lives in lab-shared.js, shared with routing_game.html's own tree (IP
-   routing commands rather than VLAN/trunk ones) over the same walker. */
-const KW={
-  configure:{terminal:{}}, enable:{}, end:{}, exit:{}, clear:{},
-  show:{vlan:{brief:{}}, 'running-config':{}, 'spanning-tree':{}},
-  vlan:{}, name:{}, interface:{vlan:{}},
-  ip:{address:{}},
-  switchport:{mode:{access:{},trunk:{}}, access:{vlan:{}}, trunk:{native:{vlan:{}}}},
-  'channel-group':{},
-  'spanning-tree':{vlan:{}},
-  no:{switchport:{access:{vlan:{}}, mode:{}, trunk:{native:{vlan:{}}}}, 'channel-group':{}, ip:{address:{}}},
-};
 function tabComplete(d,val){
   return LabShared.tabComplete(KW, val, cands=>{ d.log.push(cands.join('   ')); renderTerm(); });
-}
-
-function parseIf(s){
-  const m=s.match(/(\d+)\s*\/\s*(\d+)\s*$/);
-  if(!m) return -1;
-  const n=+m[2];
-  return (n>=1&&n<=PORTN)?n-1:-1;
-}
-
-function cli(d,line){
-  const t=line.trim().replace(/\s+/g,' ');
-  if(!t) return '';
-  const w=t.toLowerCase().split(' ');
-  const M=(tok,cand)=>tok&&cand.startsWith(tok);
-
-  /* navigation */
-  if(M(w[0],'enable')) { d.cm='exec'; return ''; }
-  if(M(w[0],'configure')||(w[0]==='conf')){ d.cm='conf'; d.ci=null; return ''; }
-  if(M(w[0],'end')){ d.cm='exec'; d.ci=null; d.cv=null; return ''; }
-  if(M(w[0],'exit')){
-    if(d.cm==='if'){ d.cm='conf'; d.ci=null; }
-    else if(d.cm==='vlan'||d.cm==='svi'){ d.cm='conf'; d.cv=null; }
-    else d.cm='exec';
-    return '';
-  }
-
-  /* clear the terminal display (config untouched) */
-  if(w[0]==='cls'||M(w[0],'clear')){
-    d.log.length=0;
-    return '';
-  }
-
-  /* show commands */
-  if(M(w[0],'show')||w[0]==='sh'){
-    if(w[1]&&(M(w[1],'vlan'))){
-      const map={};
-      d.ports.forEach(p=>{ if(p.mode==='access'){ (map[p.vlan]=map[p.vlan]||[]).push(p.name);} });
-      const vl=[...new Set([...d.vlans,...Object.keys(map).map(Number)])].sort((a,b)=>a-b);
-      let out='VLAN  Name              Ports';
-      vl.forEach(v=>{
-        const nm=d.vlanNames[v]||(v===1?'default':'VLAN'+String(v).padStart(4,'0'));
-        out+='\n'+String(v).padEnd(6)+nm.padEnd(18)+(map[v]?map[v].join(', '):'');
-      });
-      return out;
-    }
-    if(w[1]&&(M(w[1],'spanning-tree')||w[1]==='span')){
-      const sws=devices.filter(x=>x.type==='switch');
-      if(sws.length<2) return '% spanning-tree needs at least two switches in the topology';
-      const stp=computeSTP();
-      const isRoot=stp.root===d;
-      let out=isRoot
-        ? `VLAN0001\n  This bridge is the root\n  Bridge ID  Priority ${d.priority}  Address ${d.mac}\n`
-        : `VLAN0001\n  Root ID    Priority ${stp.root.priority}  Address ${stp.root.mac}\n  Bridge ID  Priority ${d.priority}  Address ${d.mac}\n`;
-      out += 'Interface        Role  Sts  Cost\n';
-      d.ports.forEach((p,i)=>{
-        const c=portCable(d.id,i); if(!c) return;
-        const other=byId(otherEnd(c,d.id).d);
-        let role, sts;
-        if(other.type!=='switch'){ role='DESG'; sts='FWD'; }
-        else if(isRoot){ role='DESG'; sts='FWD'; }
-        else if(stp.rootLink[d.id]===c.id){ role='ROOT'; sts='FWD'; }
-        else if(stp.blocked.some(b=>b.end.d===d.id&&b.end.i===i)){ role='ALTN'; sts='BLK'; }
-        else { role='DESG'; sts='FWD'; }
-        out+=`${p.name.padEnd(16)} ${role.padEnd(5)} ${sts.padEnd(4)} 19\n`;
-      });
-      return out.trimEnd();
-    }
-    if(w[1]&&(M(w[1],'running-config')||M(w[1],'run'))){
-      let out='';
-      if(d.ip!=null&&d.ipVlan!=null)
-        out+=`interface Vlan${d.ipVlan}\n ip address ${d.ip} 255.255.255.0\n`;
-      d.ports.forEach(p=>{
-        out+=`interface ${p.name}\n switchport mode ${p.mode}\n`;
-        if(p.mode==='access') out+=` switchport access vlan ${p.vlan}\n`;
-        if(p.mode==='trunk'&&p.native!==1) out+=` switchport trunk native vlan ${p.native}\n`;
-        if(p.ch>0) out+=` channel-group ${p.ch} mode on\n`;
-      });
-      return out.trimEnd();
-    }
-    return '% supported: show vlan brief, show run';
-  }
-
-  /* vlan creation & config-vlan mode */
-  if(M(w[0],'vlan')){
-    if(!(w[1]&&/^\d+$/.test(w[1]))) return '% usage: vlan <n>';
-    d.vlans.add(+w[1]);
-    d.cv=+w[1]; d.cm='vlan';
-    return '';
-  }
-
-  /* vlan naming (config-vlan mode) */
-  if(M(w[0],'name')){
-    if(d.cm!=='vlan'||d.cv==null)
-      return '% name is only valid in VLAN config mode — enter "vlan <n>" first';
-    const rawName=line.trim().replace(/\s+/g,' ').split(' ').slice(1).join(' ');
-    if(!rawName) return '% usage: name <vlan-name>';
-    d.vlanNames[d.cv]=rawName;
-    return '';
-  }
-
-  /* interface selection (physical or SVI) */
-  if(M(w[0],'interface')||w[0]==='int'){
-    if(w[1]&&M(w[1],'vlan')&&w[2]&&/^\d+$/.test(w[2])){
-      d.cm='svi'; d.cv=+w[2]; d.ci=null;
-      return d.vlans.has(+w[2])?''
-        :'% note: VLAN '+w[2]+' does not exist yet — create it or the SVI stays down';
-    }
-    const p=parseIf(w.slice(1).join(''));
-    if(p<0) return '% invalid interface — this switch has Fa0/1 to Fa0/'+PORTN+' (or "interface vlan <n>")';
-    d.ci=p; d.cm='if'; d.cv=null;
-    return '';
-  }
-
-  /* management IP on an SVI */
-  if(w[0]==='ip'){
-    if(d.cm!=='svi') return '% ip address is only valid on an SVI — enter "interface vlan <n>" first';
-    if(w[1]&&M(w[1],'address')&&w[2]&&isValidIP(w[2])){
-      d.ip=w[2]; d.ipVlan=d.cv;
-      refreshIPConflicts();   /* logs a conflict line into d.log itself if this creates a duplicate */
-      return '';
-    }
-    return '% usage: ip address <a.b.c.d>';
-  }
-
-  /* no forms */
-  if(w[0]==='no'){
-    if(d.cm==='svi'&&w[1]&&w[1]==='ip'){ d.ip=null; d.ipVlan=null; return ''; }
-    if(d.ci==null) return '% select an interface first (e.g. int fa0/1)';
-    const port=d.ports[d.ci];
-    if(M(w[1],'switchport')&&w[2]&&M(w[2],'access')){ port.vlan=1; return ''; }
-    if(M(w[1],'switchport')&&w[2]&&M(w[2],'mode')){ port.mode='access'; return ''; }
-    if(M(w[1],'switchport')&&w[2]&&M(w[2],'trunk')&&w[3]&&M(w[3],'native')){ port.native=1; return ''; }
-    if(M(w[1],'channel-group')||w[1]==='channel'){ port.ch=0; return ''; }
-    return '% supported: no switchport access vlan, no switchport mode, no switchport trunk native vlan, no channel-group';
-  }
-
-  /* switchport commands */
-  if(M(w[0],'switchport')||w[0]==='sw'){
-    if(d.ci==null) return '% select an interface first (e.g. int fa0/1)';
-    const port=d.ports[d.ci];
-    if(w[1]&&M(w[1],'mode')){
-      if(w[2]&&M(w[2],'access')){ port.mode='access'; return ''; }
-      if(w[2]&&M(w[2],'trunk')) { port.mode='trunk';  return ''; }
-      return '% usage: switchport mode access|trunk';
-    }
-    if(w[1]&&M(w[1],'access')){
-      if(w[2]&&M(w[2],'vlan')&&w[3]&&/^\d+$/.test(w[3])){
-        const vn=+w[3];
-        if(!d.vlans.has(vn))
-          return '% VLAN '+vn+' does not exist. Create it first: "vlan '+vn+'" (then "name <name>")';
-        port.vlan=vn;
-        return port.mode!=='access'?'% note: port is not in access mode yet':'';
-      }
-      return '% usage: switchport access vlan <n>';
-    }
-    if(w[1]&&M(w[1],'trunk')){
-      if(w[2]&&M(w[2],'native')){
-        if(w[3]&&M(w[3],'vlan')&&w[4]&&/^\d+$/.test(w[4])){
-          const nv=+w[4];
-          if(nv<1||nv>4094) return '% native VLAN must be between 1 and 4094';
-          port.native=nv;
-          return '';
-        }
-        return '% usage: switchport trunk native vlan <n>';
-      }
-      return '% usage: switchport trunk native vlan <n>';
-    }
-    return '% usage: switchport mode ... | switchport access vlan <n>';
-  }
-
-  /* spanning-tree priority configuration */
-  if(M(w[0],'spanning-tree')||w[0]==='span'){
-    if(!(w[1]&&M(w[1],'vlan')))
-      return '% usage: spanning-tree vlan <n> priority <val> | spanning-tree vlan <n> root primary|secondary';
-    if(!(w[2]&&/^\d+$/.test(w[2])))
-      return '% usage: spanning-tree vlan <n> priority <val> | spanning-tree vlan <n> root primary|secondary';
-    if(w[3]&&M(w[3],'priority')){
-      const val=+w[4];
-      if(!(w[4]&&/^\d+$/.test(w[4])&&val>=0&&val<=61440&&val%4096===0))
-        return '% priority must be a multiple of 4096 between 0 and 61440 (e.g. 4096, 24576, 32768)';
-      d.priority=val;
-      d.priLabel = val===24576?'root primary':val===28672?'root secondary':val===32768?'default':null;
-      return '';
-    }
-    if(w[3]&&M(w[3],'root')){
-      if(w[4]&&M(w[4],'primary')){ d.priority=24576; d.priLabel='root primary'; return ''; }
-      if(w[4]&&M(w[4],'secondary')){ d.priority=28672; d.priLabel='root secondary'; return ''; }
-      return '% usage: spanning-tree vlan <n> root primary|secondary';
-    }
-    return '% usage: spanning-tree vlan <n> priority <val> | spanning-tree vlan <n> root primary|secondary';
-  }
-
-  /* channel-group */
-  if(M(w[0],'channel-group')||w[0]==='channel'||w[0]==='ch'){
-    if(d.ci==null) return '% select an interface first (e.g. int fa0/1)';
-    if(w[1]&&/^\d+$/.test(w[1])){
-      d.ports[d.ci].ch=+w[1];
-      return 'Creating a port-channel interface Port-channel '+w[1];
-    }
-    return '% usage: channel-group <n> mode on';
-  }
-
-  return '% unknown command: '+t;
-}
-
-/* ═══ Reachability ════════════════════════════════════════════════════════ */
-function pcUplink(pc){
-  const c=portCable(pc.id,0);
-  if(!c) return null;
-  const o=otherEnd(c,pc.id);
-  const sw=byId(o.d);
-  if(sw.type!=='switch') return null;
-  return {sw, port:sw.ports[o.i]};
-}
-
-function linkPasses(c,vlan){
-  const A=byId(c.a.d), B=byId(c.b.d);
-  if(A.type!=='switch'||B.type!=='switch') return false;
-  const pa=A.ports[c.a.i], pb=B.ports[c.b.i];
-  if(pa.mode==='trunk'&&pb.mode==='trunk') return true;
-  if(pa.mode==='access'&&pb.mode==='access'&&pa.vlan===vlan&&pb.vlan===vlan) return true;
-  return false;
-}
-
-function l2SwitchReach(fromSw,vlan,toSw){
-  const seen=new Set([fromSw.id]);
-  const queue=[fromSw.id];
-  while(queue.length){
-    const cur=queue.shift();
-    if(cur===toSw.id) return true;
-    cables.forEach(c=>{
-      if(c.a.d!==cur&&c.b.d!==cur) return;
-      if(!linkPasses(c,vlan)) return;
-      const nxt=c.a.d===cur?c.b.d:c.a.d;
-      if(!seen.has(nxt)){ seen.add(nxt); queue.push(nxt); }
-    });
-  }
-  return false;
-}
-function reach(pcA,pcB){
-  const upA=pcUplink(pcA), upB=pcUplink(pcB);
-  if(!upA||!upB) return false;
-  if(upA.port.mode!=='access'||upB.port.mode!=='access') return false;
-  if(upA.port.vlan!==upB.port.vlan) return false;
-  return l2SwitchReach(upA.sw,upA.port.vlan,upB.sw);
 }
 
 /* ═══ IP conflict detection ══════════════════════════════════════════════
@@ -1073,7 +922,7 @@ function reach(pcA,pcB){
    conflict flag, so it can never oscillate with the gating below. */
 function pcSwL2Adjacent(pc,sw){
   const up=pcUplink(pc);
-  return !!up && up.port.mode==='access' && sw.ipVlan!=null
+  return !!up && effMode(up.sw,up.i)==='access' && sw.ipVlan!=null
     && up.port.vlan===sw.ipVlan && l2SwitchReach(up.sw,sw.ipVlan,sw);
 }
 function swSwL2Adjacent(swA,swB){
@@ -1124,14 +973,21 @@ function ipReach(A,B){
   if(!sameSubnet(A.ip,B.ip,24)) return false;
   return reach(A,B);
 }
-/* Router-on-a-stick: first router cabled to a switch trunk port */
+/* Router-on-a-stick: first router cabled to an up switch trunk port. Its
+   subinterface in every VLAN is that subnet's .1 — the gateway PCs and the
+   switches' ip default-gateway point at. */
 function routerAttach(){
   for(const r of devices.filter(d=>d.type==='router')){
     const c=portCable(r.id,0); if(!c) continue;
     const o=otherEnd(c,r.id); const sw=byId(o.d);
-    if(sw.type==='switch'&&sw.ports[o.i].mode==='trunk') return {r,sw};
+    if(sw.type==='switch'&&effMode(sw,o.i)==='trunk'&&portLinkUp(sw,o.i)) return {r,sw,port:sw.ports[o.i]};
   }
   return null;
+}
+/* VLAN v's traffic reaches the router: across the switches to the one it
+   hangs off, then onto its trunk if that trunk allows v. */
+function vlanToRouter(sw,v,att){
+  return l2SwitchReach(sw,v,att.sw)&&vlanListHas(att.port.allowed,v);
 }
 function routedReach(A,B){
   if(!A.ip||!B.ip||!isValidIP(A.ip)||!isValidIP(B.ip)) return false;
@@ -1139,66 +995,8 @@ function routedReach(A,B){
   if(sameSubnet(A.ip,B.ip,24)) return ipReach(A,B);
   const att=routerAttach(); if(!att) return false;
   const uA=pcUplink(A), uB=pcUplink(B);
-  if(!uA||!uB||uA.port.mode!=='access'||uB.port.mode!=='access') return false;
-  return l2SwitchReach(uA.sw,uA.port.vlan,att.sw)&&l2SwitchReach(uB.sw,uB.port.vlan,att.sw);
-}
-
-/* ═══ STP computation ═════════════════════════════════════════════════════ */
-function bid(d){ return [d.priority, d.mac]; }
-function bidLess(a,b){ return a.priority!==b.priority ? a.priority<b.priority : a.mac<b.mac; }
-
-function computeSTP(){
-  const sws=devices.filter(d=>d.type==='switch');
-  if(sws.length<2) return null;
-  const root=sws.reduce((r,s)=>bidLess(s,r)?s:r);
-  /* Dijkstra: cost 19 per link */
-  const dist={}; sws.forEach(s=>dist[s.id]=Infinity); dist[root.id]=0;
-  const todo=[...sws];
-  while(todo.length){
-    todo.sort((a,b)=>dist[a.id]-dist[b.id]);
-    const cur=todo.shift();
-    if(dist[cur.id]===Infinity) break;
-    cables.forEach(c=>{
-      const A=byId(c.a.d),B=byId(c.b.d);
-      if(A.type!=='switch'||B.type!=='switch')return;
-      let nb=null;
-      if(A===cur)nb=B; else if(B===cur)nb=A;
-      if(!nb)return;
-      if(dist[cur.id]+19<dist[nb.id]) dist[nb.id]=dist[cur.id]+19;
-    });
-  }
-  /* root port per non-root switch */
-  const rootLink={};
-  sws.forEach(s=>{
-    if(s===root) return;
-    let best=null;
-    cables.forEach(c=>{
-      const A=byId(c.a.d),B=byId(c.b.d);
-      if(A.type!=='switch'||B.type!=='switch')return;
-      let nb=null,myEnd=null;
-      if(A===s){nb=B;myEnd=c.a;} else if(B===s){nb=A;myEnd=c.b;}
-      if(!nb)return;
-      const cost=dist[nb.id]+19;
-      if(!best||cost<best.cost||(cost===best.cost&&bidLess(nb,best.nb)))
-        best={cable:c,cost,nb,myEnd};
-    });
-    if(best) rootLink[s.id]=best.cable.id;
-  });
-  /* blocked ports: non-tree segments */
-  const blocked=[];
-  cables.forEach(c=>{
-    const A=byId(c.a.d),B=byId(c.b.d);
-    if(A.type!=='switch'||B.type!=='switch')return;
-    if(rootLink[A.id]===c.id||rootLink[B.id]===c.id)return;
-    if(A===root||B===root)return; /* root's segments are all designated + other end is root port normally; but if redundant direct link to root existed it'd be root port anyway */
-    /* designated end = lower (dist, bid); other end blocks */
-    let des, blk;
-    if(dist[A.id]!==dist[B.id]) { des = dist[A.id]<dist[B.id]?c.a:c.b; }
-    else des = bidLess(A,B)?c.a:c.b;
-    blk = des===c.a?c.b:c.a;
-    blocked.push({cable:c, end:blk});
-  });
-  return {root, dist, rootLink, blocked};
+  if(!uA||!uB||!pcPortOk(uA,A)||!pcPortOk(uB,B)) return false;
+  return vlanToRouter(uA.sw,uA.port.vlan,att)&&vlanToRouter(uB.sw,uB.port.vlan,att);
 }
 
 /* ═══ Scenarios ═══════════════════════════════════════════════════════════ */
@@ -1261,19 +1059,43 @@ function buildGroupedPCs(sws, caps, sizes, opts={}){
   const groups=sizes.map(()=>[]);
   const pcs=[]; const swOf=new Map();
   sws.forEach((sw,si)=>{
+    const want=pcPortChoices(sw,sws).slice(0,persw[si].length).sort((a,b)=>a-b);
+    const row=[];
     persw[si].forEach((gi,pi)=>{
-      const off=OFF[persw[si].length][pi];
-      const x=Math.max(5,Math.min(opts.wide?620:655, sw.x+off));
       const y=(opts.y??210)+(pi%2)*(opts.wide?42:30);
       let ip=null;
       if(opts.ips) ip=`192.168.${opts.vids[gi]}.${opts.hostFor()}`;
-      const pc=addPC(x,y,{ip});
-      const port=sw.ports.findIndex((_,idx)=>!portCable(sw.id,idx));
+      const pc=addPC(sw.x+OFF[persw[si].length][pi],y,{ip});
+      const port=want[pi]!=null?want[pi]:sw.ports.findIndex((_,idx)=>!portCable(sw.id,idx));
       addCable(pc.id,0,sw.id,port,true);
+      row.push({pc,port});
       groups[gi].push(pc); pcs.push(pc); swOf.set(pc,sw);
     });
+    if(row.length) placePcRow(sw,row);
   });
   return {groups,pcs,swOf};
+}
+/* A switch's PCs sit in two staggered rows that overlap, so a PC in the lower
+   row shows only the gap between the PCs above it. Slide the whole row
+   sideways — as one, so it keeps its shape — until each lower PC's cable
+   rises through that gap rather than through a PC, then keep it on the
+   canvas (which wins if the two disagree). */
+const PC_ROW_R=800;
+function placePcRow(sw,row){
+  const W=row.map(r=>devSize(r.pc)[0]), top=Math.min(...row.map(r=>r.pc.y)), m=10;
+  let lo=-Infinity, hi=Infinity;
+  row.forEach((r,k)=>{
+    if(r.pc.y===top) return;
+    let a=r.pc.x, b=r.pc.x+W[k];
+    if(row[k-1]) a=Math.max(a,row[k-1].pc.x+W[k-1]);
+    if(row[k+1]) b=Math.min(b,row[k+1].pc.x);
+    const px=sw.x+portPosSwitch(sw,r.port)[0];
+    lo=Math.max(lo,px-b+m); hi=Math.min(hi,px-a-m);
+  });
+  let s=lo>hi?0:Math.max(lo,Math.min(hi,0));
+  const minX=Math.min(...row.map(r=>r.pc.x)), maxX=Math.max(...row.map((r,k)=>r.pc.x+W[k]));
+  s=Math.max(5-minX,Math.min(PC_ROW_R-maxX,s));
+  row.forEach(r=>{ r.pc.x=Math.round(r.pc.x+s); });
 }
 function switchesOfGroup(g,swOf){ return [...new Set(g.map(p=>swOf.get(p)))]; }
 function membStr(groups,vids,names,withSub){
@@ -1292,7 +1114,7 @@ function vlanReq(pcs,v){
   pcs.forEach(pc=>{
     const up=pcUplink(pc);
     if(!up){ bad.push(pc.name+' not cabled'); return; }
-    if(up.port.mode!=='access'){ bad.push(pc.name+"'s switch port is not access mode"); return; }
+    if(up.port.mode!=='access'){ bad.push(pc.name+"'s switch port is "+(up.port.mode==='dynamic'?'still at the default, dynamic auto':'a trunk')+' — "switchport mode access"'); return; }
     if(up.port.vlan!==v) bad.push(`${pc.name} is in VLAN ${up.port.vlan}, expected ${v}`);
   });
   return bad.length?{ok:false,reason:bad.join('; ')}:{ok:true};
@@ -1384,6 +1206,8 @@ function sviReqFor(sw,v,allPcs){
         return{ok:false,reason:`${sw.name}\u2019s IP ${sw.ip} is not inside 192.168.${v}.0/24`};
       if(o[3]<1||o[3]>254)
         return{ok:false,reason:`.${o[3]} is not a usable host address`};
+      if(o[3]===1)
+        return{ok:false,reason:`.1 is the router's address on that VLAN — pick another host number`};
       if(allPcs.some(p=>p.ip===sw.ip))
         return{ok:false,reason:`${sw.name}\u2019s IP duplicates a PC address — pick a different host number`};
       return{ok:true};
@@ -1449,7 +1273,78 @@ function bundleReq(sA,sB,label){
     if(chs[0]!==chs[1])
       return {ok:false,reason:`${label}: ${s.name} member ports are in different groups (${chs[0]} vs ${chs[1]})`};
   }
+  /* the numbers line up — now it has to actually bundle. Local faults (down,
+     suspended) first, since they also stop the far end negotiating. */
+  const ends=[];
+  ls.forEach(c=>[c.a,c.b].forEach(e=>ends.push([byId(e.d),e.i])));
+  for(const flag of ['D','s','I']){
+    const hit=ends.find(([sw,i])=>chanState(sw,i)===flag);
+    if(hit) return {ok:false,reason:`${label}: ${hit[0].name} ${hit[0].ports[hit[1]].name} is ${CH_WHY[flag]}`};
+  }
   return {ok:true};
+}
+const CH_WHY={
+  D:'down (D) — the port is shut down or its bundle is',
+  s:'suspended (s) — its VLAN/trunk settings differ from its port-channel interface; configure them on "interface port-channel <n>" so every member matches',
+  I:'stand-alone (I) — the two ends’ modes cannot negotiate (active pairs with active or passive, desirable with desirable or auto, on only with on)',
+};
+function bundleProtoReq(sA,sB,proto){
+  const how=proto==='LACP'?'mode active / passive':'mode desirable / auto';
+  return {group:'EtherChannel',desc:`The ${sA.name}–${sB.name} bundle negotiates with ${proto} (${how})`,
+    test(){
+      const ls=linksBetween(sA,sB);
+      if(!ls.length) return {ok:false,reason:`No links between ${sA.name} and ${sB.name} yet`};
+      for(const c of ls) for(const e of [c.a,c.b]){
+        const sw=byId(e.d), p=sw.ports[e.i];
+        if(!(p.ch>0)) return {ok:false,reason:`${sw.name} ${p.name} is not in a channel-group yet`};
+        const got=CH_PROTO[p.chMode];
+        if(got!==proto) return {ok:false,reason:`${sw.name} ${p.name} uses mode ${p.chMode} (${got==='-'?'static, no negotiation':got}), not ${proto}`};
+      }
+      return {ok:true};
+    }};
+}
+/* Every trunk end in `pairs` allows exactly `want` — not the default "all",
+   which is what every trunk starts with. */
+function allowedReq(pairs,want,desc){
+  const wantStr=vlanListStr([...want].sort((a,b)=>a-b));
+  return {group:'Trunking',desc,
+    test(){
+      for(const [a,b] of pairs){
+        const c=cableBetween(a,b);
+        if(!c) return {ok:false,reason:`No link between ${a.name} and ${b.name} yet`};
+        for(const e of [c.a,c.b]){
+          const sw=byId(e.d), p=sw.ports[e.i];
+          if(p.allowed==null) return {ok:false,reason:`${sw.name} ${p.name} still allows every VLAN (1-4094)`};
+          const got=vlanListStr(p.allowed);
+          if(got!==wantStr) return {ok:false,reason:`${sw.name} ${p.name} allows ${got}, expected exactly ${wantStr}`};
+        }
+      }
+      return {ok:true};
+    }};
+}
+function gwReq(sw,v){
+  const want=`192.168.${v}.1`;
+  return {group:'Addressing',desc:`${sw.name}’s default gateway is the router, ${want}`,
+    test(){
+      if(!sw.gw) return {ok:false,reason:`${sw.name} has no default gateway — "ip default-gateway ${want}"`};
+      if(sw.gw!==want) return {ok:false,reason:`${sw.name}’s default gateway is ${sw.gw}, expected ${want}`};
+      return {ok:true};
+    }};
+}
+/* An off-subnet PC can reach the switch's management IP — the test that the
+   SVI is up AND the switch's default gateway is right, the guide's section 5. */
+function mgmtPingReq(pc,sw){
+  return {group:'Verify',desc:`${pc.name} (another subnet) can ping ${sw.name}’s management IP through the router`,
+    test(){
+      if(!pc.ip) return {ok:false,reason:`${pc.name} needs its IP first`};
+      if(sw.ip==null) return {ok:false,reason:`${sw.name} has no management IP yet`};
+      if(swPingReach(pc,sw)) return {ok:true};
+      const sv=sviState(sw);
+      if(sv!=='up') return {ok:false,reason:`${sw.name}’s Vlan${sw.ipVlan} is not up/up — `+
+        (sv==='admin'?'it is shut down':sv==='down'?`VLAN ${sw.ipVlan} does not exist on ${sw.name}`:`no up port on ${sw.name} carries VLAN ${sw.ipVlan}`)};
+      if(!swGwOk(sw)) return {ok:false,reason:`${sw.name} has no usable default gateway, so its reply to ${pc.name} has nowhere to go`};
+      return {ok:false,reason:`The path from ${pc.name} through the router to ${sw.name} is broken — check trunks and the router link`};
+    }};
 }
 function bundleGroupOf(sw,other){
   const ls=linksBetween(sw,other);
@@ -1475,14 +1370,55 @@ function preTrunk(sA,ia,sB,ib){
   addCable(sA.id,ia,sB.id,ib,true);
   sA.ports[ia].mode='trunk'; sB.ports[ib].mode='trunk';
 }
-function lockPair(sA,sB){          /* two locked parallel links on random ports */
-  const ia=shuffle([0,1,2,3]).slice(0,2), ib=shuffle([0,1,2,3]).slice(0,2);
+/* Two locked parallel links, still on random ports — so the members aren't
+   always Fa0/1-2 — but on the side facing the other switch, leaving `spare`
+   ports on the far side clear of the bundle for that switch's PCs (or a link
+   the learner cables), and paired outer to outer so the two routed cables
+   nest rather than cross. spare 2 on a 4-port switch is the facing pair. */
+function lockPair(sA,sB,spareA=1,spareB=1){
+  const aLeft=sA.x<=sB.x;
+  const side=(spare,facingRight)=>{ const n=PORTN-spare; const r=[...Array(n).keys()]; return facingRight?r.map(i=>i+spare):r; };
+  const ia=shuffle(side(spareA,aLeft)).slice(0,2).sort((x,y)=>x-y);
+  const ib=shuffle(side(spareB,!aLeft)).slice(0,2).sort((x,y)=>y-x);
   addCable(sA.id,ia[0],sB.id,ib[0],true);
   addCable(sA.id,ia[1],sB.id,ib[1],true);
 }
+/* Is port i on sw under the span of a switch-to-switch cable? Those cables
+   are routed down-across-up beneath the port row, so a PC cable dropping
+   from a port inside one has to cross it. */
+function portUnderLink(sw,i){
+  const x=sw.x+portPosSwitch(sw,i)[0], row=sw.y+swHeight(sw);
+  return cables.some(c=>{
+    const A=byId(c.a.d), B=byId(c.b.d);
+    if(A.type!=='switch'||B.type!=='switch') return false;
+    if((c.a.d===sw.id&&c.a.i===i)||(c.b.d===sw.id&&c.b.i===i)) return false;
+    const xa=A.x+portPosSwitch(A,c.a.i)[0], xb=B.x+portPosSwitch(B,c.b.i)[0];
+    const base=Math.max(A.y+swHeight(A),B.y+swHeight(B));
+    return x>Math.min(xa,xb)&&x<Math.max(xa,xb)&&Math.abs(base-row)<40;
+  });
+}
+/* The free ports a switch's PCs should use, best first: clear of every drawn
+   link's span, then farthest from the switches beside it (the facing ports
+   are where the links the learner cables will naturally go), then in order. */
+function pcPortChoices(sw,sws=[]){
+  const L=sws.some(o=>o!==sw&&o.x<sw.x), R=sws.some(o=>o!==sw&&o.x>sw.x);
+  const pull=i=>Math.max(R?i:-1, L?PORTN-1-i:-1);
+  const under=i=>portUnderLink(sw,i)?1:0;
+  return [...Array(PORTN).keys()].filter(i=>!portCable(sw.id,i))
+    .sort((a,b)=>under(a)-under(b)||pull(a)-pull(b)||a-b);
+}
 
 /* ── scenario builders ── */
-function buildVlanScenario(D){
+const VLAN_TIP='<span class="mono-inl">interface range fa0/1 - 2</span> (or <span class="mono-inl">fa0/1, fa0/3</span>) configures several ports in one go. Ping between PCs to check your work.';
+/* The VLAN topic starts every port that isn't a pre-built trunk at the IOS
+   default, dynamic auto — so "switchport mode access" is part of the job,
+   as it is on a factory switch. */
+function vlanDefaults(sc){
+  devices.filter(d=>d.type==='switch').forEach(sw=>sw.ports.forEach(p=>{ if(p.mode!=='trunk') p.mode='dynamic'; }));
+  return sc;
+}
+function buildVlanScenario(D){ return vlanDefaults(buildVlanScenarioInner(D)); }
+function buildVlanScenarioInner(D){
   if(D==='easy'){
     const [n1,n2]=pickNames(2);
     const [v1,v2]=pickVids(2);
@@ -1491,10 +1427,13 @@ function buildVlanScenario(D){
     const gShuf=shuffle(pcs);
     const gA=gShuf.slice(0,2), gB=gShuf.slice(2);
     const groups=[gA,gB], vids=[v1,v2], names=[n1,n2];
-    return {type:'vlan',allowIP:false,
+    const hostFor=newHostPool();
+    groups.forEach((g,gi)=>g.forEach(pc=>{ pc.ip=`192.168.${vids[gi]}.${hostFor()}`; }));
+    return {type:'vlan',allowIP:true,
       _meta:{vids,names,groups},
       title:'VLAN Assignment',
-      instr:`Cable all four PCs to SW1, create both VLANs with their names, then assign: ${membStr(groups,vids,names,false)}.`,
+      instr:`Cable all four PCs to SW1, create both VLANs with their names, then assign: ${membStr(groups,vids,names,true)}. `+
+        `The switch ports are at the IOS default, <span class="mono-inl">dynamic auto</span> &mdash; set each PC port to <span class="mono-inl">switchport mode access</span> as well as its VLAN. `+VLAN_TIP,
       reqs:[
         {group:'Cabling',desc:'All four PCs are cabled to SW1',
           test(){ const miss=pcs.filter(p=>!cableBetween(p,sw));
@@ -1502,34 +1441,35 @@ function buildVlanScenario(D){
         {group:'VLANs',desc:`VLAN ${v1} is named ${n1} and VLAN ${v2} is named ${n2}`,
           test(){ return namesReq([[[sw],v1,n1],[[sw],v2,n2]]); }},
         groupAssignReq(groups,vids),
-        groupReachReq(groups),
+        groupIpReachReq(groups),
         isoPairReq(gA[0],gB[0]),
       ]};
   }
 
   if(D==='medium'){
     const s1=addSwitch(120,30), s2=addSwitch(500,30);
-    preTrunk(s1,3,s2,3);
+    preTrunk(s1,3,s2,0);
     const k=pick([2,3]);
     const vids=pickVids(k), names=pickNames(k);
     const sizes=groupSizes(4,k);
-    const {groups,swOf}=buildGroupedPCs([s1,s2],[3,3],sizes,{y:212});
+    const {groups,swOf}=buildGroupedPCs([s1,s2],[3,3],sizes,{y:212,ips:true,vids,hostFor:newHostPool()});
     const [gi,gj]=pickTwoGroups(k);
-    return {type:'vlan',allowIP:false,
+    return {type:'vlan',allowIP:true,
       _meta:{vids,names,groups,sizes},
       title:'VLANs Across Two Switches',
-      instr:`The SW1\u2013SW2 backbone is already trunked. Create and name each VLAN on the switches that carry its PCs, then assign: ${membStr(groups,vids,names,false)}.`,
+      instr:`The SW1\u2013SW2 backbone is already trunked. Create and name each VLAN on the switches that carry its PCs, then assign: ${membStr(groups,vids,names,true)}. `+
+        `The PC ports are still at the default, <span class="mono-inl">dynamic auto</span>, so each needs <span class="mono-inl">switchport mode access</span> too. `+VLAN_TIP,
       reqs:[
         groupNamesReq(groups,vids,names,swOf),
         groupAssignReq(groups,vids),
-        groupReachReq(groups),
+        groupIpReachReq(groups),
         isoPairReq(groups[gi][0],groups[gj][0]),
       ]};
   }
 
   /* hard: variable PCs, variable VLANs, variable missing IPs, router + SVI */
   const s1=addSwitch(120,30), s2=addSwitch(500,30);
-  preTrunk(s1,3,s2,3);
+  preTrunk(s1,3,s2,0);
   const npc=pick([4,5]);
   const k=npc===4?2:pick([2,3]);
   const vids=pickVids(k), names=pickNames(k);
@@ -1548,21 +1488,25 @@ function buildVlanScenario(D){
   const [gi,gj]=pickTwoGroups(k);
   const cA=pick(groups[gi]), cB=pick(groups[gj]);
   const [ii,ij]=pickTwoGroups(k);
+  const mgPc=pick(groups[vids.indexOf(svV)===0?1:0]);
   return {type:'vlan',allowIP:true,
     _meta:{vids,names,groups,sizes,missing,svSw,svV,cross:[cA,cB]},
     title:'VLANs, IPs &amp; Router-on-a-Stick',
-    instr:`The backbone is trunked. Membership by subnet: ${membStr(groups,vids,names,true)}. `+
+    instr:`The backbone is trunked; the PC ports are at the default, <span class="mono-inl">dynamic auto</span>. Membership by subnet: ${membStr(groups,vids,names,true)}. `+
       `Assign the missing IPs (${missing.map(p=>p.name).join(', ')}), and give <strong>${svSw.name}</strong> a management IP in 192.168.${svV}.0/24 on an SVI `+
-      `(<span class="mono-inl">interface vlan ${svV}</span>, then <span class="mono-inl">ip address ...</span>). `+
-      `Finally, cable the pre-configured router to a free switch port and trunk that port so traffic can route <em>between</em> the subnets.`,
+      `(<span class="mono-inl">interface vlan ${svV}</span>, then <span class="mono-inl">ip address ... 255.255.255.0</span>; VLAN ${svV} has to exist on ${svSw.name} for the SVI to come up) `+
+      `with the router as its default gateway (<span class="mono-inl">ip default-gateway 192.168.${svV}.1</span>). `+
+      `Finally, cable the pre-configured router to a free switch port and trunk that port so traffic can route <em>between</em> the subnets. The router is .1 in every subnet.`,
     reqs:[
       ipsReq(missEntries,pcs),
       sviReqFor(svSw,svV,pcs),
+      gwReq(svSw,svV),
       groupNamesReq(groups,vids,names,swOf),
       groupAssignReq(groups,vids),
       routerReq(),
       groupIpReachReq(groups),
       crossPingReq(cA,cB),
+      mgmtPingReq(mgPc,svSw),
       isoPairReq(groups[ii][0],groups[ij][0]),
     ]};
 }
@@ -1573,17 +1517,17 @@ function buildTrunkScenario(D){
     const vids=pickVids(k), names=pickNames(k);
     const s1=addSwitch(120,30), s2=addSwitch(500,30);
     const sizes=groupSizes(4,k);
-    const {groups,swOf}=buildGroupedPCs([s1,s2],[2,2],sizes,{y:212});
+    const {groups,swOf}=buildGroupedPCs([s1,s2],[2,2],sizes,{y:212,ips:true,vids:vids,hostFor:newHostPool()});
     const [gi,gj]=pickTwoGroups(k);
-    return {type:'trunk',allowIP:false,
+    return {type:'trunk',allowIP:true,
       _meta:{vids,names,groups,sizes},
       title:'Inter-Switch Trunking',
-      instr:`Create and name both VLANs where their PCs live, assign: ${membStr(groups,vids,names,false)}. Then cable SW1 to SW2 and trunk the link so every VLAN can cross it.`,
+      instr:`Create and name both VLANs where their PCs live, assign: ${membStr(groups,vids,names,true)}. Then cable SW1 to SW2 and trunk the link so every VLAN can cross it.`,
       reqs:[
         {group:'Trunking',desc:'SW1 and SW2 are linked and both ends are trunks', test(){ return trunkLinkReq(s1,s2); }},
         groupNamesReq(groups,vids,names,swOf),
         groupAssignReq(groups,vids),
-        groupReachReq(groups),
+        groupIpReachReq(groups),
         isoPairReq(groups[gi][0],groups[gj][0]),
       ]};
   }
@@ -1593,18 +1537,19 @@ function buildTrunkScenario(D){
     const k=pick([2,3]);
     const vids=pickVids(k), names=pickNames(k);
     const sizes=groupSizes(4,k);
-    const {groups,swOf}=buildGroupedPCs([s1,s2,s3],[3,2,3],sizes,{y:212});
+    const {groups,swOf}=buildGroupedPCs([s1,s2,s3],[3,2,3],sizes,{y:212,ips:true,vids:vids,hostFor:newHostPool()});
     const [gi,gj]=pickTwoGroups(k);
-    return {type:'trunk',allowIP:false,
+    return {type:'trunk',allowIP:true,
       _meta:{vids,names,groups,sizes},
       title:'Trunking a Three-Switch Chain',
-      instr:`Traffic must cross SW2 to travel the chain. Create and name each VLAN on the switches that carry its PCs, assign: ${membStr(groups,vids,names,false)}. Then cable and trunk <em>both</em> inter-switch links.`,
+      instr:`Traffic must cross SW2 to travel the chain. Create and name each VLAN on the switches that carry its PCs, assign: ${membStr(groups,vids,names,true)}. Then cable and trunk <em>both</em> inter-switch links, and restrict both ends of each trunk to just the VLANs in use (<span class="mono-inl">switchport trunk allowed vlan ${vids.join(',')}</span>).`,
       reqs:[
         {group:'Trunking',desc:'SW1\u2013SW2 link exists and is trunked on both ends', test(){ return trunkLinkReq(s1,s2); }},
         {group:'Trunking',desc:'SW2\u2013SW3 link exists and is trunked on both ends', test(){ return trunkLinkReq(s2,s3); }},
+        allowedReq([[s1,s2],[s2,s3]],vids,`Both trunks allow only VLANs ${vids.join(',')}, at both ends`),
         groupNamesReq(groups,vids,names,swOf),
         groupAssignReq(groups,vids),
-        groupReachReq(groups),
+        groupIpReachReq(groups),
         isoPairReq(groups[gi][0],groups[gj][0]),
       ]};
   }
@@ -1615,22 +1560,24 @@ function buildTrunkScenario(D){
   const npc=pick([5,6]);
   const vids=pickVids(3), names=pickNames(3);
   const sizes=groupSizes(npc,3);
-  const {groups,swOf}=buildGroupedPCs([s1,s2,s3],[3,2,3],sizes,{y:206});
+  const {groups,swOf}=buildGroupedPCs([s1,s2,s3],[3,2,3],sizes,{y:206,ips:true,vids:vids,hostFor:newHostPool()});
   const [gi,gj]=pickTwoGroups(3);
   const nativeVid=pick([99,199,222,777,888,999]);
-  return {type:'trunk',allowIP:false,
+  return {type:'trunk',allowIP:true,
     _meta:{vids,names,groups,sizes,nativeVid},
     title:'Three Switches, Three VLANs',
-    instr:`${npc} PCs, three VLANs: ${membStr(groups,vids,names,false)}. Create and name each VLAN on the switches that carry its PCs, assign the ports, then cable and trunk both inter-switch links. `+
-      `These switches are still defaulting to native VLAN 1, which is a VLAN-hopping risk \u2014 move the native VLAN on <em>both</em> backbone links to VLAN <strong>${nativeVid}</strong> with <span class="mono-inl">switchport trunk native vlan ${nativeVid}</span> (must match on both ends of each link).`,
+    instr:`${npc} PCs, three VLANs: ${membStr(groups,vids,names,true)}. Create and name each VLAN on the switches that carry its PCs, assign the ports, then cable and trunk both inter-switch links. `+
+      `These switches are still defaulting to native VLAN 1, which is a VLAN-hopping risk \u2014 move the native VLAN on <em>both</em> backbone links to VLAN <strong>${nativeVid}</strong> with <span class="mono-inl">switchport trunk native vlan ${nativeVid}</span> (must match on both ends of each link). `+
+      `Then prune the trunks: each one should carry only the three user VLANs and the native VLAN.`,
     reqs:[
       {group:'Trunking',desc:'Both inter-switch links exist and are trunked',
         test(){ const r=trunkLinkReq(s1,s2); if(!r.ok)return r; return trunkLinkReq(s2,s3); }},
       {group:'Trunking',desc:`Both backbone links have their native VLAN moved to VLAN ${nativeVid} on both ends`,
         test(){ const r=nativeReq(s1,s2,nativeVid); if(!r.ok)return r; return nativeReq(s2,s3,nativeVid); }},
+      allowedReq([[s1,s2],[s2,s3]],[...vids,nativeVid],'Both trunks allow only the three user VLANs and the native VLAN'),
       groupNamesReq(groups,vids,names,swOf),
       groupAssignReq(groups,vids),
-      groupReachReq(groups),
+      groupIpReachReq(groups),
       isoPairReq(groups[gi][0],groups[gj][0]),
     ]};
 }
@@ -1641,7 +1588,8 @@ function buildEtherScenario(D){
     lockPair(s1,s2);
     return {type:'ether',allowIP:false,_meta:{},
       title:'EtherChannel Bundle',
-      instr:'Two parallel links already join SW1 and SW2. Bundle them into a single EtherChannel (any group number, matching within each switch) and set every member port to trunk mode.',
+      instr:'Two parallel links already join SW1 and SW2. Bundle them into a single EtherChannel (any group number, matching within each switch) with modes that negotiate &mdash; for example <span class="mono-inl">channel-group 1 mode active</span> on both switches &mdash; '+
+        'and make the bundle a trunk. Configure the trunk on <span class="mono-inl">interface port-channel 1</span> so every member gets the same settings; a member that differs from its port-channel is suspended.',
       reqs:[
         {group:'EtherChannel',desc:'Both switches bundle their two member ports into one channel-group',
           test(){ return bundleReq(s1,s2,'SW1\u2013SW2'); }},
@@ -1654,19 +1602,22 @@ function buildEtherScenario(D){
     const [v1]=pickVids(1);
     const s1=addSwitch(140,60), s2=addSwitch(480,60);
     lockPair(s1,s2);
-    const {groups,swOf}=buildGroupedPCs([s1,s2],[1,1],[2],{y:230});
+    const {groups,swOf}=buildGroupedPCs([s1,s2],[1,1],[2],{y:230,ips:true,vids:[v1],hostFor:newHostPool()});
     const pcs=groups[0];
-    return {type:'ether',allowIP:false,
-      _meta:{vids:[v1],names:[n1],groups},
+    const proto=pick(['LACP','PAgP']);
+    const modes=proto==='LACP'?'<span class="mono-inl">active</span> / <span class="mono-inl">passive</span>':'<span class="mono-inl">desirable</span> / <span class="mono-inl">auto</span>';
+    return {type:'ether',allowIP:true,
+      _meta:{vids:[v1],names:[n1],groups,proto},
       title:'EtherChannel Carrying a VLAN',
-      instr:`Bundle the two SW1\u2013SW2 links into one EtherChannel, trunk the member ports, then create VLAN ${v1} <strong>${n1}</strong> on both switches and put ${pcs[0].name} and ${pcs[1].name} in it so they can talk over the bundle.`,
+      instr:`Bundle the two SW1\u2013SW2 links into one EtherChannel negotiated with <strong>${proto}</strong> (${modes} &mdash; at least one end has to start the negotiation), trunk the bundle on its port-channel interface, then create VLAN ${v1} <strong>${n1}</strong> (192.168.${v1}.0/24) on both switches and put ${pcs[0].name} and ${pcs[1].name} in it so they can talk over the bundle — ping between them to check.`,
       reqs:[
         {group:'EtherChannel',desc:'Both switches bundle their two member ports into one channel-group',
           test(){ return bundleReq(s1,s2,'SW1\u2013SW2'); }},
+        bundleProtoReq(s1,s2,proto),
         bundleTrunkReq([[s1,s2]]),
         groupNamesReq(groups,[v1],[n1],swOf),
         groupAssignReq(groups,[v1]),
-        groupReachReq(groups),
+        groupIpReachReq(groups),
       ]};
   }
 
@@ -1674,16 +1625,19 @@ function buildEtherScenario(D){
   const k=2;
   const vids=pickVids(k), names=pickNames(k);
   const s1=addSwitch(70,50), s2=addSwitch(320,50), s3=addSwitch(570,50);
-  const {groups,swOf}=buildGroupedPCs([s1,s2,s3],[2,0,2],[2,2],{y:224});
-  return {type:'ether',allowIP:false,
-    _meta:{vids,names,groups},
+  const {groups,swOf}=buildGroupedPCs([s1,s2,s3],[2,0,2],[2,2],{y:214,ips:true,vids:vids,hostFor:newHostPool()});
+  const [pA,pB]=shuffle(['LACP','PAgP']);
+  return {type:'ether',allowIP:true,
+    _meta:{vids,names,groups,protos:[pA,pB]},
     title:'Dual EtherChannel Backbone',
-    instr:`Run <strong>two cables</strong> between SW1 and SW2 and <strong>two cables</strong> between SW2 and SW3 using the free ports. Bundle each pair into an EtherChannel — SW2\u2019s two bundles must use <em>different</em> group numbers — trunk every member port, then create ${membStr(groups,vids,names,false)} end to end.`,
+    instr:`Run <strong>two cables</strong> between SW1 and SW2 and <strong>two cables</strong> between SW2 and SW3 using the free ports. Bundle each pair into an EtherChannel — SW2\u2019s two bundles must use <em>different</em> group numbers. The SW1–SW2 bundle negotiates with <strong>${pA}</strong> and the SW2–SW3 bundle with <strong>${pB}</strong>. Trunk each bundle on its port-channel interface, then create ${membStr(groups,vids,names,true)} end to end.`,
     reqs:[
       {group:'EtherChannel',desc:'Two links between SW1 &amp; SW2, bundled consistently on both switches',
         test(){ return bundleReq(s1,s2,'SW1\u2013SW2'); }},
       {group:'EtherChannel',desc:'Two links between SW2 &amp; SW3, bundled consistently on both switches',
         test(){ return bundleReq(s2,s3,'SW2\u2013SW3'); }},
+      bundleProtoReq(s1,s2,pA),
+      bundleProtoReq(s2,s3,pB),
       {group:'EtherChannel',desc:'SW2\u2019s two bundles use different group numbers',
         test(){ const a=bundleGroupOf(s2,s1), b=bundleGroupOf(s2,s3);
           if(a===0||b===0)return{ok:false,reason:'Both SW2 bundles must be cabled and configured first'};
@@ -1691,7 +1645,224 @@ function buildEtherScenario(D){
       bundleTrunkReq([[s1,s2],[s2,s3]],8),
       groupNamesReq(groups,vids,names,swOf),
       groupAssignReq(groups,vids),
-      groupReachReq(groups),
+      groupIpReachReq(groups),
+    ]};
+}
+
+/* ── Port security ──────────────────────────────────────────────────────────
+   Easy and Medium are build tasks; Hard arrives configured and broken, the
+   way the troubleshooting exam presents it: two err-disabled PC ports that
+   look identical in show interfaces status but need different fixes. */
+/* buildGroupedPCs always takes the first free port; move the PCs onto random
+   free ports so the spare port isn't always Fa0/4. */
+function scatterPcPorts(sw){
+  const pcCables=cables.filter(c=>c.b.d===sw.id&&byId(c.a.d).type==='pc')
+    .sort((x,y)=>byId(x.a.d).x-byId(y.a.d).x);
+  const used=new Set(cables.filter(c=>!pcCables.includes(c)).flatMap(c=>[c.a,c.b]).filter(e=>e.d===sw.id).map(e=>e.i));
+  /* a random subset of the free ports, kept in left-to-right order so the
+     PC cables never cross */
+  const all=[...Array(PORTN).keys()].filter(i=>!used.has(i));
+  const clear=all.filter(i=>!portUnderLink(sw,i));
+  const pool=clear.length>=pcCables.length?clear:all;
+  const free=shuffle(pool).slice(0,pcCables.length).sort((a,b)=>a-b);
+  pcCables.forEach((c,k)=>{ c.b.i=free[k]; });
+}
+function sparePort(sw){ return [...Array(PORTN).keys()].find(i=>!portCable(sw.id,i)); }
+function typoMac(mac){                     /* one hex digit off — the kind of slip a typed static entry has */
+  const pos=pick([0,1,2,3,5,6,7,8,10,11,12,13]);
+  const h='0123456789abcdef'.replace(mac[pos],'');
+  return mac.slice(0,pos)+pick(h.split(''))+mac.slice(pos+1);
+}
+function pcPortOf(pc){ const up=pcUplink(pc); return up?{sw:up.sw,p:up.sw.ports[up.i],i:up.i,at:up.sw.name+' '+up.sw.ports[up.i].name}:null; }
+
+/* One row checked across every PC's port; `check` returns a reason or null. */
+function psReq(pcs,desc,check){
+  return {group:'Port Security',desc,
+    test(){
+      for(const pc of pcs){
+        const u=pcPortOf(pc);
+        if(!u) return {ok:false,reason:pc.name+' is not cabled'};
+        const why=check(u.p.ps);
+        if(why) return {ok:false,reason:`${u.at} (${pc.name}): ${why}`};
+      }
+      return {ok:true};
+    }};
+}
+function shutReq(list){
+  const names=list.map(([sw,i])=>sw.name+' '+sw.ports[i].name).join(' and ');
+  return {group:'Port Security',desc:`Unused port${list.length>1?'s':''} ${names} ${list.length>1?'are':'is'} shut down`,
+    test(){
+      const on=list.find(([sw,i])=>!sw.ports[i].shut);
+      return on?{ok:false,reason:`${on[0].name} ${on[0].ports[on[1]].name} is still enabled — "shutdown" it`}:{ok:true};
+    }};
+}
+function stickyWhy(pc,ps){
+  if(!ps.on) return 'port security is not enabled';
+  if(ps.errd) return 'the port is err-disabled';
+  if(!ps.sticky) return 'sticky learning is off';
+  if(!ps.macs.some(m=>m.mac===pc.mac&&m.type==='sticky')) return `${pc.name}’s MAC hasn’t been learned yet — ping from ${pc.name}`;
+  return null;
+}
+function stickyLearnedReq(pcs){
+  return {group:'Verify',desc:'Each PC’s own MAC is stored on its port as a sticky address',
+    test(){
+      for(const pc of pcs){
+        const u=pcPortOf(pc);
+        if(!u) return {ok:false,reason:pc.name+' is not cabled'};
+        const why=stickyWhy(pc,u.p.ps);
+        if(why) return {ok:false,reason:`${u.at}: ${why}`};
+      }
+      return {ok:true};
+    }};
+}
+/* Gated, like the RIP lab's negative requirement: with no port security at
+   all every PC reaches every other, so this row would be green before the
+   learner typed anything. It counts only once every PC port is secured. */
+function psReachReq(pcs){
+  return {group:'Verify',desc:'Every PC can still ping every other PC',
+    test(){
+      const off=pcs.find(pc=>{ const u=pcPortOf(pc); return !u||!u.p.ps.on; });
+      if(off) return {ok:false,reason:`Secure every PC port first (${off.name}’s isn’t) — this check is that port security doesn’t block the PCs that belong there`};
+      const dead=pcs.map(pcPortOf).find(u=>u.p.ps.errd||u.p.shut);
+      if(dead) return {ok:false,reason:`${dead.at} is ${dead.p.ps.errd?'err-disabled':'shut down'}`};
+      for(let a=0;a<pcs.length;a++) for(let b=a+1;b<pcs.length;b++)
+        if(!ipReach(pcs[a],pcs[b])) return {ok:false,reason:`${pcs[a].name} cannot reach ${pcs[b].name} — a port’s secure address list has no room for its PC`};
+      return {ok:true};
+    }};
+}
+function psPolicyReq(x){
+  const max=x.kind==='sticky2'?2:1;
+  const what=x.kind==='static'?`static MAC (${x.pc.name}’s own)`:`sticky, maximum ${max}`;
+  return {group:'Port Security',desc:`${x.pc.name}’s port: ${what}, violation ${x.viol}`,
+    test(){
+      const u=pcPortOf(x.pc);
+      if(!u) return {ok:false,reason:x.pc.name+' is not cabled'};
+      const ps=u.p.ps, at=u.at;
+      if(!ps.on) return {ok:false,reason:`${at}: port security is not enabled`};
+      if(ps.errd) return {ok:false,reason:`${at} is err-disabled — find out why with "show port-security interface", fix it, then shutdown / no shutdown`};
+      if(ps.violation!==x.viol) return {ok:false,reason:`${at}: violation mode is ${ps.violation}, expected ${x.viol}`};
+      if(ps.max!==max) return {ok:false,reason:`${at}: maximum is ${ps.max}, expected ${max}`};
+      if(x.kind==='static'){
+        if(!ps.macs.some(m=>m.mac===x.pc.mac&&m.type==='static'))
+          return {ok:false,reason:`${at}: no static entry for ${x.pc.name}’s MAC (it’s shown in ${x.pc.name}’s panel)`};
+        const extra=ps.macs.find(m=>m.mac!==x.pc.mac);
+        if(extra) return {ok:false,reason:`${at} also secures ${macUp(extra.mac)}, which is not ${x.pc.name}’s MAC`};
+        return {ok:true};
+      }
+      const why=stickyWhy(x.pc,ps);
+      return why?{ok:false,reason:`${at}: ${why}`}:{ok:true};
+    }};
+}
+
+function buildPsecScenario(D){
+  const hostFor=newHostPool();
+  if(D==='easy'){
+    const sw=addSwitch(320,30);
+    const {pcs}=buildGroupedPCs([sw],[3],[3],{ips:true,vids:[1],hostFor,y:212});
+    scatterPcPorts(sw);
+    const spare=sparePort(sw);
+    const max=pick([1,2]), viol=pick(['shutdown','restrict','protect']);
+    return {type:'psec',allowIP:true,_meta:{max,viol,spare},
+      title:'Port Security — Lock Down the PC Ports',
+      instr:`Every PC port on SW1 should accept only the machine plugged into it. On each PC’s port turn on port security with <strong>sticky</strong> learning, a maximum of <strong>${max}</strong> address${max>1?'es':''} and violation mode <strong>${viol}</strong> `+
+        `(<span class="mono-inl">interface range</span> does all three ports at once). Shut down the unused port, <strong>${sw.ports[spare].name}</strong>, so nothing new can be plugged in. `+
+        `Then ping between the PCs so SW1 learns each one’s MAC address &mdash; sticky addresses come from traffic, not from typing.`,
+      reqs:[
+        psReq(pcs,'Port security is enabled on every PC port',ps=>ps.on?null:'port security is not enabled'),
+        psReq(pcs,`Every PC port learns sticky addresses, maximum ${max}`,
+          ps=>!ps.on?'port security is not enabled':!ps.sticky?'sticky learning is off':ps.max!==max?`maximum is ${ps.max}, expected ${max}`:null),
+        psReq(pcs,`Every PC port’s violation mode is ${viol}`,
+          ps=>!ps.on?'port security is not enabled':ps.violation!==viol?`violation mode is ${ps.violation}, expected ${viol}`:null),
+        shutReq([[sw,spare]]),
+        stickyLearnedReq(pcs),
+        psReachReq(pcs),
+      ]};
+  }
+
+  const s1=addSwitch(120,30), s2=addSwitch(500,30);
+  preTrunk(s1,3,s2,0);
+  const {pcs}=buildGroupedPCs([s1,s2],[2,2],[4],{ips:true,vids:[1],hostFor,y:212});
+  scatterPcPorts(s1); scatterPcPorts(s2);
+
+  if(D==='medium'){
+    const spares=[s1,s2].map(sw=>[sw,sparePort(sw)]);
+    const kinds=shuffle(['static','sticky1','sticky2',pick(['static','sticky1','sticky2'])]);
+    const pol=pcs.map((pc,k)=>({pc,kind:kinds[k],viol:pick(['shutdown','restrict','protect'])}));
+    const line=x=>{
+      const u=pcPortOf(x.pc);
+      const what=x.kind==='static'?`a <strong>static</strong> secure address: ${x.pc.name}’s own MAC`
+        :`<strong>sticky</strong> learning, maximum ${x.kind==='sticky2'?2:1}`;
+      return `<li>${x.pc.name} on ${u.at}: ${what}, violation <strong>${x.viol}</strong></li>`;
+    };
+    return {type:'psec',allowIP:true,_meta:{pol,spares},
+      title:'Port Security — A Policy per Port',
+      instr:`Each PC port gets its own port-security policy:<ul>${pol.map(line).join('')}</ul>`+
+        `A PC’s MAC address is shown in its panel (click the PC). Shut down the spare port on each switch, then ping between the PCs so the sticky ports learn their PC. `+
+        `Port security only goes on access ports &mdash; the SW1–SW2 trunk stays as it is.`,
+      reqs:[
+        ...pol.map(psPolicyReq),
+        shutReq(spares),
+        psReachReq(pcs),
+      ]};
+  }
+
+  /* hard: every PC port already runs sticky / maximum 1 / shutdown, each with
+     its own PC learned. Two ports are err-disabled for different reasons: on
+     one, a rogue device was plugged in and has since gone (its sticky entry is
+     still the right PC, so a bounce is the whole fix); on the other, the port
+     holds an address that isn't its PC's — left over from the machine it
+     replaced, or a static entry typed one digit wrong — so a bounce alone just
+     trips it again. Same symptom, different cause, and show port-security
+     interface's "Last Source Address" is what tells them apart. */
+  pcs.forEach(pc=>{
+    const u=pcPortOf(pc);
+    Object.assign(u.p.ps,{on:true,sticky:true,max:1,violation:'shutdown',macs:[{mac:pc.mac,type:'sticky'}],last:pc.mac});
+  });
+  const [pa,pb]=shuffle(pcs).slice(0,2);
+  const ua=pcPortOf(pa), ub=pcPortOf(pb);
+  Object.assign(ua.p.ps,{errd:true,count:1,last:genMac()});
+  const variant=pick(['stale','typo']);
+  const wrong=variant==='stale'?genMac():typoMac(pb.mac);
+  Object.assign(ub.p.ps,{errd:true,count:1,last:pb.mac,macs:[{mac:wrong,type:variant==='stale'?'sticky':'static'}]});
+  const policyOk=u=>u&&u.p.ps.on&&u.p.ps.sticky&&u.p.ps.max===1&&u.p.ps.violation==='shutdown';
+  const aReq={group:'Port Security',desc:`${pa.name}’s port is back in service, still secured`,
+    test(){
+      const u=pcPortOf(pa);
+      if(!u) return {ok:false,reason:pa.name+' is not cabled'};
+      if(u.p.ps.errd) return {ok:false,reason:`${u.at} is still err-disabled`};
+      if(!policyOk(u)) return {ok:false,reason:`${u.at} must keep port security on: sticky, maximum 1, violation shutdown`};
+      if(!portLinkUp(u.sw,u.i)) return {ok:false,reason:`${u.at} is shut down — "no shutdown"`};
+      if(!u.p.ps.macs.some(m=>m.mac===pa.mac)) return {ok:false,reason:`${u.at} no longer holds ${pa.name}’s address — ping from ${pa.name}`};
+      return {ok:true};
+    }};
+  const bReq={group:'Port Security',desc:`${pb.name}’s port secures ${pb.name}’s own MAC and nothing else`,
+    test(){
+      const u=pcPortOf(pb);
+      if(!u) return {ok:false,reason:pb.name+' is not cabled'};
+      if(!policyOk(u)) return {ok:false,reason:`${u.at} must keep port security on: sticky, maximum 1, violation shutdown`};
+      const bad=u.p.ps.macs.find(m=>m.mac!==pb.mac);
+      if(bad) return {ok:false,reason:`${u.at} still secures ${macUp(bad.mac)}, which is not ${pb.name}’s MAC`};
+      if(u.p.ps.errd) return {ok:false,reason:`${u.at} is still err-disabled`};
+      if(!portLinkUp(u.sw,u.i)) return {ok:false,reason:`${u.at} is shut down — "no shutdown"`};
+      if(!u.p.ps.macs.length) return {ok:false,reason:`${u.at} hasn’t learned ${pb.name}’s MAC yet — ping from ${pb.name}`};
+      return {ok:true};
+    }};
+  return {type:'psec',allowIP:true,_meta:{pa,pb,variant},
+    title:'Port Security — Two Dead Ports',
+    instr:`<strong>Ticket:</strong> ${pa.name} and ${pb.name} have lost their network connection. Every PC port runs port security &mdash; sticky, maximum 1, violation shutdown &mdash; and must keep doing so. `+
+      `Find out what happened to each port with show commands (<span class="mono-inl">show interfaces status</span>, <span class="mono-inl">show port-security</span>, <span class="mono-inl">show port-security interface fa0/n</span>, <span class="mono-inl">show run</span>) and fix it. `+
+      `A PC’s MAC address is shown in its panel. The two ports look the same, but they did not fail for the same reason.`,
+    reqs:[
+      aReq, bReq,
+      /* gated: untouched, the other two ports already pass — this row is
+         about not "fixing" the ticket by switching port security off */
+      {group:'Port Security',desc:'Every PC port still runs sticky port security, maximum 1, violation shutdown',
+        test(){
+          if(!aReq.test().ok||!bReq.test().ok) return {ok:false,reason:`Fix ${pa.name}’s and ${pb.name}’s ports first`};
+          return psReq(pcs,'',ps=>!ps.on?'port security is off':!ps.sticky?'sticky learning is off'
+            :ps.max!==1?`maximum is ${ps.max}`:ps.violation!=='shutdown'?`violation mode is ${ps.violation}`:null).test();
+        }},
+      psReachReq(pcs),
     ]};
 }
 
@@ -1705,6 +1876,23 @@ const STP_HW=[
   {tag:'2019 model \u2014 1G uplinks, aging',             tier:2},
   {tag:'2015 model \u2014 1G uplinks, end-of-life',       tier:1},
 ];
+/* The STP rings' cabling. Each link sits on the port facing its neighbour —
+   top pair joined on their inner ports, each side link on the outer port —
+   so the routed cables run round the outside and never cross. Which port a
+   link uses changes nothing in the election: it is decided by bridge IDs and
+   path cost. Triangle: a, b on top, c below between them. Square: a b on
+   top, c d below (a above c, b above d). */
+function stpTriangle(a,b,c){
+  addCable(a.id,3,b.id,0,true);
+  addCable(b.id,3,c.id,3,true);
+  addCable(a.id,0,c.id,0,true);
+}
+function stpSquare(a,b,c,d){
+  addCable(a.id,3,b.id,0,true);
+  addCable(b.id,3,d.id,3,true);
+  addCable(d.id,0,c.id,3,true);
+  addCable(c.id,0,a.id,0,true);
+}
 function buildSTPConfigScenario(){
   const n=pick([3,4]);
   const hwPool=shuffle(STP_HW).slice(0,n);
@@ -1712,14 +1900,9 @@ function buildSTPConfigScenario(){
   const sws=positions.map((p,i)=>addSwitch(p[0],p[1],{hwNote:hwPool[i].tag}));
   sws.forEach((s,i)=>{ s._tier=hwPool[i].tier; });
   if(n===3){
-    addCable(sws[0].id,0,sws[1].id,0,true);
-    addCable(sws[1].id,1,sws[2].id,0,true);
-    addCable(sws[0].id,1,sws[2].id,1,true);
+    stpTriangle(sws[0],sws[1],sws[2]);
   } else {
-    addCable(sws[0].id,0,sws[1].id,0,true);
-    addCable(sws[1].id,1,sws[3].id,0,true);
-    addCable(sws[3].id,1,sws[2].id,0,true);
-    addCable(sws[2].id,1,sws[0].id,1,true);
+    stpSquare(sws[0],sws[1],sws[2],sws[3]);
   }
   const bySpeed=[...sws].sort((a,b)=>b._tier-a._tier);
   const target=bySpeed[0], secondary=bySpeed[1];
@@ -1762,10 +1945,7 @@ function buildSTPScenario(D){
       const xs=[[110,25],[510,25],[110,195],[510,195]];
       var sws=xs.map((p,i)=>addSwitch(p[0],p[1],{priority:val(roles[i]),priLabel:roles[i]}));
     }
-    addCable(sws[0].id,0,sws[1].id,0,true);
-    addCable(sws[1].id,1,sws[3].id,0,true);
-    addCable(sws[3].id,1,sws[2].id,0,true);
-    addCable(sws[2].id,1,sws[0].id,1,true);
+    stpSquare(sws[0],sws[1],sws[2],sws[3]);
     sub='Four switches form a ring.';
   } else if(D==='medium'){
     const roles=shuffle(['root primary','root secondary','default']);
@@ -1773,18 +1953,14 @@ function buildSTPScenario(D){
     const s1=addSwitch(110,30,{priority:val(roles[0]),priLabel:roles[0]});
     const s2=addSwitch(510,30,{priority:val(roles[1]),priLabel:roles[1]});
     const s3=addSwitch(310,200,{priority:val(roles[2]),priLabel:roles[2]});
-    addCable(s1.id,0,s2.id,0,true);
-    addCable(s2.id,1,s3.id,0,true);
-    addCable(s1.id,1,s3.id,1,true);
+    stpTriangle(s1,s2,s3);
     sub='Three switches form a loop; priorities are shown as configured keywords.';
   } else {
     const pris=shuffle(pick([[4096,32768,32768],[8192,16384,32768],[4096,8192,32768],[32768,32768,32768]]));
     const s1=addSwitch(110,30,{priority:pris[0]});
     const s2=addSwitch(510,30,{priority:pris[1]});
     const s3=addSwitch(310,200,{priority:pris[2]});
-    addCable(s1.id,0,s2.id,0,true);
-    addCable(s2.id,1,s3.id,0,true);
-    addCable(s1.id,1,s3.id,1,true);
+    stpTriangle(s1,s2,s3);
     sub='Three switches form a loop.';
   }
   const stp=computeSTP();
@@ -1808,21 +1984,21 @@ function buildComboScenario(D){
     const k=2;
     const vids=pickVids(k), names=pickNames(k);
     const s1=addSwitch(140,55), s2=addSwitch(480,55);
-    lockPair(s1,s2);
+    lockPair(s1,s2,2,2);          /* two PCs on each switch */
     const sizes=groupSizes(4,k);
-    const {groups,swOf}=buildGroupedPCs([s1,s2],[2,2],sizes,{y:224});
+    const {groups,swOf}=buildGroupedPCs([s1,s2],[2,2],sizes,{y:214,ips:true,vids:vids,hostFor:newHostPool()});
     const [gi,gj]=pickTwoGroups(k);
-    return {type:'combo',allowIP:false,
+    return {type:'combo',allowIP:true,
       _meta:{vids,names,groups,sizes},
       title:'Everything — Bundle, Trunk &amp; VLANs',
-      instr:`Two parallel links join the switches: bundle them into one EtherChannel and trunk the member ports. Then create and name both VLANs where their PCs live and assign: ${membStr(groups,vids,names,false)}.`,
+      instr:`Two parallel links join the switches: bundle them into one EtherChannel and trunk the bundle on its port-channel interface. Then create and name both VLANs where their PCs live and assign: ${membStr(groups,vids,names,true)}.`,
       reqs:[
         {group:'EtherChannel',desc:'The two links form one consistent EtherChannel',
           test(){ return bundleReq(s1,s2,'SW1\u2013SW2'); }},
         bundleTrunkReq([[s1,s2]]),
         groupNamesReq(groups,vids,names,swOf),
         groupAssignReq(groups,vids),
-        groupReachReq(groups),
+        groupIpReachReq(groups),
         isoPairReq(groups[gi][0],groups[gj][0]),
       ]};
   }
@@ -1833,7 +2009,7 @@ function buildComboScenario(D){
   const bundlePair=pairs[bi], singlePair=pairs[1-bi];
 
   if(D==='medium'){
-    lockPair(bundlePair[0],bundlePair[1]);
+    lockPair(bundlePair[0],bundlePair[1],2,2);   /* every port is spoken for: PCs and the learner's link */
     const k=pick([2,3]);
     const vids=pickVids(k), names=pickNames(k);
     const sizes=groupSizes(4,k);
@@ -1842,12 +2018,12 @@ function buildComboScenario(D){
       let reserve=(sw===singlePair[0]||sw===singlePair[1])?1:0;
       return 4-used-reserve;
     });
-    const {groups,swOf}=buildGroupedPCs([s1,s2,s3],caps,sizes,{y:212});
+    const {groups,swOf}=buildGroupedPCs([s1,s2,s3],caps,sizes,{y:212,ips:true,vids,hostFor:newHostPool()});
     const [gi,gj]=pickTwoGroups(k);
-    return {type:'combo',allowIP:false,
+    return {type:'combo',allowIP:true,
       _meta:{vids,names,groups,sizes,bundlePair,singlePair},
       title:'Everything — Dual-Path Backbone',
-      instr:`${bundlePair[0].name} and ${bundlePair[1].name} share two pre-cabled links: bundle and trunk them. Then cable a single link between ${singlePair[0].name} and ${singlePair[1].name} and trunk it. Finally create, name and assign: ${membStr(groups,vids,names,false)}.`,
+      instr:`${bundlePair[0].name} and ${bundlePair[1].name} share two pre-cabled links: bundle and trunk them. Then cable a single link between ${singlePair[0].name} and ${singlePair[1].name} and trunk it. Finally create, name and assign: ${membStr(groups,vids,names,true)}.`,
       reqs:[
         {group:'EtherChannel',desc:`${bundlePair[0].name}\u2013${bundlePair[1].name} links form one consistent EtherChannel`,
           test(){ return bundleReq(bundlePair[0],bundlePair[1],bundlePair[0].name+'\u2013'+bundlePair[1].name); }},
@@ -1856,7 +2032,7 @@ function buildComboScenario(D){
         bundleTrunkReq([bundlePair]),
         groupNamesReq(groups,vids,names,swOf),
         groupAssignReq(groups,vids),
-        groupReachReq(groups),
+        groupIpReachReq(groups),
         isoPairReq(groups[gi][0],groups[gj][0]),
       ]};
   }
@@ -1881,13 +2057,14 @@ function buildComboScenario(D){
   const missing=shuffle(pcs).slice(0,m);
   missing.forEach(p=>p.ip=null);
   const missEntries=missing.map(p=>({pc:p,o3:vidOf.get(p)}));
-  addRouter(320,270);
+  addRouterBelow();
   const svSw=pick([s1,s2,s3]);
   const svV=pick(vids);
   const [gi,gj]=pickTwoGroups(k);
   const cA=pick(groups[gi]), cB=pick(groups[gj]);
   const [ii,ij]=pickTwoGroups(k);
   const nativeVid=pick([99,199,222,777,888,999]);
+  const mgPc=pick(groups[vids.indexOf(svV)===0?1:0]);
   const hwPool=shuffle(STP_HW).slice(0,3);
   [s1,s2,s3].forEach((s,i)=>{ s.hwNote=hwPool[i].tag; s._tier=hwPool[i].tier; });
   const bySpeed=[s1,s2,s3].slice().sort((a,b)=>b._tier-a._tier);
@@ -1898,7 +2075,7 @@ function buildComboScenario(D){
     title:'Everything — Full Build',
     instr:`Build the backbone yourself: run <strong>two cables</strong> between ${bundlePair[0].name} and ${bundlePair[1].name} and bundle them, plus a single link between ${singlePair[0].name} and ${singlePair[1].name}; trunk every backbone port. `+
       `The ${singlePair[0].name}\u2013${singlePair[1].name} link is still on native VLAN 1 \u2014 move it to VLAN <strong>${nativeVid}</strong> on both ends (<span class="mono-inl">switchport trunk native vlan ${nativeVid}</span>). `+
-      `Membership by subnet: ${membStr(groups,vids,names,true)}. Assign the missing IPs (${missing.map(p=>p.name).join(', ')}), give <strong>${svSw.name}</strong> a management SVI in 192.168.${svV}.0/24, and connect the router on a trunked port to route between subnets. `+
+      `Membership by subnet: ${membStr(groups,vids,names,true)}. Assign the missing IPs (${missing.map(p=>p.name).join(', ')}), give <strong>${svSw.name}</strong> a management SVI in 192.168.${svV}.0/24 with the router (.1) as its default gateway, and connect the router on a trunked port to route between subnets. `+
       `<br><br>${specTable}<br><br>These switches are still at the STP default priority \u2014 using <span class="mono-inl">spanning-tree vlan 1 root primary</span> / <span class="mono-inl">root secondary</span> (or an explicit <span class="mono-inl">priority &lt;n&gt;</span>), make <strong>${stpTarget.name}</strong> the root bridge and <strong>${stpSecondary.name}</strong> the backup root.`,
     reqs:[
       {group:'EtherChannel',desc:`${bundlePair[0].name}\u2013${bundlePair[1].name} has two links in one consistent EtherChannel`,
@@ -1912,9 +2089,11 @@ function buildComboScenario(D){
       groupAssignReq(groups,vids),
       ipsReq(missEntries,pcs),
       sviReqFor(svSw,svV,pcs),
+      gwReq(svSw,svV),
       routerReq(),
       groupIpReachReq(groups),
       crossPingReq(cA,cB),
+      mgmtPingReq(mgPc,svSw),
       isoPairReq(groups[ii][0],groups[ij][0]),
       {group:'Spanning Tree',desc:`${stpTarget.name} (the newest/fastest switch) is the STP root bridge`,
         test(){
@@ -1939,14 +2118,15 @@ function buildComboScenario(D){
    wants at the top. Keyed off the scenario's own type rather than the topic
    button, so a Random round promotes the reference for whatever it landed
    on. Sandbox has no scenario, so it falls back to canonical order. */
-const TOPIC_REF={vlan:'vlanref', trunk:'vlanref', ether:'cmdref', stp:'stpref', combo:'cmdref'};
+const TOPIC_REF={vlan:'vlanref', trunk:'vlanref', ether:'cmdref', psec:'cmdref', stp:'stpref', combo:'cmdref'};
 
 function newScenario(){
   resetTopo(); done=false;
-  const base = topic==='rand' ? pick(['vlan','trunk','ether','stp','all']) : topic;
+  const base = topic==='rand' ? pick(['vlan','trunk','ether','psec','stp','all']) : topic;
   if(base==='vlan')       scenario=buildVlanScenario(diffLevel);
   else if(base==='trunk') scenario=buildTrunkScenario(diffLevel);
   else if(base==='ether') scenario=buildEtherScenario(diffLevel);
+  else if(base==='psec')  scenario=buildPsecScenario(diffLevel);
   else if(base==='all')   scenario=buildComboScenario(diffLevel);
   else                    scenario=buildSTPScenario(diffLevel);
 

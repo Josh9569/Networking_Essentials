@@ -1,0 +1,2239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Troubleshooting Trainer</title>
+<link rel="stylesheet" href="styles.css">
+<script src="theme.js"></script>
+<script src="custom-theme.js"></script>
+<script src="options.js"></script>
+<script src="answer-keys.js"></script>
+<script src="lab-shared.js"></script>
+<script src="net-switch.js"></script>
+<script src="net-ospf.js"></script>
+<script src="net-router.js"></script>
+</head>
+<body>
+<div class="wrap">
+
+  <a href="index.html" class="home-link">&#8592; All Tools</a>
+  <div class="hdr">
+    <div>
+      <div class="hdr-title">Troubleshooting Trainer</div>
+      <div class="hdr-sub">A working dual-stack network with faults planted in it &mdash; work the tickets, find each fault, fix it</div>
+    </div>
+    <div class="hdr-right">
+      <div class="chips">
+        <div class="chip">Score <b id="sc">0</b></div>
+        <div class="chip">Round <b id="rnd">1</b></div>
+        <div class="chip">Streak <b id="str">0</b></div>
+      </div>
+      <div id="theme-toggle-slot"></div>
+    </div>
+  </div>
+
+  <div class="cls-row">
+    <span>Topic:</span>
+    <button class="cbtn on" id="tb-exam" onclick="setTopic('exam',this)">Exam</button>
+    <button class="cbtn" id="tb-all" onclick="setTopic('all',this)">Everything</button>
+    <button class="cbtn" id="tb-sw" onclick="setTopic('sw',this)">Switching</button>
+    <button class="cbtn" id="tb-iv" onclick="setTopic('iv',this)">Inter-VLAN</button>
+    <button class="cbtn" id="tb-ppp" onclick="setTopic('ppp',this)">PPP</button>
+    <button class="cbtn" id="tb-addr" onclick="setTopic('addr',this)">Addressing &amp; IPv6</button>
+    <button class="cbtn" id="tb-ospf" onclick="setTopic('ospf',this)">OSPF</button>
+    <button class="cbtn" id="tb-rt" onclick="setTopic('rt',this)">Static Routes</button>
+    <button class="cbtn" id="tb-nat" onclick="setTopic('nat',this)">NAT</button>
+    <button class="cbtn" id="tb-acl" onclick="setTopic('acl',this)">ACLs</button>
+    <button class="cbtn" id="tb-ssh" onclick="setTopic('ssh',this)">SSH</button>
+  </div>
+
+  <div class="diff-row">
+    <span>Difficulty:</span>
+    <button class="cbtn on" id="db-easy" onclick="setDiff('easy',this)">Easy</button>
+    <button class="cbtn" id="db-medium" onclick="setDiff('medium',this)">Medium</button>
+    <button class="cbtn" id="db-hard" onclick="setDiff('hard',this)">Hard</button>
+  </div>
+
+  <div class="qcard" id="qcard">
+    <div class="qcard-hdr">
+      <div class="qlbl" id="qlbl">Exam</div>
+      <button type="button" class="qcard-pop-btn" id="qcard-pop-btn" title="Pop out instructions to a floating panel" aria-label="Pop out instructions to a floating panel" onclick="LabShared.toggleQcardPopout('qcard','qcard-pop-btn')">
+        <svg viewBox="0 0 24 24"><path d="M11 4H4v16h7M15 8l-4 4 4 4"/></svg>
+      </button>
+    </div>
+    <div class="q-prompt" id="qprompt">Loading&hellip;</div>
+    <div class="ipdisp" id="qip" style="display:none"></div>
+    <div id="qspec"></div>
+    <div class="req-list two-col" id="req-list"></div>
+    <div id="ts-ref"></div>
+  </div>
+
+  <div class="fbanner" id="fb"></div>
+
+  <div id="qbody"></div>
+
+  <div class="actrow">
+    <button class="btn btn-p" id="chkbtn" onclick="checkAll()">Submit</button>
+    <button class="btn btn-s" id="revbtn" onclick="revealAll()">Skip</button>
+    <button class="btn btn-s" id="nxtbtn" onclick="nextQ()" style="display:none">Next Question &#8594;</button>
+    <button class="btn btn-d" id="rstbtn" onclick="resetGame()">Reset</button>
+
+    <div class="opt-wrap">
+      <button class="opt-btn" id="opt-btn" onclick="toggleOpts()">
+        Options
+        <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="opt-menu" id="opt-menu">
+        <div class="opt-section-label">Reference Tools</div>
+        <label class="opt-row" onclick="toggleTool('where')">
+          <span class="opt-row-label">Where to Look</span>
+          <div class="tog"><input type="checkbox" id="tog-where" checked><span class="tog-track"></span></div>
+        </label>
+        <label class="opt-row" onclick="toggleTool('cmds')">
+          <span class="opt-row-label">Show Commands</span>
+          <div class="tog"><input type="checkbox" id="tog-cmds" checked><span class="tog-track"></span></div>
+        </label>
+      </div>
+    </div>
+  </div>
+
+  <div class="toolsec" id="toolsec">
+    <div class="tool-block" id="t-where">
+      <div class="tool-block-title">Where to Look</div>
+      <p class="tool-note">Work from Layer 2 up: a check higher up the stack only means something once everything under it is right. Reproduce the ticket first, then ping the PC's own gateway &mdash; the last thing that answers tells you which device to open.</p>
+      <table class="ref-table">
+        <thead><tr><th>Symptom</th><th>Check, in order</th></tr></thead>
+        <tbody>
+          <tr><td>A PC cannot ping its own gateway</td><td>VLANs and access ports &rarr; port security &rarr; trunks &rarr; EtherChannel &rarr; router subinterfaces &rarr; the PC's own settings</td></tr>
+          <tr><td>Nothing reaches a switch's management address</td><td>Trunks &rarr; the switch's VLAN SVI &rarr; its default gateway</td></tr>
+          <tr><td>The sites cannot reach each other over IPv4</td><td>Serial link and PPP &rarr; router addressing &rarr; OSPF neighbours and networks &rarr; IPv4 ACLs</td></tr>
+          <tr><td>Only IPv6 is broken</td><td>IPv6 addresses and link-locals &rarr; ipv6 unicast-routing &rarr; OSPFv3 per interface &rarr; IPv6 ACLs</td></tr>
+          <tr><td>The Internet (5.5.5.5) is unreachable</td><td>R1's default routes &rarr; default-information originate &rarr; ISP's routes back &rarr; NAT</td></tr>
+          <tr><td>SSH fails</td><td>Can the PC ping the router? Then the SSH server: domain name, RSA keys, a local user, login local and transport input ssh</td></tr>
+        </tbody>
+      </table>
+      <p class="tool-note" style="margin-top:.6rem">An exam report wants the root cause and device, the show commands that proved it, and the fix. <span class="mono-inl">show running-config</span> does not count as proof &mdash; use it to read configuration, then prove the fault with a targeted show command.</p>
+    </div>
+
+    <div class="tool-block" id="t-cmds">
+      <div class="tool-block-title">Show Commands</div>
+      <table class="ref-table">
+        <thead><tr><th>Area</th><th>Commands</th></tr></thead>
+        <tbody>
+          <tr><td>Any device</td><td>show ip interface brief &middot; show ipv6 interface brief &middot; show cdp neighbors</td></tr>
+          <tr><td>Switch</td><td>show vlan brief &middot; show interfaces status &middot; show interfaces trunk &middot; show interfaces fa0/6 switchport &middot; show etherchannel summary &middot; show port-security [interface fa0/6]</td></tr>
+          <tr><td>Router, Layer 2</td><td>show interfaces g0/1.10 &middot; show vlans &middot; show interfaces s0/0/0 &middot; show controllers s0/0/0</td></tr>
+          <tr><td>Routing</td><td>show ip route [ospf] &middot; show ipv6 route [ospf] &middot; show ip protocols &middot; show ipv6 protocols &middot; show ip ospf neighbor &middot; show ipv6 ospf interface brief</td></tr>
+          <tr><td>Services</td><td>show access-lists &middot; show ipv6 access-list &middot; show ip interface g0/1.10 &middot; show ip nat translations &middot; show ip nat statistics &middot; show ip ssh</td></tr>
+          <tr><td>Testing</td><td>ping 5.5.5.5 &middot; ping 2001:5:5::5 source g0/1.10 &middot; on a PC, ping and SSH from its panel</td></tr>
+          <tr><td>Finishing</td><td>copy running-config startup-config (or write) on every device you changed</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+/* Troubleshooting Trainer — a working network with faults planted in it.
+
+   One fixed exam-style network, dual-stack throughout: an ISP with the
+   "Internet" on a loopback, an edge router (R1) doing NAT and holding the
+   default routes, an HQ router (R2) on a PPP/CHAP serial link doing
+   router-on-a-stick for three VLANs, a branch router (R3), three switches
+   with an LACP EtherChannel and port security, and four PCs. OSPFv2 and
+   OSPFv3 run in two areas; an extended IPv4 ACL and an IPv6 ACL enforce a
+   small policy; every router takes SSH.
+
+   Nothing here is a second engine. Switching is net-switch.js (the
+   switching lab's), OSPF is net-ospf.js (the OSPF Lab's), ACLs/NAT/SSH/PPP
+   are net-router.js (the access-control and routing labs'). What this page
+   owns is the part no other lab needed: a VLAN-aware view of which
+   endpoints share a broadcast domain across switches and router
+   subinterfaces, and a dual-stack forwarder over it.
+
+   A round builds the healthy network from IOS commands, plants faults (as
+   more IOS commands, so show run tells the truth), and hands out the
+   tickets those faults cause. A ticket is solved when its ping or SSH works;
+   the design rules are only checked once every ticket is. */
+
+function ri(a,b){ return Math.floor(Math.random()*(b-a+1))+a; }
+function choice(arr){ return arr[ri(0,arr.length-1)]; }
+function shuffle(arr){ for(let i=arr.length-1;i>0;i--){ const j=ri(0,i); [arr[i],arr[j]]=[arr[j],arr[i]]; } return arr; }
+function esc(s){ return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function ip2int(ip){ const p=ip.split('.').map(Number); return((p[0]<<24)|(p[1]<<16)|(p[2]<<8)|p[3])>>>0; }
+function int2ip(n){ return[(n>>>24)&255,(n>>>16)&255,(n>>>8)&255,n&255].join('.'); }
+function maskInt(c){ return c<=0?0:(c>=32?0xFFFFFFFF>>>0:(0xFFFFFFFF<<(32-c))>>>0); }
+function cidr2mask(c){ return int2ip(maskInt(c)); }
+function netIntOf(ip,c){ return (ip & maskInt(c))>>>0; }
+const isValidIP=LabShared.isValidIP;
+const M=function(tok,cand){ return !!tok&&cand.indexOf(tok)===0; };
+
+const {ac6Fmt, aclEvaluate, aceText, acIface, acIfNorm, acFullIf, aclShowLines, sshNew, sshEnabled, sshServerProblem,
+       acSshCli, acShowIpSsh, acFakeHash, sshGenKeys, aclCli, natNew, natEnabled, natOut, natIn, natClear,
+       natShowTranslations, natShowStats, natRunLines, natCli, natPfxOfMask, pppLinkState}=NetRouter;
+const {opNew, op6Parse, op6Fmt, op6Net, op6Up}=NetOspf;
+
+/* ── one address family or the other ──
+   A key is a Number for IPv4 and a 32-nibble hex string for IPv6, the same
+   convention as access_control's lab and net-ospf.js, so routes the OSPF
+   engine hands over compare directly with addresses parsed here. */
+function famOf(s){ s=String(s||'').trim(); return isValidIP(s)?4:op6Parse(s)!=null?6:null; }
+function fKey(fam,s){ if(s==null) return null; s=String(s).trim(); return fam===4?(isValidIP(s)?ip2int(s):null):op6Parse(s); }
+function fNet(fam,k,p){ return fam===4?netIntOf(k,p):op6Net(k,p); }
+function fFmt(fam,k){ return fam===4?int2ip(k):op6Fmt(k).toUpperCase(); }
+function v6Up(s){ return s?op6Up(s):s; }
+
+/* ═══ Devices ══════════════════════════════════════════════════════
+   A router keeps net-router.js's shape (ifaces, acls, nat, ssh) plus what
+   net-ospf.js reads (ospf, ospf6, unicast6) and its own static routes per
+   family. One interface record covers physical ports, dot1Q subinterfaces,
+   serials and loopbacks. A cable end on a router is an index into ifaces;
+   subinterfaces are only ever appended, so those indices never move. */
+const RT_W=128, RT_H=60, CANVAS_H=540;
+const SW_PORTS=['Fa0/1','Fa0/2','Fa0/3','Fa0/4','Fa0/5','Fa0/6','Fa0/7','Fa0/8','Gi0/1','Gi0/2'];
+const ROGUE='00e0.f7a1.3c22';
+let tsDevices=[], tsCables=[], tsNid=1, tsSel=null;
+function tsById(id){ return tsDevices.find(d=>d.id===id); }
+function tsDev(name){ return tsDevices.find(d=>d.name===name); }
+function tsHex4(){ return ('000'+ri(0,65535).toString(16)).slice(-4); }
+function tsMac(){ return tsHex4()+'.'+tsHex4()+'.'+tsHex4(); }
+function tsNewIf(r,name,o){
+  o=o||{};
+  const f={name:name, ip:null, pfx:null, ip6:null, pfx6:null, ll6:null, v6on:false,
+    up:!!o.loopback, parent:o.parent||null, vlan:null, native:false,
+    loopback:!!o.loopback, serial:!!o.serial, dce:!!o.dce, clock:null, encap:o.serial?'hdlc':null, auth:null,
+    nat:null, aclIn:null, aclOut:null, acl6In:null, acl6Out:null, area2:null, area6:null, cost:null};
+  r.ifaces.push(f); return f;
+}
+function tsAddRouter(name,x,y,role,phys){
+  const r={id:tsNid++, type:'router', name:name, role:role, x:x, y:y, ifaces:[], acls:{}, nat:natNew(), ssh:sshNew(),
+    statics:{4:[],6:[]}, ospf:opNew(), ospf6:opNew(), unicast6:false, vtyAcl:null, vty6Acl:null,
+    startup:'', cm:'exec', ci:null, log:[], hist:[], hi:0};
+  phys.forEach(p=>tsNewIf(r,p[0],p[1]));
+  tsDevices.push(r); return r;
+}
+function tsAddSwitch(name,x,y){
+  const d=Object.assign({id:tsNid++, type:'switch', name:name, x:x, y:y, priority:32768, mac:tsMac(), startup:''},
+    SWE.newSwitchState(SW_PORTS));
+  tsDevices.push(d); return d;
+}
+function tsAddPc(name,x,y,cfg){
+  const d=Object.assign({id:tsNid++, type:'pc', name:name, x:x, y:y, mac:tsMac()}, cfg);
+  tsDevices.push(d); return d;
+}
+function tsPortIdx(d,name){
+  if(d.type==='router') return d.ifaces.findIndex(f=>acIfNorm(f.name)===acIfNorm(name));
+  if(d.type==='switch') return d.ports.findIndex(p=>p.name===name);
+  return 0;
+}
+function tsCable(A,an,B,bn,opts){
+  const c=Object.assign({id:tsNid++, a:{d:A.id,i:tsPortIdx(A,an)}, b:{d:B.id,i:tsPortIdx(B,bn)}}, opts||{});
+  tsCables.push(c); return c;
+}
+function tsPortCable(id,i){ return tsCables.find(c=>(c.a.d===id&&c.a.i===i)||(c.b.d===id&&c.b.i===i)); }
+function tsOther(c,id){ return c.a.d===id?c.b:c.a; }
+function tsPortName(dev,i){ return dev.type==='router'?dev.ifaces[i].name:dev.type==='switch'?dev.ports[i].name:'NIC'; }
+
+/* The switch engine, in strict-VLAN mode: a switch carries only VLANs in
+   its own database, so "VLAN missing" is a real fault here. */
+const SWE=NetSwitch.create({
+  strictVlans:true,
+  devices:()=>tsDevices, cables:()=>tsCables, byId:id=>tsById(id),
+  portCable:(id,i)=>tsPortCable(id,i), otherEnd:(c,id)=>tsOther(c,id),
+  endUp:(d,i)=>d.type==='router'?!!d.ifaces[i].up:true
+});
+
+/* ═══ Line protocol ════════════════════════════════════════════════ */
+function tsPhys(r,f){ return f.parent?acIface(r,f.parent):f; }
+function tsIfCable(r,f){ return tsPortCable(r.id, r.ifaces.indexOf(f)); }
+/* CHAP and SSH read the same username table, as on IOS. */
+function tsUsers(r){
+  const u={};
+  Object.keys(r.ssh.users).forEach(n=>{ const x=r.ssh.users[n]; u[n]=x.password!=null?x.password:x.secret; });
+  return u;
+}
+function tsSerialPeer(r,f){
+  const c=tsIfCable(r,f); if(!c||!c.serial) return null;
+  const o=tsOther(c,r.id), pr=tsById(o.d);
+  return {router:pr, iface:pr.ifaces[o.i]};
+}
+function tsPppEnd(r,f){ return {router:r.name, ifName:f.name, up:f.up, encap:f.encap||'hdlc', auth:f.auth, clock:f.clock, dce:f.dce, users:tsUsers(r)}; }
+function tsPpp(r,f){
+  const pe=tsSerialPeer(r,f);
+  if(!pe) return {up:false, why:'no serial cable'};
+  return pppLinkState(tsPppEnd(r,f), tsPppEnd(pe.router,pe.iface));
+}
+function tsIfProto(r,f){
+  if(!f.up) return false;
+  if(f.loopback) return true;
+  if(f.parent){ const P=acIface(r,f.parent); return !!P&&tsIfProto(r,P); }
+  const c=tsIfCable(r,f); if(!c) return false;
+  if(f.serial) return tsPpp(r,f).up;
+  const o=tsOther(c,r.id), od=tsById(o.d);
+  if(od.type==='router') return !!od.ifaces[o.i].up;
+  if(od.type==='switch') return SWE.portUp(od,o.i);
+  return true;
+}
+/* The Status column: carrier, not protocol. */
+function tsIfStatus(r,f){
+  if(!f.up) return 'administratively down';
+  if(f.loopback) return 'up';
+  if(f.parent){ const P=acIface(r,f.parent); return P&&tsIfStatus(r,P)==='up'?'up':'down'; }
+  const c=tsIfCable(r,f); if(!c) return 'down';
+  const o=tsOther(c,r.id), od=tsById(o.d);
+  if(od.type==='router') return od.ifaces[o.i].up?'up':'down';
+  if(od.type==='switch') return SWE.portUp(od,o.i)?'up':'down';
+  return 'up';
+}
+
+/* ═══ Broadcast domains ════════════════════════════════════════════
+   The one model this page adds. An endpoint — a PC, a switch SVI, a router
+   interface — "lands" in a VLAN on some switch, and the switches that VLAN
+   crosses (net-switch.js's linkPasses: trunk allowed lists, natives,
+   bundles, strict VLANs) make the domain. Everything that lands in the same
+   VLAN on a switch in that domain shares a segment. A router subinterface
+   lands only when its dot1Q tag, its native flag and the trunk agree; an
+   untagged frame goes to the native subinterface, or to the physical port
+   when there is none. */
+function tsLanding(r,f){
+  if(f.loopback||f.serial||!tsIfProto(r,f)) return null;
+  const P=tsPhys(r,f), c=tsIfCable(r,P); if(!c) return null;
+  const o=tsOther(c,r.id), sw=tsById(o.d);
+  if(sw.type!=='switch'||!SWE.portLinkUp(sw,o.i)) return null;
+  const p=sw.ports[o.i], mode=SWE.effMode(sw,o.i);
+  const nat=r.ifaces.find(x=>x.parent===P.name&&x.native&&x.vlan!=null);
+  let v=null;
+  if(f===P){ if(!nat) v=mode==='trunk'?p.native:p.vlan; }
+  else if(f.vlan!=null){
+    if(mode==='trunk'){ if(f.native?f.vlan===p.native:f.vlan!==p.native) v=f.vlan; }
+    else if(f===nat) v=p.vlan;
+  }
+  if(v==null) return null;
+  if(mode==='trunk'&&!SWE.vlanListHas(p.allowed,v)) return null;
+  if(!SWE.vlanOn(sw,v)) return null;
+  return {sw:sw, vlan:v};
+}
+function tsPcLanding(pc){
+  const up=SWE.pcUplink(pc);
+  if(!up||!SWE.pcPortOk(up,pc)) return null;
+  return {sw:up.sw, vlan:up.port.vlan};
+}
+function tsSviLanding(sw){ return sw.ip&&sw.ipVlan!=null&&SWE.sviUp(sw)?{sw:sw, vlan:sw.ipVlan}:null; }
+function tsDomain(land){
+  const seen=new Set([land.sw.id]), q=[land.sw];
+  while(q.length){
+    const cur=q.shift();
+    tsCables.forEach(c=>{
+      if(c.a.d!==cur.id&&c.b.d!==cur.id) return;
+      const nx=tsById(tsOther(c,cur.id).d);
+      if(nx.type!=='switch'||seen.has(nx.id)||!SWE.linkPasses(c,land.vlan)) return;
+      seen.add(nx.id); q.push(nx);
+    });
+  }
+  return seen;
+}
+function tsAttached(land){
+  const dom=tsDomain(land), v=land.vlan, out=[];
+  const inDom=L=>L&&L.vlan===v&&dom.has(L.sw.id);
+  tsDevices.forEach(d=>{
+    if(d.type==='pc'){ if(inDom(tsPcLanding(d))) out.push({kind:'pc', dev:d}); }
+    else if(d.type==='switch'){ if(inDom(tsSviLanding(d))) out.push({kind:'svi', dev:d}); }
+    else d.ifaces.forEach(f=>{ if(inDom(tsLanding(d,f))) out.push({kind:'rif', dev:d, iface:f}); });
+  });
+  return out;
+}
+/* Everything that shares a segment with this endpoint (itself excluded). */
+function tsSegment(ep){
+  if(ep.kind==='rif'){
+    const r=ep.dev, f=ep.iface;
+    if(f.loopback||!tsIfProto(r,f)) return [];
+    if(f.serial){ const pe=tsSerialPeer(r,f); return pe&&tsIfProto(pe.router,pe.iface)?[{kind:'rif', dev:pe.router, iface:pe.iface}]:[]; }
+    const P=tsPhys(r,f), c=tsIfCable(r,P); if(!c) return [];
+    const o=tsOther(c,r.id), od=tsById(o.d);
+    if(od.type==='router'){
+      if(f!==P) return [];
+      const g=od.ifaces[o.i];
+      return tsIfProto(od,g)?[{kind:'rif', dev:od, iface:g}]:[];
+    }
+    const L=tsLanding(r,f); if(!L) return [];
+    return tsAttached(L).filter(e=>!(e.kind==='rif'&&e.iface===f));
+  }
+  const L=ep.kind==='pc'?tsPcLanding(ep.dev):tsSviLanding(ep.dev);
+  if(!L) return [];
+  return tsAttached(L).filter(e=>!(e.kind===ep.kind&&e.dev===ep.dev));
+}
+function tsV6On(f){ return !!(f.ip6||f.ll6||f.v6on); }
+function tsIfHas(r,f,fam,key){
+  if(fam===4) return !!f.ip&&ip2int(f.ip)===key;
+  if(f.ip6&&op6Parse(f.ip6)===key) return true;
+  return tsV6On(f)&&op6Parse(OSPF.opLL(r,f))===key;
+}
+function tsEpHas(ep,fam,key){
+  if(ep.kind==='rif') return tsIfHas(ep.dev,ep.iface,fam,key);
+  const d=ep.dev;
+  if(ep.kind==='svi') return fam===4&&!!d.ip&&ip2int(d.ip)===key;
+  return fam===4?!!d.ip&&ip2int(d.ip)===key:!!d.ip6&&op6Parse(d.ip6)===key;
+}
+
+/* ═══ OSPF ═════════════════════════════════════════════════════════
+   net-ospf.js, handed this page's view: a neighbour is any router
+   interface on the same segment, which is what lets a broken trunk or a
+   wrong subinterface break an adjacency without OSPF knowing about VLANs. */
+const OSPF=NetOspf.create({
+  routers:()=>tsDevices.filter(d=>d.type==='router'),
+  ifaces:r=>r.ifaces,
+  neighbors:(r,f)=>f.loopback?[]:tsSegment({kind:'rif', dev:r, iface:f}).filter(e=>e.kind==='rif').map(e=>({router:e.dev, iface:e.iface})),
+  parseIf:(r,text)=>acIface(r,text),
+  currentIf:r=>r.cm==='if'?acIface(r,r.ci):null,
+  ifUp:(r,f)=>tsIfProto(r,f),
+  staticDefault:(r,fam)=>tsHasStaticDefault(r,fam),
+  fullIf:n=>acFullIf(n)
+});
+const {opRoutesOf, ospfCli, ospfRunLines, ospfIfRunLines}=OSPF;
+
+/* ═══ Routing tables ═══════════════════════════════════════════════ */
+function tsHasAddr(f,fam){ return fam===4?!!f.ip:!!f.ip6; }
+function tsAddrKey(f,fam){ return fam===4?ip2int(f.ip):op6Parse(f.ip6); }
+function tsAddrPfx(f,fam){ return fam===4?f.pfx:f.pfx6; }
+/* A static route installs while its exit interface is up, or while its
+   next hop sits on a connected network that is — resolved every time, so
+   the order things are typed in never matters. */
+function tsStaticIf(r,fam,rt){
+  if(rt.ifName){ const f=acIface(r,rt.ifName); return f&&tsIfProto(r,f)?f:null; }
+  const k=fKey(fam,rt.nh); if(k==null) return null;
+  return r.ifaces.find(f=>!f.loopback&&tsIfProto(r,f)&&tsHasAddr(f,fam)&&tsAddrKey(f,fam)!==k&&
+    fNet(fam,k,tsAddrPfx(f,fam))===fNet(fam,tsAddrKey(f,fam),tsAddrPfx(f,fam)))||null;
+}
+function tsHasStaticDefault(r,fam){
+  if(fam===6&&!r.unicast6) return false;
+  return r.statics[fam].some(rt=>rt.pfx===0&&tsStaticIf(r,fam,rt));
+}
+function tsTable(r,fam){
+  const t=[];
+  r.ifaces.forEach(f=>{
+    if(!tsHasAddr(f,fam)||!tsIfProto(r,f)) return;
+    const p=tsAddrPfx(f,fam);
+    t.push({code:'C', net:fNet(fam,tsAddrKey(f,fam),p), pfx:p, ad:0, metric:0, f:f, iface:f.name, nextHop:null});
+  });
+  r.statics[fam].forEach(rt=>{
+    const f=tsStaticIf(r,fam,rt); if(!f) return;
+    t.push({code:'S', net:rt.net, pfx:rt.pfx, ad:rt.ad||1, metric:0, f:f, iface:f.name, nextHop:rt.nh});
+  });
+  if(fam===4||r.unicast6) opRoutesOf(r,fam).forEach(e=>e.via.forEach(v=>{
+    const f=acIface(r,v.iface); if(!f) return;
+    t.push({code:e.code, net:e.net, pfx:e.pfx, ad:110, metric:e.metric, f:f, iface:f.name, nextHop:v.nextHop});
+  }));
+  /* administrative distance: per prefix, only the most trusted source stays */
+  const best={};
+  t.forEach(e=>{ const k=e.net+'/'+e.pfx; if(best[k]==null||e.ad<best[k]) best[k]=e.ad; });
+  return t.filter(e=>e.ad===best[e.net+'/'+e.pfx]);
+}
+function tsLookup(r,fam,key){
+  let b=null;
+  tsTable(r,fam).forEach(e=>{ if(fNet(fam,key,e.pfx)!==e.net) return; if(!b||e.pfx>b.pfx) b=e; });
+  return b;
+}
+
+/* ═══ Forwarding ═══════════════════════════════════════════════════
+   access_control's forwarder, in both families at once and over real
+   segments: inbound ACL and outside→inside NAT on arrival, delivery if the
+   router owns the address, route lookup, inside→outside NAT, outbound ACL
+   (not for traffic the router originates), then the next hop has to answer
+   on the outgoing segment. */
+function tsAclHit(fam,r,f,dir,srcKey,dstKey,pkt,count){
+  const name=f[fam===4?(dir==='in'?'aclIn':'aclOut'):(dir==='in'?'acl6In':'acl6Out')];
+  if(!name) return null;
+  const acl=r.acls[name];
+  if(!acl||(acl.fam===6)!==(fam===6)) return null;
+  const res=aclEvaluate(acl,srcKey,count,dstKey,pkt);
+  return res.action==='permit'?null:{router:r, iface:f, dir:dir, acl:acl, ace:res.ace, implicit:res.implicit};
+}
+function tsBlockWhy(fam,b,srcKey){
+  return fFmt(fam,srcKey)+' was dropped by '+b.acl.name+' '+b.dir+'bound on '+b.router.name+' '+b.iface.name+
+    (b.implicit?' — nothing in the list matched it, so the implicit deny did':' — it matched "'+aceText(b.ace)+'"');
+}
+function tsForward(fam,start,srcKey,dstKey,count,pkt){
+  let cur=start.router, ingress=start.iface||null, originated=!start.iface;
+  let sport=pkt.sport, dport=pkt.dport, natted=false;
+  const seen=new Set();
+  for(let hop=0;hop<16;hop++){
+    if(seen.has(cur.id)) return {ok:false, reason:'Routing loop — the packet for '+fFmt(fam,dstKey)+' came back to '+cur.name};
+    seen.add(cur.id);
+    if(ingress){
+      const b=tsAclHit(fam,cur,ingress,'in',srcKey,dstKey,{proto:pkt.proto, sport:sport, dport:dport, icmpType:pkt.icmpType},count);
+      if(b) return {ok:false, blocked:b, reason:tsBlockWhy(fam,b,srcKey)};
+      if(fam===4&&ingress.nat==='outside'&&natEnabled(cur)){
+        const t=natIn(cur,{dst:dstKey, dport:dport, proto:pkt.proto, scratch:pkt.scratch});
+        if(t){ dstKey=t.dst; dport=t.dport; }
+      }
+    }
+    if(cur.ifaces.some(f=>tsIfProto(cur,f)&&tsIfHas(cur,f,fam,dstKey)))
+      return {ok:true, at:{kind:'rtr', dev:cur}, dst:dstKey, src:srcKey, sport:sport, dport:dport, natted:natted};
+    if(fam===6&&!cur.unicast6) return {ok:false, reason:cur.name+' is not routing IPv6 (no "ipv6 unicast-routing"), so it drops the packet for '+fFmt(6,dstKey)};
+    const win=tsLookup(cur,fam,dstKey);
+    if(!win) return {ok:false, reason:cur.name+' has no route to '+fFmt(fam,dstKey)};
+    const out=win.f;
+    if(fam===4&&ingress&&ingress.nat==='inside'&&out.nat==='outside'&&natEnabled(cur)){
+      const t=natOut(cur,{src:srcKey, sport:sport, proto:pkt.proto, dst:dstKey, dport:dport, scratch:pkt.scratch},count);
+      if(t&&t.drop) return {ok:false, reason:t.reason};
+      if(t){ srcKey=t.src; sport=t.sport; natted=true; }
+    }
+    if(!originated){
+      const b=tsAclHit(fam,cur,out,'out',srcKey,dstKey,{proto:pkt.proto, sport:sport, dport:dport, icmpType:pkt.icmpType},count);
+      if(b) return {ok:false, blocked:b, reason:tsBlockWhy(fam,b,srcKey)};
+    }
+    originated=false;
+    const nhKey=win.nextHop?fKey(fam,win.nextHop):dstKey;
+    const seg=tsSegment({kind:'rif', dev:cur, iface:out});
+    let hit=seg.find(e=>tsEpHas(e,fam,nhKey));
+    /* a route by exit interface alone onto a serial link: the far end is
+       the only thing there is */
+    if(!hit&&!win.nextHop&&win.code!=='C'&&out.serial&&seg.length) hit=seg[0];
+    if(!hit) return {ok:false, reason:win.nextHop
+      ? cur.name+"'s next hop "+fFmt(fam,nhKey)+' does not answer on '+out.name
+      : 'Nothing answers to '+fFmt(fam,dstKey)+' on '+cur.name+' '+out.name};
+    if(hit.kind!=='rif'){
+      if(!tsEpHas(hit,fam,dstKey)) return {ok:false, reason:cur.name+"'s next hop "+fFmt(fam,nhKey)+' is a host, not a router'};
+      return {ok:true, at:hit, dst:dstKey, src:srcKey, sport:sport, dport:dport, natted:natted};
+    }
+    cur=hit.dev; ingress=hit.iface;
+  }
+  return {ok:false, reason:'Too many hops'};
+}
+/* Why a PC's frames are not getting into its switch. */
+function tsPortWhy(up,pc){
+  const sw=up.sw, p=up.port, i=up.i;
+  if(p.ps.errd) return sw.name+' '+p.name+' ('+pc.name+"'s port) is err-disabled by port security";
+  if(!SWE.portLinkUp(sw,i)) return sw.name+' '+p.name+' ('+pc.name+"'s port) is down";
+  if(SWE.effMode(sw,i)!=='access') return sw.name+' '+p.name+' ('+pc.name+"'s port) is not an access port";
+  if(!SWE.vlanOn(sw,p.vlan)) return sw.name+' '+p.name+' ('+pc.name+"'s port) is in VLAN "+p.vlan+', which does not exist on '+sw.name;
+  if(!SWE.psAllows(sw,i,pc.mac)) return 'port security on '+sw.name+' '+p.name+' drops '+pc.name+"'s frames";
+  return pc.name+"'s frames do not reach "+sw.name;
+}
+/* A PC or a switch sending: straight to a neighbour on its own subnet, or
+   to its default gateway — which has to really be on its LAN. */
+function tsHostSend(fam,dev,srcKey,dstKey,count,pkt){
+  const pc=dev.type==='pc';
+  if(pc){
+    const up=SWE.pcUplink(dev);
+    if(!up) return {ok:false, reason:dev.name+' is not cabled to a switch'};
+    /* real traffic is what teaches port security an address, or trips it */
+    if(count&&SWE.portLinkUp(up.sw,up.i)) SWE.psFrame(up.sw,up.i,dev.mac);
+    if(!SWE.pcPortOk(up,dev)) return {ok:false, reason:tsPortWhy(up,dev)};
+  } else if(!SWE.sviUp(dev)) return {ok:false, reason:dev.name+"'s management interface (Vlan"+dev.ipVlan+') is not up'};
+  const pfx=fam===4?(pc?dev.pfx:24):dev.pfx6;
+  const gw=fam===4?dev.gw:dev.gw6;
+  const local=fNet(fam,dstKey,pfx)===fNet(fam,srcKey,pfx);
+  let nh=dstKey;
+  if(!local){
+    if(!gw) return {ok:false, reason:dev.name+' has no '+(fam===6?'IPv6 ':'')+'default gateway'};
+    nh=fKey(fam,gw);
+    if(nh==null) return {ok:false, reason:dev.name+"'s default gateway "+gw+' is not a valid address'};
+    if(fam===4&&fNet(4,nh,pfx)!==fNet(4,srcKey,pfx)) return {ok:false, reason:dev.name+"'s default gateway "+gw+' is not on its own subnet'};
+  }
+  const seg=tsSegment({kind:pc?'pc':'svi', dev:dev});
+  const hit=seg.find(e=>tsEpHas(e,fam,nh));
+  if(!hit) return {ok:false, reason:local
+    ? 'Nothing on '+dev.name+"'s LAN answers to "+fFmt(fam,dstKey)+(fam===4?' — '+dev.name+' treats it as local because of its own mask':'')
+    : dev.name+' cannot reach its '+(fam===6?'IPv6 ':'')+'default gateway '+gw};
+  if(hit.kind!=='rif') return local
+    ? {ok:true, at:hit, dst:dstKey, src:srcKey, sport:pkt.sport, dport:pkt.dport}
+    : {ok:false, reason:dev.name+"'s default gateway "+gw+' is a host, not a router'};
+  return tsForward(fam,{router:hit.dev, iface:hit.iface},srcKey,dstKey,count,pkt);
+}
+let tsIcmpId=0;
+/* A ping only counts when the reply gets home too — that is what makes a
+   missing return route, an ACL that drops replies, or NAT that never
+   happened fail the way they do on real kit. count:false asks "would this
+   work?" without leaving NAT translations, ACL counters or learned port
+   security addresses behind. */
+function tsPing(dev,dstStr,count,opt){
+  opt=opt||{};
+  const fam=famOf(dstStr); if(!fam) return {ok:false, reason:'invalid address'};
+  const dstKey=fKey(fam,dstStr);
+  OSPF.opInvalidate();
+  let srcKey;
+  if(dev.type==='router'){
+    if(dev.ifaces.some(f=>tsIfProto(dev,f)&&tsIfHas(dev,f,fam,dstKey))) return {ok:true, at:{kind:'rtr', dev:dev}};
+    if(opt.srcIf){
+      if(!tsHasAddr(opt.srcIf,fam)) return {ok:false, reason:opt.srcIf.name+' has no '+(fam===6?'IPv6':'IPv4')+' address'};
+      srcKey=tsAddrKey(opt.srcIf,fam);
+    } else {
+      const win=tsLookup(dev,fam,dstKey);
+      if(!win) return {ok:false, noRoute:true, reason:dev.name+' has no route to '+dstStr};
+      if(!tsHasAddr(win.f,fam)) return {ok:false, reason:win.f.name+' has no address to send from'};
+      srcKey=tsAddrKey(win.f,fam);
+    }
+  } else {
+    const a=fam===4?dev.ip:dev.ip6;
+    if(!a) return {ok:false, reason:dev.name+' has no '+(fam===6?'IPv6':'IPv4')+' address'};
+    srcKey=fKey(fam,a);
+    if(srcKey===dstKey) return {ok:true, at:{kind:dev.type==='pc'?'pc':'svi', dev:dev}};
+  }
+  const id=count?++tsIcmpId:7;
+  const proto=opt.proto||'icmp';
+  const req={proto:proto, sport:opt.sport!=null?opt.sport:id, dport:opt.dport!=null?opt.dport:id,
+             icmpType:proto==='icmp'?'echo':null, scratch:count?null:[]};
+  const there=dev.type==='router'
+    ? tsForward(fam,{router:dev, iface:null},srcKey,dstKey,count,req)
+    : tsHostSend(fam,dev,srcKey,dstKey,count,req);
+  if(!there.ok) return there;
+  const rep={proto:proto, sport:there.dport, dport:there.sport, icmpType:proto==='icmp'?'echo-reply':null, scratch:req.scratch};
+  const back=there.at.kind==='rtr'
+    ? tsForward(fam,{router:there.at.dev, iface:null},there.dst,there.src,count,rep)
+    : tsHostSend(fam,there.at.dev,there.dst,there.src,count,rep);
+  if(!back.ok) return {ok:false, blocked:back.blocked, reason:'The request arrived, but the reply did not get back: '+back.reason};
+  return {ok:true, at:there.at, natted:there.natted};
+}
+/* SSH: a TCP session to port 22 has to get through the network, then the
+   vty access-class, then the server's own configuration and the login. */
+function tsSsh(pc,ipStr,creds){
+  const fam=famOf(ipStr); if(!fam) return {ok:false, refused:true, reason:'invalid address'};
+  const reach=tsPing(pc,ipStr,false,{proto:'tcp', sport:50000+(tsIcmpId%1000), dport:22});
+  if(!reach.ok) return {ok:false, timeout:true, reason:'Cannot reach '+ipStr+' on port 22 — '+reach.reason};
+  if(!reach.at||reach.at.kind!=='rtr') return {ok:false, refused:true, reason:ipStr+' is not a router'};
+  const r=reach.at.dev;
+  if(!sshEnabled(r)) return {ok:false, refused:true, reason:sshServerProblem(r)};
+  const vty=fam===4?r.vtyAcl:r.vty6Acl;
+  if(vty&&r.acls[vty]){
+    const res=aclEvaluate(r.acls[vty], fKey(fam,fam===4?pc.ip:pc.ip6), false, fKey(fam,ipStr), {proto:'tcp', dport:22});
+    if(res.action!=='permit') return {ok:false, refused:true, vtyDenied:true, reason:'Refused by '+vty+' on '+r.name+"'s vty lines"};
+  }
+  const why=sshServerProblem(r,creds);
+  if(why) return {ok:false, login:/Login invalid/.test(why), refused:!/Login invalid/.test(why), reason:why};
+  return {ok:true, router:r};
+}
+
+/* ═══ Router CLI ═══════════════════════════════════════════════════
+   The shared handlers do the services — net-ospf.js (OSPF, ipv6
+   unicast-routing), net-router.js (ACLs, NAT, SSH, usernames) — and this
+   page adds the base: interfaces, subinterfaces, serial/PPP, addressing in
+   both families, static routes, and the show commands. Configuration
+   commands need "configure terminal", because typing them at the # prompt
+   is a mistake worth catching before the exam does. */
+const TS_SLOTS={in4:'aclIn', out4:'aclOut', in6:'acl6In', out6:'acl6Out', vty4:'vtyAcl', vty6:'vty6Acl'};
+const TS_CLOCKS=[1200,2400,4800,9600,19200,38400,56000,64000,72000,125000,128000,148000,250000,500000,800000,1000000,1300000,2000000,4000000];
+const SYSLOG=/^%[A-Za-z][A-Za-z0-9_]*-\d-[A-Z0-9_]+:/;
+const EXEC_ONLY='% Invalid input detected — that is a configuration command; enter "configure terminal" first';
+/* Every router command, by shape: this page's base plus the shared
+   engines' own lists. A line that fits none of them gets IOS's caret and
+   never reaches a handler (see cliGrammar in lab-shared.js). Keep the base
+   list in step with tsRtrCli/tsIfCli/tsRouteCli/tsRtrShow. */
+const TS_RGRAMMAR=LabShared.cliGrammar([
+  'enable', 'disable', 'configure [terminal]', 'end', 'exit', 'cls', 'clear',
+  'show running-config', 'show startup-config', 'show interfaces [<if>]', 'show controllers <if>',
+  'show cdp neighbors [detail]', 'show vlans',
+  'show ip|ipv6 route [ospf|static|connected]', 'show ip|ipv6 interface [brief]', 'show ip|ipv6 interface <if>',
+  'ping <addr> [source <if>]', 'copy running-config startup-config', 'write [memory]',
+  'interface <if>', 'no interface <if>', 'line vty <n> [<n>]', 'line console <n>', 'logging synchronous',
+  'ip address <ip> <ip>', 'no ip address [<ip> <ip>]',
+  'ipv6 address <v6p>', 'ipv6 address <v6> link-local', 'no ipv6 address [<v6p>]', 'no ipv6 address <v6> link-local',
+  'ipv6 enable', 'no ipv6 enable', 'shutdown', 'no shutdown',
+  'encapsulation dot1q <n> [native]', 'encapsulation ppp|hdlc', 'no encapsulation [ppp|hdlc]', 'no encapsulation dot1q [<n> [native]]',
+  'ppp authentication chap|pap', 'no ppp authentication [chap|pap]', 'clock rate <n>', 'no clock rate [<n>]',
+  'description <line>', 'no description', 'bandwidth <n>', 'duplex auto|full|half', 'speed auto|<n>', 'mtu <n>', 'delay <n>',
+  'ip route <ip> <ip> <ip> [<n>]', 'ip route <ip> <ip> <if> [<ip>] [<n>]', 'no ip route <ip> <ip> [<ip>|<if>]',
+  'ipv6 route <v6p> <v6>', 'ipv6 route <v6p> <if> [<v6>]', 'no ipv6 route <v6p> [<v6>|<if>]',
+  'banner motd <line>', 'ip domain-lookup', 'no ip domain-lookup', 'ip cef', 'ipv6 cef', 'ip routing',
+  'cdp run', 'no cdp run', 'security <line>'
+]).concat(NetOspf.GRAMMAR, NetRouter.ACL_GRAMMAR, NetRouter.NAT_GRAMMAR, NetRouter.SSH_GRAMMAR);
+/* the switch engine's own list, plus what this page's wrapper adds */
+const TS_SGRAMMAR=NetSwitch.GRAMMAR.concat(LabShared.cliGrammar([
+  'ping <ip>', 'show cdp neighbors [detail]', 'show startup-config', 'copy running-config startup-config', 'write [memory]'
+]));
+function tsRtrPrompt(d){
+  if(d.cm==='rsa') return 'How many bits in the modulus [512]:';
+  if(d.cm==='opclear') return 'Reset ALL OSPF processes? [no]:';
+  const f=d.cm==='if'?acIface(d,d.ci):null;
+  const m={conf:'(config)', if:f&&f.parent?'(config-subif)':'(config-if)', line:'(config-line)', con:'(config-line)',
+    nacl:'(config-std-nacl)', xacl:'(config-ext-nacl)', nacl6:'(config-ipv6-acl)', ospf:'(config-router)', ospf6:'(config-rtr)'}[d.cm]||'';
+  return d.name+m+'#';
+}
+/* A global command typed in a sub-mode drops back to global configuration
+   first, as on IOS — "ip route" straight after "router ospf 1" is legal. */
+function tsIsGlobal(w){
+  const a=w[0]==='no'?w.slice(1):w;
+  if(!a.length) return false;
+  if(a[0]==='ip'||a[0]==='ipv6'){
+    if(a[1]&&a[1].length>=2&&M(a[1],'route')) return true;
+    if(a[0]==='ip'&&a[1]==='nat'&&(a[2]==='pool'||(a[2]==='inside'&&a[3]==='source'))) return true;
+    if(a[0]==='ip'&&a[1]&&(M(a[1],'domain-name')||a[1]==='ssh')) return true;
+    return a[0]==='ipv6'&&!!a[1]&&a[1].length>=3&&M(a[1],'unicast-routing');
+  }
+  return a[0]==='access-list'||a[0]==='username'||(a[0].length>=3&&M(a[0],'crypto'))||(a[0].length>=4&&M(a[0],'hostname'))||
+    (a[0].length>=3&&M(a[0],'enable')&&!!a[1]);
+}
+function tsLinkMsgs(d,f){
+  const n=acFullIf(f.name);
+  if(!f.up) return '%LINK-5-CHANGED: Interface '+n+', changed state to administratively down\n%LINEPROTO-5-UPDOWN: Line protocol on Interface '+n+', changed state to down';
+  return '%LINK-5-CHANGED: Interface '+n+', changed state to up'+(tsIfProto(d,f)?'\n%LINEPROTO-5-UPDOWN: Line protocol on Interface '+n+', changed state to up':'');
+}
+function tsRtrCli(d,line){
+  OSPF.opInvalidate();
+  if(d.cm==='rsa'){
+    const a=line.trim();
+    d.cm=d.cmBeforeRsa||'conf';
+    const n=a===''?512:+a;
+    if(!/^\d*$/.test(a)||n<360||n>4096) return '% The modulus is 360 to 4096 bits — run "crypto key generate rsa" again';
+    return sshGenKeys(d,n);
+  }
+  let t=line.trim().replace(/\s+/g,' ');
+  if(d.cm==='opclear') return ospfCli(d,t,t.toLowerCase().split(' '),M)||'';
+  if(!t) return '';
+  const bad=LabShared.cliCheck(TS_RGRAMMAR, tsRtrPrompt(d), line);
+  if(bad) return bad;
+  if(/^do /i.test(t)) t=t.slice(3).trim();
+  const w=t.toLowerCase().split(' '), raw=t.split(' ');
+
+  /* ── modes ── */
+  if(w[0]==='en'||(w[0].length>=3&&M(w[0],'enable')&&!w[1])||w[0]==='disable') return '';
+  if((w[0].length>=4&&M(w[0],'configure'))){ d.cm='conf'; d.ci=null; return ''; }
+  if(w[0]==='end'){ d.cm='exec'; d.ci=null; return ''; }
+  if(w[0].length>=2&&M(w[0],'exit')){ d.cm=d.cm==='exec'||d.cm==='conf'?'exec':'conf'; d.ci=null; return ''; }
+
+  /* ── exec commands, allowed in any mode ── */
+  const isShow=(w[0]==='sh'&&!(d.cm==='if'&&!w[1]))||(w[0].length>=3&&M(w[0],'show'));
+  if(isShow) return tsRtrShow(d,w,raw,t);
+  if(w[0].length>=2&&M(w[0],'ping')) return tsRtrPing(d,w,raw);
+  if((w[0].length>=3&&M(w[0],'copy'))||w[0]==='wr'||(w[0].length>=3&&M(w[0],'write'))) return tsCopyRun(d,w);
+  if(w[0].length>=3&&M(w[0],'clear')){
+    if(w[1]==='ip'&&w[2]==='nat'){
+      if(!(w[3]&&M(w[3],'translation'))||w[4]!=='*') return '% Usage: clear ip nat translation *';
+      natClear(d); return '';
+    }
+    if((w[1]==='ip'||w[1]==='ipv6')&&w[2]&&M(w[2],'ospf')) return ospfCli(d,t,w,M)||'';
+    d.log.length=0; return '';
+  }
+  if(w[0]==='cls'){ d.log.length=0; return ''; }
+  if(d.cm==='exec') return EXEC_ONLY;
+  if(d.cm!=='conf'&&tsIsGlobal(w)){ d.cm='conf'; d.ci=null; }
+
+  /* ── OSPF, ipv6 unicast-routing ── */
+  const o=ospfCli(d,t,w,M); if(o!==null) return o;
+
+  /* ── interface and line selection ── */
+  if((w[0].length>=3&&M(w[0],'interface'))||w[0]==='int'){
+    const name=raw.slice(1).join('');
+    if(!name) return '% Incomplete command';
+    let f=acIface(d,name);
+    if(!f){
+      const sm=/^(.+)\.(\d+)$/.exec(name), lm=/^(?:loopback|lo)(\d+)$/i.exec(name);
+      if(sm){
+        const P=acIface(d,sm[1]);
+        if(P&&!P.parent&&!P.loopback&&!P.serial){ f=tsNewIf(d,P.name+'.'+sm[2],{parent:P.name}); f.up=true; }
+      } else if(lm){ f=tsNewIf(d,'Lo'+lm[1],{loopback:true}); f.up=true; }
+    }
+    if(!f) return '% Invalid interface — '+d.name+' has '+d.ifaces.filter(x=>!x.parent).map(x=>x.name).join(', ');
+    d.cm='if'; d.ci=f.name; return '';
+  }
+  if(w[0]==='no'&&w[1]&&w[1].length>=3&&M(w[1],'interface')) return '% Removing interfaces is not part of this lab — reconfigure the interface instead';
+  if(w[0].length>=2&&M(w[0],'line')){
+    if(w[1]&&M(w[1],'vty')){ d.cm='line'; return ''; }
+    if(w[1]&&M(w[1],'console')){ d.cm='con'; return ''; }
+    return '% Usage: line vty 0 4 | line console 0';
+  }
+  if(d.cm==='con'&&['password','login','logging','exec-timeout','no'].some(k=>M(w[0],k))) return '';
+
+  /* ── services from net-router.js ── */
+  const s=acSshCli(d,w,raw,M); if(s!==null) return s;
+  if((M(w[0],'ip')&&w[1]==='nat')||(w[0]==='no'&&M(w[1],'ip')&&w[2]==='nat')) return natCli(d,w,raw);
+  const a=aclCli(d,w,raw,M,TS_SLOTS); if(a!==null) return a;
+
+  /* ── this page's base ── */
+  if(d.cm==='if'){ const r=tsIfCli(d,acIface(d,d.ci),w,raw); if(r!==null) return r; }
+  const g=tsRouteCli(d,w,raw); if(g!==null) return g;
+  if(M(w[0],'banner')||(w[0]==='no'&&w[1]==='ip'&&w[2]&&M(w[2],'domain-lookup'))||(w[0]==='ip'&&(w[1]==='cef'||w[1]==='routing'))||
+     (w[0]==='ipv6'&&w[1]==='cef')||(w[0].length>=3&&M(w[0],'cdp'))||(w[0].length>=3&&M(w[0],'security'))) return '';
+  return '% Invalid input detected';
+}
+/* The interface sub-mode: addressing, shutdown, dot1Q, serial/PPP. */
+function tsIfCli(d,f,w,raw){
+  const no=w[0]==='no', a=no?w.slice(1):w, ra=no?raw.slice(1):raw;
+  if(!a.length) return null;
+  const SUBIF='% Configuring IP routing on a LAN subinterface is only allowed if that subinterface is already configured as part of an IEEE 802.1Q vLAN — "encapsulation dot1Q <vlan>" first';
+  if((a[0]==='sh'&&!a[1])||(a[0].length>=4&&M(a[0],'shutdown'))){
+    const was=f.up; f.up=no;
+    return was===f.up?'':tsLinkMsgs(d,f);
+  }
+  if(a[0]==='ip'&&a[1]&&a[1].length>=2&&M(a[1],'address')){
+    if(no){ f.ip=null; f.pfx=null; return ''; }
+    if(f.parent&&f.vlan==null) return SUBIF;
+    const ip=a[2], mask=a[3];
+    if(!isValidIP(ip||'')||!isValidIP(mask||'')) return '% Usage: ip address <address> <mask>';
+    const p=natPfxOfMask(mask);
+    if(p==null||p===0) return '% Bad mask '+mask+' for address '+ip;
+    const k=ip2int(ip), net=netIntOf(k,p);
+    if(p<31&&(k===net||k===((net|(~maskInt(p)>>>0))>>>0))) return '% Bad mask /'+p+' for address '+ip;
+    const clash=d.ifaces.find(x=>x!==f&&x.ip&&netIntOf(ip2int(x.ip),Math.min(p,x.pfx))===netIntOf(k,Math.min(p,x.pfx)));
+    if(clash) return '% '+int2ip(net)+' overlaps with '+acFullIf(clash.name);
+    f.ip=ip; f.pfx=p; return '';
+  }
+  if(a[0]==='ipv6'&&a[1]&&a[1].length>=2&&M(a[1],'address')){
+    const arg=ra[2]||'', ll=!!(a[3]&&M(a[3],'link-local'));
+    if(no){
+      if(!arg){ f.ip6=null; f.pfx6=null; f.ll6=null; return ''; }
+      if(ll){ const k=op6Parse(arg); if(k!=null&&f.ll6&&op6Parse(f.ll6)===k) f.ll6=null; return ''; }
+      const m=/^([0-9a-f:]+)\/(\d{1,3})$/i.exec(arg);
+      if(m&&f.ip6&&op6Parse(m[1])===op6Parse(f.ip6)&&+m[2]===f.pfx6){ f.ip6=null; f.pfx6=null; return ''; }
+      return '% '+arg+' is not configured on '+f.name;
+    }
+    if(f.parent&&f.vlan==null) return SUBIF;
+    if(ll){
+      const k=op6Parse(arg);
+      if(k==null||!/^fe[89ab]/.test(k)) return '% Invalid link-local address — it has to be in FE80::/10';
+      f.ll6=op6Fmt(k); return '';
+    }
+    const m=/^([0-9a-f:]+)\/(\d{1,3})$/i.exec(arg), k=m?op6Parse(m[1]):null;
+    if(!m||k==null||+m[2]>128) return '% Usage: ipv6 address <address>/<prefix-length> | ipv6 address <FE80::x> link-local';
+    f.ip6=op6Fmt(k); f.pfx6=+m[2]; return '';
+  }
+  if(a[0]==='ipv6'&&a[1]&&a[1].length>=2&&M(a[1],'enable')){ f.v6on=!no; return ''; }
+  if(a[0].length>=5&&M(a[0],'encapsulation')){
+    if(f.parent){
+      if(no){ f.vlan=null; f.native=false; return ''; }
+      if(!(a[1]&&M(a[1],'dot1q'))||!/^\d+$/.test(a[2]||'')) return '% Usage: encapsulation dot1Q <vlan-id> [native]';
+      const v=+a[2];
+      if(v<1||v>4094) return '% The VLAN ID is 1 to 4094';
+      const nat=!!(a[3]&&M(a[3],'native'));
+      const sib=d.ifaces.filter(x=>x!==f&&x.parent===f.parent);
+      const dup=sib.find(x=>x.vlan===v);
+      if(dup) return '% Configuration of multiple subinterfaces of the same main interface with the same VID ('+v+') is not permitted. This VID is already configured on '+acFullIf(dup.name)+'.';
+      const on=sib.find(x=>x.native);
+      if(nat&&on) return '% '+acFullIf(on.name)+' is already the native VLAN subinterface — only one subinterface can carry untagged frames';
+      f.vlan=v; f.native=nat; return '';
+    }
+    if(f.serial){
+      if(no||(a[1]&&M(a[1],'hdlc'))){ f.encap='hdlc'; f.auth=null; return ''; }
+      if(a[1]&&M(a[1],'ppp')){ f.encap='ppp'; return ''; }
+      return '% Usage: encapsulation ppp | encapsulation hdlc';
+    }
+    return '% Encapsulation is set on a subinterface (dot1Q) or a serial interface (ppp | hdlc)';
+  }
+  if(a[0]==='ppp'){
+    if(!f.serial) return '% PPP is configured on a serial interface';
+    if(!(a[1]&&M(a[1],'authentication'))) return '% Usage: ppp authentication chap';
+    if(no){ f.auth=null; return ''; }
+    if(f.encap!=='ppp') return '% Set "encapsulation ppp" first';
+    if(a[2]&&M(a[2],'chap')){ f.auth='chap'; return ''; }
+    if(a[2]&&M(a[2],'pap')) return '% This network uses CHAP — "ppp authentication chap"';
+    return '% Usage: ppp authentication chap';
+  }
+  if(a[0].length>=3&&M(a[0],'clock')){
+    if(!f.serial) return '% clock rate applies to a serial interface';
+    if(no){ f.clock=null; return ''; }
+    if(!(a[1]&&M(a[1],'rate'))) return '% Usage: clock rate <bps>';
+    const n=+a[2];
+    if(TS_CLOCKS.indexOf(n)<0) return '% Invalid clock rate — e.g. 64000 or 128000';
+    if(!f.dce) return 'This command applies only to DCE interfaces';
+    f.clock=n; return '';
+  }
+  if(['description','bandwidth','duplex','speed','mtu','delay'].some(k=>a[0].length>=3&&M(a[0],k))) return '';
+  return null;
+}
+function tsViaEq(d,fam,rt,via){
+  const k=fKey(fam,via);
+  if(k!=null) return rt.nh!=null&&fKey(fam,rt.nh)===k;
+  const f=acIface(d,via);
+  return !!f&&rt.ifName===f.name;
+}
+function tsRouteCli(d,w,raw){
+  const no=w[0]==='no', a=no?w.slice(1):w, ra=no?raw.slice(1):raw;
+  const add=function(fam,rt){
+    d.statics[fam]=d.statics[fam].filter(x=>!(x.net===rt.net&&x.pfx===rt.pfx&&x.nh===rt.nh&&x.ifName===rt.ifName));
+    d.statics[fam].push(rt); return '';
+  };
+  const del=function(fam,net,pfx,via){
+    const before=d.statics[fam].length;
+    d.statics[fam]=d.statics[fam].filter(rt=>!(rt.net===net&&rt.pfx===pfx&&(!via||tsViaEq(d,fam,rt,via))));
+    return d.statics[fam].length===before?'%No matching route to delete':'';
+  };
+  if(a[0]==='ip'&&a[1]&&a[1].length>=2&&M(a[1],'route')){
+    const USAGE='% Usage: ip route <network> <mask> <next-hop | exit-interface>';
+    if(!isValidIP(a[2]||'')||!isValidIP(a[3]||'')) return USAGE;
+    const p=natPfxOfMask(a[3]); if(p==null) return '% Invalid mask';
+    const nk=netIntOf(ip2int(a[2]),p);
+    if(nk!==ip2int(a[2])) return '%Inconsistent address and mask';
+    if(no) return del(4,nk,p,ra[4]);
+    const via=ra[4]; if(!via) return USAGE;
+    const rt={net:nk, pfx:p, nh:null, ifName:null, ad:1};
+    if(isValidIP(via)) rt.nh=via;
+    else { const f=acIface(d,via); if(!f) return '% Invalid next hop or exit interface'; rt.ifName=f.name; if(ra[5]&&isValidIP(ra[5])) rt.nh=ra[5]; }
+    const last=ra[ra.length-1]; if(ra.length>5&&/^\d+$/.test(last)) rt.ad=+last;
+    return add(4,rt);
+  }
+  if(a[0]==='ipv6'&&a[1]&&a[1].length>=2&&M(a[1],'route')){
+    const USAGE='% Usage: ipv6 route <prefix>/<length> <next-hop | exit-interface [link-local next hop]>';
+    const m=/^([0-9a-f:]+)\/(\d{1,3})$/i.exec(ra[2]||''), k=m?op6Parse(m[1]):null;
+    if(!m||k==null||+m[2]>128) return USAGE;
+    const p=+m[2], nk=op6Net(k,p);
+    if(no) return del(6,nk,p,ra[3]);
+    const via=ra[3]; if(!via) return USAGE;
+    const rt={net:nk, pfx:p, nh:null, ifName:null, ad:1};
+    const vk=op6Parse(via);
+    if(vk!=null){
+      if(/^fe[89ab]/.test(vk)) return '% A link-local next hop needs its exit interface too: ipv6 route <prefix> <interface> <FE80::x>';
+      rt.nh=op6Fmt(vk);
+    } else {
+      const f=acIface(d,via); if(!f) return '% Invalid next hop or exit interface';
+      rt.ifName=f.name; const n2=op6Parse(ra[4]||''); if(n2!=null) rt.nh=op6Fmt(n2);
+    }
+    return add(6,rt);
+  }
+  return null;
+}
+
+/* ── router show commands ── */
+/* IOS lists a subinterface under its parent and loopbacks last; ifaces
+   only ever grows at the end, so the display order is worked out here. */
+function tsIfOrder(d){
+  const out=[];
+  d.ifaces.filter(f=>!f.parent&&!f.loopback).forEach(P=>{
+    out.push(P);
+    d.ifaces.filter(x=>x.parent===P.name).sort((a,b)=>+a.name.split('.')[1]-+b.name.split('.')[1]).forEach(x=>out.push(x));
+  });
+  return out.concat(d.ifaces.filter(f=>f.loopback));
+}
+function tsCol(s,n){ return s.length>=n?s+' ':s.padEnd(n); }
+function tsRtrShow(d,w,raw,t){
+  const a=w[1]||'';
+  if(!a) return '% Incomplete command';
+  if(a==='run'||(a.length>=3&&M(a,'running-config'))) return tsRtrRun(d);
+  if(a==='start'||(a.length>=3&&M(a,'startup-config'))) return d.startup||'startup-config is not present';
+  if(a.length>=3&&M(a,'interfaces')) return tsShowInterfaces(d,raw.slice(2).join(''));
+  if(a.length>=3&&M(a,'controllers')) return tsShowControllers(d,raw.slice(2).join(''));
+  if(a.length>=2&&M(a,'cdp')) return w[2]&&M(w[2],'neighbors')?tsShowCdp(d):'% Try "show cdp neighbors"';
+  if(a.length>=3&&M(a,'access-lists')) return tsShowAcls(d,4,raw[2]);
+  if(a.length>=4&&M(a,'vlans')) return tsShowVlans(d);
+  if(a==='ip'||a==='ipv6'){
+    const fam=a==='ipv6'?6:4, b=w[2]||'';
+    if(!b) return '% Incomplete command';
+    if(b.length>=2&&M(b,'route')) return tsShowRoute(d,fam,w[3]);
+    if(b.length>=3&&M(b,'interface')){
+      if(!w[3]||(w[3].length>=2&&M(w[3],'brief'))) return fam===4?tsShowIpBrief(d):tsShowIp6Brief(d);
+      const f=acIface(d,raw.slice(3).join(''));
+      if(!f) return '% Invalid interface';
+      return fam===4?tsShowIpIf(d,f):tsShowIp6If(d,f);
+    }
+    if(b.length>=3&&M(b,'access-lists')) return tsShowAcls(d,fam,raw[3]);
+    if(fam===4&&b==='nat'){
+      if(w[3]&&M(w[3],'translations')) return natShowTranslations(d);
+      if(w[3]&&M(w[3],'statistics')) return natShowStats(d);
+      return '% Try "show ip nat translations" or "show ip nat statistics"';
+    }
+    if(fam===4&&b==='ssh') return acShowIpSsh(d);
+    if((b.length>=2&&M(b,'ospf'))||(b.length>=2&&M(b,'protocols'))){
+      const o=ospfCli(d,t,w,M);
+      return o==null?'':o;
+    }
+  }
+  return '% Invalid input detected — try show ip interface brief, show ip route, show interfaces <if>, show ip protocols, show access-lists or show running-config';
+}
+function tsShowIpBrief(d){
+  const L=['Interface              IP-Address      OK? Method Status                Protocol'];
+  tsIfOrder(d).forEach(f=>{
+    L.push(tsCol(acFullIf(f.name),23)+(f.ip||'unassigned').padEnd(16)+'YES '+(f.ip?'manual ':'unset  ')+
+      tsIfStatus(d,f).padEnd(22)+(tsIfProto(d,f)?'up':'down'));
+  });
+  return L.join('\n');
+}
+function tsShowIp6Brief(d){
+  const L=[];
+  tsIfOrder(d).forEach(f=>{
+    L.push(tsCol(acFullIf(f.name),23)+'['+tsIfStatus(d,f)+'/'+(tsIfProto(d,f)?'up':'down')+']');
+    if(!tsV6On(f)){ L.push('    unassigned'); return; }
+    L.push('    '+OSPF.opLL(d,f).toUpperCase());
+    if(f.ip6) L.push('    '+v6Up(f.ip6));
+  });
+  return L.join('\n');
+}
+function tsShowIpIf(d,f){
+  const L=[acFullIf(f.name)+' is '+tsIfStatus(d,f)+', line protocol is '+(tsIfProto(d,f)?'up':'down')];
+  if(!f.ip) L.push('  Internet protocol processing disabled');
+  else L.push('  Internet address is '+f.ip+'/'+f.pfx,'  Broadcast address is 255.255.255.255','  MTU is 1500 bytes','  Helper address is not set',
+    '  Outgoing access list is '+(f.aclOut||'not set'),'  Inbound  access list is '+(f.aclIn||'not set'));
+  return L.join('\n');
+}
+function tsShowIp6If(d,f){
+  const L=[acFullIf(f.name)+' is '+tsIfStatus(d,f)+', line protocol is '+(tsIfProto(d,f)?'up':'down')];
+  if(!tsV6On(f)) return L.concat(['  IPv6 is disabled']).join('\n');
+  L.push('  IPv6 is enabled, link-local address is '+OSPF.opLL(d,f).toUpperCase());
+  L.push('  Global unicast address(es):');
+  if(f.ip6) L.push('    '+v6Up(f.ip6)+', subnet is '+fFmt(6,op6Net(op6Parse(f.ip6),f.pfx6))+'/'+f.pfx6);
+  L.push('  Joined group address(es):','    FF02::1');
+  if(d.unicast6) L.push('    FF02::2');
+  L.push('  MTU is 1500 bytes');
+  if(f.acl6In) L.push('  Inbound access list '+f.acl6In);
+  if(f.acl6Out) L.push('  Outbound access list '+f.acl6Out);
+  return L.join('\n');
+}
+function tsIfMac(d,f){
+  const n=(d.id*31+d.ifaces.indexOf(f)*7)&0xffff;
+  return '0060.3e'+('0'+((n>>8)&255).toString(16)).slice(-2)+'.'+('000'+(n&0xffff).toString(16)).slice(-4);
+}
+function tsShowInterfaces(d,name){
+  const list=name?[acIface(d,name)]:tsIfOrder(d);
+  if(name&&!list[0]) return '% Invalid interface';
+  return list.map(f=>{
+    const L=[acFullIf(f.name)+' is '+tsIfStatus(d,f)+', line protocol is '+(tsIfProto(d,f)?'up':'down')];
+    if(f.loopback) L.push('  Hardware is Loopback');
+    else if(f.serial) L.push('  Hardware is WIC MBRD Serial');
+    else L.push('  Hardware is CN Gigabit Ethernet, address is '+tsIfMac(d,tsPhys(d,f)));
+    if(f.ip) L.push('  Internet address is '+f.ip+'/'+f.pfx);
+    L.push('  MTU 1500 bytes, BW '+(f.serial?'1544':'1000000')+' Kbit/sec, DLY '+(f.serial?'20000':'10')+' usec,');
+    if(f.parent) L.push('  Encapsulation 802.1Q Virtual LAN, Vlan ID  '+(f.vlan==null?'not set':f.vlan)+'.');
+    else if(f.serial){
+      if(f.encap==='ppp'){ const up=tsPpp(d,f).up; L.push('  Encapsulation PPP, LCP '+(up?'Open':'Closed')+(up?'\n  Open: IPCP, IPV6CP, CDPCP':'')); }
+      else L.push('  Encapsulation HDLC, loopback not set');
+    } else if(!f.loopback) L.push('  Encapsulation ARPA, loopback not set');
+    return L.join('\n');
+  }).join('\n');
+}
+function tsShowControllers(d,name){
+  const f=acIface(d,name);
+  if(!f||!f.serial) return '% Try "show controllers s0/0/0" — controllers are shown for serial interfaces';
+  const L=['Interface '+acFullIf(f.name),'Hardware is PowerQUICC MPC860'];
+  if(!tsIfCable(d,f)) L.push('No serial cable attached');
+  else if(f.dce) L.push('DCE V.35, '+(f.clock?'clock rate '+f.clock:'no clock'));
+  else L.push('DTE V.35 TX and RX clocks detected.');
+  return L.join('\n');
+}
+function tsShowVlans(d){
+  const subs=d.ifaces.filter(f=>f.parent&&f.vlan!=null);
+  if(!subs.length) return '(no 802.1Q subinterfaces)';
+  const L=[];
+  subs.slice().sort((x,y)=>x.vlan-y.vlan).forEach(f=>{
+    L.push('','Virtual LAN ID:  '+f.vlan+' (IEEE 802.1Q Encapsulation)','','   vLAN Trunk Interface:   '+acFullIf(f.name));
+    if(f.native) L.push('','   This is configured as native Vlan for the following interface(s) :','   '+acFullIf(f.parent));
+    L.push('','   Protocols Configured:   Address:');
+    if(f.ip) L.push('          IP              '+f.ip);
+    if(f.ip6) L.push('          IPv6            '+v6Up(f.ip6));
+  });
+  return L.join('\n').replace(/^\n/,'');
+}
+/* "show access-lists POLICY-1" shows just that list, as on IOS. */
+function tsShowAcls(d,fam,only){
+  const names=Object.keys(d.acls).filter(n=>(d.acls[n].fam===6)===(fam===6)&&(!only||n===only));
+  if(!names.length) return '';
+  names.sort((a,b)=>{ const na=/^\d+$/.test(a), nb=/^\d+$/.test(b); if(na&&nb) return +a-+b; if(na!==nb) return na?-1:1; return a<b?-1:1; });
+  const out=[];
+  names.forEach(n=>aclShowLines(d.acls[n]).forEach(l=>out.push(l)));
+  return out.join('\n');
+}
+const TS_CODE={'C':'C ','S':'S ','O':'O ','O IA':'O IA','O*E2':'O*E2'};
+function tsShowRoute(d,fam,filter){
+  OSPF.opInvalidate();
+  let t=tsTable(d,fam);
+  const want=filter&&(M(filter,'ospf')?'O':M(filter,'static')?'S':M(filter,'connected')?'C':null);
+  if(fam===4){
+    const L=['Codes: L - local, C - connected, S - static, O - OSPF, IA - OSPF inter area','       E2 - OSPF external type 2, * - candidate default',''];
+    const dflt=t.find(e=>e.pfx===0);
+    L.push(dflt?'Gateway of last resort is '+(dflt.nextHop||'0.0.0.0')+' to network 0.0.0.0':'Gateway of last resort is not set','');
+    const rows=[];
+    t.forEach(e=>{
+      if(want&&e.code.charAt(0)!==want) return;
+      const via=e.nextHop?' via '+e.nextHop+', '+acFullIf(e.iface):' is directly connected, '+acFullIf(e.iface);
+      if(e.code==='C'){
+        rows.push({k:e.net, p:e.pfx, s:'C        '+int2ip(e.net)+'/'+e.pfx+' is directly connected, '+acFullIf(e.iface)});
+        rows.push({k:ip2int(e.f.ip), p:32, s:'L        '+e.f.ip+'/32 is directly connected, '+acFullIf(e.iface)});
+        return;
+      }
+      const code=e.code==='S'&&e.pfx===0?'S*':e.code;
+      const metric=e.code==='S'?' ['+e.ad+'/0]':' [110/'+e.metric+']';
+      rows.push({k:e.net, p:e.pfx, s:code.padEnd(9)+int2ip(e.net)+'/'+e.pfx+metric+(e.nextHop?' via '+e.nextHop+', 00:12:41, '+acFullIf(e.iface):via)});
+    });
+    rows.sort((x,y)=>x.k-y.k||x.p-y.p).forEach(r=>L.push(r.s));
+    return L.join('\n');
+  }
+  const L=['IPv6 Routing Table - default','Codes: C - Connected, L - Local, S - Static, O - OSPF Intra, OI - OSPF Inter, OE2 - OSPF ext 2'];
+  const C6={'C':'C','S':'S','O':'O','O IA':'OI','O*E2':'OE2'};
+  const rows=[];
+  t.forEach(e=>{
+    if(want&&e.code.charAt(0)!==want) return;
+    const pre=fFmt(6,e.net)+'/'+e.pfx;
+    if(e.code==='C'){
+      rows.push({k:e.net, p:e.pfx, s:'C   '+pre+' [0/0]\n     via '+acFullIf(e.iface)+', directly connected'});
+      rows.push({k:op6Parse(e.f.ip6), p:128, s:'L   '+v6Up(e.f.ip6)+'/128 [0/0]\n     via '+acFullIf(e.iface)+', receive'});
+      return;
+    }
+    const ad=e.code==='S'?'['+e.ad+'/0]':'[110/'+e.metric+']';
+    const via=e.nextHop?fFmt(6,fKey(6,e.nextHop))+', '+acFullIf(e.iface):acFullIf(e.iface)+', directly connected';
+    rows.push({k:e.net, p:e.pfx, s:C6[e.code].padEnd(4)+pre+' '+ad+'\n     via '+via});
+  });
+  rows.sort((x,y)=>x.k<y.k?-1:x.k>y.k?1:x.p-y.p).forEach(r=>L.push(r.s));
+  return L.join('\n');
+}
+function tsShort(n){ return n.replace(/^Gi?(\d)/,'Gig $1').replace(/^Fa(\d)/,'Fas $1').replace(/^S(\d)/,'Ser $1'); }
+function tsEndUp(dev,i){
+  if(dev.type==='router'){ const f=dev.ifaces[i]; return f.serial?tsIfProto(dev,f):!!f.up; }
+  if(dev.type==='switch') return SWE.portUp(dev,i);
+  return true;
+}
+function tsShowCdp(d){
+  const L=['Capability Codes: R - Router, S - Switch, H - Host, I - IGMP, P - Phone','',
+    'Device ID        Local Intrfce   Holdtme    Capability   Platform    Port ID'];
+  tsCables.forEach(c=>{
+    if(c.a.d!==d.id&&c.b.d!==d.id) return;
+    const me=c.a.d===d.id?c.a:c.b, o=tsOther(c,d.id), od=tsById(o.d);
+    if(od.type==='pc'||!tsEndUp(d,me.i)||!tsEndUp(od,o.i)) return;
+    L.push(od.name.padEnd(17)+tsShort(tsPortName(d,me.i)).padEnd(16)+(160+o.i%10+'').padEnd(11)+
+      (od.type==='router'?'R':'S I').padEnd(13)+(od.type==='router'?'ISR4300':'2960').padEnd(12)+tsShort(tsPortName(od,o.i)));
+  });
+  return L.join('\n');
+}
+function tsRtrPing(d,w,raw){
+  const dst=raw[1];
+  if(!dst||!famOf(dst)) return '% Usage: ping <address> [source <interface>]';
+  let srcIf=null;
+  if(w[2]&&M(w[2],'source')){ srcIf=acIface(d,raw.slice(3).join('')); if(!srcIf) return '% Invalid source interface'; }
+  const fam=famOf(dst);
+  const r=tsPing(d,dst,true,{srcIf:srcIf});
+  tsRenderCanvas();
+  const L=['Type escape sequence to abort.','Sending 5, 100-byte ICMP Echos to '+(fam===6?op6Up(dst):dst)+', timeout is 2 seconds:'];
+  if(srcIf) L.push('Packet sent with a source address of '+(fam===4?(srcIf.ip||'0.0.0.0'):v6Up(srcIf.ip6)||'::'));
+  L.push(r.ok?'!!!!!':'.....');
+  L.push(r.ok?'Success rate is 100 percent (5/5), round-trip min/avg/max = 1/1/2 ms':'Success rate is 0 percent (0/5)');
+  return L.join('\n');
+}
+/* What a reload would come back with. Sticky MACs are left out of the
+   comparison: they are learned by traffic, not typed. */
+function tsRunText(d){ return d.type==='router'?tsRtrRun(d):SWE.swShowRun(d); }
+function tsConfigSig(text){ return String(text).split('\n').filter(l=>!/mac-address sticky [0-9A-F]{4}\./.test(l)).join('\n'); }
+function tsCopyRun(d,w){
+  if(w&&w[0].length>=3&&M(w[0],'copy')&&!(w[1]&&(M(w[1],'running-config')||w[1]==='run')))
+    return '% Usage: copy running-config startup-config';
+  d.startup=tsRunText(d);
+  return 'Destination filename [startup-config]?\nBuilding configuration...\n[OK]';
+}
+function tsRtrRun(d){
+  const s=d.ssh, L=['Building configuration...','','Current configuration:','!','hostname '+d.name,'!'];
+  if(s.encrypt) L.push('service password-encryption','!');
+  if(s.enable) L.push('enable secret 5 '+acFakeHash(s.enable,5),'!');
+  if(d.unicast6) L.push('ipv6 unicast-routing','!');
+  Object.keys(s.users).forEach(n=>{
+    const u=s.users[n];
+    L.push('username '+n+(u.secret!=null?' secret 5 '+acFakeHash(u.secret,5):(s.encrypt?' password 7 '+acFakeHash(u.password,7):' password '+u.password)));
+  });
+  if(s.domain) L.push('ip domain-name '+s.domain);
+  if(s.ver) L.push('ip ssh version '+s.ver);
+  L.push('!');
+  tsIfOrder(d).forEach(f=>{
+    L.push('interface '+acFullIf(f.name));
+    if(f.parent&&f.vlan!=null) L.push(' encapsulation dot1Q '+f.vlan+(f.native?' native':''));
+    L.push(f.ip?' ip address '+f.ip+' '+cidr2mask(f.pfx):' no ip address');
+    if(f.aclIn) L.push(' ip access-group '+f.aclIn+' in');
+    if(f.aclOut) L.push(' ip access-group '+f.aclOut+' out');
+    if(f.nat) L.push(' ip nat '+f.nat);
+    if(f.ll6) L.push(' ipv6 address '+f.ll6.toUpperCase()+' link-local');
+    if(f.ip6) L.push(' ipv6 address '+v6Up(f.ip6)+'/'+f.pfx6);
+    if(f.v6on) L.push(' ipv6 enable');
+    if(f.acl6In) L.push(' ipv6 traffic-filter '+f.acl6In+' in');
+    if(f.acl6Out) L.push(' ipv6 traffic-filter '+f.acl6Out+' out');
+    ospfIfRunLines(d,f).forEach(x=>L.push(x));
+    if(f.serial){
+      if(f.encap==='ppp') L.push(' encapsulation ppp');
+      if(f.auth) L.push(' ppp authentication '+f.auth);
+      if(f.clock) L.push(' clock rate '+f.clock);
+    }
+    if(!f.up) L.push(' shutdown');
+    L.push('!');
+  });
+  const o=ospfRunLines(d);
+  if(o[0]==='ipv6 unicast-routing') o.splice(0,2);
+  o.forEach(x=>L.push(x));
+  const n=natRunLines(d);
+  if(n.length){ n.forEach(x=>L.push(x)); L.push('!'); }
+  d.statics[4].forEach(rt=>L.push('ip route '+int2ip(rt.net)+' '+cidr2mask(rt.pfx)+' '+(rt.ifName?acFullIf(rt.ifName)+(rt.nh?' '+rt.nh:''):rt.nh)+(rt.ad!==1?' '+rt.ad:'')));
+  d.statics[6].forEach(rt=>L.push('ipv6 route '+fFmt(6,rt.net)+'/'+rt.pfx+' '+(rt.ifName?acFullIf(rt.ifName)+(rt.nh?' '+v6Up(rt.nh):''):v6Up(rt.nh))));
+  if(d.statics[4].length||d.statics[6].length) L.push('!');
+  Object.keys(d.acls).forEach(name=>{
+    const acl=d.acls[name];
+    if(acl.fam===6){
+      L.push('ipv6 access-list '+acl.name);
+      acl.aces.forEach(a=>L.push(' '+aceText(a).replace(/[0-9a-f:]+(?=\/|\s|$)/g,m=>m.indexOf(':')>=0?m.toUpperCase():m)+' sequence '+a.seq));
+    } else if(acl.numbered) acl.aces.forEach(a=>L.push('access-list '+acl.name+' '+aceText(a)));
+    else { L.push('ip access-list '+(acl.ext?'extended ':'standard ')+acl.name); acl.aces.forEach(a=>L.push(' '+aceText(a))); }
+    L.push('!');
+  });
+  const v=s.vty;
+  L.push('line con 0','!','line vty 0 4');
+  if(d.vtyAcl) L.push(' access-class '+d.vtyAcl+' in');
+  if(d.vty6Acl) L.push(' ipv6 access-class '+d.vty6Acl+' in');
+  if(v.password) L.push(s.encrypt?' password 7 '+acFakeHash(v.password,7):' password '+v.password);
+  L.push(v.login==='local'?' login local':v.login==='line'?' login':' no login');
+  if(v.transport!=='all') L.push(' transport input '+v.transport);
+  L.push('!','end');
+  return L.join('\n');
+}
+
+/* ═══ Switch CLI ═══════════════════════════════════════════════════
+   net-switch.js's own CLI, with the few things a troubleshooting session
+   adds on top: ping from the management SVI, show cdp neighbors, saving,
+   "do", and the exec/config distinction. */
+const TS_SW_EXEC=['enable','configure','end','exit','show','clear','ping','copy','write','disable'];
+function tsSwCli(d,line){
+  OSPF.opInvalidate();
+  let t=line.trim().replace(/\s+/g,' ');
+  if(!t) return '';
+  const bad=LabShared.cliCheck(TS_SGRAMMAR, SWE.prompt_(d), line);
+  if(bad) return bad;
+  if(/^do /i.test(t)) t=t.slice(3).trim();
+  const w=t.toLowerCase().split(' ');
+  if(w[0].length>=2&&M(w[0],'ping')) return tsSwPing(d,w[1]);
+  if((w[0]==='sh'||(w[0].length>=3&&M(w[0],'show')))&&w[1]&&w[1].length>=2&&M(w[1],'cdp'))
+    return w[2]&&M(w[2],'neighbors')?tsShowCdp(d):'% Try "show cdp neighbors"';
+  if((w[0]==='sh'||(w[0].length>=3&&M(w[0],'show')))&&w[1]&&(w[1]==='start'||(w[1].length>=3&&M(w[1],'startup-config'))))
+    return d.startup||'startup-config is not present';
+  if((w[0].length>=3&&M(w[0],'copy'))||w[0]==='wr'||(w[0].length>=3&&M(w[0],'write'))) return tsCopyRun(d,w);
+  if(d.cm==='exec'&&w[0]!=='sh'&&w[0]!=='en'&&w[0]!=='conf'&&w[0]!=='cls'&&!TS_SW_EXEC.some(k=>w[0].length>=2&&M(w[0],k))) return EXEC_ONLY;
+  return SWE.cli(d,t);
+}
+function tsSwPing(d,dst){
+  if(!dst||!isValidIP(dst)) return '% Usage: ping <a.b.c.d>';
+  if(!d.ip) return '% Unrecognized host or address, or protocol not running.';
+  const r=tsPing(d,dst,true);
+  tsRenderCanvas();
+  return ['Type escape sequence to abort.','Sending 5, 100-byte ICMP Echos to '+dst+', timeout is 2 seconds:',
+    r.ok?'!!!!!':'.....', r.ok?'Success rate is 100 percent (5/5), round-trip min/avg/max = 1/1/2 ms':'Success rate is 0 percent (0/5)'].join('\n');
+}
+/* CDP's native-VLAN complaint, printed to a switch's console whenever its
+   CLI is opened while a mismatch is live — real switches repeat it every
+   minute, and it is often the only symptom of the fault. */
+function tsCdpNativeWarn(sw){
+  tsCables.forEach(c=>{
+    if(c.a.d!==sw.id&&c.b.d!==sw.id) return;
+    const me=c.a.d===sw.id?c.a:c.b, o=tsOther(c,sw.id), od=tsById(o.d);
+    if(od.type!=='switch'||!SWE.portLinkUp(sw,me.i)) return;
+    const p=sw.ports[me.i], q=od.ports[o.i];
+    if(SWE.effMode(sw,me.i)!=='trunk'||SWE.effMode(od,o.i)!=='trunk'||p.native===q.native) return;
+    sw.log.push('%CDP-4-NATIVE_VLAN_MISMATCH: Native VLAN mismatch discovered on '+SWE.fullIf(p.name)+' ('+p.native+'), with '+od.name+' '+SWE.fullIf(q.name)+' ('+q.native+').');
+  });
+}
+
+/* ═══ Tab completion ═══ */
+const TS_ACE_KW={ip:{host:{}, any:{}}, icmp:{host:{}, any:{}}, tcp:{host:{}, any:{}}, udp:{host:{}, any:{}}, ipv6:{host:{}, any:{}}, host:{}, any:{}};
+const TS_RKW={
+  enable:{}, configure:{terminal:{}}, end:{}, exit:{}, ping:{}, copy:{'running-config':{'startup-config':{}}}, write:{memory:{}},
+  show:{ip:{route:{ospf:{}, static:{}, connected:{}}, interface:{brief:{}}, protocols:{}, ospf:{neighbor:{}, interface:{brief:{}}},
+            nat:{translations:{}, statistics:{}}, ssh:{}, 'access-lists':{}},
+        ipv6:{route:{ospf:{}, static:{}, connected:{}}, interface:{brief:{}}, protocols:{}, ospf:{neighbor:{}, interface:{brief:{}}}, 'access-list':{}},
+        interfaces:{}, controllers:{}, vlans:{}, 'access-lists':{}, 'running-config':{}, 'startup-config':{}, cdp:{neighbors:{}}},
+  clear:{ip:{nat:{translation:{}}, ospf:{process:{}}}, ipv6:{ospf:{process:{}}}},
+  interface:{}, line:{vty:{}, console:{}},
+  ip:{address:{}, route:{}, nat:{inside:{source:{list:{}, static:{}}}, outside:{}, pool:{}}, 'access-list':{standard:{}, extended:{}},
+      'access-group':{}, ospf:{}, 'domain-name':{}, ssh:{version:{}}},
+  ipv6:{address:{}, route:{}, 'unicast-routing':{}, router:{ospf:{}}, ospf:{}, 'access-list':{}, 'traffic-filter':{}, enable:{}},
+  router:{ospf:{}}, 'router-id':{}, network:{}, 'passive-interface':{}, 'default-information':{originate:{}},
+  encapsulation:{dot1q:{}, ppp:{}, hdlc:{}}, ppp:{authentication:{chap:{}}}, clock:{rate:{}},
+  'access-list':{}, permit:TS_ACE_KW, deny:TS_ACE_KW, sequence:{},
+  username:{}, crypto:{key:{generate:{rsa:{}}, zeroize:{rsa:{}}}}, login:{local:{}}, transport:{input:{ssh:{}, telnet:{}}},
+  no:{shutdown:{}, ip:{address:{}, route:{}, nat:{inside:{}, outside:{}, pool:{}}, 'access-group':{}, ospf:{}},
+      ipv6:{address:{}, route:{}, 'unicast-routing':{}, ospf:{}, 'traffic-filter':{}}, 'passive-interface':{}, network:{},
+      'default-information':{originate:{}}, 'router-id':{}, 'clock':{rate:{}}, ppp:{authentication:{}}, username:{}, sequence:{}}
+};
+const TS_SKW=Object.assign({}, SWE.KW, {ping:{}, copy:{'running-config':{'startup-config':{}}}, write:{memory:{}},
+  show:Object.assign({}, SWE.KW.show, {cdp:{neighbors:{}}, 'startup-config':{}})});
+
+/* ═══ The network ══════════════════════════════════════════════════
+   Built from IOS commands, so what show run prints is exactly what a
+   learner would have had to type, and a fault is just more commands. */
+const TS_CFG={
+  ISP:['ipv6 unicast-routing',
+    'interface G0/0',' ip address 220.100.100.1 255.255.255.252',' ipv6 address 2001:CAFE:ABC::1/64',' no shutdown',
+    'interface Lo0',' ip address 5.5.5.5 255.255.255.255',' ipv6 address 2001:5:5::5/128',
+    'ip route 100.30.20.0 255.255.255.248 220.100.100.2',
+    'ipv6 route 2001:CAFE:ACAD::/48 2001:CAFE:ABC::2'],
+  R1:['ipv6 unicast-routing',
+    'router ospf 1',' router-id 1.1.1.1','ipv6 router ospf 1',' router-id 1.1.1.1',
+    'username R2 password cisco','username admin secret cisco','ip domain-name cisco.com',
+    'crypto key generate rsa general-keys modulus 1024','ip ssh version 2',
+    'line vty 0 4',' login local',' transport input ssh',
+    'interface G0/0',' ip address 220.100.100.2 255.255.255.252',' ipv6 address FE80::1 link-local',' ipv6 address 2001:CAFE:ABC::2/64',
+    ' ip nat outside',' no shutdown',
+    'interface G0/1',' ip address 10.0.13.1 255.255.255.252',' ipv6 address FE80::1 link-local',' ipv6 address 2001:CAFE:ACAD:13::1/64',
+    ' ipv6 ospf 1 area 5',' ip nat inside',' no shutdown',
+    'interface S0/0/0',' ip address 10.0.12.1 255.255.255.252',' ipv6 address FE80::1 link-local',' ipv6 address 2001:CAFE:ACAD:12::1/64',
+    ' ipv6 ospf 1 area 0',' encapsulation ppp',' ppp authentication chap',' clock rate 128000',' ip nat inside',' no shutdown',
+    'router ospf 1',' network 10.0.12.0 0.0.0.3 area 0',' network 10.0.13.0 0.0.0.3 area 5',' default-information originate',
+    'ipv6 router ospf 1',' default-information originate',
+    'ip route 0.0.0.0 0.0.0.0 220.100.100.1','ipv6 route ::/0 2001:CAFE:ABC::1',
+    'access-list 1 permit 172.16.10.0 0.0.0.255','access-list 1 permit 172.16.20.0 0.0.0.255','access-list 1 permit 172.16.30.0 0.0.0.255',
+    'ip nat pool NAT-POOL 100.30.20.1 100.30.20.6 netmask 255.255.255.248',
+    'ip nat inside source list 1 pool NAT-POOL overload'],
+  R2:['ipv6 unicast-routing',
+    'router ospf 1',' router-id 2.2.2.2','ipv6 router ospf 1',' router-id 2.2.2.2',
+    'username R1 password cisco','username admin secret cisco','ip domain-name cisco.com',
+    'crypto key generate rsa general-keys modulus 1024','ip ssh version 2',
+    'line vty 0 4',' login local',' transport input ssh',
+    'interface G0/1',' no shutdown',
+    'interface G0/1.10',' encapsulation dot1Q 10',' ip address 172.16.10.1 255.255.255.0',' ipv6 address FE80::2 link-local',
+    ' ipv6 address 2001:CAFE:ACAD:10::1/64',' ipv6 ospf 1 area 0',
+    'interface G0/1.20',' encapsulation dot1Q 20',' ip address 172.16.20.1 255.255.255.0',' ipv6 address FE80::2 link-local',
+    ' ipv6 address 2001:CAFE:ACAD:20::1/64',' ipv6 ospf 1 area 0',
+    'interface G0/1.99',' encapsulation dot1Q 99',' ip address 172.16.99.1 255.255.255.0',
+    'interface G0/1.1000',' encapsulation dot1Q 1000 native',
+    'interface S0/0/0',' ip address 10.0.12.2 255.255.255.252',' ipv6 address FE80::2 link-local',' ipv6 address 2001:CAFE:ACAD:12::2/64',
+    ' ipv6 ospf 1 area 0',' encapsulation ppp',' ppp authentication chap',' no shutdown',
+    'router ospf 1',' network 10.0.12.0 0.0.0.3 area 0',' network 172.16.10.0 0.0.0.255 area 0',' network 172.16.20.0 0.0.0.255 area 0',
+    ' network 172.16.99.0 0.0.0.255 area 0',' passive-interface G0/1.10',' passive-interface G0/1.20',' passive-interface G0/1.99',
+    'ipv6 router ospf 1',' passive-interface G0/1.10',' passive-interface G0/1.20',
+    'ip access-list extended POLICY-1',' permit ip host 172.16.10.100 172.16.30.0 0.0.0.255',
+    ' deny ip 172.16.10.0 0.0.0.255 172.16.30.0 0.0.0.255',' permit ip any any',
+    'interface G0/1.10',' ip access-group POLICY-1 in',
+    'ip access-list standard ADMIN',' permit 172.16.10.0 0.0.0.255',' permit 172.16.99.0 0.0.0.255',
+    'line vty 0 4',' access-class ADMIN in'],
+  R3:['ipv6 unicast-routing',
+    'router ospf 1',' router-id 3.3.3.3','ipv6 router ospf 1',' router-id 3.3.3.3',
+    'username admin secret cisco','ip domain-name cisco.com',
+    'crypto key generate rsa general-keys modulus 1024','ip ssh version 2',
+    'line vty 0 4',' login local',' transport input ssh',
+    'interface G0/0',' ip address 10.0.13.2 255.255.255.252',' ipv6 address FE80::3 link-local',' ipv6 address 2001:CAFE:ACAD:13::2/64',
+    ' ipv6 ospf 1 area 5',' no shutdown',
+    'interface G0/1',' ip address 172.16.30.1 255.255.255.0',' ipv6 address FE80::3 link-local',' ipv6 address 2001:CAFE:ACAD:30::1/64',
+    ' ipv6 ospf 1 area 5',' no shutdown',
+    'router ospf 1',' network 10.0.13.0 0.0.0.3 area 5',' network 172.16.30.0 0.0.0.255 area 5',' passive-interface G0/1',
+    'ipv6 router ospf 1',' passive-interface G0/1',
+    'ipv6 access-list NO-ICMP',' deny icmp 2001:CAFE:ACAD:30::/64 2001:CAFE:ACAD:20::/64',' permit ipv6 any any',
+    'interface G0/1',' ipv6 traffic-filter NO-ICMP in'],
+  S1:['vlan 10',' name Sales','vlan 20',' name HR','vlan 99',' name Management','vlan 1000',' name Native',
+    'interface range fa0/1 - 2',' switchport mode trunk',' switchport trunk native vlan 1000',' switchport trunk allowed vlan 10,20,99,1000',
+    ' channel-group 1 mode active',
+    'interface gi0/1',' switchport mode trunk',' switchport trunk native vlan 1000',' switchport trunk allowed vlan 10,20,99,1000',
+    'interface fa0/6',' switchport mode access',' switchport access vlan 10',' switchport port-security',' switchport port-security mac-address sticky',
+    'interface vlan 99',' ip address 172.16.99.11 255.255.255.0',' no shutdown',
+    'ip default-gateway 172.16.99.1'],
+  S2:['vlan 10',' name Sales','vlan 20',' name HR','vlan 99',' name Management','vlan 1000',' name Native',
+    'interface range fa0/1 - 2',' switchport mode trunk',' switchport trunk native vlan 1000',' switchport trunk allowed vlan 10,20,99,1000',
+    ' channel-group 1 mode passive',
+    'interface fa0/6',' switchport mode access',' switchport access vlan 20',' switchport port-security',' switchport port-security mac-address sticky',
+    'interface fa0/7',' switchport mode access',' switchport access vlan 10',' switchport port-security',' switchport port-security mac-address sticky',
+    'interface vlan 99',' ip address 172.16.99.12 255.255.255.0',' no shutdown',
+    'ip default-gateway 172.16.99.1'],
+  S3:['vlan 30',' name Branch',
+    'interface gi0/1',' switchport mode access',' switchport access vlan 30',
+    'interface fa0/6',' switchport mode access',' switchport access vlan 30',' switchport port-security',' switchport port-security mac-address sticky']
+};
+const TS_PCS={
+  'PC-A':{ip:'172.16.10.10', pfx:24, gw:'172.16.10.1', ip6:'2001:cafe:acad:10::10', pfx6:64, gw6:'fe80::2'},
+  'PC-B':{ip:'172.16.20.10', pfx:24, gw:'172.16.20.1', ip6:'2001:cafe:acad:20::10', pfx6:64, gw6:'fe80::2'},
+  'PC-C':{ip:'172.16.10.100', pfx:24, gw:'172.16.10.1', ip6:'2001:cafe:acad:10::100', pfx6:64, gw6:'fe80::2'},
+  'PC-D':{ip:'172.16.30.10', pfx:24, gw:'172.16.30.1', ip6:'2001:cafe:acad:30::10', pfx6:64, gw6:'fe80::3'}
+};
+/* VLAN table — what every switch is supposed to have. */
+const TS_VLANS={S1:{10:'Sales',20:'HR',99:'Management',1000:'Native'}, S2:{10:'Sales',20:'HR',99:'Management',1000:'Native'}, S3:{30:'Branch'}};
+let tsBuildErrors=[];
+/* Run commands silently (no echo into the console log), from exec, in
+   global configuration. Anything a command complains about is kept for the
+   harness, because a build line that fails would be a fault nobody chose. */
+function tsExec(d,lines){
+  ['configure terminal'].concat(lines,['end']).forEach(l=>{
+    const out=d.type==='router'?tsRtrCli(d,l):tsSwCli(d,l);
+    const bad=String(out||'').split('\n').some(x=>/^%/.test(x)&&!SYSLOG.test(x)&&!/^% ?[Nn]ote|^% All keys will be removed|^% OSPF: Reload|^% Generating/.test(x));
+    if(bad) tsBuildErrors.push(d.name+': '+l.trim()+' → '+out);
+  });
+}
+function tsBuild(){
+  tsDevices=[]; tsCables=[]; tsNid=1; tsSel=null; tsBuildErrors=[];
+  const ISP=tsAddRouter('ISP',336,58,'Internet',[['G0/0'],['Lo0',{loopback:true}]]);
+  const R1=tsAddRouter('R1',336,162,'edge',[['G0/0'],['G0/1'],['S0/0/0',{serial:true, dce:true}],['S0/0/1',{serial:true}]]);
+  const R2=tsAddRouter('R2',96,266,'HQ',[['G0/0'],['G0/1'],['S0/0/0',{serial:true}],['S0/0/1',{serial:true}]]);
+  const R3=tsAddRouter('R3',574,266,'branch',[['G0/0'],['G0/1'],['S0/0/0',{serial:true}],['S0/0/1',{serial:true}]]);
+  const S1=tsAddSwitch('S1',44,374), S2=tsAddSwitch('S2',318,374), S3=tsAddSwitch('S3',562,374);
+  const A=tsAddPc('PC-A',74,466,TS_PCS['PC-A']), B=tsAddPc('PC-B',262,466,TS_PCS['PC-B']),
+        C=tsAddPc('PC-C',398,466,TS_PCS['PC-C']), D=tsAddPc('PC-D',592,466,TS_PCS['PC-D']);
+  ISP.ifaces[1].up=true;
+  tsCable(ISP,'G0/0',R1,'G0/0');
+  tsCable(R1,'S0/0/0',R2,'S0/0/0',{serial:true});
+  tsCable(R1,'G0/1',R3,'G0/0');
+  tsCable(R2,'G0/1',S1,'Gi0/1');
+  tsCable(S1,'Fa0/1',S2,'Fa0/1'); tsCable(S1,'Fa0/2',S2,'Fa0/2');
+  tsCable(R3,'G0/1',S3,'Gi0/1');
+  tsCable(S1,'Fa0/6',A,'NIC'); tsCable(S2,'Fa0/6',B,'NIC'); tsCable(S2,'Fa0/7',C,'NIC'); tsCable(S3,'Fa0/6',D,'NIC');
+  ['ISP','R1','R2','R3','S1','S2','S3'].forEach(n=>tsExec(tsDev(n),TS_CFG[n]));
+  /* the network has been running: each secured port has learned its PC */
+  [A,B,C,D].forEach(pc=>{ const up=SWE.pcUplink(pc); SWE.psFrame(up.sw,up.i,pc.mac); });
+}
+/* What a reload does to OSPF: every process picks its router ID afresh. */
+function tsReload(){
+  tsDevices.forEach(d=>{ if(d.type!=='router') return; d.ospf.ridActive=null; d.ospf6.ridActive=null; });
+  OSPF.opInvalidate();
+  tsDevices.forEach(d=>{ if(d.type==='router'){ OSPF.opRid(d,4); OSPF.opRid(d,6); } });
+}
+
+/* ═══ Tickets ══════════════════════════════════════════════════════
+   A ticket is a complaint, phrased the way a user would make it, and is
+   solved when the thing it complains about works. */
+function tP(pc,dst){ const r=tsPing(tsDev(pc),dst,false); return {ok:r.ok, reason:r.ok?'':r.reason}; }
+function tBlocked(pc,dst){
+  const r=tsPing(tsDev(pc),dst,false);
+  if(r.ok) return {ok:false, reason:'The ping went through — nothing stopped it'};
+  return r.blocked?{ok:true}:{ok:false, reason:'It fails, but not because an ACL stops it: '+r.reason};
+}
+function tSsh(pc,ip){
+  const r=tsSsh(tsDev(pc),ip,{user:'admin', pass:'cisco'});
+  return {ok:r.ok, reason:r.ok?'':r.reason};
+}
+function tsNativeIssues(){
+  const bad=[];
+  [['S1',['Fa0/1','Fa0/2','Gi0/1']],['S2',['Fa0/1','Fa0/2']]].forEach(x=>{
+    const sw=tsDev(x[0]);
+    x[1].forEach(n=>{ const p=sw.ports.find(q=>q.name===n); if(p.native!==1000) bad.push(sw.name+' '+n+' uses native VLAN '+p.native); });
+    Object.keys(sw.pos).forEach(k=>{ if(sw.pos[k].native!==1000) bad.push(sw.name+' Po'+k+' uses native VLAN '+sw.pos[k].native); });
+  });
+  return bad;
+}
+function tNatives(){ const b=tsNativeIssues(); return b.length?{ok:false, reason:b.join('; ')}:{ok:true}; }
+function tMembers(){
+  const bad=[];
+  ['S1','S2'].forEach(n=>{ const sw=tsDev(n); ['Fa0/1','Fa0/2'].forEach(p=>{
+    const i=sw.ports.findIndex(q=>q.name===p), st=SWE.chanState(sw,i);
+    if(st!=='P') bad.push(n+' '+p+' is '+(st==null?'not in the channel':'flagged '+st)); }); });
+  return bad.length?{ok:false, reason:bad.join('; ')}:{ok:true};
+}
+function tsNameIssues(name){
+  const sw=tsDev(name), want=TS_VLANS[name], bad=[];
+  Object.keys(want).forEach(v=>{
+    if(!sw.vlans.has(+v)) bad.push(name+' has no VLAN '+v);
+    else if(SWE.vlanName(sw,+v)!==want[v]) bad.push(name+' VLAN '+v+' is named "'+SWE.vlanName(sw,+v)+'", not "'+want[v]+'"');
+  });
+  return bad;
+}
+function tNames(name){ const b=tsNameIssues(name); return b.length?{ok:false, reason:b.join('; ')}:{ok:true}; }
+function tRNative(){
+  const f=acIface(tsDev('R2'),'G0/1.1000');
+  return f&&f.vlan===1000&&f.native?{ok:true}:{ok:false, reason:'R2 G0/1.1000 is '+(f&&f.vlan!=null?'dot1Q '+f.vlan+(f.native?' native':' without the native keyword'):'not tagged')};
+}
+const TS_T={
+  gwA4:{d:'PC-A cannot ping its default gateway, 172.16.10.1', t:()=>tP('PC-A','172.16.10.1')},
+  gwB4:{d:'PC-B cannot ping its default gateway, 172.16.20.1', t:()=>tP('PC-B','172.16.20.1')},
+  gwC4:{d:'PC-C cannot ping its default gateway, 172.16.10.1', t:()=>tP('PC-C','172.16.10.1')},
+  B_D4:{d:'PC-B cannot ping PC-D at the branch (172.16.30.10)', t:()=>tP('PC-B','172.16.30.10')},
+  C_D4:{d:'PC-C — the one Sales host allowed to reach the branch — cannot ping PC-D (172.16.30.10)', t:()=>tP('PC-C','172.16.30.10')},
+  D_B4:{d:'PC-D cannot ping PC-B (172.16.20.10)', t:()=>tP('PC-D','172.16.20.10')},
+  A_B4:{d:'PC-A cannot ping PC-B (172.16.20.10)', t:()=>tP('PC-A','172.16.20.10')},
+  A_net4:{d:'PC-A cannot ping the Internet (5.5.5.5)', t:()=>tP('PC-A','5.5.5.5')},
+  B_net4:{d:'PC-B cannot ping the Internet (5.5.5.5)', t:()=>tP('PC-B','5.5.5.5')},
+  D_net4:{d:'PC-D cannot ping the Internet (5.5.5.5)', t:()=>tP('PC-D','5.5.5.5')},
+  A_D6:{d:'PC-A cannot ping PC-D over IPv6 (2001:CAFE:ACAD:30::10)', t:()=>tP('PC-A','2001:cafe:acad:30::10')},
+  D_A6:{d:'PC-D cannot ping PC-A over IPv6 (2001:CAFE:ACAD:10::10)', t:()=>tP('PC-D','2001:cafe:acad:10::10')},
+  A_net6:{d:'PC-A cannot ping the Internet over IPv6 (2001:5:5::5)', t:()=>tP('PC-A','2001:5:5::5')},
+  B_net6:{d:'PC-B cannot ping the Internet over IPv6 (2001:5:5::5)', t:()=>tP('PC-B','2001:5:5::5')},
+  D_net6:{d:'PC-D cannot ping the Internet over IPv6 (2001:5:5::5)', t:()=>tP('PC-D','2001:5:5::5')},
+  A_S1:{d:"PC-A cannot ping S1's management address (172.16.99.11)", t:()=>tP('PC-A','172.16.99.11')},
+  A_S2:{d:"PC-A cannot ping S2's management address (172.16.99.12)", t:()=>tP('PC-A','172.16.99.12')},
+  ssh_R1:{d:'PC-B cannot SSH to R1 (10.0.12.1) as admin / cisco', t:()=>tSsh('PC-B','10.0.12.1')},
+  ssh_R2:{d:'PC-A cannot SSH to R2 (172.16.10.1) as admin / cisco', t:()=>tSsh('PC-A','172.16.10.1')},
+  ssh_R3:{d:'PC-D cannot SSH to R3 (172.16.30.1) as admin / cisco', t:()=>tSsh('PC-D','172.16.30.1')},
+  pol4:{d:'Security: PC-A (172.16.10.10) can reach PC-D at the branch — POLICY-1 is supposed to stop it', t:()=>tBlocked('PC-A','172.16.30.10')},
+  pol6:{d:'Security: PC-B can ping PC-D over IPv6 — NO-ICMP is supposed to stop it', t:()=>tBlocked('PC-B','2001:cafe:acad:30::10')},
+  chk_native:{d:'S1 and S2 keep logging %CDP-4-NATIVE_VLAN_MISMATCH on their EtherChannel', t:tNatives},
+  chk_member:{d:'The S1–S2 EtherChannel is running on one link — a member port is flagged suspended', t:tMembers},
+  chk_names:{d:"An audit found VLANs on S2 that don't match the VLAN table", t:()=>tNames('S2')},
+  chk_rnative:{d:"Untagged frames on the S1–R2 trunk are not reaching R2's native VLAN subinterface (G0/1.1000)", t:tRNative}
+};
+/* ── design rules: checked only once every ticket is fixed ── */
+function tNatUsed(){
+  const r=tsPing(tsDev('PC-A'),'5.5.5.5',false);
+  if(!r.ok) return {ok:false, reason:r.reason};
+  return r.natted?{ok:true}:{ok:false, reason:"PC-A's traffic reaches the Internet untranslated — R1's NAT is not doing it"};
+}
+function tChap(){
+  const r1=acIface(tsDev('R1'),'S0/0/0'), r2=acIface(tsDev('R2'),'S0/0/0'), bad=[];
+  [[tsDev('R1'),r1],[tsDev('R2'),r2]].forEach(x=>{
+    if(x[1].encap!=='ppp') bad.push(x[0].name+' S0/0/0 is not running PPP');
+    else if(x[1].auth!=='chap') bad.push(x[0].name+' S0/0/0 has no "ppp authentication chap"');
+  });
+  if(!bad.length&&!tsPpp(tsDev('R1'),r1).up) bad.push('the link is down: '+tsPpp(tsDev('R1'),r1).why);
+  return bad.length?{ok:false, reason:bad.join('; ')}:{ok:true};
+}
+function tAdminVty(){
+  const r=tsSsh(tsDev('PC-B'),'172.16.20.1',{user:'admin', pass:'cisco'});
+  if(r.ok) return {ok:false, reason:'PC-B (HR) can open an SSH session to R2'};
+  return r.vtyDenied?{ok:true}:{ok:false, reason:'PC-B is kept out, but not by the vty access-class: '+r.reason};
+}
+function tVty(){
+  const bad=[];
+  ['R1','R2','R3'].forEach(n=>{ const v=tsDev(n).ssh.vty;
+    if(v.transport!=='ssh') bad.push(n+' vty transport is "'+v.transport+'"');
+    if(v.login!=='local') bad.push(n+' vty lines do not use login local'); });
+  return bad.length?{ok:false, reason:bad.join('; ')}:{ok:true};
+}
+function tPsec(){
+  const bad=[];
+  [['S1','Fa0/6'],['S2','Fa0/6'],['S2','Fa0/7'],['S3','Fa0/6']].forEach(x=>{
+    const p=tsDev(x[0]).ports.find(q=>q.name===x[1]);
+    if(!p.ps.on) bad.push(x[0]+' '+x[1]+' has port security off');
+    else if(p.ps.max!==1||!p.ps.sticky) bad.push(x[0]+' '+x[1]+' is not sticky with a maximum of 1');
+  });
+  return bad.length?{ok:false, reason:bad.join('; ')}:{ok:true};
+}
+function tVlanDesign(){
+  const bad=tsNameIssues('S1').concat(tsNameIssues('S2'),tsNameIssues('S3'),tsNativeIssues());
+  const r=tRNative(); if(!r.ok) bad.push(r.reason);
+  return bad.length?{ok:false, reason:bad.join('; ')}:{ok:true};
+}
+function tSaved(){
+  const bad=tsDevices.filter(d=>d.type!=='pc'&&tsConfigSig(tsRunText(d))!==tsConfigSig(d.startup)).map(d=>d.name);
+  return bad.length?{ok:false, reason:'Not saved since the last change: '+bad.join(', ')}:{ok:true};
+}
+const TS_RULES=[
+  {d:'POLICY-1 still stops PC-A, and the rest of Sales, reaching the branch over IPv4', t:()=>tBlocked('PC-A','172.16.30.10')},
+  {d:'PC-C (172.16.10.100) can still reach the branch', t:()=>tP('PC-C','172.16.30.10')},
+  {d:'NO-ICMP still stops pings between HR and the branch over IPv6', t:()=>tBlocked('PC-B','2001:cafe:acad:30::10')},
+  {d:'Traffic to the Internet is still translated by PAT on R1', t:tNatUsed},
+  {d:'The R1–R2 link still runs PPP with CHAP at both ends', t:tChap},
+  {d:'R1, R2 and R3 still accept only SSH on their vty lines, with local usernames', t:tVty},
+  {d:"R2's vty lines still refuse SSH from outside Sales and Management (ADMIN)", t:tAdminVty},
+  {d:'Every PC port still has port security (sticky, maximum 1)', t:tPsec},
+  {d:"Every switch still has the VLAN table's VLANs and names, and every trunk uses native VLAN 1000", t:tVlanDesign},
+  {d:'Every device you changed is saved — copy running-config startup-config', t:tSaved}
+];
+
+/* ═══ Faults ═══════════════════════════════════════════════════════
+   Each fault is the commands that break one thing (or a function, for the
+   few that only traffic can cause), the tickets it can produce, what was
+   wrong, the show command that proves it, and the fix. keys name what it
+   touches, so a round never plants two faults on the same setting. lvl is
+   how hard it is to spot: 1 obvious, 2 needs the right show command, 3
+   looks fine at a glance. */
+const FAULTS=[];
+function fault(o){ FAULTS.push(o); }
+function tsRogue(swName,port,replace){
+  const sw=tsDev(swName), i=sw.ports.findIndex(p=>p.name===port), pc=tsById(tsOther(tsPortCable(sw.id,i),sw.id).d);
+  if(replace){ sw.ports[i].ps.macs=[]; SWE.psFrame(sw,i,ROGUE); SWE.psFrame(sw,i,pc.mac); }
+  else SWE.psFrame(sw,i,ROGUE);
+}
+/* ── switching ── */
+fault({id:'sw-vlan-missing', cat:'sw', lvl:1, keys:['s2-vlan20'], dev:'S2', run:['no vlan 20'], tickets:['gwB4','B_D4'],
+  cause:'VLAN 20 does not exist on S2. Fa0/6 (PC-B) is inactive, and S2 drops VLAN 20 frames rather than trunking them.',
+  show:'show vlan brief', fix:{dev:'S2', lines:['vlan 20',' name HR']}});
+fault({id:'sw-port-vlan', cat:'sw', lvl:1, keys:['s2-fa06'], dev:'S2', run:['interface fa0/6',' switchport access vlan 10'], tickets:['gwB4','B_D4'],
+  cause:"S2 Fa0/6, PC-B's port, is in VLAN 10 instead of VLAN 20 (HR).",
+  show:'show vlan brief', fix:{dev:'S2', lines:['interface fa0/6',' switchport access vlan 20']}});
+fault({id:'sw-port-shut', cat:'sw', lvl:1, keys:['s1-fa06'], dev:'S1', run:['interface fa0/6',' shutdown'], tickets:['gwA4','A_net4'],
+  cause:"S1 Fa0/6, PC-A's port, is administratively down.",
+  show:'show interfaces status', fix:{dev:'S1', lines:['interface fa0/6',' no shutdown']}});
+fault({id:'sw-psec', cat:'sw', lvl:2, keys:['s2-fa07'], dev:'S2', apply:()=>tsRogue('S2','Fa0/7',false), tickets:['gwC4','C_D4'],
+  cause:"S2 Fa0/7, PC-C's port, is err-disabled: another device was plugged in and broke the one-address limit. PC-C's own sticky address is still there, so the port only needs bouncing.",
+  show:'show port-security interface fa0/7', fix:{dev:'S2', lines:['interface fa0/7',' shutdown',' no shutdown']}});
+fault({id:'sw-psec-sticky', cat:'sw', lvl:3, keys:['s2-fa07'], dev:'S2', apply:()=>tsRogue('S2','Fa0/7',true), tickets:['gwC4','C_D4'],
+  cause:"S2 Fa0/7 learned a visiting laptop's MAC ("+ROGUE.toUpperCase()+") as its one sticky address, then err-disabled itself when PC-C came back. Bouncing the port alone trips it again the moment PC-C sends — the wrong sticky address has to go first.",
+  show:'show port-security address', fix:{dev:'S2', lines:['interface fa0/7',' no switchport port-security mac-address sticky '+ROGUE.toUpperCase(),' shutdown',' no shutdown']}});
+fault({id:'sw-allowed', cat:'sw', lvl:2, keys:['s1-gi01'], dev:'S1', run:['interface gi0/1',' switchport trunk allowed vlan 10,99,1000'], tickets:['gwB4','B_D4'],
+  cause:'The S1–R2 trunk (S1 Gi0/1) does not allow VLAN 20, so HR traffic never reaches R2.',
+  show:'show interfaces trunk', fix:{dev:'S1', lines:['interface gi0/1',' switchport trunk allowed vlan add 20']}});
+fault({id:'sw-trunk-mode', cat:'sw', lvl:2, keys:['s1-gi01'], dev:'S1', run:['interface gi0/1',' switchport mode dynamic auto'], tickets:['gwA4','gwB4'],
+  cause:"S1 Gi0/1, the link to R2, is dynamic auto. A router never negotiates a trunk, so the port stays an access port in VLAN 1 and none of R2's subinterfaces hear anything.",
+  show:'show interfaces gi0/1 switchport', fix:{dev:'S1', lines:['interface gi0/1',' switchport mode trunk']}});
+fault({id:'sw-native', cat:'sw', lvl:2, keys:['po1-native'], dev:'S2', run:['interface port-channel 1',' switchport trunk native vlan 1'], tickets:['chk_native'],
+  cause:"S2's Port-channel1 (and with it Fa0/1–2) uses native VLAN 1 while S1 uses 1000. Untagged frames would land in the wrong VLAN, which is what CDP keeps complaining about.",
+  show:'show interfaces trunk', fix:{dev:'S2', lines:['interface port-channel 1',' switchport trunk native vlan 1000']}});
+fault({id:'sw-ether-mode', cat:'sw', lvl:3, keys:['po1-mode'], dev:'S2', run:['interface range fa0/1 - 2',' channel-group 1 mode auto'], tickets:['gwB4','gwC4'],
+  cause:"S2's EtherChannel members use PAgP (auto) while S1's use LACP (active). The two protocols never agree, so the bundle does not form and nothing crosses between the switches.",
+  show:'show etherchannel summary', fix:{dev:'S2', lines:['interface range fa0/1 - 2',' channel-group 1 mode passive']}});
+fault({id:'sw-ether-passive', cat:'sw', lvl:2, keys:['po1-mode'], dev:'S1', run:['interface range fa0/1 - 2',' channel-group 1 mode passive'], tickets:['gwB4','gwC4'],
+  cause:'Both ends of the S1–S2 EtherChannel are LACP passive, so neither starts the negotiation and the bundle never forms.',
+  show:'show etherchannel summary', fix:{dev:'S1', lines:['interface range fa0/1 - 2',' channel-group 1 mode active']}});
+fault({id:'sw-member', cat:'sw', lvl:3, keys:['s1-fa02'], dev:'S1', run:['interface fa0/2',' switchport trunk allowed vlan 10,20'], tickets:['chk_member'],
+  cause:"S1 Fa0/2's allowed VLAN list differs from Port-channel1's, so S1 suspends it from the bundle (flag s). The channel survives on Fa0/1 alone.",
+  show:'show etherchannel summary', fix:{dev:'S1', lines:['interface fa0/2',' switchport trunk allowed vlan 10,20,99,1000']}});
+fault({id:'sw-svi-shut', cat:'sw', lvl:1, keys:['s1-svi'], dev:'S1', run:['interface vlan 99',' shutdown'], tickets:['A_S1'],
+  cause:"S1's management SVI (VLAN 99) is administratively down.",
+  show:'show ip interface brief', fix:{dev:'S1', lines:['interface vlan 99',' no shutdown']}});
+fault({id:'sw-svi-ip', cat:'sw', lvl:2, keys:['s2-svi'], dev:'S2', run:['interface vlan 99',' ip address 172.16.99.21 255.255.255.0'], tickets:['A_S2'],
+  cause:"S2's management SVI has 172.16.99.21 instead of 172.16.99.12.",
+  show:'show ip interface brief', fix:{dev:'S2', lines:['interface vlan 99',' ip address 172.16.99.12 255.255.255.0']}});
+fault({id:'sw-gw', cat:'sw', lvl:2, keys:['s2-gw'], dev:'S2', run:['ip default-gateway 172.16.99.254'], tickets:['A_S2'],
+  cause:"S2's default gateway is 172.16.99.254, which does not exist. S2 can answer its own VLAN but cannot reply to anything off it.",
+  show:'show running-config | include default-gateway', fix:{dev:'S2', lines:['ip default-gateway 172.16.99.1']}});
+fault({id:'sw-gw-missing', cat:'sw', lvl:1, keys:['s1-gw'], dev:'S1', run:['no ip default-gateway'], tickets:['A_S1'],
+  cause:'S1 has no default gateway, so it cannot reply to PC-A on another subnet.',
+  show:'show running-config | include default-gateway', fix:{dev:'S1', lines:['ip default-gateway 172.16.99.1']}});
+fault({id:'sw-vlan-name', cat:'sw', lvl:1, keys:['s2-names'], dev:'S2', run:['vlan 10',' name Sale'], tickets:['chk_names'],
+  cause:'VLAN 10 on S2 is named "Sale" instead of "Sales".',
+  show:'show vlan brief', fix:{dev:'S2', lines:['vlan 10',' name Sales']}});
+/* ── inter-VLAN routing ── */
+fault({id:'iv-shut', cat:'iv', lvl:1, keys:['r2-g01'], dev:'R2', run:['interface g0/1',' shutdown'], tickets:['gwA4','gwB4'],
+  cause:'R2 G0/1, the physical interface under every subinterface, is shut down — so all of them are down.',
+  show:'show ip interface brief', fix:{dev:'R2', lines:['interface g0/1',' no shutdown']}});
+fault({id:'iv-dot1q', cat:'iv', lvl:2, keys:['r2-sub20'], dev:'R2', run:['interface g0/1.20',' encapsulation dot1Q 30'], tickets:['gwB4','B_D4'],
+  cause:'R2 G0/1.20 is tagged for VLAN 30, so it never sees the VLAN 20 frames HR sends.',
+  show:'show interfaces g0/1.20', fix:{dev:'R2', lines:['interface g0/1.20',' encapsulation dot1Q 20']}});
+fault({id:'iv-ip', cat:'iv', lvl:2, keys:['r2-sub10'], dev:'R2', run:['interface g0/1.10',' ip address 172.16.10.254 255.255.255.0'], tickets:['gwA4','A_net4'],
+  cause:'R2 G0/1.10 has 172.16.10.254, not 172.16.10.1 — the gateway the Sales PCs use.',
+  show:'show ip interface brief', fix:{dev:'R2', lines:['interface g0/1.10',' ip address 172.16.10.1 255.255.255.0']}});
+fault({id:'iv-native', cat:'iv', lvl:3, keys:['r2-sub1000'], dev:'R2', run:['interface g0/1.1000',' encapsulation dot1Q 1000'], tickets:['chk_rnative'],
+  cause:'R2 G0/1.1000 is missing the native keyword, so it expects VLAN 1000 tagged while S1 sends its native VLAN untagged.',
+  show:'show vlans', fix:{dev:'R2', lines:['interface g0/1.1000',' encapsulation dot1Q 1000 native']}});
+fault({id:'iv-ip6', cat:'iv', lvl:2, keys:['r2-sub20-6'], dev:'R2', run:['interface g0/1.20',' no ipv6 address 2001:CAFE:ACAD:20::1/64',' ipv6 address 2001:CAFE:ACAD:21::1/64'], tickets:['B_net6'],
+  cause:"R2 G0/1.20 has 2001:CAFE:ACAD:21::1/64 instead of :20::1/64. PC-B still reaches its link-local gateway, but no router has a route back to HR's real prefix.",
+  show:'show ipv6 interface brief', fix:{dev:'R2', lines:['interface g0/1.20',' no ipv6 address 2001:CAFE:ACAD:21::1/64',' ipv6 address 2001:CAFE:ACAD:20::1/64']}});
+/* ── PPP ── */
+fault({id:'ppp-clock', cat:'ppp', lvl:1, keys:['r1-s0-clock'], dev:'R1', run:['interface s0/0/0',' no clock rate'], tickets:['B_D4','A_net4'],
+  cause:'R1 S0/0/0 is the DCE end of the serial cable but has no clock rate, so the link never comes up.',
+  show:'show controllers s0/0/0', fix:{dev:'R1', lines:['interface s0/0/0',' clock rate 128000']}});
+fault({id:'ppp-encap', cat:'ppp', lvl:1, keys:['r2-s0-encap'], dev:'R2', run:['interface s0/0/0',' encapsulation hdlc'], tickets:['B_D4','A_net4'],
+  cause:"R2 S0/0/0 runs HDLC while R1 runs PPP. The encapsulations have to match — and going to HDLC also dropped R2's CHAP setting.",
+  show:'show interfaces s0/0/0', fix:{dev:'R2', lines:['interface s0/0/0',' encapsulation ppp',' ppp authentication chap']}});
+fault({id:'ppp-user', cat:'ppp', lvl:2, keys:['r1-chap'], dev:'R1', run:['no username R2','username r2 password cisco'], tickets:['B_D4','A_net4'],
+  cause:'R1\'s CHAP username for its neighbour is "r2". CHAP looks the peer up by its exact hostname, R2, and the match is case-sensitive.',
+  show:'show interfaces s0/0/0', fix:{dev:'R1', lines:['no username r2','username R2 password cisco']}});
+fault({id:'ppp-pass', cat:'ppp', lvl:2, keys:['r2-chap'], dev:'R2', run:['username R1 password class'], tickets:['B_D4','A_net4'],
+  cause:'R2\'s CHAP password for R1 is "class", but R1 uses "cisco" — both ends of a CHAP link share one password.',
+  show:'show interfaces s0/0/0', fix:{dev:'R2', lines:['username R1 password cisco']}});
+fault({id:'ppp-shut', cat:'ppp', lvl:1, keys:['r2-s0-shut'], dev:'R2', run:['interface s0/0/0',' shutdown'], tickets:['B_D4','A_net4'],
+  cause:'R2 S0/0/0, its only link to R1, is administratively down.',
+  show:'show ip interface brief', fix:{dev:'R2', lines:['interface s0/0/0',' no shutdown']}});
+/* ── addressing and IPv6 ── */
+fault({id:'ad-r3-shut', cat:'addr', lvl:1, keys:['r3-g00'], dev:'R3', run:['interface g0/0',' shutdown'], tickets:['B_D4','D_net4'],
+  cause:"R3 G0/0, the branch's only link to R1, is administratively down.",
+  show:'show ip interface brief', fix:{dev:'R3', lines:['interface g0/0',' no shutdown']}});
+fault({id:'ad-r1-ip', cat:'addr', lvl:1, keys:['r1-g01-ip'], dev:'R1', run:['interface g0/1',' ip address 10.0.13.5 255.255.255.252'], tickets:['B_D4','D_net4'],
+  cause:"R1 G0/1 has 10.0.13.5/30 — a different subnet from R3's 10.0.13.2/30 — so the two cannot talk and OSPF never forms across the link.",
+  show:'show ip interface brief', fix:{dev:'R1', lines:['interface g0/1',' ip address 10.0.13.1 255.255.255.252']}});
+fault({id:'ad-unicast6', cat:'addr', lvl:2, keys:['r3-uni6'], dev:'R3', run:['no ipv6 unicast-routing'], tickets:['D_A6','D_net6'],
+  cause:'R3 has no "ipv6 unicast-routing". It will not forward IPv6 at all, and OSPFv3 cannot run without it.',
+  show:'show ipv6 protocols', fix:{dev:'R3', lines:['ipv6 unicast-routing']}});
+fault({id:'ad-ip6', cat:'addr', lvl:2, keys:['r3-g01-6'], dev:'R3', run:['interface g0/1',' no ipv6 address 2001:CAFE:ACAD:30::1/64',' ipv6 address 2001:CAFE:ACAD:3::1/64'], tickets:['D_A6','D_net6'],
+  cause:"R3 G0/1 has 2001:CAFE:ACAD:3::1/64 instead of :30::1/64, so nobody advertises the branch's real prefix and replies to PC-D have nowhere to go.",
+  show:'show ipv6 interface brief', fix:{dev:'R3', lines:['interface g0/1',' no ipv6 address 2001:CAFE:ACAD:3::1/64',' ipv6 address 2001:CAFE:ACAD:30::1/64']}});
+fault({id:'ad-ll', cat:'addr', lvl:2, keys:['r2-sub10-ll'], dev:'R2', run:['interface g0/1.10',' ipv6 address FE80::20 link-local'], tickets:['A_D6','A_net6'],
+  cause:"R2 G0/1.10's link-local address is FE80::20, but the Sales PCs use FE80::2 as their IPv6 gateway.",
+  show:'show ipv6 interface brief', fix:{dev:'R2', lines:['interface g0/1.10',' ipv6 address FE80::2 link-local']}});
+fault({id:'ad-pc-gw', cat:'addr', lvl:1, keys:['pcd'], dev:'PC-D', apply:()=>{ tsDev('PC-D').gw='172.16.30.254'; }, tickets:['D_B4','D_net4'],
+  cause:"PC-D's default gateway is 172.16.30.254 instead of 172.16.30.1.",
+  show:'ipconfig', fix:{pc:'PC-D', set:{gw:'172.16.30.1'}}});
+fault({id:'ad-pc-mask', cat:'addr', lvl:3, keys:['pcb'], dev:'PC-B', apply:()=>{ tsDev('PC-B').pfx=16; }, tickets:['B_D4'],
+  cause:"PC-B's mask is 255.255.0.0, so it believes PC-D (172.16.30.10) is on its own LAN and never hands the packet to its gateway.",
+  show:'ipconfig', fix:{pc:'PC-B', set:{pfx:24}}});
+fault({id:'ad-pc-gw6', cat:'addr', lvl:2, keys:['pca'], dev:'PC-A', apply:()=>{ tsDev('PC-A').gw6='fe80::1'; }, tickets:['A_D6','A_net6'],
+  cause:"PC-A's IPv6 gateway is FE80::1, but the router on its LAN, R2, is FE80::2.",
+  show:'ipconfig', fix:{pc:'PC-A', set:{gw6:'fe80::2'}}});
+fault({id:'ad-pc-ip', cat:'addr', lvl:2, keys:['pcc'], dev:'PC-C', apply:()=>{ tsDev('PC-C').ip='172.16.10.110'; }, tickets:['C_D4'],
+  cause:'PC-C is addressed 172.16.10.110 instead of 172.16.10.100. POLICY-1 only lets .100 reach the branch, so the wrong address gets PC-C filtered like the rest of Sales.',
+  show:'ipconfig', fix:{pc:'PC-C', set:{ip:'172.16.10.100'}}});
+/* ── OSPF ── */
+fault({id:'os-passive', cat:'ospf', lvl:1, keys:['r2-o4-pass'], dev:'R2', run:['router ospf 1',' passive-interface s0/0/0'], tickets:['B_D4','A_net4'],
+  cause:'R2 S0/0/0 is passive in OSPF, so R2 sends no hellos to R1 and learns no route off its own site.',
+  show:'show ip protocols', fix:{dev:'R2', lines:['router ospf 1',' no passive-interface s0/0/0']}});
+fault({id:'os-area', cat:'ospf', lvl:2, keys:['r3-o4-13'], dev:'R3', run:['router ospf 1',' no network 10.0.13.0 0.0.0.3 area 5',' network 10.0.13.0 0.0.0.3 area 0'], tickets:['B_D4','D_net4'],
+  cause:"R3 puts its link to R1 in area 0, while R1's end is in area 5. The areas have to match for the two to become neighbours.",
+  show:'show ip ospf interface g0/0', fix:{dev:'R3', lines:['router ospf 1',' no network 10.0.13.0 0.0.0.3 area 0',' network 10.0.13.0 0.0.0.3 area 5']}});
+fault({id:'os-net', cat:'ospf', lvl:1, keys:['r3-o4-30'], dev:'R3', run:['router ospf 1',' no network 172.16.30.0 0.0.0.255 area 5'], tickets:['B_D4','D_net4'],
+  cause:'R3 has no network statement for 172.16.30.0/24, so the branch LAN is never advertised.',
+  show:'show ip protocols', fix:{dev:'R3', lines:['router ospf 1',' network 172.16.30.0 0.0.0.255 area 5']}});
+fault({id:'os-wild', cat:'ospf', lvl:2, keys:['r2-o4-20'], dev:'R2', run:['router ospf 1',' no network 172.16.20.0 0.0.0.255 area 0',' network 172.16.20.0 0.0.0.0 area 0'], tickets:['B_D4'],
+  cause:"R2's network statement for HR has wildcard 0.0.0.0, which matches only the address 172.16.20.0 — not G0/1.20 at .1 — so HR is never advertised.",
+  show:'show ip protocols', fix:{dev:'R2', lines:['router ospf 1',' no network 172.16.20.0 0.0.0.0 area 0',' network 172.16.20.0 0.0.0.255 area 0']}});
+fault({id:'os-rid', cat:'ospf', lvl:3, keys:['r3-rid'], dev:'R3', run:['router ospf 1',' router-id 1.1.1.1'], tickets:['B_D4','D_net4'],
+  cause:"R3's OSPF router ID is 1.1.1.1, the same as R1's. Duplicate router IDs stop the adjacency.",
+  show:'show ip protocols', fix:{dev:'R3', lines:['router ospf 1',' router-id 3.3.3.3','end','clear ip ospf process','yes']}});
+fault({id:'os-deforig', cat:'ospf', lvl:2, keys:['r1-o4-def'], dev:'R1', run:['router ospf 1',' no default-information originate'], tickets:['A_net4','D_net4'],
+  cause:'R1 has a default route to ISP but no longer advertises it into OSPF, so R2 and R3 have no way out.',
+  show:'show ip route on R2 or R3 (no O*E2 route)', fix:{dev:'R1', lines:['router ospf 1',' default-information originate']}});
+fault({id:'os3-passive', cat:'ospf', lvl:2, keys:['r3-o6-pass'], dev:'R3', run:['ipv6 router ospf 1',' passive-interface g0/0'], tickets:['D_A6','D_net6'],
+  cause:'R3 G0/0 is passive in OSPFv3, so R3 has no IPv6 neighbour and learns no IPv6 routes.',
+  show:'show ipv6 ospf interface g0/0', fix:{dev:'R3', lines:['ipv6 router ospf 1',' no passive-interface g0/0']}});
+fault({id:'os3-if', cat:'ospf', lvl:1, keys:['r2-o6-s0'], dev:'R2', run:['interface s0/0/0',' no ipv6 ospf 1 area 0'], tickets:['A_D6','A_net6'],
+  cause:'R2 S0/0/0 is not in OSPFv3. OSPFv3 is enabled per interface, and this one is missing "ipv6 ospf 1 area 0".',
+  show:'show ipv6 ospf interface brief', fix:{dev:'R2', lines:['interface s0/0/0',' ipv6 ospf 1 area 0']}});
+fault({id:'os3-area', cat:'ospf', lvl:2, keys:['r1-o6-g01'], dev:'R1', run:['interface g0/1',' ipv6 ospf 1 area 0'], tickets:['D_A6','D_net6'],
+  cause:"R1 G0/1 is in OSPFv3 area 0, but R3's end of the link is in area 5.",
+  show:'show ipv6 ospf interface g0/1', fix:{dev:'R1', lines:['interface g0/1',' ipv6 ospf 1 area 5']}});
+fault({id:'os3-deforig', cat:'ospf', lvl:2, keys:['r1-o6-def'], dev:'R1', run:['ipv6 router ospf 1',' no default-information originate'], tickets:['A_net6','D_net6'],
+  cause:'R1 no longer advertises its IPv6 default route into OSPFv3, so R2 and R3 have no IPv6 way out.',
+  show:'show ipv6 route on R2 or R3 (no OE2 ::/0)', fix:{dev:'R1', lines:['ipv6 router ospf 1',' default-information originate']}});
+/* ── static and default routes ── */
+fault({id:'rt-def4', cat:'rt', lvl:1, keys:['r1-s4'], dev:'R1', run:['no ip route 0.0.0.0 0.0.0.0 220.100.100.1'], tickets:['A_net4','D_net4'],
+  cause:'R1 has no IPv4 default route to ISP — and with nothing to originate, R2 and R3 lose their default too.',
+  show:'show ip route', fix:{dev:'R1', lines:['ip route 0.0.0.0 0.0.0.0 220.100.100.1']}});
+fault({id:'rt-def4-nh', cat:'rt', lvl:2, keys:['r1-s4'], dev:'R1', run:['no ip route 0.0.0.0 0.0.0.0 220.100.100.1','ip route 0.0.0.0 0.0.0.0 220.100.100.5'], tickets:['A_net4','D_net4'],
+  cause:"R1's default route points at 220.100.100.5, which is not on any of its networks, so the route is never installed.",
+  show:'show ip route', fix:{dev:'R1', lines:['no ip route 0.0.0.0 0.0.0.0 220.100.100.5','ip route 0.0.0.0 0.0.0.0 220.100.100.1']}});
+fault({id:'rt-def6', cat:'rt', lvl:1, keys:['r1-s6'], dev:'R1', run:['no ipv6 route ::/0 2001:CAFE:ABC::1'], tickets:['A_net6','D_net6'],
+  cause:'R1 has no IPv6 default route to ISP.',
+  show:'show ipv6 route', fix:{dev:'R1', lines:['ipv6 route ::/0 2001:CAFE:ABC::1']}});
+fault({id:'rt-def6-nh', cat:'rt', lvl:2, keys:['r1-s6'], dev:'R1', run:['no ipv6 route ::/0 2001:CAFE:ABC::1','ipv6 route ::/0 2001:CAFE:ABC::3'], tickets:['A_net6','D_net6'],
+  cause:"R1's IPv6 default route points at 2001:CAFE:ABC::3. That is on the ISP link, so the route installs — but nothing answers there.",
+  show:'show ipv6 route', fix:{dev:'R1', lines:['no ipv6 route ::/0 2001:CAFE:ABC::3','ipv6 route ::/0 2001:CAFE:ABC::1']}});
+fault({id:'rt-isp4', cat:'rt', lvl:2, keys:['isp-s4'], dev:'ISP', run:['no ip route 100.30.20.0 255.255.255.248 220.100.100.2'], tickets:['A_net4','D_net4'],
+  cause:"ISP has no route back to R1's NAT pool, 100.30.20.0/29, so replies to translated traffic die at ISP.",
+  show:'show ip route', fix:{dev:'ISP', lines:['ip route 100.30.20.0 255.255.255.248 220.100.100.2']}});
+fault({id:'rt-isp4-net', cat:'rt', lvl:3, keys:['isp-s4'], dev:'ISP', run:['no ip route 100.30.20.0 255.255.255.248 220.100.100.2','ip route 100.30.20.8 255.255.255.248 220.100.100.2'], tickets:['A_net4','D_net4'],
+  cause:"ISP's route to the NAT pool is for 100.30.20.8/29 — the block after the pool. The pool is 100.30.20.0/29.",
+  show:'show ip route', fix:{dev:'ISP', lines:['no ip route 100.30.20.8 255.255.255.248 220.100.100.2','ip route 100.30.20.0 255.255.255.248 220.100.100.2']}});
+fault({id:'rt-isp6', cat:'rt', lvl:2, keys:['isp-s6'], dev:'ISP', run:['no ipv6 route 2001:CAFE:ACAD::/48 2001:CAFE:ABC::2'], tickets:['A_net6','D_net6'],
+  cause:"ISP has no IPv6 route back to the company's 2001:CAFE:ACAD::/48.",
+  show:'show ipv6 route', fix:{dev:'ISP', lines:['ipv6 route 2001:CAFE:ACAD::/48 2001:CAFE:ABC::2']}});
+fault({id:'rt-isp6-nh', cat:'rt', lvl:3, keys:['isp-s6'], dev:'ISP', run:['no ipv6 route 2001:CAFE:ACAD::/48 2001:CAFE:ABC::2','ipv6 route 2001:CAFE:ACAD::/48 2001:CAFE:ABC::3'], tickets:['A_net6','D_net6'],
+  cause:"ISP's IPv6 route back to the company points at 2001:CAFE:ABC::3; R1 is ::2.",
+  show:'show ipv6 route', fix:{dev:'ISP', lines:['no ipv6 route 2001:CAFE:ACAD::/48 2001:CAFE:ABC::3','ipv6 route 2001:CAFE:ACAD::/48 2001:CAFE:ABC::2']}});
+/* ── NAT ── */
+fault({id:'nat-inout', cat:'nat', lvl:1, keys:['r1-n-g00'], dev:'R1', run:['interface g0/0',' ip nat inside'], tickets:['A_net4','D_net4'],
+  cause:'R1 G0/0, the interface facing ISP, is "ip nat inside" instead of outside. With no outside interface nothing is translated, and ISP drops replies to private addresses.',
+  show:'show ip nat statistics', fix:{dev:'R1', lines:['interface g0/0',' ip nat outside']}});
+fault({id:'nat-acl', cat:'nat', lvl:2, keys:['r1-n-acl'], dev:'R1', run:['no access-list 1','access-list 1 permit 172.16.10.0 0.0.0.255','access-list 1 permit 172.16.30.0 0.0.0.255'], tickets:['B_net4'],
+  cause:'Access list 1, which decides what NAT translates, has no line for HR (172.16.20.0/24).',
+  show:'show access-lists', fix:{dev:'R1', lines:['access-list 1 permit 172.16.20.0 0.0.0.255']}});
+fault({id:'nat-pool', cat:'nat', lvl:2, keys:['r1-n-pool'], dev:'R1', run:['ip nat pool NAT-POOL 100.30.21.1 100.30.21.6 netmask 255.255.255.248'], tickets:['A_net4','D_net4'],
+  cause:"R1's NAT pool is 100.30.21.1–6, but the company owns (and ISP routes back) 100.30.20.0/29.",
+  show:'show ip nat statistics', fix:{dev:'R1', lines:['no ip nat inside source list 1 pool NAT-POOL overload','ip nat pool NAT-POOL 100.30.20.1 100.30.20.6 netmask 255.255.255.248','ip nat inside source list 1 pool NAT-POOL overload']}});
+fault({id:'nat-rule', cat:'nat', lvl:1, keys:['r1-n-rule'], dev:'R1', run:['no ip nat inside source list 1 pool NAT-POOL overload'], tickets:['A_net4','D_net4'],
+  cause:'R1 has the pool and the access list but no "ip nat inside source" statement tying them together.',
+  show:'show ip nat statistics', fix:{dev:'R1', lines:['ip nat inside source list 1 pool NAT-POOL overload']}});
+fault({id:'nat-s0', cat:'nat', lvl:2, keys:['r1-n-s0'], dev:'R1', run:['interface s0/0/0',' no ip nat inside'], tickets:['A_net4','B_net4'],
+  cause:'R1 S0/0/0, the link to HQ, is missing "ip nat inside", so traffic from Sales and HR leaves untranslated. The branch, on G0/1, still works.',
+  show:'show ip nat statistics', fix:{dev:'R1', lines:['interface s0/0/0',' ip nat inside']}});
+/* ── ACLs ── */
+fault({id:'acl-permit', cat:'acl', lvl:1, keys:['policy1'], dev:'R2', run:['ip access-list extended POLICY-1',' no 30'], tickets:['A_net4','A_B4'],
+  cause:'POLICY-1 lost its final "permit ip any any", so the implicit deny drops everything from Sales the list does not explicitly permit.',
+  show:'show access-lists', fix:{dev:'R2', lines:['ip access-list extended POLICY-1',' permit ip any any']}});
+fault({id:'acl-order', cat:'acl', lvl:2, keys:['policy1'], dev:'R2', run:['ip access-list extended POLICY-1',' no 10',' 25 permit ip host 172.16.10.100 172.16.30.0 0.0.0.255'], tickets:['C_D4'],
+  cause:'In POLICY-1 the host permit for 172.16.10.100 sits after the deny for all of Sales (sequence 25 after 20), so the deny catches PC-C first.',
+  show:'show access-lists', fix:{dev:'R2', lines:['ip access-list extended POLICY-1',' no 25',' 10 permit ip host 172.16.10.100 172.16.30.0 0.0.0.255']}});
+fault({id:'acl-wc', cat:'acl', lvl:3, keys:['policy1'], dev:'R2', run:['ip access-list extended POLICY-1',' no 20',' 20 deny ip 172.16.10.0 0.0.0.255 172.16.0.0 0.0.255.255'], tickets:['A_B4','A_S1'],
+  cause:"POLICY-1's deny has destination 172.16.0.0 0.0.255.255 — all of 172.16.0.0/16 — instead of just the branch, 172.16.30.0 0.0.0.255.",
+  show:'show access-lists', fix:{dev:'R2', lines:['ip access-list extended POLICY-1',' no 20',' 20 deny ip 172.16.10.0 0.0.0.255 172.16.30.0 0.0.0.255']}});
+fault({id:'acl-dir', cat:'acl', lvl:2, keys:['policy1'], dev:'R2', run:['interface g0/1.10',' no ip access-group POLICY-1 in',' ip access-group POLICY-1 out'], tickets:['pol4'],
+  cause:'POLICY-1 is applied outbound on G0/1.10. That filters traffic going to Sales, whose source is never a Sales address, so the policy matches nothing.',
+  show:'show ip interface g0/1.10', fix:{dev:'R2', lines:['interface g0/1.10',' no ip access-group POLICY-1 out',' ip access-group POLICY-1 in']}});
+fault({id:'acl-unapplied', cat:'acl', lvl:1, keys:['policy1'], dev:'R2', run:['interface g0/1.10',' no ip access-group POLICY-1 in'], tickets:['pol4'],
+  cause:'POLICY-1 exists but is not applied to any interface.',
+  show:'show ip interface g0/1.10', fix:{dev:'R2', lines:['interface g0/1.10',' ip access-group POLICY-1 in']}});
+fault({id:'acl6-permit', cat:'acl', lvl:1, keys:['noicmp'], dev:'R3', run:['ipv6 access-list NO-ICMP',' no sequence 20'], tickets:['D_A6','D_net6'],
+  cause:'NO-ICMP lost its final "permit ipv6 any any", so every IPv6 packet from the branch LAN is dropped.',
+  show:'show ipv6 access-list', fix:{dev:'R3', lines:['ipv6 access-list NO-ICMP',' permit ipv6 any any']}});
+fault({id:'acl6-prefix', cat:'acl', lvl:2, keys:['noicmp'], dev:'R3', run:['ipv6 access-list NO-ICMP',' no sequence 10',' deny icmp 2001:CAFE:ACAD:30::/64 2001:CAFE:ACAD:10::/64 sequence 10'], tickets:['D_A6'],
+  cause:'NO-ICMP denies ICMP from the branch to Sales (2001:CAFE:ACAD:10::/64) instead of to HR (:20::/64).',
+  show:'show ipv6 access-list', fix:{dev:'R3', lines:['ipv6 access-list NO-ICMP',' no sequence 10',' deny icmp 2001:CAFE:ACAD:30::/64 2001:CAFE:ACAD:20::/64 sequence 10']}});
+fault({id:'acl6-dir', cat:'acl', lvl:2, keys:['noicmp'], dev:'R3', run:['interface g0/1',' no ipv6 traffic-filter NO-ICMP in',' ipv6 traffic-filter NO-ICMP out'], tickets:['pol6'],
+  cause:'NO-ICMP is applied outbound on R3 G0/1. Its deny names the branch as the source, which traffic heading into the branch never has.',
+  show:'show ipv6 interface g0/1', fix:{dev:'R3', lines:['interface g0/1',' no ipv6 traffic-filter NO-ICMP out',' ipv6 traffic-filter NO-ICMP in']}});
+fault({id:'acl-vty-net', cat:'acl', lvl:2, keys:['admin'], dev:'R2', run:['ip access-list standard ADMIN',' no 10'], tickets:['ssh_R2'],
+  cause:"ADMIN, the access-class on R2's vty lines, no longer permits Sales (172.16.10.0/24), so PC-A is refused before it can log in.",
+  show:'show access-lists', fix:{dev:'R2', lines:['ip access-list standard ADMIN',' 10 permit 172.16.10.0 0.0.0.255']}});
+fault({id:'acl-vty-wc', cat:'acl', lvl:3, keys:['admin'], dev:'R2', run:['ip access-list standard ADMIN',' no 10',' 10 permit 172.16.10.0 0.0.0.0'], tickets:['ssh_R2'],
+  cause:"ADMIN's Sales line has wildcard 0.0.0.0, so it matches only the address 172.16.10.0 — no Sales host gets onto R2's vty lines.",
+  show:'show access-lists', fix:{dev:'R2', lines:['ip access-list standard ADMIN',' no 10',' 10 permit 172.16.10.0 0.0.0.255']}});
+fault({id:'acl-vty-deny', cat:'acl', lvl:1, keys:['admin'], dev:'R2', run:['ip access-list standard ADMIN',' 5 deny any'], tickets:['ssh_R2'],
+  cause:'ADMIN now starts with "deny any" (sequence 5), so the permits below it are never reached and every SSH session to R2 is refused.',
+  show:'show access-lists', fix:{dev:'R2', lines:['ip access-list standard ADMIN',' no 5']}});
+/* ── SSH, on whichever router the ticket names ── */
+['R1','R2','R3'].forEach(R=>{
+  const T=['ssh_'+R];
+  fault({id:'ssh-login@'+R, cat:'ssh', lvl:1, keys:[R+'-vty-login'], dev:R, run:['line vty 0 4',' password cisco',' login'], tickets:T,
+    cause:R+"'s vty lines use \"login\" (a line password) instead of \"login local\", so SSH has no username to check.",
+    show:'show running-config | section vty', fix:{dev:R, lines:['line vty 0 4',' login local']}});
+  fault({id:'ssh-transport@'+R, cat:'ssh', lvl:1, keys:[R+'-vty-tr'], dev:R, run:['line vty 0 4',' transport input telnet'], tickets:T,
+    cause:R+"'s vty lines only accept Telnet (\"transport input telnet\").",
+    show:'show running-config | section vty', fix:{dev:R, lines:['line vty 0 4',' transport input ssh']}});
+  fault({id:'ssh-keys@'+R, cat:'ssh', lvl:2, keys:[R+'-rsa'], dev:R, run:['crypto key zeroize rsa'], tickets:T,
+    cause:R+' has no RSA keys, so its SSH server is off.',
+    show:'show ip ssh', fix:{dev:R, lines:['crypto key generate rsa general-keys modulus 1024']}});
+  fault({id:'ssh-bits@'+R, cat:'ssh', lvl:3, keys:[R+'-rsa'], dev:R, run:['crypto key zeroize rsa','crypto key generate rsa general-keys modulus 512'], tickets:T,
+    cause:R+"'s RSA keys are 512 bits. \"ip ssh version 2\" needs at least 768, so SSH stays disabled.",
+    show:'show ip ssh', fix:{dev:R, lines:['crypto key generate rsa general-keys modulus 1024']}});
+  fault({id:'ssh-user@'+R, cat:'ssh', lvl:2, keys:[R+'-user'], dev:R, run:['no username admin','username admim secret cisco'], tickets:T,
+    cause:R+' has a user "admim" (a typo) instead of "admin", so the admin login fails.',
+    show:'show running-config | include username', fix:{dev:R, lines:['no username admim','username admin secret cisco']}});
+  fault({id:'ssh-pass@'+R, cat:'ssh', lvl:3, keys:[R+'-user'], dev:R, run:['username admin secret Cisco'], tickets:T,
+    cause:R+"'s admin password was changed to \"Cisco\" — passwords are case-sensitive. A secret only ever shows as a hash, so the fix is to set it again.",
+    show:'the login itself — the secret is hashed in the config', fix:{dev:R, lines:['username admin secret cisco']}});
+});
+const CATS=['sw','iv','ppp','addr','ospf','rt','nat','acl','ssh'];
+const CAT_LABEL={sw:'Switching', iv:'Inter-VLAN routing', ppp:'PPP', addr:'Addressing & IPv6', ospf:'OSPF', rt:'Static & default routes', nat:'NAT', acl:'ACLs', ssh:'SSH'};
+function tsApplyFault(f){
+  if(f.run) tsExec(tsDev(f.dev),f.run);
+  if(f.apply) f.apply();
+}
+/* Fixes are run the same way, so the harness proves every one of them
+   through the real CLI. */
+function tsApplyFix(f){
+  if(f.fix.pc){ Object.assign(tsDev(f.fix.pc),f.fix.set); return; }
+  tsExec(tsDev(f.fix.dev),f.fix.lines);
+}
+
+/* Weighted toward faults at the chosen level, never two on one setting. */
+function tsPickFaults(topic,diff){
+  const L={easy:1,medium:2,hard:3}[diff], used=new Set(), out=[];
+  const take=function(pool){
+    const ok=pool.filter(f=>out.indexOf(f)<0&&f.keys.every(k=>!used.has(k)));
+    if(!ok.length) return;
+    const w=ok.map(f=>f.lvl===L?3:1);
+    let r=Math.random()*w.reduce((a,b)=>a+b,0), i=0;
+    while(i<w.length-1&&r>=w[i]){ r-=w[i]; i++; }
+    out.push(ok[i]); ok[i].keys.forEach(k=>used.add(k));
+  };
+  const pool=cat=>FAULTS.filter(f=>f.cat===cat&&f.lvl<=L);
+  if(topic==='all') CATS.forEach(c=>take(pool(c)));
+  else if(topic==='exam') shuffle(CATS.slice()).slice(0,{easy:3,medium:4,hard:5}[diff]).forEach(c=>take(pool(c)));
+  else for(let i=0;i<{easy:1,medium:2,hard:3}[diff];i++) take(pool(topic));
+  return out;
+}
+function tsTicketsOk(){ return state.data.tickets.every(t=>t.test().ok); }
+/* Every ticket handed out has to be failing when the round starts. Two
+   faults can mask each other — an unapplied POLICY-1 lets PC-C through
+   whatever order its entries are in — so each fault's ticket is chosen
+   from the ones it really breaks right now, and a draw where some fault
+   breaks nothing visible is thrown away and redrawn. */
+function genRound(topic,diff){
+  let faults, ids;
+  for(let attempt=0;attempt<200;attempt++){
+    tsBuild();
+    /* every fault shows on its own, so a draw that never settles falls
+       back to its first fault rather than ship one that hides another */
+    faults=attempt<199?tsPickFaults(topic,diff):tsPickFaults(topic,diff).slice(0,1);
+    faults.forEach(tsApplyFault);
+    tsReload();
+    ids=[];
+    const shown=faults.every(f=>{
+      const red=f.tickets.filter(id=>!TS_T[id].t().ok);
+      if(!red.length) return false;
+      const fresh=red.filter(id=>ids.indexOf(id)<0);
+      const id=fresh.length?choice(fresh):red[0];
+      if(ids.indexOf(id)<0) ids.push(id);
+      return true;
+    });
+    if(shown) break;
+  }
+  /* the faulty configuration is what was saved — a reload brings it back */
+  tsDevices.forEach(d=>{ if(d.type!=='pc'){ d.startup=tsRunText(d); d.cm='exec'; d.ci=null; } });
+  const tickets=ids.map(id=>({group:'Tickets', desc:TS_T[id].d, id:id, test:TS_T[id].t}));
+  const gate={ok:false, reason:'Checked once every ticket is fixed'};
+  const rules=TS_RULES.map(r=>({group:'Design rules', desc:r.d, test:function(){ return tsTicketsOk()?r.t():gate; }}));
+  return {faults:faults, tickets:tickets, reqs:tickets.concat(rules)};
+}
+
+/* ═══ Canvas ═══════════════════════════════════════════════════════ */
+function tsDevSize(d){ return d.type==='router'?[RT_W,RT_H]:d.type==='switch'?[LabShared.SW_W,LabShared.SW_H]:[LabShared.PC_W,LabShared.PC_H]; }
+function tsCentre(d){ const s=tsDevSize(d); return [d.x+s[0]/2, d.y+s[1]/2]; }
+function tsEdge(from,to,off){
+  const s=tsDevSize(from), c=tsCentre(from), o=tsCentre(to);
+  c[0]+=off[0]; c[1]+=off[1]; o[0]+=off[0]; o[1]+=off[1];
+  const dx=o[0]-c[0], dy=o[1]-c[1];
+  if(!dx&&!dy) return c;
+  const k=Math.min(dx?(s[0]/2)/Math.abs(dx):Infinity, dy?(s[1]/2)/Math.abs(dy):Infinity);
+  return [c[0]+dx*k, c[1]+dy*k];
+}
+function tsSvg(tag,attrs,parent){
+  const el=document.createElementNS('http://www.w3.org/2000/svg',tag);
+  Object.keys(attrs).forEach(k=>el.setAttribute(k,attrs[k]));
+  parent.appendChild(el); return el;
+}
+function tsLabel(svg,x,y,text,anchor){
+  const t=tsSvg('text',{x:x, y:y, 'text-anchor':anchor||'middle', 'font-size':'10.5', 'font-family':'var(--mono)', fill:'var(--text-s)'},svg);
+  t.textContent=text; t.style.pointerEvents='none';
+}
+/* A port's link light: green when the link is up at that end. */
+function tsLightUp(dev,i){
+  if(dev.type==='router'){ const f=dev.ifaces[i]; return f.serial?tsIfProto(dev,f):tsIfStatus(dev,f)==='up'; }
+  if(dev.type==='switch') return SWE.portLinkUp(dev,i);
+  const up=SWE.pcUplink(dev); return !!up&&SWE.portLinkUp(up.sw,up.i);
+}
+function tsRenderCanvas(){
+  const svg=document.getElementById('ts-cable-svg'), layer=document.getElementById('ts-dev-layer');
+  if(!svg||!layer) return;
+  svg.innerHTML=''; layer.innerHTML='';
+  const pairs={};
+  tsCables.forEach(c=>{ const k=Math.min(c.a.d,c.b.d)+'-'+Math.max(c.a.d,c.b.d); (pairs[k]=pairs[k]||[]).push(c); });
+  Object.keys(pairs).forEach(k=>{
+    const list=pairs[k];
+    list.forEach((c,n)=>{
+      const A=tsById(c.a.d), B=tsById(c.b.d), ca=tsCentre(A), cb=tsCentre(B);
+      const len=Math.hypot(cb[0]-ca[0],cb[1]-ca[1])||1, ux=(cb[0]-ca[0])/len, uy=(cb[1]-ca[1])/len;
+      const shift=(n-(list.length-1)/2)*9, off=[-uy*shift, ux*shift];
+      const p=tsEdge(A,B,off), q=tsEdge(B,A,off);
+      const l=tsSvg('line',{x1:p[0], y1:p[1], x2:q[0], y2:q[1], class:'cable'},svg);
+      l.style.pointerEvents='none';
+      if(c.serial) l.style.strokeDasharray='7 4';
+      [[c.a,A,p,q],[c.b,B,q,p]].forEach(e=>{
+        const end=e[0], dev=e[1], at=e[2], to=e[3];
+        const dx=to[0]-at[0], dy=to[1]-at[1], L=Math.hypot(dx,dy)||1;
+        tsSvg('circle',{cx:at[0]+dx/L*9, cy:at[1]+dy/L*9, r:3.6, fill:tsLightUp(dev,end.i)?'var(--ok-text)':'var(--err-text)'},svg).style.pointerEvents='none';
+        if(dev.type==='pc'||n>0) return;
+        let name=tsPortName(dev,end.i);
+        if(list.length>1) name=name+'–'+tsPortName(dev,(list[list.length-1].a.d===dev.id?list[list.length-1].a:list[list.length-1].b).i).replace(/^.*\//,'');
+        const d2=Math.min(30,L*0.32), side=Math.abs(dx)>Math.abs(dy)?[0,-7]:[7,4];
+        tsLabel(svg,at[0]+dx/L*d2+side[0],at[1]+dy/L*d2+side[1],name,Math.abs(dx)>Math.abs(dy)?'middle':'start');
+      });
+    });
+  });
+  /* the ISP's loopback as the usual stub symbol */
+  tsDevices.forEach(d=>{
+    if(d.type!=='router') return;
+    d.ifaces.filter(f=>f.loopback).forEach(f=>{
+      const c=tsCentre(d), x=c[0], y0=d.y, y1=d.y-30;
+      [[x,y0,x,y1],[x-14,y1,x+14,y1]].forEach(g=>{ tsSvg('line',{x1:g[0], y1:g[1], x2:g[2], y2:g[3], class:'cable'},svg).style.pointerEvents='none'; });
+      tsLabel(svg,x,y1-6,f.name+' — the Internet');
+    });
+  });
+  tsDevices.forEach(d=>{
+    const size=tsDevSize(d), el=document.createElement('div');
+    el.className='dev '+d.type+(tsSel===d.id?' selected':'');
+    el.style.left=d.x+'px'; el.style.top=d.y+'px'; el.style.width=size[0]+'px'; el.style.height=size[1]+'px';
+    el.dataset.did=d.id;
+    const sub=d.type==='router'?d.role+' router':d.type==='switch'?'switch':'PC';
+    el.innerHTML='<div class="dev-name">'+esc(d.name)+'</div><div class="dev-sub">'+esc(d.name==='ISP'?'provider':sub)+'</div>';
+    layer.appendChild(el);
+  });
+}
+
+/* ═══ Panels ═══════════════════════════════════════════════════════ */
+function tsOpenCfg(id){
+  tsSel=id;
+  const d=tsById(id);
+  if(d&&d.type==='switch') tsCdpNativeWarn(d);
+  tsRenderCanvas(); tsRefreshCfg();
+  const inp=document.getElementById('ts-term-in'); if(inp) inp.focus({preventScroll:true});
+}
+function tsCloseCfg(){ tsSel=null; tsRenderCanvas(); const p=document.getElementById('ts-cfg'); if(p) p.style.display='none'; }
+function tsCfgHdr(d){
+  return '<div class="cfg-hdr"><div class="cfg-name">'+esc(d.name)+'</div>'+
+    '<button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="tsCloseCfg()">Close</button></div>';
+}
+function tsRefreshCfg(){
+  const d=tsSel!=null?tsById(tsSel):null, panel=document.getElementById('ts-cfg');
+  if(!panel) return;
+  if(!d){ panel.style.display='none'; return; }
+  panel.style.display='';
+  if(d.type==='pc'){ panel.innerHTML=tsPcHtml(d); return; }
+  panel.innerHTML=tsCfgHdr(d)+
+    '<div class="cfg-sec-lbl">Console</div>'+
+    '<div class="term"><div class="term-log" id="ts-term-log"></div>'+
+    '<div class="term-inrow"><span class="term-prompt" id="ts-term-prompt"></span>'+
+    '<input class="term-in" id="ts-term-in" autocomplete="off" spellcheck="false"></div></div>'+
+    '<div class="cli-note" style="margin-top:8px">'+(d.type==='router'
+      ? 'Tab completes, ↑/↓ recall. "do" runs show commands from configuration mode. Save with copy running-config startup-config.'
+      : 'Tab completes, ↑/↓ recall. ping works from the management SVI. Save with copy running-config startup-config.')+'</div>';
+  tsRenderTerm();
+}
+function tsPrompt(d){ return d.type==='router'?tsRtrPrompt(d):SWE.prompt_(d); }
+function tsCli(d,line){
+  const run=function(l){ return d.type==='router'?tsRtrCli(d,l):tsSwCli(d,l); };
+  /* show ... | include/exclude/begin/section, for either device */
+  if(d.cm!=='rsa'&&d.cm!=='opclear'){
+    const pp=LabShared.cliPipe(tsPrompt(d),line);
+    if(pp) return pp.err||LabShared.cliFilter(run(pp.base),pp);
+  }
+  return run(line);
+}
+function tsRenderTerm(){
+  const d=tsSel!=null?tsById(tsSel):null;
+  if(!d||d.type==='pc') return;
+  const log=document.getElementById('ts-term-log');
+  if(!log) return;
+  log.innerHTML=d.log.slice(-400).map(l=>'<div class="tl'+(l.charAt(0)==='%'&&!SYSLOG.test(l)?' terr':'')+'">'+esc(l)+'</div>').join('');
+  log.scrollTop=log.scrollHeight;
+  const pr=document.getElementById('ts-term-prompt'); if(pr) pr.textContent=tsPrompt(d);
+}
+document.addEventListener('keydown',function(e){
+  const input=document.getElementById('ts-term-in');
+  if(!input||document.activeElement!==input) return;
+  const d=tsSel!=null?tsById(tsSel):null;
+  if(!d||d.type==='pc') return;
+  if(e.key==='Enter'){
+    const line=input.value; input.value='';
+    if(line.trim()){ d.hist.push(line); d.hi=d.hist.length; }
+    d.log.push(tsPrompt(d)+' '+line);
+    const out=tsCli(d,line);
+    if(out) out.split('\n').forEach(l=>d.log.push(l));
+    tsRenderTerm(); tsRenderCanvas();
+  } else if(e.key==='ArrowUp'){
+    e.preventDefault(); if(d.hi>0){ d.hi--; input.value=d.hist[d.hi]||''; }
+  } else if(e.key==='ArrowDown'){
+    e.preventDefault();
+    if(d.hi<d.hist.length-1){ d.hi++; input.value=d.hist[d.hi]||''; } else { d.hi=d.hist.length; input.value=''; }
+  } else if(e.key==='Tab'){
+    e.preventDefault();
+    input.value=LabShared.tabComplete(d.type==='router'?TS_RKW:TS_SKW, input.value, function(c){ d.log.push(c.join('   ')); tsRenderTerm(); });
+  }
+});
+/* ── the PC: IP Configuration, ping and SSH ── */
+function tsPcRow(label,id,val,ph,w){
+  return '<label class="pc-form-lbl" for="'+id+'">'+label+'</label>'+
+    '<input class="custom-ip-inp" id="'+id+'" value="'+esc(val||'')+'" placeholder="'+ph+'" autocomplete="off" spellcheck="false"'+
+    (w?' style="width:'+w+'px"':'')+' onchange="tsSetPc(this)">';
+}
+function tsPcHtml(d){
+  const v6=d.ip6?v6Up(d.ip6)+'/'+d.pfx6:'';
+  return tsCfgHdr(d)+
+    '<div class="cfg-sec-lbl">IP Configuration</div>'+
+    '<div class="pc-form">'+tsPcRow('IPv4 Address','ts-pc-ip',d.ip,'e.g. 172.20.5.10')+tsPcRow('Subnet Mask','ts-pc-mask',d.pfx!=null?cidr2mask(d.pfx):'','e.g. 255.255.255.0')+'</div>'+
+    '<div class="pc-form" style="margin-top:6px">'+tsPcRow('Default Gateway','ts-pc-gw',d.gw,'e.g. 172.20.5.1')+'</div>'+
+    '<div class="pc-form" style="margin-top:6px">'+tsPcRow('IPv6 Address','ts-pc-ip6',v6,'e.g. 2001:DB8:5::10/64',250)+'</div>'+
+    '<div class="pc-form" style="margin-top:6px">'+tsPcRow('IPv6 Gateway','ts-pc-gw6',d.gw6?v6Up(d.gw6):'','e.g. FE80::1')+'</div>'+
+    '<div class="cli-note" id="ts-pc-msg" style="margin-top:8px;display:none"></div>'+
+    '<div class="cfg-sec-lbl" style="margin-top:14px">Ping</div>'+
+    '<div class="pc-form"><label class="pc-form-lbl" for="ts-ping-ip">Target</label>'+
+    '<input class="custom-ip-inp" id="ts-ping-ip" placeholder="IPv4 or IPv6" style="width:250px" autocomplete="off" spellcheck="false" onkeydown="if(event.key===\'Enter\')tsPingRun()">'+
+    '<button class="rand-btn" id="ts-ping-btn" onclick="tsPingRun()">Ping</button></div>'+
+    '<pre class="ping-out" id="ts-ping-out"></pre>'+
+    '<div class="cfg-sec-lbl" style="margin-top:14px">SSH</div>'+
+    '<div class="pc-form"><label class="pc-form-lbl" for="ts-ssh-ip">Router</label>'+
+    '<input class="custom-ip-inp" id="ts-ssh-ip" placeholder="e.g. 172.20.5.1" autocomplete="off" spellcheck="false" onkeydown="if(event.key===\'Enter\')tsSshRun()">'+
+    '<label class="pc-form-lbl" for="ts-ssh-user">User</label>'+
+    '<input class="custom-ip-inp" id="ts-ssh-user" style="width:110px" placeholder="admin" autocomplete="off" spellcheck="false" onkeydown="if(event.key===\'Enter\')tsSshRun()">'+
+    '<label class="pc-form-lbl" for="ts-ssh-pass">Password</label>'+
+    '<input class="custom-ip-inp" id="ts-ssh-pass" type="password" style="width:110px" autocomplete="off" onkeydown="if(event.key===\'Enter\')tsSshRun()">'+
+    '<button class="rand-btn" id="ts-ssh-btn" onclick="tsSshRun()">SSH</button></div>'+
+    '<pre class="ping-out" id="ts-ssh-out"></pre>';
+}
+function tsSetPc(el){
+  const d=tsById(tsSel); if(!d||d.type!=='pc') return;
+  const v=el.value.trim(), msg=document.getElementById('ts-pc-msg');
+  let err=null;
+  if(el.id==='ts-pc-ip'){ if(v&&!isValidIP(v)) err='Not a valid IPv4 address'; else d.ip=v||null; }
+  else if(el.id==='ts-pc-mask'){ const p=isValidIP(v)?natPfxOfMask(v):null; if(v&&p==null) err='Not a valid subnet mask'; else d.pfx=v?p:null; }
+  else if(el.id==='ts-pc-gw'){ if(v&&!isValidIP(v)) err='Not a valid IPv4 address'; else d.gw=v||null; }
+  else if(el.id==='ts-pc-ip6'){
+    const m=/^([0-9a-f:]+)\/(\d{1,3})$/i.exec(v), k=m?op6Parse(m[1]):null;
+    if(v&&(!m||k==null||+m[2]>128)) err='Give the IPv6 address with its prefix length, e.g. 2001:DB8:5::10/64';
+    else if(!v){ d.ip6=null; d.pfx6=null; } else { d.ip6=op6Fmt(k); d.pfx6=+m[2]; }
+  } else if(el.id==='ts-pc-gw6'){ const k=op6Parse(v); if(v&&k==null) err='Not a valid IPv6 address'; else d.gw6=v?op6Fmt(k):null; }
+  if(msg){ msg.style.display=err?'':'none'; msg.textContent=err||''; }
+  tsRenderCanvas();
+}
+let tsPingGen=0;
+function tsPingRun(){
+  const d=tsSel!=null?tsById(tsSel):null;
+  if(!d||d.type!=='pc') return;
+  const myGen=++tsPingGen, id=d.id;
+  LabShared.runPing({
+    inputId:'ts-ping-ip', btnId:'ts-ping-btn', outId:'ts-ping-out',
+    resolve:function(dst){
+      const fam=famOf(dst);
+      if(!fam) return {msg:'invalid target address'};
+      if(!(fam===4?d.ip:d.ip6)) return {msg:d.name+' has no '+(fam===6?'IPv6':'IPv4')+' address'};
+      const r=tsPing(d,dst,true);
+      tsRenderCanvas();
+      if(!r.ok) return {ok:false};
+      d._arp=d._arp||new Set();
+      const first=!d._arp.has(dst); d._arp.add(dst);
+      return {ok:true, firstTime:first};
+    },
+    stillActive:function(){ return myGen===tsPingGen&&tsSel===id; }
+  });
+}
+/* The client says what a real one would — working out why is the job. */
+function tsSshRun(){
+  const d=tsSel!=null?tsById(tsSel):null;
+  if(!d||d.type!=='pc') return;
+  const ip=(document.getElementById('ts-ssh-ip').value||'').trim(), out=document.getElementById('ts-ssh-out');
+  const user=(document.getElementById('ts-ssh-user').value||'').trim(), pass=document.getElementById('ts-ssh-pass').value||'';
+  if(!famOf(ip)){ out.textContent='% Invalid address'; return; }
+  if(!user){ out.textContent='% A username is required — this is "ssh -l <username> '+ip+'"'; return; }
+  const r=tsSsh(d,ip,{user:user, pass:pass}), head='C:\\> ssh -l '+user+' '+ip+'\n';
+  out.textContent=r.ok?head+'Password:\n\n'+r.router.name+'>'
+    :r.login?head+'Password:\n\n% Login invalid'
+    :r.timeout?head+'% Connection timed out; remote host not responding'
+    :head+'% Connection refused by remote host';
+}
+
+/* ═══ The brief ════════════════════════════════════════════════════ */
+const TS_ADDR=[
+  ['ISP','G0/0','220.100.100.1/30','2001:CAFE:ABC::1/64',''],
+  ['ISP','Lo0','5.5.5.5/32','2001:5:5::5/128','Internet'],
+  ['R1','G0/0','220.100.100.2/30','2001:CAFE:ABC::2/64<span class="cell-alt">FE80::1</span>',''],
+  ['R1','G0/1','10.0.13.1/30','2001:CAFE:ACAD:13::1/64<span class="cell-alt">FE80::1</span>',''],
+  ['R1','S0/0/0<span class="cell-alt">DCE</span>','10.0.12.1/30','2001:CAFE:ACAD:12::1/64<span class="cell-alt">FE80::1</span>',''],
+  ['R2','G0/1.10','172.16.10.1/24','2001:CAFE:ACAD:10::1/64<span class="cell-alt">FE80::2</span>',''],
+  ['R2','G0/1.20','172.16.20.1/24','2001:CAFE:ACAD:20::1/64<span class="cell-alt">FE80::2</span>',''],
+  ['R2','G0/1.99','172.16.99.1/24','',''],
+  ['R2','G0/1.1000','none — native','',''],
+  ['R2','S0/0/0','10.0.12.2/30','2001:CAFE:ACAD:12::2/64<span class="cell-alt">FE80::2</span>',''],
+  ['R3','G0/0','10.0.13.2/30','2001:CAFE:ACAD:13::2/64<span class="cell-alt">FE80::3</span>',''],
+  ['R3','G0/1','172.16.30.1/24','2001:CAFE:ACAD:30::1/64<span class="cell-alt">FE80::3</span>',''],
+  ['S1','VLAN 99','172.16.99.11/24','','172.16.99.1'],
+  ['S2','VLAN 99','172.16.99.12/24','','172.16.99.1'],
+  ['PC-A','NIC','172.16.10.10/24','2001:CAFE:ACAD:10::10/64','172.16.10.1<span class="cell-alt">FE80::2</span>'],
+  ['PC-B','NIC','172.16.20.10/24','2001:CAFE:ACAD:20::10/64','172.16.20.1<span class="cell-alt">FE80::2</span>'],
+  ['PC-C','NIC','172.16.10.100/24','2001:CAFE:ACAD:10::100/64','172.16.10.1<span class="cell-alt">FE80::2</span>'],
+  ['PC-D','NIC','172.16.30.10/24','2001:CAFE:ACAD:30::10/64','172.16.30.1<span class="cell-alt">FE80::3</span>']
+];
+const TS_VLAN_ROWS=[
+  ['10','Sales','172.16.10.0/24','S1 Fa0/6 (PC-A)<span class="cell-alt">S2 Fa0/7 (PC-C)</span>'],
+  ['20','HR','172.16.20.0/24','S2 Fa0/6 (PC-B)'],
+  ['30','Branch','172.16.30.0/24','S3 Fa0/6 (PC-D)<span class="cell-alt">S3 Gi0/1 (R3)</span>'],
+  ['99','Management','172.16.99.0/24','S1 and S2 SVIs'],
+  ['1000','Native','—','every trunk, untagged']
+];
+const TS_DESIGN=[
+  'Trunks: S1 Gi0/1 to R2, and Port-channel1 between S1 and S2 (Fa0/1–2; LACP, S1 active and S2 passive). Native VLAN 1000, allowed VLANs 10, 20, 99 and 1000.',
+  'Port security on every PC port: sticky, maximum 1, violation shutdown.',
+  'R1–R2 serial link: PPP with CHAP, password cisco. R1 S0/0/0 is the DCE end, clocked at 128000.',
+  'OSPF process 1, for IPv4 and IPv6: area 0 is the R1–R2 link and R2’s LANs; area 5 is the R1–R3 link and the branch LAN. Router IDs 1.1.1.1, 2.2.2.2 and 3.3.3.3. LAN interfaces are passive. R1 advertises its default routes into both.',
+  'R1: default routes to ISP for IPv4 and IPv6. PAT on pool NAT-POOL (100.30.20.1–6 /29) for access list 1, which permits VLANs 10 and 20 and the branch. ISP routes 100.30.20.0/29 and 2001:CAFE:ACAD::/48 back to R1.',
+  'POLICY-1 (R2 G0/1.10, inbound): of Sales, only 172.16.10.100 may reach the branch LAN; everything else is permitted.',
+  'NO-ICMP (R3 G0/1, inbound, IPv6): no ICMP from the branch to HR; everything else is permitted.',
+  'SSH version 2 on R1, R2 and R3: domain cisco.com, 1024-bit keys, user admin / cisco, vty lines login local and transport input ssh.',
+  'ADMIN (R2 vty lines, access-class in): only Sales and Management may open a session to R2.'
+];
+function tsPref(k){ try{ return localStorage.getItem('ne-ts-'+k)!=='0'; }catch(e){ return true; } }
+function tsTogglePref(k){ try{ localStorage.setItem('ne-ts-'+k, tsPref(k)?'0':'1'); }catch(e){} tsApplyPrefs(); }
+function tsApplyPrefs(){
+  ['addr','vlan','design','tasks'].forEach(k=>{
+    const shown=tsPref(k), b=document.getElementById('ts-sec-'+k), body=document.getElementById(k==='tasks'?'req-list':'ts-body-'+k);
+    if(body) body.style.display=shown?'':'none';
+    if(b){ b.classList.toggle('collapsed',!shown); b.setAttribute('aria-expanded',String(shown)); }
+  });
+}
+function tsSecBtn(k,label){
+  return '<button type="button" class="qlbl sec-toggle" id="ts-sec-'+k+'" style="margin-top:1rem" aria-expanded="'+tsPref(k)+'" onclick="tsTogglePref(\''+k+'\')">'+label+
+    '<svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></button>';
+}
+/* The brief's tables use the compact .port-table rows: the addressing
+   table alone is eighteen lines, and at .rt-table's spacing it pushed the
+   tickets a screen below the fold. */
+/* addrCols are the columns holding addresses. A narrow pop-out may break one
+   only where a person would: before its prefix length ("…::1" / "/64"), or
+   after an IPv6 site prefix ("2001:CAFE:ACAD:" / "10::1") — never mid-group.
+   A <wbr> costs nothing when the table fits on one line. */
+function tsHtmlTable(head,rows,addrCols){
+  const cell=(c,i)=>(addrCols||[]).indexOf(i)>=0?String(c)
+    .replace(/([0-9A-Fa-f:.])(\/\d{1,3})(?![\d/])/g,'$1<wbr>$2')
+    .replace(/\b([0-9A-Fa-f]{1,4}:[0-9A-Fa-f]{1,4}:[0-9A-Fa-f]{1,4}:)(?=[0-9A-Fa-f])/g,'$1<wbr>'):c;
+  return '<table class="port-table" style="margin-top:.35rem;font-family:var(--mono);font-size:12px;white-space:nowrap"><thead><tr>'+head.map(h=>'<th>'+h+'</th>').join('')+'</tr></thead><tbody>'+
+    rows.map(r=>'<tr>'+r.map((c,i)=>'<td>'+cell(c,i)+'</td>').join('')+'</tr>').join('')+'</tbody></table>';
+}
+/* Tickets first — they are the job — then the reference material, which a
+   learner reads once and then consults. Every section collapses and
+   remembers it. */
+function tsRefHtml(){
+  return tsSecBtn('addr','Addressing Table')+'<div id="ts-body-addr">'+tsHtmlTable(['Device','Interface','IPv4','IPv6 / link-local','Gateway'],TS_ADDR,[2,3])+'</div>'+
+    tsSecBtn('vlan','VLAN Table')+'<div id="ts-body-vlan">'+tsHtmlTable(['VLAN','Name','Network','Ports'],TS_VLAN_ROWS,[2])+'</div>'+
+    tsSecBtn('design','Design')+'<div id="ts-body-design">'+TS_DESIGN.map(s=>'<div class="tool-note">'+esc(s)+'</div>').join('')+'</div>';
+}
+function tsFixText(f){
+  if(f.fix.pc) return f.fix.pc+' › IP Configuration: '+Object.keys(f.fix.set).map(k=>({ip:'IPv4 Address', pfx:'Subnet Mask', gw:'Default Gateway', gw6:'IPv6 Gateway'}[k])+' '+
+    (k==='pfx'?cidr2mask(f.fix.set[k]):k==='gw6'?v6Up(f.fix.set[k]):f.fix.set[k])).join(', ');
+  return f.fix.dev+'(config)#\n'+f.fix.lines.map(l=>(/^ /.test(l)?'  ':' ')+l.trim()).join('\n');
+}
+function tsCausesHtml(faults){
+  return '<div class="lab-card"><div class="qlbl">What was broken</div>'+faults.map((f,i)=>
+    '<div class="req-note" style="margin-top:'+(i?'14px':'6px')+'"><b>'+esc(CAT_LABEL[f.cat])+' — '+esc(f.dev)+'.</b> '+esc(f.cause)+
+    '<br>Proof: <span class="mono-inl">'+esc(f.show)+'</span></div>'+
+    '<pre class="ping-out" style="margin-top:6px">'+esc(tsFixText(f))+'</pre>').join('')+'</div>';
+}
+
+/* ═══ Round flow ═══════════════════════════════════════════════════ */
+const TOPIC_LABEL={exam:'Exam', all:'Everything', sw:'Switching', iv:'Inter-VLAN Routing', ppp:'PPP', addr:'Addressing & IPv6',
+  ospf:'OSPF', rt:'Static & Default Routes', nat:'NAT', acl:'ACLs', ssh:'SSH'};
+const state={topic:'exam', diff:'easy', data:null, score:0, round:1, streak:0, done:false};
+function loadQ(){
+  state.done=false;
+  state.data=genRound(state.topic,state.diff);
+  render();
+  updateChips();
+}
+function updateChips(){
+  document.getElementById('sc').textContent=state.score;
+  document.getElementById('rnd').textContent=state.round;
+  document.getElementById('str').textContent=state.streak;
+}
+function setBtns(){
+  document.getElementById('nxtbtn').style.display='none';
+  document.getElementById('chkbtn').style.display='';
+  document.getElementById('revbtn').style.display='';
+  document.getElementById('rstbtn').style.display='';
+  document.getElementById('fb').style.display='none';
+}
+function tsRenderReqs(results){
+  LabShared.renderReqList('req-list', state.data.reqs, results, esc);
+  tsApplyPrefs();
+}
+function render(){
+  const d=state.data, n=d.tickets.length;
+  document.getElementById('qlbl').textContent=TOPIC_LABEL[state.topic]+' · '+n+' ticket'+(n===1?'':'s');
+  const all=state.topic==='all';
+  document.getElementById('qprompt').innerHTML='<b>'+(all?'Everything at once.':'The network was working.')+'</b> '+
+    (all?'One fault from every area is planted at the same time — the tickets below are what users are reporting.':'Then the tickets below came in.')+
+    ' Find each fault with show commands, fix it, and save what you changed. The design rules are checked once every ticket works.';
+  document.getElementById('qspec').innerHTML=tsSecBtn('tasks','Tasks');
+  document.getElementById('ts-ref').innerHTML=tsRefHtml();
+  const body=document.getElementById('qbody');
+  body.innerHTML=
+    '<div class="lab-card"><div class="lab-toolbar">'+
+      '<div class="legend"><span class="lg">Click a router or switch for its console · click a PC for its IP settings, ping and SSH · drag to rearrange</span></div>'+
+    '</div>'+
+    '<div class="lab-canvas" id="ts-canvas" style="height:'+CANVAS_H+'px"><svg id="ts-cable-svg"></svg><div id="ts-dev-layer"></div></div>'+
+    '</div><div class="cfg-panel" id="ts-cfg" style="display:none"></div><div id="ts-causes"></div>';
+  LabShared.attachCanvasDrag({
+    layer:document.getElementById('ts-dev-layer'), canvas:document.getElementById('ts-canvas'),
+    getDevice:id=>tsById(id), devSize:dev=>tsDevSize(dev),
+    onRender:()=>tsRenderCanvas(), onDevClick:id=>tsOpenCfg(id), onPortClick:function(){}
+  });
+  setBtns();
+  tsRenderCanvas();
+  tsRenderReqs(null);
+}
+function grade(reveal){
+  const d=state.data;
+  OSPF.opInvalidate();
+  const results=d.reqs.map(r=>r.test());
+  tsRenderReqs(results);
+  const met=results.filter(r=>r.ok).length, total=results.length, all=met===total;
+  const tk=d.tickets.length, tkMet=results.slice(0,tk).filter(r=>r.ok).length;
+  const pts=reveal?0:met+(all?2:0);
+  state.score+=pts;
+  state.streak=(!reveal&&all)?state.streak+1:0;
+  state.round++;
+  const fb=document.getElementById('fb');
+  fb.style.display='block';
+  if(reveal){ fb.className='fbanner warn'; fb.textContent='Skipped — '+tkMet+'/'+tk+' tickets were fixed. The faults are listed below the network. +0 pts.'; }
+  else if(all){ fb.className='fbanner ok'; fb.textContent='All '+tk+' ticket'+(tk===1?'':'s')+' fixed and every design rule holds. +'+pts+' pts (+2 bonus). Streak: '+state.streak; }
+  else { fb.className='fbanner '+(met>=Math.ceil(total*0.6)?'warn':'err');
+    fb.textContent=tkMet+'/'+tk+' tickets fixed, '+met+'/'+total+' rows met. +'+pts+' pt'+(pts!==1?'s':'')+'. Each unmet row says why; the faults are listed below the network.'; }
+  document.getElementById('ts-causes').innerHTML=tsCausesHtml(d.faults);
+  finishRound();
+}
+function checkAll(){ if(!state.done) grade(false); }
+function revealAll(){ if(!state.done) grade(true); }
+function finishRound(){
+  state.done=true;
+  updateChips();
+  document.getElementById('chkbtn').style.display='none';
+  document.getElementById('revbtn').style.display='none';
+  document.getElementById('nxtbtn').style.display='';
+}
+function nextQ(){ loadQ(); }
+function resetGame(){ state.score=0; state.round=1; state.streak=0; loadQ(); }
+function setTopic(t,btn){
+  state.topic=t;
+  document.querySelectorAll('.cls-row .cbtn').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  loadQ();
+}
+function setDiff(d,btn){
+  state.diff=d;
+  document.querySelectorAll('#db-easy,#db-medium,#db-hard').forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  loadQ();
+}
+function toggleOpts(){
+  const menu=document.getElementById('opt-menu'), btn=document.getElementById('opt-btn');
+  btn.classList.toggle('open',menu.classList.toggle('open'));
+}
+function toggleTool(id){
+  const cb=document.getElementById('tog-'+id);
+  cb.checked=!cb.checked;
+  document.getElementById('t-'+id).style.display=cb.checked?'':'none';
+  document.getElementById('toolsec').style.display=['where','cmds'].some(t=>document.getElementById('tog-'+t).checked)?'':'none';
+  if(window.saveOptionsState) saveOptionsState();
+}
+document.addEventListener('click',function(e){
+  const wrap=document.getElementById('opt-btn').closest('.opt-wrap');
+  if(wrap&&!wrap.contains(e.target)){
+    document.getElementById('opt-menu').classList.remove('open');
+    document.getElementById('opt-btn').classList.remove('open');
+  }
+});
+
+loadQ();
+
+/* Enter submits, then Enter moves on — see answer-keys.js. There are no
+   typed answers here: the consoles and PC fields bind Enter themselves. */
+AnswerKeys.wire({submit:'checkAll'});
+</script>
+</body>
+</html>

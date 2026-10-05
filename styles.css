@@ -112,6 +112,15 @@
   --err-bdr:   #b22020;
 }
 
+/* ── Dropdown menus: one corner geometry ──
+   .theme-dd-menu, .opt-menu and .sel-menu are all radius var(--rl) with a
+   1px border and 6px of padding, and their rows (.theme-dd-item, .opt-row,
+   .sel-item) are concentric with that corner: inner radius = outer radius -
+   border - padding = 12 - 1 - 6 = 5px, written calc(var(--rl) - 7px) so it
+   follows --rl. A row with the same radius as its menu looks pinched at the
+   corners. Anything nested deeper than the corner curve reaches (e.g. the
+   pencil button inside a theme row, 8px in from a 5px corner) gets 0.
+   Change the menu padding and the 7px must change with it. */
 /* ── Global theme dropdown (injected by theme.js into #theme-toggle-slot on every page) ──
    Light / Dark / Sync with Device, mirroring the per-page "Options" dropdown's
    look (.opt-btn/.opt-menu/.opt-row) but sized to sit in the header next to
@@ -127,12 +136,12 @@
 .theme-dd-menu       { display: none; position: absolute; right: 0; top: calc(100% + 6px); width: 190px; background: var(--surface); border: 1px solid var(--border-m); border-radius: var(--rl); padding: 6px; z-index: 100; box-shadow: 0 4px 16px rgba(0,0,0,.10); }
 .theme-dd.open .theme-dd-menu { display: block; }
 .theme-dd-label      { font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--text-t); padding: 6px 10px 4px; }
-.theme-dd-item       { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 8px 10px; border: none; border-radius: var(--r); background: transparent; font-family: var(--font); font-size: 14px; color: var(--text); text-align: left; cursor: pointer; transition: background .12s; }
+.theme-dd-item       { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 8px 10px; border: none; border-radius: calc(var(--rl) - 7px); background: transparent; font-family: var(--font); font-size: 14px; color: var(--text); text-align: left; cursor: pointer; transition: background .12s; }
 .theme-dd-item:hover { background: var(--surface-s); }
 .theme-dd-item.on    { color: var(--info-text); font-weight: 500; }
 .theme-dd-check      { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
 .theme-dd-item-icons { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
-.theme-dd-edit       { display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; flex-shrink: 0; border: none; border-radius: 6px; background: transparent; color: var(--text-t); cursor: pointer; }
+.theme-dd-edit       { display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; flex-shrink: 0; border: none; border-radius: 0; background: transparent; color: var(--text-t); cursor: pointer; }
 .theme-dd-edit:hover { background: var(--surface); color: var(--info-text); }
 .theme-dd-edit svg   { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
@@ -216,8 +225,18 @@ sup  { font-size: .65em; vertical-align: super; }
      fit 260px, but they do fit ~500. Past the ceiling, content wraps as
      before. */
   width: max-content;
-  min-width: 260px;
-  max-width: min(520px, calc(max(16px, (100vw - 840px) / 2) - 52px));
+  /* --pop-w is the width the learner dragged the left edge out to
+     (LabShared.toggleQcardPopout wires the drag). It only ever adds width:
+     it raises min-width, so content that needs more still gets it, and the
+     drag itself never goes below the content-sized width. It may use the
+     whole gutter — up to 16px short of the viewport edge — rather than the
+     520px ceiling, and both min() terms re-clamp it if the window narrows.
+     "100% - 100vw" is minus the page scrollbar (100% of a fixed box is the
+     viewport without it; 100vw includes it), which the right offset above
+     also carries — without it a re-clamped panel sat 1px from the edge. */
+  min-width: max(260px, min(var(--pop-w, 0px), calc(100% - 100vw + max(16px, (100vw - 840px) / 2) - 36px)));
+  max-width: max(min(520px, calc(max(16px, (100vw - 840px) / 2) - 52px)),
+                 min(var(--pop-w, 0px), calc(100% - 100vw + max(16px, (100vw - 840px) / 2) - 36px)));
   max-height: calc(100vh - 100px); overflow-y: auto;
   /* Reserve the vertical scrollbar's width up front. Without this, the
      content is measured, width:max-content settles on that, and *then* the
@@ -254,7 +273,37 @@ sup  { font-size: .65em; vertical-align: super; }
   .qcard.popped .rt-table td { overflow-wrap: anywhere; }
   .qcard.popped .req-note    { font-size: 11px; }
   .qcard.popped .mono-inl    { padding: 0 3px; }
+  /* The troubleshooting trainer's brief uses the compact .port-table rows;
+     floating, they go tighter still. td carries the size so it wins over
+     the inline font-size the table sets for its docked layout. */
+  .qcard.popped .port-table th { padding: 4px; font-size: 9.5px; }
+  .qcard.popped .port-table td { padding: 4px; font-size: 10.5px; }
+  /* When even the compact table cannot fit, a cell may wrap — but only at
+     the <wbr> the page puts before an address's prefix length, never
+     mid-address (overflow-wrap:anywhere broke "220.100.100.1/3" + "0"). */
+  .qcard.popped .port-table td { white-space: normal; }
+  .qcard.popped .cell-alt         { display: block; }
+  .qcard.popped .cell-alt::before { content: none; }
 }
+/* Below ~2000px the gutter cannot fit even the broken-up table at 10.5px
+   (1800px leaves 379px and the table needs 390); half a pixel and a pixel
+   of side padding close it. */
+@media (min-width: 1600px) and (max-width: 1999px) {
+  .qcard.popped .port-table td { font-size: 10px; }
+  .qcard.popped .port-table th,
+  .qcard.popped .port-table td { padding-left: 3px; padding-right: 3px; }
+}
+/* A second value in a table cell — an IPv6 address's link-local, a PC's IPv6
+   gateway beside its IPv4 one. Inline after a middot normally; on its own
+   line in the floating panel (above), where width is the scarce thing. */
+.cell-alt::before { content: ' · '; }
+/* The left edge is the resize handle: highlighted while the pointer is on it,
+   and the ew-resize cursor held everywhere during the drag so it doesn't
+   flicker as the pointer outruns the edge. Only while the panel floats. */
+@media (min-width: 1600px) {
+  .qcard.popped.pop-edge { cursor: ew-resize; box-shadow: inset 3px 0 0 var(--info-text), 0 10px 30px rgba(0,0,0,.20); }
+}
+body.pop-resizing, body.pop-resizing * { cursor: ew-resize !important; user-select: none !important; }
 .qcard.popped .q-prompt   { font-size: 13.5px; margin-bottom: 8px; }
 .qcard.popped .ipdisp     { font-size: 18px; }
 .qcard.popped .req-list   { margin-top: .6rem; gap: 5px; }
@@ -369,7 +418,7 @@ sup  { font-size: .65em; vertical-align: super; }
 .opt-menu          { display: none; position: absolute; right: 0; top: calc(100% + 6px); width: 220px; background: var(--surface); border: 1px solid var(--border-m); border-radius: var(--rl); padding: 6px; z-index: 100; box-shadow: 0 4px 16px rgba(0,0,0,.10); }
 .opt-menu.open     { display: block; }
 .opt-section-label { font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--text-t); padding: 6px 10px 4px; }
-.opt-row           { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border-radius: var(--r); transition: background .12s; cursor: pointer; }
+.opt-row           { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border-radius: calc(var(--rl) - 7px); transition: background .12s; cursor: pointer; }
 .opt-row:hover     { background: var(--surface-s); }
 .opt-row-label     { font-size: 14px; color: var(--text); user-select: none; }
 
@@ -661,6 +710,9 @@ sup  { font-size: .65em; vertical-align: super; }
 .q-type-tag { font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--text-t); margin-bottom: .4rem; }
 .q-subject  { font-family: var(--mono); font-size: 26px; font-weight: 500; color: var(--text); margin-bottom: 6px; line-height: 1.3; }
 .q-prompt   { font-size: 18px; font-weight: 500; color: var(--text); line-height: 1.4; margin-bottom: 6px; }
+/* The global reset strips a list's indent, which left the bullets hanging
+   in the margin and the item text flush with the prompt. Give it back. */
+.q-prompt ul, .q-prompt ol { padding-left: 1.4em; margin: .35em 0; }
 .q-sub      { font-size: 13px; color: var(--text-s); }
 
 /* layer buttons */
@@ -864,15 +916,17 @@ sup  { font-size: .65em; vertical-align: super; }
    page's own render function, which is the wrong place to go looking. The drill
    diagrams elsewhere (osDiagramHtml, summTopoHtml) sidestep it entirely by
    inlining these same styles on the <svg> they build. */
-#cable-svg, #rl-cable-svg, #rp-cable-svg, #ac-cable-svg  { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; }
-#dev-layer, #rl-dev-layer, #rp-dev-layer, #ac-dev-layer  { position: absolute; inset: 0; }
+#cable-svg, #rl-cable-svg, #rp-cable-svg, #ac-cable-svg, #ts-cable-svg  { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 2; pointer-events: none; }
+#dev-layer, #rl-dev-layer, #rp-dev-layer, #ac-dev-layer, #ts-dev-layer  { position: absolute; inset: 0; }
 .lab-hint    { font-size: 12px; color: var(--text-s); margin-top: .55rem; min-height: 16px; }
 
 /* cables */
-.cable        { stroke: var(--border-m); stroke-width: 3; cursor: pointer; pointer-events: stroke; }
+.cable        { stroke: var(--border-m); stroke-width: 3; cursor: pointer; pointer-events: stroke; fill: none; }
 .cable:hover  { stroke: var(--err-text); }
 .cable.trunk  { stroke: var(--info-text); }
 .cable.chan   { stroke: #7c3aed; stroke-dasharray: 7 4; }
+/* Serial WAN link (routing_game PPP Links) - Packet Tracer draws them red. */
+.cable.serial { stroke: var(--err-text); }
 .cable.locked { cursor: default; }
 .cable.locked:hover { stroke: inherit; }
 
@@ -895,6 +949,9 @@ sup  { font-size: .65em; vertical-align: super; }
 .port.p-trunk   { background: var(--info-bg); border-color: var(--info-text); }
 .port.p-chan    { box-shadow: 0 0 0 2.5px #7c3aed; }
 .port.p-pending { background: var(--warn-bg); border-color: var(--warn-text); transform: scale(1.35); }
+/* A switch port that is shut, err-disabled or in a shut port-channel — the
+   red link light Packet Tracer draws at that end of the cable. */
+.port.p-down    { background: var(--err-bg); border-color: var(--err-text); }
 .port.p-ok      { background: var(--ok-bg);  border-color: var(--ok-text);  box-shadow: 0 0 0 3px var(--ok-bg);  transform: scale(1.45); }
 .port.p-bad     { background: var(--err-bg); border-color: var(--err-text); box-shadow: 0 0 0 3px var(--err-bg); transform: scale(1.45); }
 
@@ -972,6 +1029,11 @@ sup  { font-size: .65em; vertical-align: super; }
 .cfg-name    { font-size: 14px; font-weight: 600; font-family: var(--mono); }
 .cfg-grid    { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 @media (max-width: 720px){ .cfg-grid { grid-template-columns: 1fr; } }
+/* One column at every width: the switching lab's port table needs the room for
+   its channel column, and IOS show tables (show interfaces trunk, show
+   port-security) are ~80 characters wide and wrap into nonsense at half width. */
+.cfg-grid.stack { grid-template-columns: 1fr; }
+.cfg-grid.stack .term { height: 300px; }
 .cfg-sec-lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--text-t); margin-bottom: .5rem; }
 
 .port-table        { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -980,9 +1042,24 @@ sup  { font-size: .65em; vertical-align: super; }
 .port-table tr:last-child td { border-bottom: none; }
 .pt-name           { font-family: var(--mono); font-weight: 500; color: var(--text); }
 .pt-conn           { font-family: var(--mono); font-size: 12px; color: var(--text-s); }
+/* Channel cell: group number and negotiation mode side by side. */
+.pt-chan           { white-space: nowrap; }
+.port-table .pt-chan input  { max-width: 44px; }
+.port-table .pt-chan select { max-width: 92px; margin-left: 4px; }
 .port-table select,
 .port-table input  { font-family: var(--mono); font-size: 12.5px; background: var(--surface-s); border: 1px solid var(--border-m); border-radius: 5px; padding: 3px 6px; color: var(--text); outline: none; width: 100%; max-width: 82px; }
 .port-table input:disabled { opacity: .4; }
+/* The open list of a native <select> is drawn by the browser — white on one,
+   grey on another, never translucent — so lab-shared.js swaps it for this
+   menu, the same surface as .opt-menu / .theme-dd-menu. The <select> itself
+   stays (value, onchange, keyboard), only its popup is replaced. option
+   colours are the fallback for keyboard users who open the native list. */
+.port-table select { max-width: 100px; }
+.port-table select option, .cfg-panel select option { background: var(--bg); color: var(--text); }
+.sel-menu       { position: fixed; z-index: 400; min-width: 90px; background: var(--surface); border: 1px solid var(--border-m); border-radius: var(--rl); padding: 6px; box-shadow: 0 4px 16px rgba(0,0,0,.18); }
+.sel-item       { display: block; width: 100%; padding: 5px 10px; border: none; border-radius: calc(var(--rl) - 7px); background: transparent; font-family: var(--mono); font-size: 12.5px; color: var(--text); text-align: left; white-space: nowrap; cursor: pointer; }
+.sel-item:hover { background: var(--surface-s); }
+.sel-item.on    { color: var(--info-text); font-weight: 500; }
 /* IP Routing's interface IP/mask columns (routing_game.html) hold real dotted-
    quad values — "255.255.255.255" measures ~127px in this font/size, well
    past the 82px default sized for switching_lab's short VLAN-ID/Ch-Grp
@@ -1038,7 +1115,7 @@ sup  { font-size: .65em; vertical-align: super; }
 
 /* Switching Lab: zoom wrapper, cable hit area, STP answer selection, ping, SVI */
 #zoom-wrap    { position: absolute; inset: 0; transform-origin: 0 0; }
-.cable-hit    { stroke: #000; stroke-opacity: 0; stroke-width: 14; pointer-events: stroke; cursor: pointer; }
+.cable-hit    { stroke: #000; stroke-opacity: 0; stroke-width: 14; pointer-events: stroke; cursor: pointer; fill: none; }
 .dev.q-sel    { border-color: var(--info-bdr); box-shadow: 0 0 0 3px rgba(59,130,246,.25); }
 .port.p-sel   { border-color: var(--info-bdr); background: #dbeafe; transform: scale(1.25); }
 .lg-note      { color: var(--text-t); font-style: italic; }
@@ -1158,7 +1235,7 @@ sup  { font-size: .65em; vertical-align: super; }
 .lab-card, .lab-canvas, .dev, .req-row, .cfg-panel, .port-table th,
 .port-table select, .port-table input, .cmd-table code, .vm-inp, .cli-note, .ping-out, .mono-inl,
 .rt-table, .rt-code, .bin-card, .cli-block, .ct-picker-hex-row, .opt-row,
-.ct-drawer-close, .ct-bgtype-btn, .qcard-pop-btn {
+.ct-drawer-close, .ct-bgtype-btn, .qcard-pop-btn, .sel-menu {
   backdrop-filter: var(--custom-blur, none);
   -webkit-backdrop-filter: var(--custom-blur, none);
 }
@@ -1194,7 +1271,7 @@ sup  { font-size: .65em; vertical-align: super; }
 .custom-card .rand-btn, .custom-card .custom-src-btn, .custom-card .custom-cls-btn,
 .afield .tip-ic, .afield .expl-box code,
 .theme-dd-menu .theme-dd-edit, .theme-dd-menu .theme-dd-item,
-.opt-menu .opt-row,
+.opt-menu .opt-row, .sel-menu .sel-item,
 .qcard .qcard-pop-btn,
 .ct-drawer .ct-picker-hex-row, .ct-drawer .ct-drawer-close, .ct-drawer .ct-bgtype-btn,
 .ct-drawer .btn {

@@ -10,6 +10,7 @@
 <script src="options.js"></script>
 <script src="answer-keys.js"></script>
 <script src="lab-shared.js"></script>
+<script src="net-router.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -37,6 +38,7 @@
     <button class="cbtn" id="tb-lpm" onclick="setTopic('lpm',this)">Longest Match</button>
     <button class="cbtn" id="tb-ad" onclick="setTopic('ad',this)">Admin Distance</button>
     <button class="cbtn" id="tb-route" onclick="setTopic('route',this)">IP Routing</button>
+    <button class="cbtn" id="tb-ppp" onclick="setTopic('ppp',this)">PPP Links</button>
     <button class="cbtn" id="tb-summ" onclick="setTopic('summ',this)">IP Summaries</button>
     <button class="cbtn" id="tb-summ6" onclick="setTopic('summ6',this)">IPv6 Summaries</button>
   </div>
@@ -153,6 +155,15 @@
           <tr><td class="cmd">ip route &lt;net&gt; &lt;mask&gt; &lt;interface&gt;</td><td>Static route by exit interface &mdash; only reliable on a genuine point-to-point link, not through a switch</td></tr>
           <tr><td class="cmd">ip route &lt;net&gt; &lt;mask&gt; &lt;interface&gt; &lt;next-hop&gt;</td><td>Fully specified static route &mdash; always unambiguous, required on multi-access (switched) links</td></tr>
           <tr><td class="cmd">show ip route</td><td>Show the router's routing table</td></tr>
+          <tr><td class="cmd">show ip interface brief</td><td>Every interface's address, status and line protocol</td></tr>
+          <tr><td class="cmd">ping &lt;ip&gt;</td><td>Ping from the router itself, sourced from the exit interface</td></tr>
+          <tr><td class="cmd">encapsulation ppp</td><td>Run PPP on a serial interface (the default is HDLC) &mdash; both ends must match</td></tr>
+          <tr><td class="cmd">clock rate 128000</td><td>Supply the clock &mdash; only on the <b>DCE</b> end of a serial cable</td></tr>
+          <tr><td class="cmd">username &lt;peer&gt; password &lt;pw&gt;</td><td>CHAP's secret for the router at the other end, named by its exact hostname</td></tr>
+          <tr><td class="cmd">ppp authentication chap</td><td>Require CHAP on this serial link</td></tr>
+          <tr><td class="cmd">show interfaces s0/0/0</td><td>Line protocol, encapsulation and LCP state</td></tr>
+          <tr><td class="cmd">show controllers s0/0/0</td><td>Whether this end is DCE or DTE, and its clock</td></tr>
+          <tr><td class="cmd">show run</td><td>The router's configuration, CHAP usernames included</td></tr>
           <tr><td class="cmd">exit</td><td>Step back one configuration level</td></tr>
         </tbody>
       </table>
@@ -317,15 +328,15 @@ function cliFullLine(e){
 
 /* ─── State ─────────────────────────────────────────────────────── */
 let state={ topic:'rand', diff:'easy', score:0, round:1, streak:0, done:false, mode:null, data:null, lastTopic:null, selectedId:null };
-const TOPICS=['read','lpm','ad','route','summ','summ6'];
-const TOPIC_LABEL={read:'Read The Table', lpm:'Longest Prefix Match', ad:'Administrative Distance', route:'IP Routing', summ:'IP Summaries', summ6:'IPv6 Summaries'};
+const TOPICS=['read','lpm','ad','route','ppp','summ','summ6'];
+const TOPIC_LABEL={read:'Read The Table', lpm:'Longest Prefix Match', ad:'Administrative Distance', route:'IP Routing', ppp:'PPP Links', summ:'IP Summaries', summ6:'IPv6 Summaries'};
 const POINTS={easy:3, medium:4, hard:6};
 /* The reference tool each topic most wants at hand. options.js floats it to
    the top of both the Options menu and the reference column and leaves the
    rest in the page's own markup order. Topics with no obvious reference
    (the two summaries topics) are simply absent, which restores plain
    canonical order rather than picking an arbitrary favourite. */
-const TOPIC_REF={read:'anat', lpm:'lpm', ad:'ad', route:'cli'};
+const TOPIC_REF={read:'anat', lpm:'lpm', ad:'ad', route:'cli', ppp:'cli'};
 
 function pickTopic(){
   if(state.topic!=='rand') return state.topic;
@@ -1328,11 +1339,17 @@ let rlDevices=[], rlCables=[], rlNid=1, rlCid=1, rlSelected=null, rlPending=null
 
 function rlResetTopo(){ rlDevices=[]; rlCables=[]; rlNid=1; rlCid=1; rlSelected=null; rlPending=null; rlRtCount=0; rlPcCount=0; rlSwCount=0; }
 function rlById(id){ return rlDevices.find(d=>d.id===id); }
-function rlAddRouter(x,y){
+/* opts.serial gives the router two serial ports beside two Gigabit ones
+   (the PPP topic's routers); without it the router is the IP Routing lab's
+   three-Gigabit box, unchanged. opts.serialLeft lists the serial ports
+   first; where each port is DRAWN is rlLayoutSlots' call, from the links. */
+function rlAddRouter(x,y,opts={}){
   rlRtCount++;
-  const d={ id:rlNid++, type:'router', name:'R'+rlRtCount, x, y,
-    ports:Array.from({length:RT_PORTN},(_,i)=>({name:'Gi0/'+i, ip:null, pfx:null, up:false})),
-    staticRoutes:[], cm:'exec', ci:null, log:[], hist:[], hi:0 };
+  const gi=n=>Array.from({length:n},(_,i)=>({name:'Gi0/'+i, ip:null, pfx:null, up:false}));
+  const se=()=>[0,1].map(i=>({name:'S0/0/'+i, ip:null, pfx:null, up:false, serial:true, encap:'hdlc', auth:null, clock:null}));
+  const ports=!opts.serial?gi(RT_PORTN):opts.serialLeft?[...se(),...gi(2)]:[...gi(2),...se()];
+  const d={ id:rlNid++, type:'router', name:'R'+rlRtCount, x, y, ports,
+    users:{}, staticRoutes:[], cm:'exec', ci:null, log:[], hist:[], hi:0 };
   rlDevices.push(d); return d;
 }
 function rlAddPC(x,y){
@@ -1386,27 +1403,76 @@ function rlL2Neighbors(startDevId,startPortIdx){
    Same mode-nested-context pattern: d.cm tracks exec/conf/if, d.ci the
    selected interface. The graphical helper form and the typed terminal
    both funnel through rlCli() so they can never disagree. */
-function rlParseIfName(text){
+function rlParseIfName(text,d){
   const s=text.toLowerCase().replace(/\s+/g,'');
-  const m=s.match(/^(gi|gigabitethernet)0\/(\d+)$/);
-  if(!m) return -1;
-  const n=+m[2];
-  return (n>=0 && n<RT_PORTN) ? n : -1;
+  let m=s.match(/^(g|gi|gig|gigabitethernet)0\/(\d+)$/), name=null;
+  if(m) name='Gi0/'+m[2];
+  else if((m=s.match(/^(s|se|ser|serial)0\/0\/(\d+)$/))) name='S0/0/'+m[2];
+  if(!name) return -1;
+  return d ? d.ports.findIndex(p=>p.name===name) : -1;
 }
+/* ── Serial links ──
+   A serial cable has a DCE end, which must supply the clock; it is the end
+   the learner clicked first, or the one a scenario names. Line protocol is up
+   only when both ends are up, the DCE end has a clock rate, both run the same
+   encapsulation, and — when either end asks for CHAP — each router holds a
+   username for the other's hostname with the same password. */
+const CLOCK_RATES=[1200,2400,4800,9600,14400,19200,28800,32000,38400,48000,56000,57600,64000,72000,115200,125000,128000,148000,192000,250000,256000,384000,500000,512000,768000,800000,1000000,1300000,2000000,4000000];
+function rlSerialRole(r,i){
+  const c=rlPortCable(r.id,i); if(!c) return null;
+  const dce=c.dce||c.a;
+  return dce.d===r.id&&dce.i===i ? 'DCE' : 'DTE';
+}
+function rlSerialState(r,i){
+  const p=r.ports[i];
+  if(!p.up) return {up:false, why:r.name+' '+p.name+' is shut down'};
+  const c=rlPortCable(r.id,i);
+  if(!c) return {up:false, why:r.name+' '+p.name+' has no cable'};
+  const o=rlOtherEnd(c,r.id), od=rlById(o.d), q=od.ports&&od.ports[o.i];
+  if(!q||!q.serial) return {up:false, why:r.name+' '+p.name+' is not cabled to a serial interface'};
+  /* the protocol itself — clock, encapsulation, CHAP — is net-router.js's */
+  const end=function(rt,port,dce){ return {router:rt.name, ifName:port.name, up:port.up, encap:port.encap,
+    auth:port.auth, clock:port.clock, dce:dce, users:rt.users}; };
+  const mineDce=rlSerialRole(r,i)==='DCE';
+  return NetRouter.pppLinkState(end(r,p,mineDce), end(od,q,!mineDce));
+}
+/* An interface that can carry traffic: administratively up, and for a serial
+   port, line protocol up as well. The Gigabit ports keep their old meaning
+   (up = configured "no shutdown"), so the IP Routing lab is unchanged. */
+function rlLive(r,p){ return !!p.up && (!p.serial || rlSerialState(r,r.ports.indexOf(p)).up); }
 /* Tab-completion keyword tree — walked by the shared LabShared.tabComplete
    (see lab-shared.js; switching_lab.html has its own tree, VLAN/trunk
    commands rather than IP-routing ones, over the same generic walker). */
 const RL_KW={
   enable:{}, configure:{terminal:{}}, end:{}, exit:{}, clear:{},
-  show:{ip:{route:{}}},
+  show:{ip:{route:{}, interface:{brief:{}}}, interfaces:{}, controllers:{}, 'running-config':{}},
   interface:{},
   shutdown:{},
   ip:{address:{}, route:{}},
-  no:{shutdown:{}, ip:{address:{}, route:{}}},
+  encapsulation:{ppp:{}, hdlc:{}}, ppp:{authentication:{chap:{}}}, clock:{rate:{}},
+  username:{}, ping:{},
+  no:{shutdown:{}, ip:{address:{}, route:{}}, ppp:{authentication:{}}, clock:{rate:{}}, username:{}},
 };
+/* Every command rlCli understands, by shape. A line that fits none of them
+   gets IOS's caret (see cliGrammar in lab-shared.js). */
+const RL_GRAMMAR=LabShared.cliGrammar([
+  'enable', 'configure [terminal]', 'end', 'exit', 'cls', 'clear',
+  'show ip route', 'show ip interface [brief]', 'show interfaces <if>', 'show controllers <if>', 'show running-config',
+  'ping <ip>', 'username <word> password|secret <line>', 'no username <word>', 'hostname <word>',
+  'interface <if>', 'encapsulation ppp|hdlc', 'ppp authentication chap|pap', 'no ppp authentication [chap|pap]',
+  'clock rate <n>', 'no clock rate [<n>]', 'bandwidth <n>', 'description <line>', 'shutdown', 'no shutdown',
+  'ip address <ip> <ip>', 'no ip address [<ip> <ip>]',
+  'ip route <ip> <ip> <ip>', 'ip route <ip> <ip> <if> [<ip>]', 'no ip route <ip> <ip> <ip>', 'no ip route <ip> <ip> <if> [<ip>]'
+]);
 function rlCli(d,line){
   const t=line.trim().replace(/\s+/g,' ');
   if(!t) return '';
+  const pp=LabShared.cliPipe(rlPromptFor(d), line);
+  if(pp) return pp.err||LabShared.cliFilter(rlCli(d,pp.base),pp);
+  const bad=LabShared.cliCheck(RL_GRAMMAR, rlPromptFor(d), line);
+  if(bad) return bad;
+  /* "do" runs an exec command from any configuration mode */
+  if(/^do\s/i.test(t)) return rlCli(d, t.slice(3));
   const w=t.toLowerCase().split(' ');
   const M=(tok,cand)=>tok&&cand.startsWith(tok);
 
@@ -1421,16 +1487,76 @@ function rlCli(d,line){
       const table=rlRoutingTable(d);
       return table.length ? table.map(e=>cliFullLine(e)).join('\n') : 'No routes.';
     }
-    return '% Unknown show command';
+    if(w[1]==='ip'&&w[2]&&M(w[2],'interface')) return rlShowIpBrief(d);
+    if(w[1]&&w[1].length>=2&&M(w[1],'interfaces')){
+      const idx=rlParseIfName(t.split(' ').slice(2).join(''),d);
+      if(idx<0) return '% Invalid interface — e.g. "show interfaces s0/0/0"';
+      return rlShowIface(d,idx);
+    }
+    if(w[1]&&w[1].length>=2&&M(w[1],'controllers')){
+      const idx=rlParseIfName(t.split(' ').slice(2).join(''),d);
+      if(idx<0||!d.ports[idx].serial) return '% show controllers takes a serial interface — e.g. "show controllers s0/0/0"';
+      return rlShowControllers(d,idx);
+    }
+    if(w[1]&&(M(w[1],'running-config')||M(w[1],'run'))) return rlShowRun(d);
+    return '% Unknown show command — try show ip route, show ip interface brief, show interfaces <if>, show controllers <if>, show run';
+  }
+
+  if(M(w[0],'ping')&&w[1]){
+    if(!isValidIP(w[1])) return '% Usage: ping <address>';
+    return rlRouterPing(d,w[1]);
+  }
+
+  /* CHAP's local database and the device name, in global config */
+  if(w[0]==='username'){
+    const parts=t.split(' ');
+    const kind=(parts[2]||'').toLowerCase();
+    let val=parts.slice(3).join(' ');
+    if(/^[05] \S/.test(val)) val=val.slice(2);
+    if(!parts[1]||(kind!=='password'&&kind!=='secret')||!val) return '% Usage: username <peer-hostname> password <password>';
+    d.users[parts[1]]=val;
+    return '';
+  }
+  if(w[0]==='no'&&w[1]==='username'){ delete d.users[t.split(' ')[2]]; return ''; }
+  if(M(w[0],'hostname')&&w[0].length>=4){
+    const n=t.split(' ')[1];
+    return n===d.name ? '' : '% The device names come from the topology in this lab — '+d.name+' stays '+d.name;
   }
 
   if(M(w[0],'interface')||w[0]==='int'){
-    const idx=rlParseIfName(t.slice(t.indexOf(' ')+1));
+    const idx=rlParseIfName(t.slice(t.indexOf(' ')+1),d);
     if(idx<0) return '% Invalid interface — try "interface Gi0/0"';
     d.cm='if'; d.ci=idx; return '';
   }
 
   if(d.cm==='if'){
+    const sp=d.ports[d.ci];
+    const SER_ONLY='% '+sp.name+' is not a serial interface — encapsulation, PPP and clock rate are set on S0/0/0 or S0/0/1';
+    if(M(w[0],'encapsulation')){
+      if(!sp.serial) return SER_ONLY;
+      const e=w[1]&&M(w[1],'ppp')?'ppp':w[1]&&M(w[1],'hdlc')?'hdlc':null;
+      if(!e) return '% Usage: encapsulation ppp | encapsulation hdlc';
+      sp.encap=e; if(e==='hdlc') sp.auth=null;
+      return '';
+    }
+    if(M(w[0],'ppp')&&w[1]&&M(w[1],'authentication')){
+      if(!sp.serial) return SER_ONLY;
+      if(sp.encap!=='ppp') return '% PPP commands need "encapsulation ppp" on this interface first';
+      if(w[2]&&M(w[2],'chap')){ sp.auth='chap'; return ''; }
+      if(w[2]&&M(w[2],'pap')) return '% This lab models CHAP — "ppp authentication chap"';
+      return '% Usage: ppp authentication chap';
+    }
+    if(w[0]==='no'&&w[1]&&M(w[1],'ppp')){ sp.auth=null; return ''; }
+    if(M(w[0],'clock')&&w[1]&&M(w[1],'rate')){
+      if(!sp.serial) return SER_ONLY;
+      const n=+w[2];
+      if(!CLOCK_RATES.includes(n)) return '% Invalid clock rate — e.g. 64000, 128000 or 2000000';
+      if(rlSerialRole(d,d.ci)==='DTE') return '% This command applies only to DCE interfaces';
+      sp.clock=n;
+      return '';
+    }
+    if(w[0]==='no'&&w[1]&&M(w[1],'clock')){ sp.clock=null; return ''; }
+    if(M(w[0],'bandwidth')||M(w[0],'description')) return '';
     if(w[0]==='no'&&w[1]&&M(w[1],'shutdown')){ d.ports[d.ci].up=true; return ''; }
     if(M(w[0],'shutdown')){ d.ports[d.ci].up=false; return ''; }
     if(w[0]==='no'&&w[1]&&M(w[1],'ip')&&w[2]&&M(w[2],'address')){ d.ports[d.ci].ip=null; d.ports[d.ci].pfx=null; return ''; }
@@ -1464,7 +1590,7 @@ function rlCli(d,line){
       if(pfx==null) return '% Invalid subnet mask';
       const netInt=netIntOf(ip2int(net),pfx);
       let exitIface=null, nextHop=null;
-      const ifaceIdx=rlParseIfName(arg4);
+      const ifaceIdx=rlParseIfName(arg4,d);
       if(ifaceIdx>=0){
         exitIface=ifaceIdx;
         if(arg5){
@@ -1481,6 +1607,84 @@ function rlCli(d,line){
   }
 
   return '% Invalid input detected';
+}
+/* ── show output ── */
+function rlFullIf(n){ return n.replace(/^Gi/,'GigabitEthernet').replace(/^S(?=\d)/,'Serial'); }
+function rlIfOrder(d){ return d.ports.map((p,i)=>i).sort((a,b)=>(d.ports[a].serial?1:0)-(d.ports[b].serial?1:0)||(d.ports[a].name<d.ports[b].name?-1:1)); }
+/* Physical status and line protocol, the two columns everything else reads */
+function rlIfStatus(d,i){
+  const p=d.ports[i];
+  if(!p.up) return ['administratively down','down'];
+  if(!rlPortCable(d.id,i)) return ['down','down'];
+  return ['up', p.serial ? (rlSerialState(d,i).up?'up':'down') : 'up'];
+}
+function rlShowIpBrief(d){
+  const L=['Interface              IP-Address      OK? Method Status                Protocol'];
+  rlIfOrder(d).forEach(i=>{
+    const p=d.ports[i], st=rlIfStatus(d,i);
+    L.push(rlFullIf(p.name).padEnd(23)+(p.ip||'unassigned').padEnd(16)+'YES '+(p.ip?'manual ':'unset  ')+st[0].padEnd(22)+st[1]);
+  });
+  return L.join('\n');
+}
+function rlShowIface(d,i){
+  const p=d.ports[i], st=rlIfStatus(d,i);
+  const L=[rlFullIf(p.name)+' is '+st[0]+', line protocol is '+st[1],
+    '  Hardware is '+(p.serial?'WIC MBRD Serial':'CN Gigabit Ethernet'),
+    p.ip?'  Internet address is '+p.ip+'/'+p.pfx:'  Internet address is not set'];
+  if(p.serial){
+    if(p.encap==='ppp'){
+      const ss=rlSerialState(d,i);
+      L.push('  Encapsulation PPP, LCP '+(ss.up?'Open':'Closed'), ss.up?'  Open: IPCP, CDPCP':'  Closed: IPCP, CDPCP');
+    } else L.push('  Encapsulation HDLC, loopback not set');
+  } else L.push('  Encapsulation ARPA, loopback not set');
+  return L.join('\n');
+}
+function rlShowControllers(d,i){
+  const p=d.ports[i], role=rlSerialRole(d,i);
+  const L=['Interface '+rlFullIf(p.name),'Hardware is PowerQUICC MPC860'];
+  if(!role) L.push('No serial cable attached');
+  else if(role==='DCE') L.push(p.clock?'DCE V.35, clock rate '+p.clock:'DCE V.35, no clock');
+  else {
+    const c=rlPortCable(d.id,i), o=rlOtherEnd(c,d.id), q=rlById(o.d).ports[o.i];
+    L.push(q.clock?'DTE V.35 TX and RX clocks detected.':'DTE V.35 clocks stopped.');
+  }
+  return L.join('\n');
+}
+function rlShowRun(d){
+  const L=['hostname '+d.name,'!'];
+  Object.keys(d.users).forEach(n=>L.push('username '+n+' password 0 '+d.users[n]));
+  if(Object.keys(d.users).length) L.push('!');
+  rlIfOrder(d).forEach(i=>{
+    const p=d.ports[i];
+    L.push('interface '+rlFullIf(p.name));
+    L.push(p.ip?' ip address '+p.ip+' '+cidr2mask(p.pfx):' no ip address');
+    if(p.serial){
+      if(p.encap==='ppp') L.push(' encapsulation ppp');
+      if(p.auth) L.push(' ppp authentication '+p.auth);
+      if(p.clock) L.push(' clock rate '+p.clock);
+    }
+    if(!p.up) L.push(' shutdown');
+    L.push('!');
+  });
+  d.staticRoutes.forEach(r=>L.push('ip route '+r._raw));
+  return L.join('\n');
+}
+/* ping from the router itself: sourced from the exit interface, and only
+   successful if the reply finds its way back to that address */
+function rlRouterPing(d,dst){
+  const head='Type escape sequence to abort.\nSending 5, 100-byte ICMP Echos to '+dst+', timeout is 2 seconds:\n';
+  const win=bestMatch(ip2int(dst), rlRoutingTable(d));
+  const own=d.ports.find(p=>p.ip===dst&&rlLive(d,p));
+  const src=own?own.ip:(win&&win._port?win._port.ip:win&&win._route?(d.ports.find(p=>p.name===win.iface)||{}).ip:null);
+  let ok=!!own;
+  if(!ok&&src){
+    const there=rlResolveFrom(d,dst);
+    if(there.ok){
+      const pc=rlDeviceWithIp(dst), hit=rlRouterPortWithIp(dst);
+      ok = pc ? rlResolvePing(pc,src).ok : hit ? rlResolveFrom(hit.router,src).ok : false;
+    }
+  }
+  return head+(ok?'!!!!!\nSuccess rate is 100 percent (5/5)':'.....\nSuccess rate is 0 percent (0/5)');
 }
 function rlPromptFor(d){
   return d.name+(d.cm==='conf'?'(config)#':d.cm==='if'?'(config-if)#':'#');
@@ -1499,7 +1703,7 @@ function rlEchoCli(d,cmds){
 function rlRoutingTable(router){
   const table=[];
   router.ports.forEach(p=>{
-    if(p.ip&&p.up){
+    if(p.ip&&rlLive(router,p)){
       const netInt=netIntOf(ip2int(p.ip),p.pfx);
       table.push({source:RT_SOURCES[0], network:int2ip(netInt), prefix:p.pfx, netInt, nextHop:null, metric:null, iface:p.name, _port:p});
     }
@@ -1516,12 +1720,12 @@ function rlRoutingTable(router){
       if(!displayNextHop && viaPort){
         const nbs=rlL2Neighbors(router.id,r.exitIface).filter(n=>n.type==='router');
         if(nbs.length===1){
-          const nbPort=nbs[0].ports.find(p=>p.ip&&p.up&&viaPort.ip&&netIntOf(ip2int(p.ip),viaPort.pfx)===netIntOf(ip2int(viaPort.ip),viaPort.pfx));
+          const nbPort=nbs[0].ports.find(p=>p.ip&&rlLive(nbs[0],p)&&viaPort.ip&&netIntOf(ip2int(p.ip),viaPort.pfx)===netIntOf(ip2int(viaPort.ip),viaPort.pfx));
           if(nbPort) displayNextHop=nbPort.ip;
         }
       }
     } else {
-      viaPort=router.ports.find(p=>p.ip&&p.up&&netIntOf(ip2int(p.ip),p.pfx)===netIntOf(ip2int(r.nextHop),p.pfx));
+      viaPort=router.ports.find(p=>p.ip&&rlLive(router,p)&&netIntOf(ip2int(p.ip),p.pfx)===netIntOf(ip2int(r.nextHop),p.pfx));
     }
     table.push({source:src, network:int2ip(r.netInt), prefix:r.prefix, netInt:r.netInt, nextHop:displayNextHop, metric:0, iface:viaPort?viaPort.name:'(unresolved)', _route:r});
   });
@@ -1531,7 +1735,7 @@ function rlDeviceWithIp(ipStr){ return rlDevices.find(d=>d.type==='pc'&&d.ip===i
 function rlRouterPortWithIp(ipStr){
   for(const d of rlDevices){
     if(d.type!=='router') continue;
-    const p=d.ports.find(p=>p.ip===ipStr&&p.up);
+    const p=d.ports.find(p=>p.ip===ipStr&&rlLive(d,p));
     if(p) return {router:d,port:p};
   }
   return null;
@@ -1554,9 +1758,17 @@ function rlResolvePing(srcPc,dstStr){
   if(netIntOf(ip2int(srcPc.ip),gwPort.pfx)!==netIntOf(ip2int(gwPort.ip),gwPort.pfx))
     return {ok:false,reason:srcPc.name+"'s IP isn't in the same subnet as "+gw.name+' '+gwPort.name};
 
-  let current=gw;
+  return rlResolveFrom(gw,dstStr);
+}
+/* The hop-by-hop walk from a router, shared by a PC's ping (starting at its
+   gateway) and a router's own ping. A packet addressed to one of the current
+   router's live interfaces has arrived. */
+function rlResolveFrom(start,dstStr){
+  const dstInt=ip2int(dstStr);
+  let current=start;
   const visited=new Set();
   for(let hop=0; hop<8; hop++){
+    if(current.ports.some(p=>p.ip===dstStr&&rlLive(current,p))) return {ok:true};
     if(visited.has(current.id)) return {ok:false,reason:'Routing loop detected at '+current.name};
     visited.add(current.id);
     const table=rlRoutingTable(current);
@@ -1564,9 +1776,13 @@ function rlResolvePing(srcPc,dstStr){
     if(!winner) return {ok:false,reason:current.name+' has no route to '+dstStr};
 
     if(winner.source.code==='C'){
-      const destPc=rlDeviceWithIp(dstStr);
-      if(!destPc) return {ok:false,reason:'No device currently holds '+dstStr};
       const portIdx=current.ports.indexOf(winner._port);
+      const destPc=rlDeviceWithIp(dstStr);
+      if(!destPc){
+        const hit=rlRouterPortWithIp(dstStr);
+        if(hit&&hit.router!==current&&rlL2Neighbors(current.id,portIdx).includes(hit.router)) return {ok:true};
+        return {ok:false,reason:'No device currently holds '+dstStr};
+      }
       if(!rlL2Neighbors(current.id,portIdx).includes(destPc))
         return {ok:false,reason:dstStr+' is not actually reachable via '+current.name+' '+winner.iface};
       return {ok:true};
@@ -1584,7 +1800,7 @@ function rlResolvePing(srcPc,dstStr){
     if(winner._route && winner._route.exitIface!=null){
       viaIdx=winner._route.exitIface;
       const p=current.ports[viaIdx];
-      if(!p||!p.ip||!p.up) return {ok:false,reason:current.name+' '+(p?p.name:'')+" isn't addressed and up — the static route's exit interface is down"};
+      if(!p||!p.ip||!rlLive(current,p)) return {ok:false,reason:current.name+' '+(p?p.name:'')+" isn't addressed and up — the static route's exit interface is down"};
       if(winner._route.nextHop){
         const hit=rlRouterPortWithIp(winner._route.nextHop);
         if(!hit||hit.router===current) return {ok:false,reason:'Next hop '+winner._route.nextHop+" doesn't belong to any other router's up interface"};
@@ -1609,7 +1825,7 @@ function rlResolvePing(srcPc,dstStr){
       const nh=winner._route.nextHop;
       const hit=rlRouterPortWithIp(nh);
       if(!hit||hit.router===current) return {ok:false,reason:'Next hop '+nh+" doesn't belong to any other router's up interface"};
-      viaIdx=current.ports.findIndex(p=>p.ip&&p.up&&netIntOf(ip2int(p.ip),p.pfx)===netIntOf(ip2int(nh),p.pfx));
+      viaIdx=current.ports.findIndex(p=>p.ip&&rlLive(current,p)&&netIntOf(ip2int(p.ip),p.pfx)===netIntOf(ip2int(nh),p.pfx));
       if(viaIdx<0) return {ok:false,reason:current.name+' cannot reach next-hop '+nh};
       if(!rlL2Neighbors(current.id,viaIdx).includes(hit.router))
         return {ok:false,reason:current.name+' '+current.ports[viaIdx].name+' cannot reach next-hop '+nh};
@@ -1657,7 +1873,10 @@ function rlPcIpReq(pc,netInt,pfx){
     }};
 }
 function rlCableReq(devA,labelA,devB,labelB){
-  return {desc:`Cable ${labelA} to ${labelB}`,
+  /* link: the ports the brief names, so rlLayoutSlots can lay the boxes'
+     ports out for the cabling the learner is about to do */
+  const ix=(d,l)=>d.ports?d.ports.findIndex(p=>l.endsWith(' '+p.name)):0;
+  return {desc:`Cable ${labelA} to ${labelB}`, link:{a:devA, ia:ix(devA,labelA), b:devB, ib:ix(devB,labelB)},
     test(){ return rlCableBetween(devA,devB) ? {ok:true} : {ok:false,reason:`${labelA} and ${labelB} are not cabled yet`}; }};
 }
 /* A real ping needs the echo REPLY to route back too, not just the request
@@ -1821,6 +2040,138 @@ function genRoute(diff){
   return {title,goal,note,addr,reqs};
 }
 
+/* ── PPP Links ──
+   One serial WAN link between two routers, the troubleshooting guide's
+   section 8. The LANs, the PCs and the static routes across the link are
+   already done, so the only thing standing between PC1 and PC2 is the serial
+   link itself. Easy names the DCE end and every value; Medium adds CHAP and
+   makes you find the DCE end with show controllers; Hard arrives configured
+   with two faults drawn from six, and gives you only the ticket. */
+function pppEncapReq(r,i){
+  const p=r.ports[i];
+  return {desc:`${r.name} ${p.name} uses PPP encapsulation`,
+    test(){ return p.encap==='ppp'?{ok:true}:{ok:false,reason:`${r.name} ${p.name} is still ${p.encap.toUpperCase()} — "encapsulation ppp"`}; }};
+}
+function pppClockReq(r,i,named){
+  return {desc:named?`Set a clock rate on the DCE end, ${r.name} ${r.ports[i].name}`:'Set a clock rate on whichever end is DCE',
+    test(){
+      const p=r.ports[i];
+      return p.clock?{ok:true}:{ok:false,reason:named?`${r.name} ${p.name} has no clock rate`:'The DCE end has no clock rate — "show controllers" on each serial interface tells you which end is DCE'};
+    }};
+}
+function pppChapReq(rA,iA,rB,iB,pass){
+  return {desc:`CHAP on both ends: each router has a username for the <b>other</b> router's hostname, password <span class="mono-inl">${pass}</span>`,
+    test(){
+      for(const [r,i,o] of [[rA,iA,rB],[rB,iB,rA]]){
+        const p=r.ports[i];
+        if(p.auth!=='chap') return {ok:false,reason:`${r.name} ${p.name} has no "ppp authentication chap"`};
+        if(r.users[o.name]==null){
+          const near=Object.keys(r.users).find(n=>n.toLowerCase()===o.name.toLowerCase());
+          return {ok:false,reason:near?`${r.name} has "username ${near}", but the peer's hostname is ${o.name} — CHAP matches it exactly`:`${r.name} has no "username ${o.name} password ${pass}"`};
+        }
+        if(r.users[o.name]!==pass) return {ok:false,reason:`${r.name}'s password for ${o.name} is not the one in the brief`};
+      }
+      return {ok:true};
+    }};
+}
+function pppLineReq(r,i,o,j){
+  return {desc:`The ${r.name}–${o.name} serial link is up/up`,
+    test(){ const st=rlSerialState(r,i); return st.up?{ok:true}:{ok:false,reason:st.why}; }};
+}
+/* Same pair of routers every tier: R1's serial ports on the right of its port
+   row, R2's on the left, so the WAN cable runs clear of every other port. */
+function pppBuild(){
+  const r1=rlAddRouter(70,40,{serial:true}), r2=rlAddRouter(440,40,{serial:true,serialLeft:true});
+  const pc1=rlAddPC(20,200), pc2=rlAddPC(470,200);
+  const lan1=netIntOf(niceRawInt(),24), lan2=netIntOf(niceRawInt(),24), wan=netIntOf(niceRawInt(),30);
+  const ix=(r,n)=>r.ports.findIndex(p=>p.name===n);
+  const s1=choice(['S0/0/0','S0/0/1']), s2=choice(['S0/0/0','S0/0/1']);
+  /* the port row is only a drawing: put the serial port in use on the inside
+     edge of each router so the WAN cable never crosses another port */
+  const sw=(r,a,b)=>{ const t=r.ports[a]; r.ports[a]=r.ports[b]; r.ports[b]=t; };
+  if(ix(r1,s1)!==r1.ports.length-1) sw(r1,ix(r1,s1),r1.ports.length-1);
+  if(ix(r2,s2)!==0) sw(r2,ix(r2,s2),0);
+  const r1g=ix(r1,'Gi0/0'), r2g=ix(r2,'Gi0/0'), r1s=ix(r1,s1), r2s=ix(r2,s2);
+  rlAddCable(pc1.id,0,r1.id,r1g); rlAddCable(pc2.id,0,r2.id,r2g);
+  /* the DCE end is drawn at random, so "which end clocks" is a real question */
+  const r1Dce=Math.random()<0.5;
+  rlCables.push({id:rlCid++, a:{d:r1.id,i:r1s}, b:{d:r2.id,i:r2s}, locked:false, dce:r1Dce?{d:r1.id,i:r1s}:{d:r2.id,i:r2s}});
+  const w1=int2ip(wan+1), w2=int2ip(wan+2);
+  pc1.ip=int2ip(lan1+10); pc2.ip=int2ip(lan2+10);
+  rlEchoCli(r1,['configure terminal','interface Gi0/0','ip address '+int2ip(lan1+1)+' 255.255.255.0','no shutdown','exit',
+    'ip route '+int2ip(lan2)+' 255.255.255.0 '+w2,'end']);
+  rlEchoCli(r2,['configure terminal','interface Gi0/0','ip address '+int2ip(lan2+1)+' 255.255.255.0','no shutdown','exit',
+    'ip route '+int2ip(lan1)+' 255.255.255.0 '+w1,'end']);
+  r1.log.length=0; r2.log.length=0;
+  return {r1,r2,pc1,pc2,lan1,lan2,wan,w1,w2,r1s,r2s,s1,s2,r1Dce,
+    dce:r1Dce?{r:r1,i:r1s}:{r:r2,i:r2s}};
+}
+function pppAddr(t,markDce){
+  const d=(r,s)=>markDce&&t.dce.r===r?' (DCE)':'';
+  return [
+    [t.r1.name,'Gi0/0',int2ip(t.lan1+1)+'/24',t.pc1.name],
+    [t.r1.name,t.s1+d(t.r1),t.w1+'/30',t.r2.name+' '+t.s2],
+    [t.r2.name,'Gi0/0',int2ip(t.lan2+1)+'/24',t.pc2.name],
+    [t.r2.name,t.s2+d(t.r2),t.w2+'/30',t.r1.name+' '+t.s1],
+    [t.pc1.name,'NIC',t.pc1.ip+'/24',t.r1.name+' Gi0/0'],
+    [t.pc2.name,'NIC',t.pc2.ip+'/24',t.r2.name+' Gi0/0']];
+}
+const PPP_PASSES=['cisco','Wan!Link9','chap4321','S3rialPPP'];
+const PPP_FAULTS={
+  clock:t=>{ t.dce.r.ports[t.dce.i].clock=null; },
+  encap:t=>{ const [r,i]=choice([[t.r1,t.r1s],[t.r2,t.r2s]]); r.ports[i].encap='hdlc'; r.ports[i].auth=null; },
+  user:t=>{ const [r,o]=choice([[t.r1,t.r2],[t.r2,t.r1]]); const v=r.users[o.name]; delete r.users[o.name]; r.users[o.name.toLowerCase()]=v; },
+  pass:t=>{ const [r,o]=choice([[t.r1,t.r2],[t.r2,t.r1]]); r.users[o.name]=r.users[o.name]+'1'; },
+  shut:t=>{ const [r,i]=choice([[t.r1,t.r1s],[t.r2,t.r2s]]); r.ports[i].up=false; },
+  addr:t=>{ const [r,i]=choice([[t.r1,t.r1s],[t.r2,t.r2s]]); r.ports[i].ip=int2ip(t.wan+(r===t.r1?5:6)); }
+};
+function genPpp(diff){
+  rlResetTopo();
+  const t=pppBuild();
+  const pass=choice(PPP_PASSES);
+  const reqsAddr=()=>rlGroup('Addressing', rlIfaceReq(t.r1,t.r1s,t.wan,30), rlIfaceReq(t.r2,t.r2s,t.wan,30));
+  if(diff==='easy'){
+    return {title:'PPP — Bring Up the Serial Link',
+      goal:`The LANs and the routes are done; the serial link between <b>${t.r1.name}</b> and <b>${t.r2.name}</b> is not. Bring it up with PPP so <b>${t.pc1.name}</b> can reach <b>${t.pc2.name}</b>.`,
+      note:`Address both serial interfaces and <span class="mono-inl">no shutdown</span> them, run <span class="mono-inl">encapsulation ppp</span> at <b>both</b> ends, and give the DCE end, <b>${t.dce.r.name} ${t.dce.r.ports[t.dce.i].name}</b>, a <span class="mono-inl">clock rate 128000</span>. Encapsulation, PPP and the clock are CLI-only.`,
+      addr:pppAddr(t,true),
+      reqs:[...reqsAddr(),
+        ...rlGroup('PPP', pppEncapReq(t.r1,t.r1s), pppEncapReq(t.r2,t.r2s), pppClockReq(t.dce.r,t.dce.i,true)),
+        ...rlGroup('Verify', pppLineReq(t.r1,t.r1s,t.r2,t.r2s), rlPingReq(t.pc1,t.pc2))]};
+  }
+  if(diff==='medium'){
+    return {title:'PPP with CHAP',
+      goal:`Bring up the <b>${t.r1.name}–${t.r2.name}</b> serial link with PPP and <b>CHAP</b> authentication (shared password <b>${pass}</b>), so <b>${t.pc1.name}</b> can reach <b>${t.pc2.name}</b>.`,
+      note:`Which end is DCE is not on the table — <span class="mono-inl">show controllers s0/0/x</span> says, and only that end takes a clock rate. For CHAP each router needs <span class="mono-inl">username &lt;the other router's hostname&gt; password ${pass}</span> plus <span class="mono-inl">ppp authentication chap</span> on its serial interface.`,
+      addr:pppAddr(t,false),
+      reqs:[...reqsAddr(),
+        ...rlGroup('PPP', pppEncapReq(t.r1,t.r1s), pppEncapReq(t.r2,t.r2s), pppClockReq(t.dce.r,t.dce.i,false),
+          pppChapReq(t.r1,t.r1s,t.r2,t.r2s,pass)),
+        ...rlGroup('Verify', pppLineReq(t.r1,t.r1s,t.r2,t.r2s), rlPingReq(t.pc1,t.pc2))]};
+  }
+  /* hard: configured as Medium would leave it, then broken twice */
+  const cfg=(r,i,o,ip)=>rlEchoCli(r,['configure terminal','username '+o.name+' password '+pass,'interface '+r.ports[i].name,
+    'ip address '+ip+' 255.255.255.252','encapsulation ppp','ppp authentication chap','no shutdown','end']);
+  cfg(t.r1,t.r1s,t.r2,t.w1); cfg(t.r2,t.r2s,t.r1,t.w2);
+  t.dce.r.ports[t.dce.i].clock=128000;
+  t.r1.log.length=0; t.r2.log.length=0;
+  const faults=shuffle(Object.keys(PPP_FAULTS)).slice(0,2);
+  faults.forEach(f=>PPP_FAULTS[f](t));
+  const ping=rlPingReq(t.pc1,t.pc2);
+  const gate=()=>ping.test().ok?null:`Get ${t.pc1.name} talking to ${t.pc2.name} first — this checks the fix kept the policy`;
+  const gated=r=>({desc:r.desc, test(){ const g=gate(); return g?{ok:false,reason:g}:r.test(); }});
+  return {title:'Ticket: The WAN Link Is Down', faults,
+    goal:`<b>Ticket:</b> ${t.pc1.name} cannot reach ${t.pc2.name}. The ${t.r1.name}–${t.r2.name} link must run <b>PPP with CHAP</b> (shared password <b>${pass}</b>) and keep the addresses in the table. Find what is wrong and fix it.`,
+    note:`Two things are wrong. Work from the bottom up: <span class="mono-inl">show ip interface brief</span>, <span class="mono-inl">show interfaces s0/0/x</span> (line protocol, encapsulation, LCP), <span class="mono-inl">show controllers s0/0/x</span> (DCE and clock), then <span class="mono-inl">show run</span> on both routers for the CHAP usernames.`,
+    addr:pppAddr(t,false),
+    reqs:[...rlGroup('Verify', ping),
+      ...rlGroup('PPP',
+        gated({desc:'Both ends still run PPP with CHAP', test(){
+          const a=t.r1.ports[t.r1s], b=t.r2.ports[t.r2s];
+          return a.encap==='ppp'&&b.encap==='ppp'&&a.auth==='chap'&&b.auth==='chap'?{ok:true}:{ok:false,reason:'Both serial interfaces need "encapsulation ppp" and "ppp authentication chap"'}; }}),
+        gated(rlIfaceReq(t.r1,t.r1s,t.wan,30)), gated(rlIfaceReq(t.r2,t.r2s,t.wan,30)))]};
+}
+
 /* ─── Round control ──────────────────────────────────────────────── */
 function loadQ(){
   state.done=false; state.selectedId=null;
@@ -1830,6 +2181,7 @@ function loadQ(){
   else if(t==='ad') state.data=genAD(state.diff);
   else if(t==='read') state.data=genRead(state.diff);
   else if(t==='route') state.data=genRoute(state.diff);
+  else if(t==='ppp') state.data=genPpp(state.diff);
   else if(t==='summ') state.data=genSumm(state.diff);
   else if(t==='summ6') state.data=genSumm6(state.diff);
   render();
@@ -1847,7 +2199,7 @@ function updateChips(){
    configured, or a grid of answer fields. On a one-click drill it is just
    Skip with the score wiped, so it is hidden there. Kept per topic rather
    than per page, because these pages mix both kinds. */
-const TOPIC_RESET={read:true, lpm:false, ad:false, route:true};
+const TOPIC_RESET={read:true, lpm:false, ad:false, route:true, ppp:true};
 function resetWanted(){
   if(state.mode==='summ'||state.mode==='summ6')
     return !!(state.data && state.data.kind && state.data.kind!=='easy');
@@ -1878,12 +2230,12 @@ function render(){
      way out means it's never left stuck floating over a topic it doesn't
      apply to. */
   const popBtn=document.getElementById('qcard-pop-btn');
-  if(state.mode==='route'){ if(popBtn) popBtn.style.display=''; }
+  if(state.mode==='route'||state.mode==='ppp'){ if(popBtn) popBtn.style.display=''; }
   else { LabShared.dockQcardPopout('qcard','qcard-pop-btn'); if(popBtn) popBtn.style.display='none'; }
   if(state.mode==='lpm') renderLPM(body,qip);
   else if(state.mode==='ad') renderAD(body,qip);
   else if(state.mode==='read') renderRead(body,qip);
-  else if(state.mode==='route') renderRoute(body,qip);
+  else if(state.mode==='route'||state.mode==='ppp') renderRoute(body,qip);
   else if(state.mode==='summ') renderSumm(body,qip);
   else if(state.mode==='summ6') renderSumm6(body,qip);
 }
@@ -2308,6 +2660,7 @@ function renderRoute(body,qip){
   });
   document.getElementById('rl-cable-svg').addEventListener('click', rlOnCableClick);
   setBtns();
+  rlLayoutSlots();
   rlRenderCanvas();
   rlRenderReqs(null);
 }
@@ -2322,16 +2675,42 @@ function rlDevSize(d){
 }
 function rlPortPosRouter(d,i){
   const pad=20, span=RT_W-2*pad;
-  return [pad+i*(span/(RT_PORTN-1)), RT_H];
+  return [pad+i*(span/(d.ports.length-1)), RT_H];
 }
 function rlPortPosSwitch(d,i){
   const pad=20, span=LabShared.SW_W-2*pad;
   return [pad+i*(span/(SW_PORTN-1)), LabShared.SW_H];
 }
 function rlFixedPortPos(d,i){
-  if(d.type==='router') return rlPortPosRouter(d,i);
-  if(d.type==='switch') return rlPortPosSwitch(d,i);
+  const k=d.slots?d.slots[i]:i;
+  if(d.type==='router') return rlPortPosRouter(d,k);
+  if(d.type==='switch') return rlPortPosSwitch(d,k);
   return null;
+}
+/* Draw each box's ports in the order their cables leave (LabShared.portSlots)
+   — S0/0/1 is still S0/0/1, it just sits on the side its link runs to. Laid
+   out once per round from the round's cables plus the ones the brief asks
+   the learner to make (rlCableReq's link), so the cabling the round wants is
+   drawn clear before any of it exists, and nothing moves while it is made. */
+function rlLayoutSlots(){
+  const links=rlCables.map(c=>({a:rlById(c.a.d), ia:c.a.i, b:rlById(c.b.d), ib:c.b.i}));
+  ((state.data&&state.data.reqs)||[]).forEach(r=>{
+    const l=r.link; if(!l||l.ia<0||l.ib<0) return;
+    if(!links.some(k=>(k.a===l.a&&k.ia===l.ia)||(k.b===l.a&&k.ib===l.ia)||(k.a===l.b&&k.ia===l.ib)||(k.b===l.b&&k.ib===l.ib))) links.push(l);
+  });
+  rlDevices.forEach(d=>{ d.slots=null; });
+  rlDevices.forEach(d=>{
+    if(d.type!=='router'&&d.type!=='switch') return;
+    const [w,h]=rlDevSize(d), row=d.y+h;
+    const far=d.ports.map((_,i)=>{
+      const l=links.find(k=>(k.a===d&&k.ia===i)||(k.b===d&&k.ib===i)); if(!l) return null;
+      const od=l.a===d&&l.ia===i?l.b:l.a, oi=l.a===d&&l.ia===i?l.ib:l.ia;
+      const fp=rlFixedPortPos(od,oi), [ow,oh]=rlDevSize(od);
+      if(fp) return {x:od.x+fp[0], kind:'u'};
+      return {x:od.x+ow/2, kind:od.y+oh/2<row?'up':'down'};
+    });
+    d.slots=LabShared.portSlots(far, d.x+w/2);
+  });
 }
 /* PCs have one port that slides around the box edge toward whatever
    they're cabled to (same trick as switching_lab's portPos). */
@@ -2358,17 +2737,24 @@ function rlRenderCanvas(){
   if(!svg||!layer) return;
   svg.innerHTML=''; layer.innerHTML='';
 
-  rlCables.forEach(c=>{
-    const A=rlById(c.a.d), B=rlById(c.b.d);
-    const [ax,ay]=rlPortPos(A,c.a.i), [bx,by]=rlPortPos(B,c.b.i);
-    const l=document.createElementNS('http://www.w3.org/2000/svg','line');
-    l.setAttribute('x1',A.x+ax); l.setAttribute('y1',A.y+ay);
-    l.setAttribute('x2',B.x+bx); l.setAttribute('y2',B.y+by);
-    l.setAttribute('class','cable'); l.dataset.cid=c.id;
+  /* Router and switch ports sit on the bottom edge of the box, so a cable
+     between two of them is routed down-across-up (LabShared.cablePaths)
+     instead of drawn straight along the port row or through a box. */
+  const box=d=>{ const [w,h]=rlDevSize(d); return {l:d.x, t:d.y, r:d.x+w, b:d.y+h}; };
+  const routes=LabShared.cablePaths(rlCables.map(c=>{
+    const A=rlById(c.a.d), B=rlById(c.b.d), [ax,ay]=rlPortPos(A,c.a.i), [bx,by]=rlPortPos(B,c.b.i);
+    return {ax:A.x+ax, ay:A.y+ay, bx:B.x+bx, by:B.y+by,
+      aDown:!!rlFixedPortPos(A,c.a.i), bDown:!!rlFixedPortPos(B,c.b.i), aBox:box(A), bBox:box(B)};
+  }));
+  rlCables.forEach((c,ci)=>{
+    const A=rlById(c.a.d);
+    const l=document.createElementNS('http://www.w3.org/2000/svg','path');
+    l.setAttribute('d',routes[ci]);
+    const ser=(A.ports&&A.ports[c.a.i]&&A.ports[c.a.i].serial);
+    l.setAttribute('class','cable'+(ser?' serial':'')); l.dataset.cid=c.id;
     svg.appendChild(l);
-    const hl=document.createElementNS('http://www.w3.org/2000/svg','line');
-    hl.setAttribute('x1',A.x+ax); hl.setAttribute('y1',A.y+ay);
-    hl.setAttribute('x2',B.x+bx); hl.setAttribute('y2',B.y+by);
+    const hl=document.createElementNS('http://www.w3.org/2000/svg','path');
+    hl.setAttribute('d',routes[ci]);
     hl.setAttribute('class','cable-hit'); hl.dataset.cid=c.id;
     svg.appendChild(hl);
   });
@@ -2380,8 +2766,8 @@ function rlRenderCanvas(){
     el.style.left=d.x+'px'; el.style.top=d.y+'px'; el.style.width=w+'px'; el.style.height=h+'px';
     el.dataset.did=d.id;
     if(d.type==='router'){
-      const up=d.ports.filter(p=>p.ip&&p.up).length;
-      el.innerHTML=`<div class="dev-name">${d.name}</div><div class="dev-sub">router · ${up}/${RT_PORTN} up</div>`;
+      const up=d.ports.filter(p=>p.ip&&rlLive(d,p)).length;
+      el.innerHTML=`<div class="dev-name">${d.name}</div><div class="dev-sub">router · ${up}/${d.ports.length} up</div>`;
     } else if(d.type==='switch'){
       el.innerHTML=`<div class="dev-name">${d.name}</div><div class="dev-sub">unmanaged switch</div>`;
     } else {
@@ -2395,11 +2781,11 @@ function rlRenderCanvas(){
       const pel=document.createElement('span');
       let cls='port';
       if(rlPending&&rlPending.d===d.id&&rlPending.i===i) cls+=' p-pending';
-      else if(p&&p.ip&&p.up) cls+=' p-acc';
+      else if(p&&p.ip&&rlLive(d,p)) cls+=' p-acc';
       pel.className=cls;
       pel.style.left=(d.x+px-7)+'px'; pel.style.top=(d.y+py-7)+'px';
       pel.dataset.did=d.id; pel.dataset.pi=i;
-      pel.title = p ? p.name+(p.ip?' '+p.ip+'/'+p.pfx:'')+(p.up?'':' (down)') : 'Eth0';
+      pel.title = p ? p.name+(p.ip?' '+p.ip+'/'+p.pfx:'')+(p.up?'':' (down)')+(p.serial&&rlSerialRole(d,i)?' — '+rlSerialRole(d,i):'') : 'Eth0';
       layer.appendChild(pel);
     });
   });
@@ -2417,6 +2803,8 @@ function rlOnPortClick(did,i){
     rlPending=null; rlSetHint('Selection cleared.');
   } else if(rlPending.d===did){
     rlSetHint('Choose a port on a different device.');
+  } else if(rlIsSerialPort(rlPending.d,rlPending.i)!==rlIsSerialPort(did,i)){
+    rlSetHint('A serial port only connects to another router\'s serial port.');
   } else {
     rlAddCable(rlPending.d,rlPending.i,did,i);
     rlSetHint('Cabled.');
@@ -2424,6 +2812,7 @@ function rlOnPortClick(did,i){
   }
   rlRenderCanvas();
 }
+function rlIsSerialPort(did,i){ const d=rlById(did); return !!(d.ports&&d.ports[i]&&d.ports[i].serial); }
 function rlOnCableClick(e){
   if(state.done) return;
   const cid=e.target.dataset&&e.target.dataset.cid;
@@ -2491,7 +2880,7 @@ function rlRenderRouterCfg(d,panel){
   const helper=state.diff!=='hard';
   panel.innerHTML=`
     <div class="cfg-hdr"><div class="cfg-name">${d.name}</div><button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="rlCloseCfgPanel()">Close</button></div>
-    <div class="cfg-grid">
+    <div class="cfg-grid stack">
       <div>
         <div class="cfg-sec-lbl">Interfaces</div>
         ${helper ? rlPortTableHtml(d) : '<div class="cli-note">Hard mode — configure interfaces via the CLI only (interface, ip address, no shutdown).</div>'}
@@ -2595,7 +2984,7 @@ function rlRenderTerm(){
   if(!d||d.type!=='router') return;
   const log=document.getElementById('rl-term-log');
   if(!log) return;
-  log.innerHTML=d.log.slice(-14).map(l=>`<div class="tl${l.startsWith('%')?' terr':''}">${rlEsc(l)}</div>`).join('');
+  log.innerHTML=d.log.slice(-300).map(l=>`<div class="tl${l.startsWith('%')?' terr':''}">${rlEsc(l)}</div>`).join('');
   log.scrollTop=log.scrollHeight;
   const pr=document.getElementById('rl-term-prompt');
   if(pr) pr.textContent=rlPromptFor(d);
@@ -2683,7 +3072,7 @@ function checkAll(){
     return;
   }
 
-  if(mode==='route'){
+  if(mode==='route'||mode==='ppp'){
     const d=state.data;
     const results=d.reqs.map(r=>r.test());
     rlRenderReqs(results);
@@ -2767,7 +3156,7 @@ function revealAll(){
     document.getElementById('row-'+d.correct.id).classList.add('correct');
     if(mode==='lpm'){ gradeLpmBinRows(d,true); renderLpmExplainSlots(d); }
     fb.textContent='Skipped. '+lpmAdExplain(mode,d,d.correct.id)+' No points awarded.';
-  } else if(mode==='route'){
+  } else if(mode==='route'||mode==='ppp'){
     /* Unlike the other topics there's no single "correct answer" to fill in
        here (many valid IP/route choices all work) — reveal just shows the
        current requirement status rather than auto-solving the exercise. */
@@ -2806,7 +3195,7 @@ function resetGame(){ state.score=0; state.round=1; state.streak=0; loadQ(); }
 
 function setTopic(t,btn){
   state.topic=t;
-  document.querySelectorAll('#tb-rand,#tb-read,#tb-lpm,#tb-ad,#tb-route,#tb-summ,#tb-summ6').forEach(b=>b.classList.remove('on'));
+  document.querySelectorAll('#tb-rand,#tb-read,#tb-lpm,#tb-ad,#tb-route,#tb-ppp,#tb-summ,#tb-summ6').forEach(b=>b.classList.remove('on'));
   btn.classList.add('on');
   syncDiffButtons();
   loadQ();
