@@ -318,6 +318,35 @@
   window.addEventListener('scroll', closeSelMenu, true);
   window.addEventListener('resize', closeSelMenu);
 
+  /* ---------- multi-line paste into a lab CLI ----------
+     A terminal box is a single-line <input>, so a pasted block would arrive
+     as one line with its newlines stripped. Instead, every line that ends in
+     a newline is run as its own command, through the lab's own Enter
+     handling — so each is echoed with its prompt, history and errors work,
+     and a two-line exchange (crypto key generate rsa / 1024, clear ip ospf
+     process / yes) answers itself. A last line with no newline is left in
+     the box unsent, as a real console would. The box is looked up by id
+     before every line because three labs rebuild it after each command. */
+  document.addEventListener('paste', function (e) {
+    var t = e.target;
+    if (!t || !t.classList || !t.classList.contains('term-in')) return;
+    var text = (e.clipboardData || window.clipboardData).getData('text') || '';
+    if (!/[\r\n]/.test(text)) return;
+    e.preventDefault();
+    var lines = (t.value.slice(0, t.selectionStart) + text).replace(/\r\n?/g, '\n').split('\n');
+    var rest = lines.pop() + t.value.slice(t.selectionEnd);
+    var id = t.id;
+    lines.forEach(function (line) {
+      var inp = document.getElementById(id);
+      if (!inp) return;
+      inp.focus();
+      inp.value = line;
+      inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    });
+    var inp = document.getElementById(id);
+    if (inp) { inp.value = rest; inp.focus(); }
+  });
+
   window.LabShared = {
     isValidIP: isValidIP,
     toggleQcardPopout: toggleQcardPopout,
