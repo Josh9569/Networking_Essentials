@@ -748,6 +748,17 @@ const AC_KW={
       ipv6:{'access-list':{}, 'traffic-filter':{}, 'access-class':{}},
       'access-list':{}, 'access-class':{}, sequence:{}, username:{}, login:{}}
 };
+/* Every command acCli understands, by shape: this page's base plus the
+   shared ACL, NAT and SSH lists. A line that fits none of them gets IOS's
+   caret (see cliGrammar in lab-shared.js). */
+const AC_GRAMMAR=LabShared.cliGrammar([
+  'enable', 'configure [terminal]', 'end', 'exit', 'cls', 'clear',
+  'show running-config', 'show ip|ipv6 route', 'show ip|ipv6 interface [brief]', 'show ip|ipv6 interface <if>',
+  'show ip|ipv6 access-lists [<word>]', 'ping <addr> [source <if>]',
+  'interface <if>', 'line vty <n> [<n>]',
+  'shutdown', 'no shutdown', 'clock rate <n>', 'no clock rate [<n>]', 'ip address <ip> <ip>', 'no ip address [<ip> <ip>]',
+  'ip route <ip> <ip> <ip>|<if>', 'no ip route <ip> <ip> [<ip>|<if>]'
+]).concat(NetRouter.ACL_GRAMMAR, NetRouter.NAT_GRAMMAR, NetRouter.SSH_GRAMMAR);
 function acPrompt(d){
   if(d.cm==='rsa') return 'How many bits in the modulus [512]:';
   return d.name+(d.cm==='conf'?'(config)#':d.cm==='if'?'(config-if)#':
@@ -765,6 +776,12 @@ function acCli(d, line){
     if(!/^\d*$/.test(a)||n<360||n>4096) return '% The modulus is 360 to 4096 bits — run "crypto key generate rsa" again';
     return sshGenKeys(d,n);
   }
+  const pp=LabShared.cliPipe(acPrompt(d), line);
+  if(pp) return pp.err||LabShared.cliFilter(acCli(d,pp.base),pp);
+  const bad=LabShared.cliCheck(AC_GRAMMAR, acPrompt(d), line);
+  if(bad) return bad;
+  /* "do" runs an exec command from any configuration mode */
+  if(/^do\s/i.test(line.trim())) return acCli(d, line.trim().slice(3));
   const t=line.trim().replace(/\s+/g,' ');
   if(!t) return '';
   const w=t.toLowerCase().split(' ');
@@ -784,9 +801,9 @@ function acCli(d, line){
 
   /* ── show ── */
   if(M(w[0],'show')||w[0]==='sh'){
-    if(w[1]&&(w[1]==='access-lists'||w[1]==='access-list')) return acShowAcls(d);
+    if(w[1]&&(w[1]==='access-lists'||w[1]==='access-list')) return acShowAcls(d, raw[2]);
     const ipw = w[1]&&(w[1]==='ipv6'||M(w[1],'ip'));
-    if(ipw&&w[2]&&M(w[2],'access-list')) return acShowAcls(d);
+    if(ipw&&w[2]&&M(w[2],'access-lists')) return acShowAcls(d, raw[3]);
     if(ipw&&w[2]&&M(w[2],'route')) return acShowRoute(d);
     if(ipw&&w[1]!=='ipv6'&&w[2]==='ssh') return acShowIpSsh(d);
     if(ipw&&w[2]==='nat'){

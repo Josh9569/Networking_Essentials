@@ -746,9 +746,17 @@ function osIfaceRows(d){
     return {name:osIfaceName(i), neighbour:p.via, bw:h.bw, cost:h.cost, override:!!h.override};
   });
 }
+/* The four commands the drill's read-only CLI offers (OS_CMDS), by shape:
+   anything else gets IOS's caret rather than being matched by its prefix. */
+const OS_GRAMMAR=LabShared.cliGrammar([
+  'show ip ospf interface [brief|<if>]', 'show ip protocols', 'show running-config [\\| section ospf]',
+  'show interfaces [<if>]', 'help', '?'
+]);
 function osCliRun(cmd){
   const d=state.data, t=cmd.trim().toLowerCase().replace(/\s+/g,' ');
   if(!t) return '';
+  const bad=LabShared.cliCheck(OS_GRAMMAR, 'R1#', cmd);
+  if(bad) return bad;
   if(t==='?'||t==='help') return OS_CMDS.map(function(c){ return '  '+c; }).join('\n');
   const ifs=osIfaceRows(d);
 
@@ -2089,11 +2097,31 @@ const RP_KW={
       router:{rip:{}, ospf:{}}, version:{}, network:{}, 'default-information':{originate:{}},
       ipv6:{'unicast-routing':{}, router:{ospf:{}}, address:{}, ospf:{}, route:{}}, 'router-id':{}}
 };
+/* Every command rpCli understands, by shape: RIP, addressing and the IPv6
+   default route here, OSPF from net-ospf.js. A line that fits none of them
+   gets IOS's caret (see cliGrammar in lab-shared.js). */
+const RP_GRAMMAR=LabShared.cliGrammar([
+  'enable', 'configure [terminal]', 'end', 'exit', 'cls', 'clear',
+  'show ip route', 'show ip protocols', 'show ip interface [brief]', 'show running-config',
+  'show ipv6 route', 'show ipv6 interface [brief]',
+  'interface <if>', 'router rip', 'no router rip',
+  'shutdown', 'no shutdown', 'ip address <ip> <ip>', 'no ip address [<ip> <ip>]',
+  'ip route <ip> <ip> <ip>|<if>', 'no ip route [<ip> <ip> [<ip>|<if>]]',
+  'version 1|2', 'no version [1|2]', 'network <ip>', 'no network <ip>', 'auto-summary', 'no auto-summary',
+  'ipv6 route <v6p> <v6>|<if>', 'no ipv6 route [<v6p> [<v6>|<if>]]',
+  'ipv6 address <v6p>', 'ipv6 address <v6> link-local', 'no ipv6 address [<v6p>]', 'ipv6 enable'
+]).concat(NetOspf.GRAMMAR);
 function rpCli(d, line){
   const t=line.trim().replace(/\s+/g,' ');
   const M=function(tok,cand){ return tok&&cand.indexOf(tok)===0; };
   if(d.cm==='opclear'){ rpInvalidate(); return opCli(d,t,t.toLowerCase().split(' '),M); }
   if(!t) return '';
+  const pp=LabShared.cliPipe(rpPromptFor(d), line);
+  if(pp) return pp.err||LabShared.cliFilter(rpCli(d,pp.base),pp);
+  const bad=LabShared.cliCheck(RP_GRAMMAR, rpPromptFor(d), line);
+  if(bad) return bad;
+  /* "do" runs an exec command from any configuration mode */
+  if(/^do\s/i.test(t)) return rpCli(d, t.slice(3));
   const w=t.toLowerCase().split(' ');
   rpInvalidate();
 

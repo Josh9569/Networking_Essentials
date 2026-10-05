@@ -16,6 +16,36 @@
    vlanNames:{}, ip, ipVlan, sviShut, gw, priority, mac, cm, ci, cr, cpo, cv,
    log, hist, hi} — newSwitchState() supplies everything but the identity. */
 (function(window){
+  /* Every command the CLI below understands, by shape (see cliGrammar in
+     lab-shared.js). A line that fits none of these is refused with IOS's
+     caret before any handler runs, so "switchport mode access 80" is an
+     error rather than a silent "switchport mode access". Keep this list in
+     step with cli() when adding a command. */
+  const GRAMMAR=window.LabShared.cliGrammar([
+    'enable', 'configure [terminal]', 'end', 'exit', 'cls', 'clear',
+    'clear port-security all|dynamic|sticky|configured [interface <if>]',
+    'show vlan [brief]', 'show spanning-tree [vlan <n>]', 'show running-config', 'show ip interface [brief]',
+    'show interfaces [status|trunk]', 'show interfaces [<if>] [switchport]',
+    'show etherchannel [summary|port-channel]', 'show port-security [address]', 'show port-security interface <if>',
+    'vlan <n>', 'no vlan <n>', 'name <word>',
+    'interface <if>', 'interface range <any>', 'no interface <if>',
+    'ip address <ip> <ip>', 'no ip address [<ip> <ip>]', 'ip default-gateway <ip>', 'no ip default-gateway [<ip>]',
+    'shutdown', 'no shutdown',
+    'switchport mode access|trunk', 'switchport mode dynamic auto|desirable',
+    'no switchport mode [access|trunk]', 'no switchport mode dynamic [auto|desirable]',
+    'switchport access vlan <n>', 'no switchport access vlan [<n>]',
+    'switchport trunk native vlan <n>', 'no switchport trunk native vlan [<n>]',
+    'switchport trunk allowed vlan <vlist>', 'switchport trunk allowed vlan add|remove|except <vlist>',
+    'switchport trunk allowed vlan all|none', 'no switchport trunk allowed vlan [<vlist>]',
+    'switchport port-security', 'switchport port-security maximum <n>',
+    'switchport port-security mac-address sticky [<mac>]', 'switchport port-security mac-address <mac>',
+    'switchport port-security violation shutdown|restrict|protect',
+    'no switchport port-security', 'no switchport port-security maximum [<n>]',
+    'no switchport port-security mac-address sticky [<mac>]', 'no switchport port-security mac-address <mac>',
+    'no switchport port-security violation [shutdown|restrict|protect]',
+    'channel-group <n> mode active|passive|desirable|auto|on', 'no channel-group [<n>]',
+    'spanning-tree vlan <n> priority <n>', 'spanning-tree vlan <n> root primary|secondary'
+  ]);
   function create(world){
     const byId=function(id){ return world.byId(id); };
     const portCable=function(d,i){ return world.portCable(d,i); };
@@ -241,6 +271,12 @@
     function cli(d,line){
       const t=line.trim().replace(/\s+/g,' ');
       if(!t) return '';
+      const pp=window.LabShared.cliPipe(prompt_(d), line);
+      if(pp) return pp.err||window.LabShared.cliFilter(cli(d,pp.base),pp);
+      const bad=window.LabShared.cliCheck(GRAMMAR, prompt_(d), line);
+      if(bad) return bad;
+      /* "do" runs an exec command from any configuration mode */
+      if(/^do\s/i.test(t)) return cli(d,t.slice(3));
       const w=t.toLowerCase().split(' ');
       const M=(tok,cand)=>tok&&cand.startsWith(tok);
 
@@ -967,7 +1003,7 @@
     }
 
 
-    return {newPort:newPort, newSwitchState:newSwitchState, vlanOn:vlanOn,
+    return {GRAMMAR:GRAMMAR, newPort:newPort, newSwitchState:newSwitchState, vlanOn:vlanOn,
       psNew:psNew,
       portUp:portUp,
       portLinkUp:portLinkUp,
@@ -1037,5 +1073,5 @@
       PS_USAGE:PS_USAGE
     };
   }
-  window.NetSwitch={create:create};
+  window.NetSwitch={create:create, GRAMMAR:GRAMMAR};
 })(window);

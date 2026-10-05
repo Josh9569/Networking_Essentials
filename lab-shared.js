@@ -347,7 +347,164 @@
     if (inp) { inp.value = rest; inp.focus(); }
   });
 
+  /* ---------- command grammar ----------
+     IOS answers a line it cannot parse with a caret under the first word it
+     could not place, then "% Invalid input detected at '^' marker." A lab's
+     handlers only look at the words they need, so without this a line with
+     extra or misplaced words ("switchport mode access 80") ran silently.
+     Each CLI lists the shapes of the commands it knows; a line that fits none
+     of them is refused before any handler sees it. A line that merely stops
+     short is passed through, so a handler's own usage message still answers
+     "switchport access vlan" on its own.
+
+     Pattern syntax, words separated by spaces:
+       keyword      matched by abbreviation ("sh" fits "show")
+       a|b          either word (or type)
+       <type>       n, ip, v6, v6p (address/len), addr (ip or v6), word,
+                    if (one or two words: "g0/1", "GigabitEthernet 0/1"),
+                    mac, area (n or ip), vlist (the rest: a VLAN list),
+                    line (the rest: free text), any (the rest: the handler
+                    parses it, e.g. an ACE)
+       [ ... ]      optional
+       ( a b | c )  one of several sequences
+     Shape only, never mode: the handlers already say "select an interface
+     first" and the like, which helps a learner more than a caret would. */
+  var IF_TYPES = ['fastethernet', 'gigabitethernet', 'ethernet', 'serial', 'loopback', 'port-channel', 'vlan'];
+  var V6_RE = /^[0-9a-f]*:[0-9a-f:.]*$/i, IFNUM_RE = /^\d+(\/\d+)*(\.\d+)?$/;
+  function ifWord(w) { w = w.toLowerCase(); return IF_TYPES.some(function (t) { return t.indexOf(w) === 0; }); }
+  function cliCompile(src) {
+    var toks = src.replace(/([\[\]()])/g, ' $1 ').trim().split(/\s+/), i = 0;
+    function seq(stop) {
+      var out = [];
+      while (i < toks.length && stop.indexOf(toks[i]) < 0) {
+        var t = toks[i++];
+        if (t === '[') { out.push({ t: 'opt', seq: seq([']']) }); i++; }
+        else if (t === '(') {
+          var alts = [seq(['|', ')'])];
+          while (toks[i] === '|') { i++; alts.push(seq(['|', ')'])); }
+          i++; out.push({ t: 'alt', seqs: alts });
+        } else if (t === '\\|') out.push({ t: 'el', alts: [{ kw: '|' }] });   /* a literal pipe */
+        else out.push({ t: 'el', alts: t.split('|').map(function (a) {
+          var m = /^<(\w+)>$/.exec(a); return m ? { ty: m[1] } : { kw: a.toLowerCase() };
+        }) });
+      }
+      return out;
+    }
+    return seq([]);
+  }
+  function cliGrammar(patterns) { return patterns.map(cliCompile); }
+  function typeEnds(ty, toks, i) {
+    var t = toks[i], n = toks.length, m;
+    switch (ty) {
+      case 'n': return /^\d+$/.test(t) ? [i + 1] : [];
+      case 'ip': return isValidIP(t) ? [i + 1] : [];
+      case 'v6': return V6_RE.test(t) ? [i + 1] : [];
+      case 'v6p': m = /^(.+)\/\d{1,3}$/.exec(t); return m && V6_RE.test(m[1]) ? [i + 1] : [];
+      case 'addr': return isValidIP(t) || V6_RE.test(t) ? [i + 1] : [];
+      case 'area': return /^\d+$/.test(t) || isValidIP(t) ? [i + 1] : [];
+      case 'mac': return /^[0-9a-f]{4}\.[0-9a-f]{4}\.[0-9a-f]{4}$/i.test(t) ? [i + 1] : [];
+      case 'word': return [i + 1];
+      case 'if':
+        var out = [];
+        m = /^([a-z][a-z-]*)?(\d+(\/\d+)*(\.\d+)?)$/i.exec(t);
+        if (m && (m[1] ? ifWord(m[1]) : t.indexOf('/') > 0)) out.push(i + 1);
+        if (/^[a-z][a-z-]*$/i.test(t) && ifWord(t) && i + 1 < n && IFNUM_RE.test(toks[i + 1])) out.push(i + 2);
+        return out;
+      case 'vlist': return /^[\d,\-\s]+$/.test(toks.slice(i).join(' ')) ? [n] : [];
+      default: return [n];
+    }
+  }
+  function matchEl(node, i, ctx) {
+    var toks = ctx.toks, out = [];
+    if (i >= toks.length) { ctx.short = true; return out; }
+    var tok = toks[i].toLowerCase();
+    node.alts.forEach(function (a) {
+      var ends = a.ty ? typeEnds(a.ty, toks, i)
+        : (a.kw === tok || (a.kw !== '*' && a.kw.indexOf(tok) === 0)) ? [i + 1] : [];
+      ends.forEach(function (e) { if (out.indexOf(e) < 0) out.push(e); });
+    });
+    if (!out.length && i > ctx.far) ctx.far = i;
+    return out;
+  }
+  function matchSeq(seq, j, i, ctx) {
+    if (j === seq.length) return [i];
+    var node = seq[j], starts = [], out = [];
+    if (node.t === 'opt') starts = [i].concat(matchSeq(node.seq, 0, i, ctx));
+    else if (node.t === 'alt') node.seqs.forEach(function (s) { starts = starts.concat(matchSeq(s, 0, i, ctx)); });
+    else starts = matchEl(node, i, ctx);
+    starts.forEach(function (p) {
+      matchSeq(seq, j + 1, p, ctx).forEach(function (e) { if (out.indexOf(e) < 0) out.push(e); });
+    });
+    return out;
+  }
+  /* null when the line fits (or only stops short); otherwise IOS's caret
+     error. The caret lines up with the echo every lab prints, "<prompt>
+     <line>", so pass the prompt that was shown. A leading "do" is skipped. */
+  function cliCheck(grammar, prompt, line) {
+    var raw = String(line == null ? '' : line), toks = raw.trim().split(/\s+/).filter(Boolean);
+    if (!toks.length) return null;
+    var shift = toks.length > 1 && toks[0].toLowerCase() === 'do' ? 1 : 0;
+    var t = toks.slice(shift), ctx = { toks: t, far: -1, short: false };
+    for (var k = 0; k < grammar.length; k++) {
+      var ends = matchSeq(grammar[k], 0, 0, ctx);
+      if (ends.indexOf(t.length) >= 0) return null;
+      ends.forEach(function (e) { if (e > ctx.far) ctx.far = e; });
+    }
+    if (ctx.short) return null;
+    return cliCaretAt(prompt, raw, Math.max(0, ctx.far) + shift);
+  }
+
+  /* ---------- output filters: show ... | include|exclude|begin|section ----------
+     cliPipe splits a piped show command into the command and its filter (or
+     IOS's error for a malformed filter); cliFilter applies the filter to the
+     command's output. A page's CLI entry runs the command on its own, so the
+     grammar never sees the pipe:
+       const pp=LabShared.cliPipe(prompt, line);
+       if(pp) return pp.err || LabShared.cliFilter(run(pp.base), pp);
+     Only show commands take a filter, as on IOS. */
+  var PIPE_KINDS = ['include', 'exclude', 'begin', 'section'];
+  function cliCaretAt(prompt, raw, at) {
+    var re = /\S+/g, m, idx = 0, col = raw.length;
+    while ((m = re.exec(raw))) { if (idx === at) { col = m.index; break; } idx++; }
+    return new Array(String(prompt || '').length + 2 + col).join(' ') + "^\n% Invalid input detected at '^' marker.";
+  }
+  function cliPipe(prompt, line) {
+    var raw = String(line == null ? '' : line), cut = raw.indexOf('|');
+    if (cut < 0) return null;
+    var toks = raw.trim().split(/\s+/), first = (toks[0] || '').toLowerCase();
+    if (first === 'do' && toks[1]) first = toks[1].toLowerCase();
+    if (first.length < 2 || 'show'.indexOf(first) !== 0) return null;
+    var base = raw.slice(0, cut), after = raw.slice(cut + 1).trim().split(/\s+/).filter(Boolean);
+    var at = base.trim().split(/\s+/).length + (raw.charAt(cut + 1) === ' ' || !after.length ? 1 : 0);
+    if (!after.length) return { err: '% Incomplete command.' };
+    var kind = PIPE_KINDS.filter(function (k) { return k.indexOf(after[0].toLowerCase()) === 0; })[0];
+    if (!kind) return { err: cliCaretAt(prompt, raw, at) };
+    if (after.length < 2) return { err: '% Incomplete command.' };
+    return { base: base, kind: kind, pat: after.slice(1).join(' ') };
+  }
+  function cliFilter(out, p) {
+    var text = String(out == null ? '' : out), lines = text.split('\n');
+    if (lines.some(function (l) { return /^%|^\s*\^$/.test(l); })) return text;   /* an error passes through */
+    var re; try { re = new RegExp(p.pat); } catch (e) { re = { test: function (s) { return s.indexOf(p.pat) >= 0; } }; }
+    if (p.kind === 'include') return lines.filter(function (l) { return re.test(l); }).join('\n');
+    if (p.kind === 'exclude') return lines.filter(function (l) { return !re.test(l); }).join('\n');
+    if (p.kind === 'begin') { var i = 0; while (i < lines.length && !re.test(lines[i])) i++; return lines.slice(i).join('\n'); }
+    /* section: a matching line and everything indented under it */
+    var keep = [], depth = -1;
+    lines.forEach(function (l) {
+      var ind = l.length - l.replace(/^\s+/, '').length;
+      if (depth >= 0 && ind > depth && l.trim()) { keep.push(l); return; }
+      depth = -1;
+      if (re.test(l)) { keep.push(l); depth = ind; }
+    });
+    return keep.join('\n');
+  }
+
   window.LabShared = {
+    cliGrammar: cliGrammar,
+    cliCheck: cliCheck,
+    cliPipe: cliPipe,
+    cliFilter: cliFilter,
     isValidIP: isValidIP,
     toggleQcardPopout: toggleQcardPopout,
     dockQcardPopout: dockQcardPopout,

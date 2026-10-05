@@ -617,6 +617,32 @@ const TS_SLOTS={in4:'aclIn', out4:'aclOut', in6:'acl6In', out6:'acl6Out', vty4:'
 const TS_CLOCKS=[1200,2400,4800,9600,19200,38400,56000,64000,72000,125000,128000,148000,250000,500000,800000,1000000,1300000,2000000,4000000];
 const SYSLOG=/^%[A-Za-z][A-Za-z0-9_]*-\d-[A-Z0-9_]+:/;
 const EXEC_ONLY='% Invalid input detected — that is a configuration command; enter "configure terminal" first';
+/* Every router command, by shape: this page's base plus the shared
+   engines' own lists. A line that fits none of them gets IOS's caret and
+   never reaches a handler (see cliGrammar in lab-shared.js). Keep the base
+   list in step with tsRtrCli/tsIfCli/tsRouteCli/tsRtrShow. */
+const TS_RGRAMMAR=LabShared.cliGrammar([
+  'enable', 'disable', 'configure [terminal]', 'end', 'exit', 'cls', 'clear',
+  'show running-config', 'show startup-config', 'show interfaces [<if>]', 'show controllers <if>',
+  'show cdp neighbors [detail]', 'show vlans',
+  'show ip|ipv6 route [ospf|static|connected]', 'show ip|ipv6 interface [brief]', 'show ip|ipv6 interface <if>',
+  'ping <addr> [source <if>]', 'copy running-config startup-config', 'write [memory]',
+  'interface <if>', 'no interface <if>', 'line vty <n> [<n>]', 'line console <n>', 'logging synchronous',
+  'ip address <ip> <ip>', 'no ip address [<ip> <ip>]',
+  'ipv6 address <v6p>', 'ipv6 address <v6> link-local', 'no ipv6 address [<v6p>]', 'no ipv6 address <v6> link-local',
+  'ipv6 enable', 'no ipv6 enable', 'shutdown', 'no shutdown',
+  'encapsulation dot1q <n> [native]', 'encapsulation ppp|hdlc', 'no encapsulation [ppp|hdlc]', 'no encapsulation dot1q [<n> [native]]',
+  'ppp authentication chap|pap', 'no ppp authentication [chap|pap]', 'clock rate <n>', 'no clock rate [<n>]',
+  'description <line>', 'no description', 'bandwidth <n>', 'duplex auto|full|half', 'speed auto|<n>', 'mtu <n>', 'delay <n>',
+  'ip route <ip> <ip> <ip> [<n>]', 'ip route <ip> <ip> <if> [<ip>] [<n>]', 'no ip route <ip> <ip> [<ip>|<if>]',
+  'ipv6 route <v6p> <v6>', 'ipv6 route <v6p> <if> [<v6>]', 'no ipv6 route <v6p> [<v6>|<if>]',
+  'banner motd <line>', 'ip domain-lookup', 'no ip domain-lookup', 'ip cef', 'ipv6 cef', 'ip routing',
+  'cdp run', 'no cdp run', 'security <line>'
+]).concat(NetOspf.GRAMMAR, NetRouter.ACL_GRAMMAR, NetRouter.NAT_GRAMMAR, NetRouter.SSH_GRAMMAR);
+/* the switch engine's own list, plus what this page's wrapper adds */
+const TS_SGRAMMAR=NetSwitch.GRAMMAR.concat(LabShared.cliGrammar([
+  'ping <ip>', 'show cdp neighbors [detail]', 'show startup-config', 'copy running-config startup-config', 'write [memory]'
+]));
 function tsRtrPrompt(d){
   if(d.cm==='rsa') return 'How many bits in the modulus [512]:';
   if(d.cm==='opclear') return 'Reset ALL OSPF processes? [no]:';
@@ -656,6 +682,8 @@ function tsRtrCli(d,line){
   let t=line.trim().replace(/\s+/g,' ');
   if(d.cm==='opclear') return ospfCli(d,t,t.toLowerCase().split(' '),M)||'';
   if(!t) return '';
+  const bad=LabShared.cliCheck(TS_RGRAMMAR, tsRtrPrompt(d), line);
+  if(bad) return bad;
   if(/^do /i.test(t)) t=t.slice(3).trim();
   const w=t.toLowerCase().split(' '), raw=t.split(' ');
 
@@ -876,7 +904,7 @@ function tsRtrShow(d,w,raw,t){
   if(a.length>=3&&M(a,'interfaces')) return tsShowInterfaces(d,raw.slice(2).join(''));
   if(a.length>=3&&M(a,'controllers')) return tsShowControllers(d,raw.slice(2).join(''));
   if(a.length>=2&&M(a,'cdp')) return w[2]&&M(w[2],'neighbors')?tsShowCdp(d):'% Try "show cdp neighbors"';
-  if(a.length>=3&&M(a,'access-lists')) return tsShowAcls(d,4);
+  if(a.length>=3&&M(a,'access-lists')) return tsShowAcls(d,4,raw[2]);
   if(a.length>=4&&M(a,'vlans')) return tsShowVlans(d);
   if(a==='ip'||a==='ipv6'){
     const fam=a==='ipv6'?6:4, b=w[2]||'';
@@ -888,7 +916,7 @@ function tsRtrShow(d,w,raw,t){
       if(!f) return '% Invalid interface';
       return fam===4?tsShowIpIf(d,f):tsShowIp6If(d,f);
     }
-    if(b.length>=3&&M(b,'access-lists')) return tsShowAcls(d,fam);
+    if(b.length>=3&&M(b,'access-lists')) return tsShowAcls(d,fam,raw[3]);
     if(fam===4&&b==='nat'){
       if(w[3]&&M(w[3],'translations')) return natShowTranslations(d);
       if(w[3]&&M(w[3],'statistics')) return natShowStats(d);
@@ -984,8 +1012,9 @@ function tsShowVlans(d){
   });
   return L.join('\n').replace(/^\n/,'');
 }
-function tsShowAcls(d,fam){
-  const names=Object.keys(d.acls).filter(n=>(d.acls[n].fam===6)===(fam===6));
+/* "show access-lists POLICY-1" shows just that list, as on IOS. */
+function tsShowAcls(d,fam,only){
+  const names=Object.keys(d.acls).filter(n=>(d.acls[n].fam===6)===(fam===6)&&(!only||n===only));
   if(!names.length) return '';
   names.sort((a,b)=>{ const na=/^\d+$/.test(a), nb=/^\d+$/.test(b); if(na&&nb) return +a-+b; if(na!==nb) return na?-1:1; return a<b?-1:1; });
   const out=[];
@@ -1147,6 +1176,8 @@ function tsSwCli(d,line){
   OSPF.opInvalidate();
   let t=line.trim().replace(/\s+/g,' ');
   if(!t) return '';
+  const bad=LabShared.cliCheck(TS_SGRAMMAR, SWE.prompt_(d), line);
+  if(bad) return bad;
   if(/^do /i.test(t)) t=t.slice(3).trim();
   const w=t.toLowerCase().split(' ');
   if(w[0].length>=2&&M(w[0],'ping')) return tsSwPing(d,w[1]);
@@ -1298,8 +1329,8 @@ let tsBuildErrors=[];
 function tsExec(d,lines){
   ['configure terminal'].concat(lines,['end']).forEach(l=>{
     const out=d.type==='router'?tsRtrCli(d,l):tsSwCli(d,l);
-    if(out&&/^%/.test(out)&&!SYSLOG.test(out)&&!/^% ?[Nn]ote|^% All keys will be removed|^% OSPF: Reload/.test(out))
-      tsBuildErrors.push(d.name+': '+l.trim()+' → '+out);
+    const bad=String(out||'').split('\n').some(x=>/^%/.test(x)&&!SYSLOG.test(x)&&!/^% ?[Nn]ote|^% All keys will be removed|^% OSPF: Reload|^% Generating/.test(x));
+    if(bad) tsBuildErrors.push(d.name+': '+l.trim()+' → '+out);
   });
 }
 function tsBuild(){
@@ -1878,7 +1909,15 @@ function tsRefreshCfg(){
   tsRenderTerm();
 }
 function tsPrompt(d){ return d.type==='router'?tsRtrPrompt(d):SWE.prompt_(d); }
-function tsCli(d,line){ return d.type==='router'?tsRtrCli(d,line):tsSwCli(d,line); }
+function tsCli(d,line){
+  const run=function(l){ return d.type==='router'?tsRtrCli(d,l):tsSwCli(d,l); };
+  /* show ... | include/exclude/begin/section, for either device */
+  if(d.cm!=='rsa'&&d.cm!=='opclear'){
+    const pp=LabShared.cliPipe(tsPrompt(d),line);
+    if(pp) return pp.err||LabShared.cliFilter(run(pp.base),pp);
+  }
+  return run(line);
+}
 function tsRenderTerm(){
   const d=tsSel!=null?tsById(tsSel):null;
   if(!d||d.type==='pc') return;

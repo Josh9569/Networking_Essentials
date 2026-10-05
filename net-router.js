@@ -18,6 +18,47 @@
   function cidr2mask(c){ return int2ip(maskInt(c)); }
   function netIntOf(ip,c){ return (ip & maskInt(c))>>>0; }
 
+  /* The shapes of the ACL, NAT and SSH commands this file's handlers
+     understand, for a page that checks lines against a grammar before
+     running them (lab-shared.js cliCheck). The ACE bodies are spelled out,
+     so a stray word inside an entry gets IOS's caret too; whether a shape
+     suits the list it is typed into (a protocol in a standard list, say) is
+     still the parsers' call, and they say so in words. */
+  const SIDE4='( any | host <ip> | <ip> <ip> )', SIDE6='( any | host <v6> | <v6p> )';
+  const PORT='[ ( eq|neq|gt|lt <word> | range <word> <word> ) ]';
+  const STD_ACE='( any | host <ip> | <ip> [<ip>] ) [log]';
+  const EXT_ACE='ip|icmp|tcp|udp '+SIDE4+' '+PORT+' '+SIDE4+' '+PORT+' [echo|echo-reply] [log]';
+  const V6_ACE='ipv6|icmp|tcp|udp '+SIDE6+' '+PORT+' '+SIDE6+' '+PORT+' [echo-request|echo-reply] [log] [sequence <n>]';
+  const ACL_GRAMMAR=window.LabShared.cliGrammar([
+    'access-list <n> permit|deny '+STD_ACE, 'access-list <n> permit|deny '+EXT_ACE, 'no access-list <n>',
+    'ip access-list standard|extended <word>', 'no ip access-list standard|extended <word>',
+    'ipv6 access-list <word>', 'no ipv6 access-list <word>',
+    '[<n>] permit|deny '+STD_ACE, '[<n>] permit|deny '+EXT_ACE, '[<n>] permit|deny '+V6_ACE,
+    'no <n>', 'no sequence <n>',
+    'ip access-group <word> in|out', 'no ip access-group [<word>] in|out',
+    'ipv6 traffic-filter <word> in|out', 'no ipv6 traffic-filter <word> in|out',
+    'access-class <word> in', 'no access-class [<word> in]', 'ipv6 access-class <word> in', 'no ipv6 access-class [<word> in]',
+    'show access-lists [<word>]', 'show ip access-lists [<word>]', 'show ipv6 access-list [<word>]'
+  ]);
+  const NAT_GRAMMAR=window.LabShared.cliGrammar([
+    'ip nat inside|outside', 'no ip nat inside|outside',
+    'ip nat pool <word> <ip> <ip> ( netmask <ip> | prefix-length <n> )',
+    'no ip nat pool <word> [<ip> <ip> ( netmask <ip> | prefix-length <n> )]',
+    'ip nat inside source static <ip> <ip>', 'no ip nat inside source static <ip> <ip>',
+    'ip nat inside source list <word> pool <word> [overload]', 'ip nat inside source list <word> interface <if> overload',
+    'no ip nat inside source list <word> [pool <word> [overload]]', 'no ip nat inside source list <word> interface <if> [overload]',
+    'clear ip nat translation *', 'show ip nat translations|statistics'
+  ]);
+  const SSH_GRAMMAR=window.LabShared.cliGrammar([
+    'ip domain-name <word>', 'ip domain name <word>', 'no ip domain-name [<word>]', 'no ip domain name [<word>]',
+    'ip ssh version 1|2', 'ip ssh time-out <n>', 'ip ssh authentication-retries <n>', 'no ip ssh version [1|2]',
+    'crypto key generate rsa [general-keys] [modulus <n>]', 'crypto key zeroize rsa',
+    'username <word> [privilege <n>] secret|password <line>', 'no username <word>',
+    'enable secret|password <line>', 'service password-encryption', 'hostname <word>',
+    'login [local]', 'no login', 'password <line>',
+    'transport input ssh|telnet|all|none [ssh|telnet]', 'exec-timeout <n> [<n>]', 'show ip ssh'
+  ]);
+
   function ac6Parse(str){
     const t=String(str||'').trim().toLowerCase();
     if(!t||!/^[0-9a-f:]+$/.test(t)||t.indexOf(':::')>=0) return null;
@@ -159,7 +200,23 @@
     if(s.kind==='host') return 'host '+int2ip(s.ipInt);
     return int2ip(s.ipInt)+' '+int2ip(s.wcInt);
   }
-  function aceText(ace){
+  /* A trailing "log" changes nothing about what an entry matches — it asks
+     IOS to log hits — so it is kept only so show commands print it back. */
+  function aceText(ace){ return aceTextBody(ace)+(ace.log?' log':''); }
+  function takeLog(parts){
+    const p=parts.slice(), n=p.length, low=p.map(function(x){ return String(x).toLowerCase(); });
+    if(n&&low[n-1]==='log'){ p.pop(); return {parts:p, log:true}; }
+    if(n>=3&&low[n-3]==='log'&&low[n-2]==='sequence'){ p.splice(n-3,1); return {parts:p, log:true}; }
+    return {parts:p, log:false};
+  }
+  function withLog(parse){
+    return function(action, parts){
+      const L=takeLog(parts), r=parse(action, L.parts);
+      if(r.ace&&L.log) r.ace.log=true;
+      return r;
+    };
+  }
+  function aceTextBody(ace){
     if(ace.fam===6) return ace.action+' '+(ace.proto||'ipv6')+' '+ace6SideText(ace.src)+portText(ace.sport)+' '+
       ace6SideText(ace.dst)+portText(ace.dport)+(ace.icmp?' '+(ace.icmp==='echo'?'echo-request':ace.icmp):'');
     if(ace.ext) return ace.action+' '+ace.proto+' '+acexSideText(ace.src)+portText(ace.sport)+' '+
@@ -224,9 +281,9 @@
     const rows=acl.aces.map(function(a){
       /* IOS pads the action so permit/deny line up, and only shows a counter
          once the ACE has actually been hit. */
-      const body = a.kind==='any' ? a.action+(a.action==='deny'?'   ':' ')+'any'
+      const body = (a.kind==='any' ? a.action+(a.action==='deny'?'   ':' ')+'any'
                  : a.kind==='host' ? a.action+' host '+int2ip(a.ipInt)
-                 : a.action+' '+int2ip(a.ipInt)+' '+int2ip(a.wcInt);
+                 : a.action+' '+int2ip(a.ipInt)+' '+int2ip(a.wcInt))+(a.log?' log':'');
       return '    '+a.seq+' '+body+(a.matches?' ('+a.matches+' match'+(a.matches===1?'':'es')+')':'');
     });
     return [head].concat(rows);
@@ -247,9 +304,10 @@
     return n.replace(/^Gi(?=\d)/,'GigabitEthernet').replace(/^G(?=\d)/,'GigabitEthernet').replace(/^Fa(?=\d)/,'FastEthernet')
       .replace(/^S(?=\d)/,'Serial').replace(/^Lo(?=\d)/,'Loopback');
   }
-  function acShowAcls(d){
-    const names=Object.keys(d.acls);
-    if(!names.length) return '(no access lists configured)';
+  /* only, when given, is "show access-lists <name>": that list alone. */
+  function acShowAcls(d, only){
+    const names=Object.keys(d.acls).filter(function(n){ return !only||n===only; });
+    if(!names.length) return only?'':'(no access lists configured)';
     /* IOS lists numbered ACLs before named ones. */
     names.sort(function(a,b){
       const na=/^\d+$/.test(a), nb=/^\d+$/.test(b);
@@ -302,20 +360,21 @@
   /* SSH to a router: a TCP connection to port 22 has to get through the
      network (interface ACLs included), then the vty access-class decides,
      then the SSH server's own configuration and the login. */
-  function acParseAce(action, parts){
+  const acParseAce=withLog(function(action, parts){
     if(!parts.length) return {err:'% Incomplete command'};
     if(['ip','icmp','tcp','udp'].indexOf(String(parts[0]).toLowerCase())>=0)
       return {err:'% A standard list matches only the source address — protocols and destinations need an extended list (100-199, or "ip access-list extended <name>")'};
-    if(parts[0]==='any') return {ace:aceAny(0, action)};
+    const extra=function(i){ return parts.length>i?{err:'% Invalid input detected at "'+parts[i]+'"'}:null; };
+    if(parts[0]==='any') return extra(1)||{ace:aceAny(0, action)};
     if(parts[0]==='host'){
       if(!parts[1]||!isValidIP(parts[1])) return {err:'% Invalid host address'};
-      return {ace:aceHost(0, action, parts[1])};
+      return extra(2)||{ace:aceHost(0, action, parts[1])};
     }
     if(!isValidIP(parts[0])) return {err:'% Invalid address'};
     if(parts.length===1) return {ace:aceHost(0, action, parts[0])};
     if(!isValidIP(parts[1])) return {err:'% Invalid wildcard mask'};
-    return {ace:aceNet(0, action, parts[0], parts[1])};
-  }
+    return extra(2)||{ace:aceNet(0, action, parts[0], parts[1])};
+  });
   /* ── extended IPv4: "<proto> <src> [port] <dst> [port] [icmp-type]" ── */
   function acxParseSide(parts, i){
     const t=String(parts[i]||'').toLowerCase();
@@ -342,7 +401,7 @@
     }
     return {port:{op:op, a:a}, next:i+2};
   }
-  function acxParseAce(action, parts){
+  const acxParseAce=withLog(function(action, parts){
     const proto=String(parts[0]||'').toLowerCase();
     if(['ip','icmp','tcp','udp'].indexOf(proto)<0)
       return {err:'% An extended entry names the protocol first: "'+action+' ip|icmp|tcp|udp <source> <destination>"'};
@@ -355,7 +414,7 @@
     if(proto==='icmp'&&(t==='echo'||t==='echo-reply')){ icmp=t; i++; }
     if(i<parts.length) return {err:'% Invalid input detected at "'+parts[i]+'"'};
     return {ace:acexMake(0, action, proto, s.side, d.side, {sport:sp.port, dport:dp.port, icmp:icmp})};
-  }
+  });
 
   /* One side of an IPv6 entry: any | host X | X/len. Returns where parsing
      got to, so the destination can pick up after the source. */
@@ -378,7 +437,7 @@
      optional in IOS, and the sequence number goes LAST, which is the opposite
      of an IPv4 named list. Both are the sort of thing a lab should make you
      type rather than smooth over. */
-  function ac6ParseAce(action, parts){
+  const ac6ParseAce=withLog(function(action, parts){
     const proto=(parts[0]||'').toLowerCase();
     if(['ipv6','icmp','tcp','udp'].indexOf(proto)<0)
       return {err:'% An IPv6 entry names the protocol: "'+action+' ipv6|icmp|tcp|udp <source> <destination>"'};
@@ -395,7 +454,7 @@
     }
     if(i<parts.length) return {err:'% Invalid input detected'};
     return {ace:ace6Make(seq||0, action, a.side, b.side, proto, {sport:sp.port, dport:dp.port, icmp:icmp}), seq:seq};
-  }
+  });
 
   /* ── SSH and device-access commands, in global config and on the vty lines.
      Returns null for anything that isn't one of them. ── */
@@ -899,6 +958,9 @@
 
 
   window.NetRouter={
+    ACL_GRAMMAR:ACL_GRAMMAR,
+    NAT_GRAMMAR:NAT_GRAMMAR,
+    SSH_GRAMMAR:SSH_GRAMMAR,
     ac6Parse:ac6Parse,
     ac6Fmt:ac6Fmt,
     ac6Net:ac6Net,

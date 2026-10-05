@@ -1454,9 +1454,26 @@ const RL_KW={
   username:{}, ping:{},
   no:{shutdown:{}, ip:{address:{}, route:{}}, ppp:{authentication:{}}, clock:{rate:{}}, username:{}},
 };
+/* Every command rlCli understands, by shape. A line that fits none of them
+   gets IOS's caret (see cliGrammar in lab-shared.js). */
+const RL_GRAMMAR=LabShared.cliGrammar([
+  'enable', 'configure [terminal]', 'end', 'exit', 'cls', 'clear',
+  'show ip route', 'show ip interface [brief]', 'show interfaces <if>', 'show controllers <if>', 'show running-config',
+  'ping <ip>', 'username <word> password|secret <line>', 'no username <word>', 'hostname <word>',
+  'interface <if>', 'encapsulation ppp|hdlc', 'ppp authentication chap|pap', 'no ppp authentication [chap|pap]',
+  'clock rate <n>', 'no clock rate [<n>]', 'bandwidth <n>', 'description <line>', 'shutdown', 'no shutdown',
+  'ip address <ip> <ip>', 'no ip address [<ip> <ip>]',
+  'ip route <ip> <ip> <ip>', 'ip route <ip> <ip> <if> [<ip>]', 'no ip route <ip> <ip> <ip>', 'no ip route <ip> <ip> <if> [<ip>]'
+]);
 function rlCli(d,line){
   const t=line.trim().replace(/\s+/g,' ');
   if(!t) return '';
+  const pp=LabShared.cliPipe(rlPromptFor(d), line);
+  if(pp) return pp.err||LabShared.cliFilter(rlCli(d,pp.base),pp);
+  const bad=LabShared.cliCheck(RL_GRAMMAR, rlPromptFor(d), line);
+  if(bad) return bad;
+  /* "do" runs an exec command from any configuration mode */
+  if(/^do\s/i.test(t)) return rlCli(d, t.slice(3));
   const w=t.toLowerCase().split(' ');
   const M=(tok,cand)=>tok&&cand.startsWith(tok);
 
