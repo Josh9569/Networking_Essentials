@@ -112,6 +112,15 @@
   --err-bdr:   #b22020;
 }
 
+/* ── Dropdown menus: one corner geometry ──
+   .theme-dd-menu, .opt-menu and .sel-menu are all radius var(--rl) with a
+   1px border and 6px of padding, and their rows (.theme-dd-item, .opt-row,
+   .sel-item) are concentric with that corner: inner radius = outer radius -
+   border - padding = 12 - 1 - 6 = 5px, written calc(var(--rl) - 7px) so it
+   follows --rl. A row with the same radius as its menu looks pinched at the
+   corners. Anything nested deeper than the corner curve reaches (e.g. the
+   pencil button inside a theme row, 8px in from a 5px corner) gets 0.
+   Change the menu padding and the 7px must change with it. */
 /* ── Global theme dropdown (injected by theme.js into #theme-toggle-slot on every page) ──
    Light / Dark / Sync with Device, mirroring the per-page "Options" dropdown's
    look (.opt-btn/.opt-menu/.opt-row) but sized to sit in the header next to
@@ -127,12 +136,12 @@
 .theme-dd-menu       { display: none; position: absolute; right: 0; top: calc(100% + 6px); width: 190px; background: var(--surface); border: 1px solid var(--border-m); border-radius: var(--rl); padding: 6px; z-index: 100; box-shadow: 0 4px 16px rgba(0,0,0,.10); }
 .theme-dd.open .theme-dd-menu { display: block; }
 .theme-dd-label      { font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--text-t); padding: 6px 10px 4px; }
-.theme-dd-item       { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 8px 10px; border: none; border-radius: var(--r); background: transparent; font-family: var(--font); font-size: 14px; color: var(--text); text-align: left; cursor: pointer; transition: background .12s; }
+.theme-dd-item       { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; padding: 8px 10px; border: none; border-radius: calc(var(--rl) - 7px); background: transparent; font-family: var(--font); font-size: 14px; color: var(--text); text-align: left; cursor: pointer; transition: background .12s; }
 .theme-dd-item:hover { background: var(--surface-s); }
 .theme-dd-item.on    { color: var(--info-text); font-weight: 500; }
 .theme-dd-check      { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
 .theme-dd-item-icons { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
-.theme-dd-edit       { display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; flex-shrink: 0; border: none; border-radius: 6px; background: transparent; color: var(--text-t); cursor: pointer; }
+.theme-dd-edit       { display: flex; align-items: center; justify-content: center; width: 22px; height: 22px; flex-shrink: 0; border: none; border-radius: 0; background: transparent; color: var(--text-t); cursor: pointer; }
 .theme-dd-edit:hover { background: var(--surface); color: var(--info-text); }
 .theme-dd-edit svg   { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 
@@ -369,7 +378,7 @@ sup  { font-size: .65em; vertical-align: super; }
 .opt-menu          { display: none; position: absolute; right: 0; top: calc(100% + 6px); width: 220px; background: var(--surface); border: 1px solid var(--border-m); border-radius: var(--rl); padding: 6px; z-index: 100; box-shadow: 0 4px 16px rgba(0,0,0,.10); }
 .opt-menu.open     { display: block; }
 .opt-section-label { font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--text-t); padding: 6px 10px 4px; }
-.opt-row           { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border-radius: var(--r); transition: background .12s; cursor: pointer; }
+.opt-row           { display: flex; align-items: center; justify-content: space-between; padding: 8px 10px; border-radius: calc(var(--rl) - 7px); transition: background .12s; cursor: pointer; }
 .opt-row:hover     { background: var(--surface-s); }
 .opt-row-label     { font-size: 14px; color: var(--text); user-select: none; }
 
@@ -1004,8 +1013,8 @@ sup  { font-size: .65em; vertical-align: super; }
    colours are the fallback for keyboard users who open the native list. */
 .port-table select { max-width: 100px; }
 .port-table select option, .cfg-panel select option { background: var(--bg); color: var(--text); }
-.sel-menu       { position: fixed; z-index: 400; min-width: 90px; background: var(--surface); border: 1px solid var(--border-m); border-radius: var(--r); padding: 4px; box-shadow: 0 4px 16px rgba(0,0,0,.18); }
-.sel-item       { display: block; width: 100%; padding: 5px 10px; border: none; border-radius: 5px; background: transparent; font-family: var(--mono); font-size: 12.5px; color: var(--text); text-align: left; white-space: nowrap; cursor: pointer; }
+.sel-menu       { position: fixed; z-index: 400; min-width: 90px; background: var(--surface); border: 1px solid var(--border-m); border-radius: var(--rl); padding: 6px; box-shadow: 0 4px 16px rgba(0,0,0,.18); }
+.sel-item       { display: block; width: 100%; padding: 5px 10px; border: none; border-radius: calc(var(--rl) - 7px); background: transparent; font-family: var(--mono); font-size: 12.5px; color: var(--text); text-align: left; white-space: nowrap; cursor: pointer; }
 .sel-item:hover { background: var(--surface-s); }
 .sel-item.on    { color: var(--info-text); font-weight: 500; }
 /* IP Routing's interface IP/mask columns (routing_game.html) hold real dotted-
