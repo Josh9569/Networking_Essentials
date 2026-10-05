@@ -2033,30 +2033,30 @@ function tsSshRun(){
 /* ═══ The brief ════════════════════════════════════════════════════ */
 const TS_ADDR=[
   ['ISP','G0/0','220.100.100.1/30','2001:CAFE:ABC::1/64',''],
-  ['ISP','Lo0','5.5.5.5/32','2001:5:5::5/128','the Internet'],
-  ['R1','G0/0','220.100.100.2/30','2001:CAFE:ABC::2/64 · FE80::1',''],
-  ['R1','G0/1','10.0.13.1/30','2001:CAFE:ACAD:13::1/64 · FE80::1',''],
-  ['R1','S0/0/0 (DCE)','10.0.12.1/30','2001:CAFE:ACAD:12::1/64 · FE80::1',''],
-  ['R2','G0/1.10','172.16.10.1/24','2001:CAFE:ACAD:10::1/64 · FE80::2',''],
-  ['R2','G0/1.20','172.16.20.1/24','2001:CAFE:ACAD:20::1/64 · FE80::2',''],
+  ['ISP','Lo0','5.5.5.5/32','2001:5:5::5/128','Internet'],
+  ['R1','G0/0','220.100.100.2/30','2001:CAFE:ABC::2/64<span class="cell-alt">FE80::1</span>',''],
+  ['R1','G0/1','10.0.13.1/30','2001:CAFE:ACAD:13::1/64<span class="cell-alt">FE80::1</span>',''],
+  ['R1','S0/0/0<span class="cell-alt">DCE</span>','10.0.12.1/30','2001:CAFE:ACAD:12::1/64<span class="cell-alt">FE80::1</span>',''],
+  ['R2','G0/1.10','172.16.10.1/24','2001:CAFE:ACAD:10::1/64<span class="cell-alt">FE80::2</span>',''],
+  ['R2','G0/1.20','172.16.20.1/24','2001:CAFE:ACAD:20::1/64<span class="cell-alt">FE80::2</span>',''],
   ['R2','G0/1.99','172.16.99.1/24','',''],
-  ['R2','G0/1.1000','— native VLAN 1000, untagged','',''],
-  ['R2','S0/0/0','10.0.12.2/30','2001:CAFE:ACAD:12::2/64 · FE80::2',''],
-  ['R3','G0/0','10.0.13.2/30','2001:CAFE:ACAD:13::2/64 · FE80::3',''],
-  ['R3','G0/1','172.16.30.1/24','2001:CAFE:ACAD:30::1/64 · FE80::3',''],
+  ['R2','G0/1.1000','none — native','',''],
+  ['R2','S0/0/0','10.0.12.2/30','2001:CAFE:ACAD:12::2/64<span class="cell-alt">FE80::2</span>',''],
+  ['R3','G0/0','10.0.13.2/30','2001:CAFE:ACAD:13::2/64<span class="cell-alt">FE80::3</span>',''],
+  ['R3','G0/1','172.16.30.1/24','2001:CAFE:ACAD:30::1/64<span class="cell-alt">FE80::3</span>',''],
   ['S1','VLAN 99','172.16.99.11/24','','172.16.99.1'],
   ['S2','VLAN 99','172.16.99.12/24','','172.16.99.1'],
-  ['PC-A','NIC','172.16.10.10/24','2001:CAFE:ACAD:10::10/64','172.16.10.1 · FE80::2'],
-  ['PC-B','NIC','172.16.20.10/24','2001:CAFE:ACAD:20::10/64','172.16.20.1 · FE80::2'],
-  ['PC-C','NIC','172.16.10.100/24','2001:CAFE:ACAD:10::100/64','172.16.10.1 · FE80::2'],
-  ['PC-D','NIC','172.16.30.10/24','2001:CAFE:ACAD:30::10/64','172.16.30.1 · FE80::3']
+  ['PC-A','NIC','172.16.10.10/24','2001:CAFE:ACAD:10::10/64','172.16.10.1<span class="cell-alt">FE80::2</span>'],
+  ['PC-B','NIC','172.16.20.10/24','2001:CAFE:ACAD:20::10/64','172.16.20.1<span class="cell-alt">FE80::2</span>'],
+  ['PC-C','NIC','172.16.10.100/24','2001:CAFE:ACAD:10::100/64','172.16.10.1<span class="cell-alt">FE80::2</span>'],
+  ['PC-D','NIC','172.16.30.10/24','2001:CAFE:ACAD:30::10/64','172.16.30.1<span class="cell-alt">FE80::3</span>']
 ];
 const TS_VLAN_ROWS=[
-  ['10','Sales','172.16.10.0/24','S1 Fa0/6 (PC-A), S2 Fa0/7 (PC-C)'],
+  ['10','Sales','172.16.10.0/24','S1 Fa0/6 (PC-A)<span class="cell-alt">S2 Fa0/7 (PC-C)</span>'],
   ['20','HR','172.16.20.0/24','S2 Fa0/6 (PC-B)'],
-  ['30','Branch','172.16.30.0/24','S3 Fa0/6 (PC-D), S3 Gi0/1 (R3)'],
+  ['30','Branch','172.16.30.0/24','S3 Fa0/6 (PC-D)<span class="cell-alt">S3 Gi0/1 (R3)</span>'],
   ['99','Management','172.16.99.0/24','S1 and S2 SVIs'],
-  ['1000','Native','—','untagged on every trunk']
+  ['1000','Native','—','every trunk, untagged']
 ];
 const TS_DESIGN=[
   'Trunks: S1 Gi0/1 to R2, and Port-channel1 between S1 and S2 (Fa0/1–2; LACP, S1 active and S2 passive). Native VLAN 1000, allowed VLANs 10, 20, 99 and 1000.',
@@ -2085,17 +2085,24 @@ function tsSecBtn(k,label){
 /* The brief's tables use the compact .port-table rows: the addressing
    table alone is eighteen lines, and at .rt-table's spacing it pushed the
    tickets a screen below the fold. */
-function tsHtmlTable(head,rows){
+/* addrCols are the columns holding addresses. A narrow pop-out may break one
+   only where a person would: before its prefix length ("…::1" / "/64"), or
+   after an IPv6 site prefix ("2001:CAFE:ACAD:" / "10::1") — never mid-group.
+   A <wbr> costs nothing when the table fits on one line. */
+function tsHtmlTable(head,rows,addrCols){
+  const cell=(c,i)=>(addrCols||[]).indexOf(i)>=0?String(c)
+    .replace(/([0-9A-Fa-f:.])(\/\d{1,3})(?![\d/])/g,'$1<wbr>$2')
+    .replace(/\b([0-9A-Fa-f]{1,4}:[0-9A-Fa-f]{1,4}:[0-9A-Fa-f]{1,4}:)(?=[0-9A-Fa-f])/g,'$1<wbr>'):c;
   return '<table class="port-table" style="margin-top:.35rem;font-family:var(--mono);font-size:12px;white-space:nowrap"><thead><tr>'+head.map(h=>'<th>'+h+'</th>').join('')+'</tr></thead><tbody>'+
-    rows.map(r=>'<tr>'+r.map(c=>'<td>'+c+'</td>').join('')+'</tr>').join('')+'</tbody></table>';
+    rows.map(r=>'<tr>'+r.map((c,i)=>'<td>'+cell(c,i)+'</td>').join('')+'</tr>').join('')+'</tbody></table>';
 }
 /* Tickets first — they are the job — then the reference material, which a
    learner reads once and then consults. Every section collapses and
    remembers it. */
 function tsRefHtml(){
-  return tsSecBtn('addr','Addressing Table')+'<div id="ts-body-addr">'+tsHtmlTable(['Device','Interface','IPv4','IPv6 / link-local','Gateway'],TS_ADDR)+'</div>'+
-    tsSecBtn('vlan','VLAN Table')+'<div id="ts-body-vlan">'+tsHtmlTable(['VLAN','Name','Network','Ports'],TS_VLAN_ROWS)+'</div>'+
-    tsSecBtn('design','Design')+'<div id="ts-body-design">'+TS_DESIGN.map(s=>'<div class="req-note">'+esc(s)+'</div>').join('')+'</div>';
+  return tsSecBtn('addr','Addressing Table')+'<div id="ts-body-addr">'+tsHtmlTable(['Device','Interface','IPv4','IPv6 / link-local','Gateway'],TS_ADDR,[2,3])+'</div>'+
+    tsSecBtn('vlan','VLAN Table')+'<div id="ts-body-vlan">'+tsHtmlTable(['VLAN','Name','Network','Ports'],TS_VLAN_ROWS,[2])+'</div>'+
+    tsSecBtn('design','Design')+'<div id="ts-body-design">'+TS_DESIGN.map(s=>'<div class="tool-note">'+esc(s)+'</div>').join('')+'</div>';
 }
 function tsFixText(f){
   if(f.fix.pc) return f.fix.pc+' › IP Configuration: '+Object.keys(f.fix.set).map(k=>({ip:'IPv4 Address', pfx:'Subnet Mask', gw:'Default Gateway', gw6:'IPv6 Gateway'}[k])+' '+

@@ -273,7 +273,30 @@ sup  { font-size: .65em; vertical-align: super; }
   .qcard.popped .rt-table td { overflow-wrap: anywhere; }
   .qcard.popped .req-note    { font-size: 11px; }
   .qcard.popped .mono-inl    { padding: 0 3px; }
+  /* The troubleshooting trainer's brief uses the compact .port-table rows;
+     floating, they go tighter still. td carries the size so it wins over
+     the inline font-size the table sets for its docked layout. */
+  .qcard.popped .port-table th { padding: 4px; font-size: 9.5px; }
+  .qcard.popped .port-table td { padding: 4px; font-size: 10.5px; }
+  /* When even the compact table cannot fit, a cell may wrap — but only at
+     the <wbr> the page puts before an address's prefix length, never
+     mid-address (overflow-wrap:anywhere broke "220.100.100.1/3" + "0"). */
+  .qcard.popped .port-table td { white-space: normal; }
+  .qcard.popped .cell-alt         { display: block; }
+  .qcard.popped .cell-alt::before { content: none; }
 }
+/* Below ~2000px the gutter cannot fit even the broken-up table at 10.5px
+   (1800px leaves 379px and the table needs 390); half a pixel and a pixel
+   of side padding close it. */
+@media (min-width: 1600px) and (max-width: 1999px) {
+  .qcard.popped .port-table td { font-size: 10px; }
+  .qcard.popped .port-table th,
+  .qcard.popped .port-table td { padding-left: 3px; padding-right: 3px; }
+}
+/* A second value in a table cell — an IPv6 address's link-local, a PC's IPv6
+   gateway beside its IPv4 one. Inline after a middot normally; on its own
+   line in the floating panel (above), where width is the scarce thing. */
+.cell-alt::before { content: ' · '; }
 /* The left edge is the resize handle: highlighted while the pointer is on it,
    and the ew-resize cursor held everywhere during the drag so it doesn't
    flicker as the pointer outruns the edge. Only while the panel floats. */
