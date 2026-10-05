@@ -388,6 +388,24 @@ function addPC(x,y,opts={}){
     ports:[{name:'Eth0',mode:'access',vlan:1,ch:0}] };
   devices.push(d); return d;
 }
+/* The bottom-row slot for a router the learner cables in: on the canvas and
+   clear of the PCs if any slot is, else the one they cover least, nearest the
+   middle. */
+function addRouterBelow(){
+  const y=246;
+  const cover=x=>devices.reduce((t,d)=>{
+    if(d.type!=='pc') return t;
+    const [w,h]=devSize(d);
+    const ox=Math.min(x+RT_W,d.x+w+6)-Math.max(x,d.x-6), oy=Math.min(y+RT_H,d.y+h+6)-Math.max(y,d.y-6);
+    return t+(ox>0&&oy>0?ox*oy:0);
+  },0);
+  let best=null;
+  for(let x=5;x<=PC_ROW_R-RT_W;x+=15){
+    const c=cover(x), k=[c,Math.abs(x-320)];
+    if(!best||k[0]<best.k[0]||(k[0]===best.k[0]&&k[1]<best.k[1])) best={x,k};
+  }
+  return addRouter(best.x,y);
+}
 function addRouter(x,y,opts={}){
   rtCount++;
   const d={ id:nid++, type:'router', name:opts.name||('R'+rtCount), x, y,
@@ -456,12 +474,18 @@ function render(){
   const layer=document.getElementById('dev-layer');
   svg.innerHTML=''; layer.innerHTML='';
 
-  cables.forEach(c=>{
+  /* Switch ports are on the box's bottom edge, so switch-to-switch cables
+     are routed down-across-up (LabShared.cablePaths) rather than drawn
+     straight along the port row, where they stacked on each other. */
+  const routes=LabShared.cablePaths(cables.map(c=>{
+    const A=byId(c.a.d), B=byId(c.b.d), [ax,ay]=portPos(A,c.a.i), [bx,by]=portPos(B,c.b.i);
+    const box=d=>{ const [w,h]=devSize(d); return {l:d.x, t:d.y, r:d.x+w, b:d.y+h}; };
+    return {ax:A.x+ax, ay:A.y+ay, bx:B.x+bx, by:B.y+by, aDown:A.type==='switch', bDown:B.type==='switch', aBox:box(A), bBox:box(B)};
+  }));
+  cables.forEach((c,ci)=>{
     const A=byId(c.a.d), B=byId(c.b.d);
-    const [ax,ay]=portPos(A,c.a.i), [bx,by]=portPos(B,c.b.i);
-    const l=document.createElementNS('http://www.w3.org/2000/svg','line');
-    l.setAttribute('x1',A.x+ax); l.setAttribute('y1',A.y+ay);
-    l.setAttribute('x2',B.x+bx); l.setAttribute('y2',B.y+by);
+    const l=document.createElementNS('http://www.w3.org/2000/svg','path');
+    l.setAttribute('d',routes[ci]);
     const pa=A.ports[c.a.i], pb=B.ports[c.b.i];
     let cls='cable';
     if(pa.ch>0&&pb.ch>0) cls+=' chan';
@@ -471,9 +495,8 @@ function render(){
     l.dataset.cid=c.id;
     svg.appendChild(l);
     /* invisible wide line so cables are easy to click */
-    const hl=document.createElementNS('http://www.w3.org/2000/svg','line');
-    hl.setAttribute('x1',A.x+ax); hl.setAttribute('y1',A.y+ay);
-    hl.setAttribute('x2',B.x+bx); hl.setAttribute('y2',B.y+by);
+    const hl=document.createElementNS('http://www.w3.org/2000/svg','path');
+    hl.setAttribute('d',routes[ci]);
     hl.setAttribute('class','cable-hit');
     hl.dataset.cid=c.id;
     svg.appendChild(hl);
@@ -1036,19 +1059,43 @@ function buildGroupedPCs(sws, caps, sizes, opts={}){
   const groups=sizes.map(()=>[]);
   const pcs=[]; const swOf=new Map();
   sws.forEach((sw,si)=>{
+    const want=pcPortChoices(sw,sws).slice(0,persw[si].length).sort((a,b)=>a-b);
+    const row=[];
     persw[si].forEach((gi,pi)=>{
-      const off=OFF[persw[si].length][pi];
-      const x=Math.max(5,Math.min(opts.wide?620:655, sw.x+off));
       const y=(opts.y??210)+(pi%2)*(opts.wide?42:30);
       let ip=null;
       if(opts.ips) ip=`192.168.${opts.vids[gi]}.${opts.hostFor()}`;
-      const pc=addPC(x,y,{ip});
-      const port=sw.ports.findIndex((_,idx)=>!portCable(sw.id,idx));
+      const pc=addPC(sw.x+OFF[persw[si].length][pi],y,{ip});
+      const port=want[pi]!=null?want[pi]:sw.ports.findIndex((_,idx)=>!portCable(sw.id,idx));
       addCable(pc.id,0,sw.id,port,true);
+      row.push({pc,port});
       groups[gi].push(pc); pcs.push(pc); swOf.set(pc,sw);
     });
+    if(row.length) placePcRow(sw,row);
   });
   return {groups,pcs,swOf};
+}
+/* A switch's PCs sit in two staggered rows that overlap, so a PC in the lower
+   row shows only the gap between the PCs above it. Slide the whole row
+   sideways — as one, so it keeps its shape — until each lower PC's cable
+   rises through that gap rather than through a PC, then keep it on the
+   canvas (which wins if the two disagree). */
+const PC_ROW_R=800;
+function placePcRow(sw,row){
+  const W=row.map(r=>devSize(r.pc)[0]), top=Math.min(...row.map(r=>r.pc.y)), m=10;
+  let lo=-Infinity, hi=Infinity;
+  row.forEach((r,k)=>{
+    if(r.pc.y===top) return;
+    let a=r.pc.x, b=r.pc.x+W[k];
+    if(row[k-1]) a=Math.max(a,row[k-1].pc.x+W[k-1]);
+    if(row[k+1]) b=Math.min(b,row[k+1].pc.x);
+    const px=sw.x+portPosSwitch(sw,r.port)[0];
+    lo=Math.max(lo,px-b+m); hi=Math.min(hi,px-a-m);
+  });
+  let s=lo>hi?0:Math.max(lo,Math.min(hi,0));
+  const minX=Math.min(...row.map(r=>r.pc.x)), maxX=Math.max(...row.map((r,k)=>r.pc.x+W[k]));
+  s=Math.max(5-minX,Math.min(PC_ROW_R-maxX,s));
+  row.forEach(r=>{ r.pc.x=Math.round(r.pc.x+s); });
 }
 function switchesOfGroup(g,swOf){ return [...new Set(g.map(p=>swOf.get(p)))]; }
 function membStr(groups,vids,names,withSub){
@@ -1323,10 +1370,42 @@ function preTrunk(sA,ia,sB,ib){
   addCable(sA.id,ia,sB.id,ib,true);
   sA.ports[ia].mode='trunk'; sB.ports[ib].mode='trunk';
 }
-function lockPair(sA,sB){          /* two locked parallel links on random ports */
-  const ia=shuffle([0,1,2,3]).slice(0,2), ib=shuffle([0,1,2,3]).slice(0,2);
+/* Two locked parallel links, still on random ports — so the members aren't
+   always Fa0/1-2 — but on the side facing the other switch, leaving `spare`
+   ports on the far side clear of the bundle for that switch's PCs (or a link
+   the learner cables), and paired outer to outer so the two routed cables
+   nest rather than cross. spare 2 on a 4-port switch is the facing pair. */
+function lockPair(sA,sB,spareA=1,spareB=1){
+  const aLeft=sA.x<=sB.x;
+  const side=(spare,facingRight)=>{ const n=PORTN-spare; const r=[...Array(n).keys()]; return facingRight?r.map(i=>i+spare):r; };
+  const ia=shuffle(side(spareA,aLeft)).slice(0,2).sort((x,y)=>x-y);
+  const ib=shuffle(side(spareB,!aLeft)).slice(0,2).sort((x,y)=>y-x);
   addCable(sA.id,ia[0],sB.id,ib[0],true);
   addCable(sA.id,ia[1],sB.id,ib[1],true);
+}
+/* Is port i on sw under the span of a switch-to-switch cable? Those cables
+   are routed down-across-up beneath the port row, so a PC cable dropping
+   from a port inside one has to cross it. */
+function portUnderLink(sw,i){
+  const x=sw.x+portPosSwitch(sw,i)[0], row=sw.y+swHeight(sw);
+  return cables.some(c=>{
+    const A=byId(c.a.d), B=byId(c.b.d);
+    if(A.type!=='switch'||B.type!=='switch') return false;
+    if((c.a.d===sw.id&&c.a.i===i)||(c.b.d===sw.id&&c.b.i===i)) return false;
+    const xa=A.x+portPosSwitch(A,c.a.i)[0], xb=B.x+portPosSwitch(B,c.b.i)[0];
+    const base=Math.max(A.y+swHeight(A),B.y+swHeight(B));
+    return x>Math.min(xa,xb)&&x<Math.max(xa,xb)&&Math.abs(base-row)<40;
+  });
+}
+/* The free ports a switch's PCs should use, best first: clear of every drawn
+   link's span, then farthest from the switches beside it (the facing ports
+   are where the links the learner cables will naturally go), then in order. */
+function pcPortChoices(sw,sws=[]){
+  const L=sws.some(o=>o!==sw&&o.x<sw.x), R=sws.some(o=>o!==sw&&o.x>sw.x);
+  const pull=i=>Math.max(R?i:-1, L?PORTN-1-i:-1);
+  const under=i=>portUnderLink(sw,i)?1:0;
+  return [...Array(PORTN).keys()].filter(i=>!portCable(sw.id,i))
+    .sort((a,b)=>under(a)-under(b)||pull(a)-pull(b)||a-b);
 }
 
 /* ── scenario builders ── */
@@ -1369,7 +1448,7 @@ function buildVlanScenarioInner(D){
 
   if(D==='medium'){
     const s1=addSwitch(120,30), s2=addSwitch(500,30);
-    preTrunk(s1,3,s2,3);
+    preTrunk(s1,3,s2,0);
     const k=pick([2,3]);
     const vids=pickVids(k), names=pickNames(k);
     const sizes=groupSizes(4,k);
@@ -1390,7 +1469,7 @@ function buildVlanScenarioInner(D){
 
   /* hard: variable PCs, variable VLANs, variable missing IPs, router + SVI */
   const s1=addSwitch(120,30), s2=addSwitch(500,30);
-  preTrunk(s1,3,s2,3);
+  preTrunk(s1,3,s2,0);
   const npc=pick([4,5]);
   const k=npc===4?2:pick([2,3]);
   const vids=pickVids(k), names=pickNames(k);
@@ -1546,7 +1625,7 @@ function buildEtherScenario(D){
   const k=2;
   const vids=pickVids(k), names=pickNames(k);
   const s1=addSwitch(70,50), s2=addSwitch(320,50), s3=addSwitch(570,50);
-  const {groups,swOf}=buildGroupedPCs([s1,s2,s3],[2,0,2],[2,2],{y:224,ips:true,vids:vids,hostFor:newHostPool()});
+  const {groups,swOf}=buildGroupedPCs([s1,s2,s3],[2,0,2],[2,2],{y:214,ips:true,vids:vids,hostFor:newHostPool()});
   const [pA,pB]=shuffle(['LACP','PAgP']);
   return {type:'ether',allowIP:true,
     _meta:{vids,names,groups,protos:[pA,pB]},
@@ -1582,7 +1661,10 @@ function scatterPcPorts(sw){
   const used=new Set(cables.filter(c=>!pcCables.includes(c)).flatMap(c=>[c.a,c.b]).filter(e=>e.d===sw.id).map(e=>e.i));
   /* a random subset of the free ports, kept in left-to-right order so the
      PC cables never cross */
-  const free=shuffle([...Array(PORTN).keys()].filter(i=>!used.has(i))).slice(0,pcCables.length).sort((a,b)=>a-b);
+  const all=[...Array(PORTN).keys()].filter(i=>!used.has(i));
+  const clear=all.filter(i=>!portUnderLink(sw,i));
+  const pool=clear.length>=pcCables.length?clear:all;
+  const free=shuffle(pool).slice(0,pcCables.length).sort((a,b)=>a-b);
   pcCables.forEach((c,k)=>{ c.b.i=free[k]; });
 }
 function sparePort(sw){ return [...Array(PORTN).keys()].find(i=>!portCable(sw.id,i)); }
@@ -1794,6 +1876,23 @@ const STP_HW=[
   {tag:'2019 model \u2014 1G uplinks, aging',             tier:2},
   {tag:'2015 model \u2014 1G uplinks, end-of-life',       tier:1},
 ];
+/* The STP rings' cabling. Each link sits on the port facing its neighbour —
+   top pair joined on their inner ports, each side link on the outer port —
+   so the routed cables run round the outside and never cross. Which port a
+   link uses changes nothing in the election: it is decided by bridge IDs and
+   path cost. Triangle: a, b on top, c below between them. Square: a b on
+   top, c d below (a above c, b above d). */
+function stpTriangle(a,b,c){
+  addCable(a.id,3,b.id,0,true);
+  addCable(b.id,3,c.id,3,true);
+  addCable(a.id,0,c.id,0,true);
+}
+function stpSquare(a,b,c,d){
+  addCable(a.id,3,b.id,0,true);
+  addCable(b.id,3,d.id,3,true);
+  addCable(d.id,0,c.id,3,true);
+  addCable(c.id,0,a.id,0,true);
+}
 function buildSTPConfigScenario(){
   const n=pick([3,4]);
   const hwPool=shuffle(STP_HW).slice(0,n);
@@ -1801,14 +1900,9 @@ function buildSTPConfigScenario(){
   const sws=positions.map((p,i)=>addSwitch(p[0],p[1],{hwNote:hwPool[i].tag}));
   sws.forEach((s,i)=>{ s._tier=hwPool[i].tier; });
   if(n===3){
-    addCable(sws[0].id,0,sws[1].id,0,true);
-    addCable(sws[1].id,1,sws[2].id,0,true);
-    addCable(sws[0].id,1,sws[2].id,1,true);
+    stpTriangle(sws[0],sws[1],sws[2]);
   } else {
-    addCable(sws[0].id,0,sws[1].id,0,true);
-    addCable(sws[1].id,1,sws[3].id,0,true);
-    addCable(sws[3].id,1,sws[2].id,0,true);
-    addCable(sws[2].id,1,sws[0].id,1,true);
+    stpSquare(sws[0],sws[1],sws[2],sws[3]);
   }
   const bySpeed=[...sws].sort((a,b)=>b._tier-a._tier);
   const target=bySpeed[0], secondary=bySpeed[1];
@@ -1851,10 +1945,7 @@ function buildSTPScenario(D){
       const xs=[[110,25],[510,25],[110,195],[510,195]];
       var sws=xs.map((p,i)=>addSwitch(p[0],p[1],{priority:val(roles[i]),priLabel:roles[i]}));
     }
-    addCable(sws[0].id,0,sws[1].id,0,true);
-    addCable(sws[1].id,1,sws[3].id,0,true);
-    addCable(sws[3].id,1,sws[2].id,0,true);
-    addCable(sws[2].id,1,sws[0].id,1,true);
+    stpSquare(sws[0],sws[1],sws[2],sws[3]);
     sub='Four switches form a ring.';
   } else if(D==='medium'){
     const roles=shuffle(['root primary','root secondary','default']);
@@ -1862,18 +1953,14 @@ function buildSTPScenario(D){
     const s1=addSwitch(110,30,{priority:val(roles[0]),priLabel:roles[0]});
     const s2=addSwitch(510,30,{priority:val(roles[1]),priLabel:roles[1]});
     const s3=addSwitch(310,200,{priority:val(roles[2]),priLabel:roles[2]});
-    addCable(s1.id,0,s2.id,0,true);
-    addCable(s2.id,1,s3.id,0,true);
-    addCable(s1.id,1,s3.id,1,true);
+    stpTriangle(s1,s2,s3);
     sub='Three switches form a loop; priorities are shown as configured keywords.';
   } else {
     const pris=shuffle(pick([[4096,32768,32768],[8192,16384,32768],[4096,8192,32768],[32768,32768,32768]]));
     const s1=addSwitch(110,30,{priority:pris[0]});
     const s2=addSwitch(510,30,{priority:pris[1]});
     const s3=addSwitch(310,200,{priority:pris[2]});
-    addCable(s1.id,0,s2.id,0,true);
-    addCable(s2.id,1,s3.id,0,true);
-    addCable(s1.id,1,s3.id,1,true);
+    stpTriangle(s1,s2,s3);
     sub='Three switches form a loop.';
   }
   const stp=computeSTP();
@@ -1897,9 +1984,9 @@ function buildComboScenario(D){
     const k=2;
     const vids=pickVids(k), names=pickNames(k);
     const s1=addSwitch(140,55), s2=addSwitch(480,55);
-    lockPair(s1,s2);
+    lockPair(s1,s2,2,2);          /* two PCs on each switch */
     const sizes=groupSizes(4,k);
-    const {groups,swOf}=buildGroupedPCs([s1,s2],[2,2],sizes,{y:224,ips:true,vids:vids,hostFor:newHostPool()});
+    const {groups,swOf}=buildGroupedPCs([s1,s2],[2,2],sizes,{y:214,ips:true,vids:vids,hostFor:newHostPool()});
     const [gi,gj]=pickTwoGroups(k);
     return {type:'combo',allowIP:true,
       _meta:{vids,names,groups,sizes},
@@ -1922,7 +2009,7 @@ function buildComboScenario(D){
   const bundlePair=pairs[bi], singlePair=pairs[1-bi];
 
   if(D==='medium'){
-    lockPair(bundlePair[0],bundlePair[1]);
+    lockPair(bundlePair[0],bundlePair[1],2,2);   /* every port is spoken for: PCs and the learner's link */
     const k=pick([2,3]);
     const vids=pickVids(k), names=pickNames(k);
     const sizes=groupSizes(4,k);
@@ -1970,7 +2057,7 @@ function buildComboScenario(D){
   const missing=shuffle(pcs).slice(0,m);
   missing.forEach(p=>p.ip=null);
   const missEntries=missing.map(p=>({pc:p,o3:vidOf.get(p)}));
-  addRouter(320,270);
+  addRouterBelow();
   const svSw=pick([s1,s2,s3]);
   const svV=pick(vids);
   const [gi,gj]=pickTwoGroups(k);

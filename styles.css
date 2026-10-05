@@ -921,7 +921,7 @@ body.pop-resizing, body.pop-resizing * { cursor: ew-resize !important; user-sele
 .lab-hint    { font-size: 12px; color: var(--text-s); margin-top: .55rem; min-height: 16px; }
 
 /* cables */
-.cable        { stroke: var(--border-m); stroke-width: 3; cursor: pointer; pointer-events: stroke; }
+.cable        { stroke: var(--border-m); stroke-width: 3; cursor: pointer; pointer-events: stroke; fill: none; }
 .cable:hover  { stroke: var(--err-text); }
 .cable.trunk  { stroke: var(--info-text); }
 .cable.chan   { stroke: #7c3aed; stroke-dasharray: 7 4; }
@@ -1115,7 +1115,7 @@ body.pop-resizing, body.pop-resizing * { cursor: ew-resize !important; user-sele
 
 /* Switching Lab: zoom wrapper, cable hit area, STP answer selection, ping, SVI */
 #zoom-wrap    { position: absolute; inset: 0; transform-origin: 0 0; }
-.cable-hit    { stroke: #000; stroke-opacity: 0; stroke-width: 14; pointer-events: stroke; cursor: pointer; }
+.cable-hit    { stroke: #000; stroke-opacity: 0; stroke-width: 14; pointer-events: stroke; cursor: pointer; fill: none; }
 .dev.q-sel    { border-color: var(--info-bdr); box-shadow: 0 0 0 3px rgba(59,130,246,.25); }
 .port.p-sel   { border-color: var(--info-bdr); background: #dbeafe; transform: scale(1.25); }
 .lg-note      { color: var(--text-t); font-style: italic; }

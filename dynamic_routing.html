@@ -2888,9 +2888,28 @@ function rpDevSize(d){
   return [Math.max(LabShared.PC_W, Math.round(label.length*6.4)+24), LabShared.PC_H];
 }
 function rpFixedPortPos(d,i){
-  if(d.type==='router'){ const pad=20, span=RP_W-2*pad; return [pad+i*(span/(RP_PORTN-1)), RP_H]; }
-  if(d.type==='switch'){ const pad=20, span=LabShared.SW_W-2*pad; return [pad+i*(span/(RP_SW_PORTN-1)), LabShared.SW_H]; }
+  const k=d.slots?d.slots[i]:i;
+  if(d.type==='router'){ const pad=20, span=RP_W-2*pad; return [pad+k*(span/(RP_PORTN-1)), RP_H]; }
+  if(d.type==='switch'){ const pad=20, span=LabShared.SW_W-2*pad; return [pad+k*(span/(RP_SW_PORTN-1)), LabShared.SW_H]; }
   return null;
+}
+/* Draw each box's ports in the order their cables leave (LabShared.portSlots)
+   — Gi0/0 is still Gi0/0, it just sits on the side its PC is on. Run once per
+   round, when the round's own cables exist; devices are laid out in order, so
+   a later one sees the slots an earlier one settled on. */
+function rpLayoutSlots(){
+  rpDevices.forEach(function(d){ d.slots=null; });
+  rpDevices.forEach(function(d){
+    if(d.type!=='router'&&d.type!=='switch') return;
+    const sz=rpDevSize(d), row=d.y+sz[1];
+    const far=d.ports.map(function(_,i){
+      const c=rpPortCable(d.id,i); if(!c) return null;
+      const o=rpOtherEnd(c,d.id), od=rpById(o.d), os=rpDevSize(od), fp=rpFixedPortPos(od,o.i);
+      if(fp) return {x:od.x+fp[0], kind:'u'};
+      return {x:od.x+os[0]/2, kind:od.y+os[1]/2<row?'up':'down'};
+    });
+    d.slots=LabShared.portSlots(far, d.x+sz[0]/2);
+  });
 }
 function rpPortPos(d,i){
   const fixed=rpFixedPortPos(d,i);
@@ -2914,13 +2933,19 @@ function rpRenderCanvas(){
   if(!svg||!layer) return;
   svg.innerHTML=''; layer.innerHTML='';
 
-  rpCables.forEach(function(c){
-    const A=rpById(c.a.d), B=rpById(c.b.d);
-    const pa=rpPortPos(A,c.a.i), pb=rpPortPos(B,c.b.i);
+  /* Router and switch ports sit on the bottom edge of the box, so a cable
+     between two of them is routed down-across-up (LabShared.cablePaths)
+     instead of drawn straight along the port row or through a box. */
+  const rpBox=function(d){ const s=rpDevSize(d); return {l:d.x, t:d.y, r:d.x+s[0], b:d.y+s[1]}; };
+  const rpRoutes=LabShared.cablePaths(rpCables.map(function(c){
+    const A=rpById(c.a.d), B=rpById(c.b.d), pa=rpPortPos(A,c.a.i), pb=rpPortPos(B,c.b.i);
+    return {ax:A.x+pa[0], ay:A.y+pa[1], bx:B.x+pb[0], by:B.y+pb[1],
+      aDown:!!rpFixedPortPos(A,c.a.i), bDown:!!rpFixedPortPos(B,c.b.i), aBox:rpBox(A), bBox:rpBox(B)};
+  }));
+  rpCables.forEach(function(c,ci){
     ['cable','cable-hit'].forEach(function(cls){
-      const l=document.createElementNS('http://www.w3.org/2000/svg','line');
-      l.setAttribute('x1',A.x+pa[0]); l.setAttribute('y1',A.y+pa[1]);
-      l.setAttribute('x2',B.x+pb[0]); l.setAttribute('y2',B.y+pb[1]);
+      const l=document.createElementNS('http://www.w3.org/2000/svg','path');
+      l.setAttribute('d',rpRoutes[ci]);
       l.setAttribute('class',cls); l.dataset.cid=c.id;
       svg.appendChild(l);
     });
@@ -3365,6 +3390,7 @@ function renderRipLab(body,qip){
   });
   document.getElementById('rp-cable-svg').addEventListener('click', rpOnCableClick);
   setBtns('lab');
+  rpLayoutSlots();
   rpRenderCanvas();
   rpRenderReqs(null);
 }

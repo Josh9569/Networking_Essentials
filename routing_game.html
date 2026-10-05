@@ -1341,9 +1341,8 @@ function rlResetTopo(){ rlDevices=[]; rlCables=[]; rlNid=1; rlCid=1; rlSelected=
 function rlById(id){ return rlDevices.find(d=>d.id===id); }
 /* opts.serial gives the router two serial ports beside two Gigabit ones
    (the PPP topic's routers); without it the router is the IP Routing lab's
-   three-Gigabit box, unchanged. opts.serialLeft draws the serial ports on
-   the left of the port row, so a link to a router on its left runs clear of
-   the other port dots. */
+   three-Gigabit box, unchanged. opts.serialLeft lists the serial ports
+   first; where each port is DRAWN is rlLayoutSlots' call, from the links. */
 function rlAddRouter(x,y,opts={}){
   rlRtCount++;
   const gi=n=>Array.from({length:n},(_,i)=>({name:'Gi0/'+i, ip:null, pfx:null, up:false}));
@@ -1874,7 +1873,10 @@ function rlPcIpReq(pc,netInt,pfx){
     }};
 }
 function rlCableReq(devA,labelA,devB,labelB){
-  return {desc:`Cable ${labelA} to ${labelB}`,
+  /* link: the ports the brief names, so rlLayoutSlots can lay the boxes'
+     ports out for the cabling the learner is about to do */
+  const ix=(d,l)=>d.ports?d.ports.findIndex(p=>l.endsWith(' '+p.name)):0;
+  return {desc:`Cable ${labelA} to ${labelB}`, link:{a:devA, ia:ix(devA,labelA), b:devB, ib:ix(devB,labelB)},
     test(){ return rlCableBetween(devA,devB) ? {ok:true} : {ok:false,reason:`${labelA} and ${labelB} are not cabled yet`}; }};
 }
 /* A real ping needs the echo REPLY to route back too, not just the request
@@ -2658,6 +2660,7 @@ function renderRoute(body,qip){
   });
   document.getElementById('rl-cable-svg').addEventListener('click', rlOnCableClick);
   setBtns();
+  rlLayoutSlots();
   rlRenderCanvas();
   rlRenderReqs(null);
 }
@@ -2679,9 +2682,35 @@ function rlPortPosSwitch(d,i){
   return [pad+i*(span/(SW_PORTN-1)), LabShared.SW_H];
 }
 function rlFixedPortPos(d,i){
-  if(d.type==='router') return rlPortPosRouter(d,i);
-  if(d.type==='switch') return rlPortPosSwitch(d,i);
+  const k=d.slots?d.slots[i]:i;
+  if(d.type==='router') return rlPortPosRouter(d,k);
+  if(d.type==='switch') return rlPortPosSwitch(d,k);
   return null;
+}
+/* Draw each box's ports in the order their cables leave (LabShared.portSlots)
+   — S0/0/1 is still S0/0/1, it just sits on the side its link runs to. Laid
+   out once per round from the round's cables plus the ones the brief asks
+   the learner to make (rlCableReq's link), so the cabling the round wants is
+   drawn clear before any of it exists, and nothing moves while it is made. */
+function rlLayoutSlots(){
+  const links=rlCables.map(c=>({a:rlById(c.a.d), ia:c.a.i, b:rlById(c.b.d), ib:c.b.i}));
+  ((state.data&&state.data.reqs)||[]).forEach(r=>{
+    const l=r.link; if(!l||l.ia<0||l.ib<0) return;
+    if(!links.some(k=>(k.a===l.a&&k.ia===l.ia)||(k.b===l.a&&k.ib===l.ia)||(k.a===l.b&&k.ia===l.ib)||(k.b===l.b&&k.ib===l.ib))) links.push(l);
+  });
+  rlDevices.forEach(d=>{ d.slots=null; });
+  rlDevices.forEach(d=>{
+    if(d.type!=='router'&&d.type!=='switch') return;
+    const [w,h]=rlDevSize(d), row=d.y+h;
+    const far=d.ports.map((_,i)=>{
+      const l=links.find(k=>(k.a===d&&k.ia===i)||(k.b===d&&k.ib===i)); if(!l) return null;
+      const od=l.a===d&&l.ia===i?l.b:l.a, oi=l.a===d&&l.ia===i?l.ib:l.ia;
+      const fp=rlFixedPortPos(od,oi), [ow,oh]=rlDevSize(od);
+      if(fp) return {x:od.x+fp[0], kind:'u'};
+      return {x:od.x+ow/2, kind:od.y+oh/2<row?'up':'down'};
+    });
+    d.slots=LabShared.portSlots(far, d.x+w/2);
+  });
 }
 /* PCs have one port that slides around the box edge toward whatever
    they're cabled to (same trick as switching_lab's portPos). */
@@ -2708,18 +2737,24 @@ function rlRenderCanvas(){
   if(!svg||!layer) return;
   svg.innerHTML=''; layer.innerHTML='';
 
-  rlCables.forEach(c=>{
-    const A=rlById(c.a.d), B=rlById(c.b.d);
-    const [ax,ay]=rlPortPos(A,c.a.i), [bx,by]=rlPortPos(B,c.b.i);
-    const l=document.createElementNS('http://www.w3.org/2000/svg','line');
-    l.setAttribute('x1',A.x+ax); l.setAttribute('y1',A.y+ay);
-    l.setAttribute('x2',B.x+bx); l.setAttribute('y2',B.y+by);
+  /* Router and switch ports sit on the bottom edge of the box, so a cable
+     between two of them is routed down-across-up (LabShared.cablePaths)
+     instead of drawn straight along the port row or through a box. */
+  const box=d=>{ const [w,h]=rlDevSize(d); return {l:d.x, t:d.y, r:d.x+w, b:d.y+h}; };
+  const routes=LabShared.cablePaths(rlCables.map(c=>{
+    const A=rlById(c.a.d), B=rlById(c.b.d), [ax,ay]=rlPortPos(A,c.a.i), [bx,by]=rlPortPos(B,c.b.i);
+    return {ax:A.x+ax, ay:A.y+ay, bx:B.x+bx, by:B.y+by,
+      aDown:!!rlFixedPortPos(A,c.a.i), bDown:!!rlFixedPortPos(B,c.b.i), aBox:box(A), bBox:box(B)};
+  }));
+  rlCables.forEach((c,ci)=>{
+    const A=rlById(c.a.d);
+    const l=document.createElementNS('http://www.w3.org/2000/svg','path');
+    l.setAttribute('d',routes[ci]);
     const ser=(A.ports&&A.ports[c.a.i]&&A.ports[c.a.i].serial);
     l.setAttribute('class','cable'+(ser?' serial':'')); l.dataset.cid=c.id;
     svg.appendChild(l);
-    const hl=document.createElementNS('http://www.w3.org/2000/svg','line');
-    hl.setAttribute('x1',A.x+ax); hl.setAttribute('y1',A.y+ay);
-    hl.setAttribute('x2',B.x+bx); hl.setAttribute('y2',B.y+by);
+    const hl=document.createElementNS('http://www.w3.org/2000/svg','path');
+    hl.setAttribute('d',routes[ci]);
     hl.setAttribute('class','cable-hit'); hl.dataset.cid=c.id;
     svg.appendChild(hl);
   });

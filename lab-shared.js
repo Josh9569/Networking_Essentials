@@ -546,7 +546,121 @@
     return keep.join('\n');
   }
 
+  /* ---------- routed cables ----------
+     Switch and router ports sit on the bottom edge of the box, so a straight
+     line between two of them lies along the port row (devices level) or cuts
+     through a box (devices staggered). cablePaths routes such a cable the way
+     a tidy rack is cabled: down from its port, across, and up into the other
+     port from below. When the drop from the higher port would run through the
+     lower box, the cable goes down the side of that box instead (a corridor
+     14px clear of it). A cable from a bottom port to a free end ABOVE it (a PC
+     sitting higher than its router) would cut straight up through its own
+     box, so it drops, runs out to the nearer side and climbs that corridor.
+     Horizontal runs that overlap step down one level each, narrowest first,
+     so bundles nest instead of stacking and nested cables never cross. Any
+     other cable with a free end (a PC below, a single-port router) stays a
+     straight line.
+       ends: [{ax, ay, bx, by, aDown, bDown, aBox, bBox}]  ->  path strings
+       (a box is {l, t, r, b}: the down end's own box, for the corridors) */
+  function roundedPath(pts, R) {
+    var d = 'M' + pts[0][0] + ' ' + pts[0][1];
+    for (var i = 1; i < pts.length; i++) {
+      var p = pts[i];
+      if (i === pts.length - 1) { d += 'L' + p[0] + ' ' + p[1]; break; }
+      var a = pts[i - 1], c = pts[i + 1];
+      var l1 = Math.hypot(p[0] - a[0], p[1] - a[1]), l2 = Math.hypot(c[0] - p[0], c[1] - p[1]);
+      var r = Math.min(R, l1 / 2, l2 / 2);
+      if (r < 1) { d += 'L' + p[0] + ' ' + p[1]; continue; }
+      var bx = p[0] - (p[0] - a[0]) / l1 * r, by = p[1] - (p[1] - a[1]) / l1 * r;
+      var ex = p[0] + (c[0] - p[0]) / l2 * r, ey = p[1] + (c[1] - p[1]) / l2 * r;
+      d += 'L' + bx + ' ' + by + 'Q' + p[0] + ' ' + p[1] + ' ' + ex + ' ' + ey;
+    }
+    return d;
+  }
+  function cablePaths(ends) {
+    var BASE = 16, STEP = 11, GAP = 14, out = [], runs = [], routes = [];
+    function run(base, x1, x2) { var h = { base: base, lo: Math.min(x1, x2), hi: Math.max(x1, x2) }; runs.push(h); return h; }
+    ends.forEach(function (e, i) {
+      var a = { x: e.ax, y: e.ay, box: e.aBox }, b = { x: e.bx, y: e.by, box: e.bBox };
+      if (!(e.aDown && e.bDown)) {
+        /* one bottom port, one free end */
+        var dn = e.aDown ? a : e.bDown ? b : null, fr = dn === a ? b : a, bx = dn && dn.box;
+        if (!bx || fr.y >= dn.y - 2) { out[i] = 'M' + e.ax + ' ' + e.ay + 'L' + e.bx + ' ' + e.by; return; }
+        var cx = fr.x < (bx.l + bx.r) / 2 ? bx.l - GAP : bx.r + GAP;
+        routes.push({ i: i, rev: dn !== a, h: [run(dn.y, dn.x, cx)], build: function (h) {
+          var pts = [[dn.x, dn.y], [dn.x, h[0].y], [cx, h[0].y]];
+          /* a free end over the box itself: climb past the top before turning in */
+          if (fr.x > bx.l - GAP && fr.x < bx.r + GAP) pts.push([cx, Math.min(fr.y, bx.t - GAP)]);
+          pts.push([fr.x, fr.y]);
+          return pts;
+        } });
+        return;
+      }
+      /* hi = the higher port, lo = the lower */
+      var aHi = a.y <= b.y, hi = aHi ? a : b, lo = aHi ? b : a, lb = lo.box;
+      if (lo.y - hi.y >= 40 && lb && hi.x > lb.l - 8 && hi.x < lb.r + 8) {
+        /* the drop would hit the lower box: across to its nearer side first */
+        var sx = (hi.x - lb.l < lb.r - hi.x) ? lb.l - GAP : lb.r + GAP;
+        routes.push({ i: i, rev: !aHi, h: [run(hi.y, hi.x, sx), run(lo.y, sx, lo.x)], build: function (h) {
+          return [[hi.x, hi.y], [hi.x, h[0].y], [sx, h[0].y], [sx, h[1].y], [lo.x, h[1].y], [lo.x, lo.y]];
+        } });
+      } else {
+        routes.push({ i: i, rev: !aHi, h: [run(Math.max(hi.y, lo.y), hi.x, lo.x)], build: function (h) {
+          return [[hi.x, hi.y], [hi.x, h[0].y], [lo.x, h[0].y], [lo.x, lo.y]];
+        } });
+      }
+    });
+    /* levels: narrowest first, each one step below any overlapping run on its row */
+    runs.sort(function (p, q) { return (p.hi - p.lo) - (q.hi - q.lo); });
+    var placed = [];
+    runs.forEach(function (h) {
+      var lvl = 0;
+      placed.forEach(function (o) { if (o.lo <= h.hi && h.lo <= o.hi && Math.abs(o.base - h.base) < 40) lvl = Math.max(lvl, o.lvl + 1); });
+      h.lvl = lvl; h.y = h.base + BASE + lvl * STEP; placed.push(h);
+    });
+    routes.forEach(function (rt) {
+      var pts = rt.build(rt.h);
+      /* a route is built from its own natural end; put it back in a-to-b order */
+      if (rt.rev) pts.reverse();
+      out[rt.i] = roundedPath(pts, 8);
+    });
+    return out;
+  }
+
+  /* ---------- port slots ----------
+     Which slot along a box's bottom edge each port is drawn in. A port keeps
+     its name and number; only where its circle sits changes, so that every
+     cable leaves on the side it is heading for and the cables out of one box
+     don't cross each other. From each edge inwards: cables that climb the
+     corridor beside the box (a free end above), then routed cables to other
+     bottom ports — nearest far end at the edge, so cables to farther devices
+     nest round them — then straight cables down to a free end below. Uncabled
+     ports keep their own order in the slots left over in the middle.
+     A page computes this once, when the round's cables exist, and keeps it,
+     so ports never move while the learner is cabling.
+       far: per port, null (uncabled) or {x, kind}: x is the far end's x;
+            kind 'up' (free end above the port), 'u' (another bottom port)
+            or 'down' (free end below)
+       cx:  the box's own centre x            ->  slot index per port */
+  function portSlots(far, cx) {
+    var RANK = { up: 0, u: 1, down: 2 }, idx = far.map(function (_, i) { return i; });
+    function side(left) {
+      return idx.filter(function (i) { return far[i] && (far[i].x < cx) === left; })
+        .sort(function (p, q) {
+          var A = far[p], B = far[q], dA = Math.abs(A.x - cx), dB = Math.abs(B.x - cx);
+          if (A.kind !== B.kind) return RANK[A.kind] - RANK[B.kind];
+          return (A.kind === 'u' ? dA - dB : dB - dA) || p - q;
+        });
+    }
+    var order = side(true).concat(idx.filter(function (i) { return !far[i]; }), side(false).reverse());
+    var slot = [];
+    order.forEach(function (p, k) { slot[p] = k; });
+    return slot;
+  }
+
   window.LabShared = {
+    cablePaths: cablePaths,
+    portSlots: portSlots,
     cliGrammar: cliGrammar,
     cliCheck: cliCheck,
     cliPipe: cliPipe,
