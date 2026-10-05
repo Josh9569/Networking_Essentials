@@ -38,6 +38,7 @@
     <button class="cbtn" id="tb-match" onclick="setTopic('match',this)">Which ACE Matches?</button>
     <button class="cbtn" id="tb-place" onclick="setTopic('place',this)">Placement</button>
     <button class="cbtn" id="tb-lab" onclick="setTopic('lab',this)">ACL Lab</button>
+    <button class="cbtn" id="tb-ssh" onclick="setTopic('ssh',this)">SSH Lab</button>
     <button class="cbtn" id="tb-terms" onclick="setTopic('terms',this)">NAT Terms</button>
     <button class="cbtn" id="tb-nat" onclick="setTopic('nat',this)">NAT Lab</button>
   </div>
@@ -189,6 +190,34 @@
         </tbody>
       </table>
       <p class="tool-note">IOS numbers ACEs in tens automatically, which is what leaves room to insert a line between two existing ones later. <strong>Tab</strong> completes a command; <strong>&uarr;</strong> and <strong>&darr;</strong> walk the history.</p>
+      <div class="tool-block-title" style="margin-top:1rem">Extended ACLs</div>
+      <p class="tool-note">An extended entry names a <strong>protocol</strong>, a <strong>source</strong> and a <strong>destination</strong>, and for tcp/udp optionally a port. Because it can be that specific, it goes <strong>close to the source</strong>. Lists 100&ndash;199 are extended; a named one uses <span class="mono-inl">ip access-list extended</span>. End it with <span class="mono-inl">permit ip any any</span> or the implicit deny drops everything else.</p>
+      <table class="ref-table">
+        <thead><tr><th>Command</th><th>Mode</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td class="mono-inl">access-list 100 deny ip 192.168.10.0 0.0.0.255 192.168.30.0 0.0.0.255</td><td>config</td><td>Any IP traffic from one network to another</td></tr>
+          <tr><td class="mono-inl">access-list 100 permit ip any any</td><td>config</td><td>Let everything else through</td></tr>
+          <tr><td class="mono-inl">ip access-list extended NAME</td><td>config</td><td>Create or edit a named extended ACL (also opens a numbered one, e.g. <span class="mono-inl">ip access-list extended 100</span>, for editing by sequence number)</td></tr>
+          <tr><td class="mono-inl">deny icmp 192.168.30.0 0.0.0.255 any</td><td>config-ext-nacl</td><td>Just pings (ICMP); add <span class="mono-inl">echo</span> or <span class="mono-inl">echo-reply</span> to pick one direction</td></tr>
+          <tr><td class="mono-inl">deny tcp any host 10.1.1.1 eq 22</td><td>config-ext-nacl</td><td>Just SSH (TCP port 22) to that host. <span class="mono-inl">eq www</span> is web, <span class="mono-inl">eq telnet</span> is 23</td></tr>
+          <tr><td class="mono-inl">5 permit ip host 192.168.10.100 any</td><td>config-ext-nacl</td><td>Insert at sequence 5, ahead of entry 10</td></tr>
+        </tbody>
+      </table>
+      <div class="tool-block-title" style="margin-top:1rem">SSH</div>
+      <p class="tool-note">SSH needs a <strong>domain name</strong> (the keys are named after it), <strong>RSA keys</strong> &mdash; at least 768 bits for version 2 &mdash; a <strong>local user</strong>, and vty lines that use <span class="mono-inl">login local</span> and accept <span class="mono-inl">transport input ssh</span>. Test it from a PC once the device is reachable.</p>
+      <table class="ref-table">
+        <thead><tr><th>Command</th><th>Mode</th><th>What it does</th></tr></thead>
+        <tbody>
+          <tr><td class="mono-inl">ip domain-name ccna-lab.com</td><td>config</td><td>Required before keys can be generated</td></tr>
+          <tr><td class="mono-inl">crypto key generate rsa general-keys modulus 1024</td><td>config</td><td>Make the keys, which turns SSH on. Without <span class="mono-inl">modulus</span> it asks for the size</td></tr>
+          <tr><td class="mono-inl">ip ssh version 2</td><td>config</td><td>Only accept SSH version 2</td></tr>
+          <tr><td class="mono-inl">username admin secret cisco</td><td>config</td><td>A local account; <span class="mono-inl">secret</span> stores it hashed</td></tr>
+          <tr><td class="mono-inl">line vty 0 4</td><td>config</td><td>The virtual terminal lines remote sessions use</td></tr>
+          <tr><td class="mono-inl">login local</td><td>config-line</td><td>Log in with a username from the local database</td></tr>
+          <tr><td class="mono-inl">transport input ssh</td><td>config-line</td><td>Accept SSH only &mdash; no telnet</td></tr>
+          <tr><td class="mono-inl">show ip ssh</td><td>exec</td><td>Whether SSH is enabled, and which version</td></tr>
+        </tbody>
+      </table>
       <div class="tool-block-title" style="margin-top:1rem">The same lab in IPv6</div>
       <p class="tool-note">Three things change and nothing else does. There are <strong>no wildcards</strong> &mdash; a network is written with its prefix length, <span class="mono-inl">2001:db8:acad:10::/64</span>. There are <strong>no numbered lists</strong> &mdash; every IPv6 ACL is named. And every entry names a <strong>source and a destination</strong>, because IPv6 has no "standard" list; a policy that only cares about the source says <span class="mono-inl">any</span> for the destination.</p>
       <table class="ref-table">
@@ -334,11 +363,11 @@ function acNet(key,pfx){ return acFam===6 ? ac6Net(key,pfx) : netIntOf(key,pfx);
 function acFmt(key){ return acFam===6 ? ac6Fmt(key) : int2ip(key); }
 function acValid(str){ return acKey(str)!==null; }
 function acCanon(str){ const k=acKey(str); return k===null ? null : acFmt(k); }
-const TOPICS=['wild','range','match','place','lab','terms','nat'];
+const TOPICS=['wild','range','match','place','lab','ssh','terms','nat'];
 const TOPIC_LABEL={wild:'Wildcard Masks', range:'Wildcard Ranges', match:'Which ACE Matches?',
-                   place:'ACL Placement', lab:'ACL Lab', terms:'NAT Terms', nat:'NAT Lab'};
+                   place:'ACL Placement', lab:'ACL Lab', ssh:'SSH Lab', terms:'NAT Terms', nat:'NAT Lab'};
 const POINTS={easy:3, medium:4, hard:6};
-const TOPIC_REF={wild:'wcref', range:'wcref', match:'aclref', place:'aclref', lab:'cmdref', terms:'natref', nat:'natref'};
+const TOPIC_REF={wild:'wcref', range:'wcref', match:'aclref', place:'aclref', lab:'cmdref', ssh:'cmdref', terms:'natref', nat:'natref'};
 
 /* The Version row is the address family, and it is LIVE on the lab: it
    picks which family the round is built in, the way the RIP lab's row picks
@@ -350,7 +379,8 @@ const VERSIONS={
   range:{row:'Family', opts:[], labels:['IPv4','IPv6'], note:'wildcards are an IPv4 idea'},
   match:{row:'Family', opts:[], labels:['IPv4','IPv6'], note:'wildcards are an IPv4 idea'},
   place:{row:'Family', opts:[], labels:['IPv4','IPv6'], note:'wildcards are an IPv4 idea'},
-  lab:{row:'Family', opts:['4','6'], labels:['IPv4','IPv6'], note:'the same lab in either family'},
+  lab:{row:'Type', opts:['4','x','6'], labels:['Standard','Extended','IPv6'], note:'standard or extended IPv4 lists, or the lab in IPv6'},
+  ssh:{row:'Version', opts:[], labels:['SSH v2'], note:'the lab always builds version 2'},
   /* On the NAT topics the row is the NAT type. Three buttons; the third is
      hidden on every other topic. */
   terms:{row:'Type', opts:[], labels:['Static','Dynamic','PAT'], note:'the terms are the same for all three'},
@@ -385,21 +415,77 @@ function aceMake(seq, action, kind, ipInt, wcInt){
 function aceHost(seq, action, ip){ return aceMake(seq, action, 'host', ip2int(ip), 0); }
 function aceNet(seq, action, ip, wc){ return aceMake(seq, action, 'net', ip2int(ip), ip2int(wc)); }
 function aceAny(seq, action){ return aceMake(seq, action, 'any', 0, 0xFFFFFFFF); }
-/* An IPv6 ACE names a source AND a destination, each as any / host X / X/len,
-   and matches on prefix length — there are no wildcards in IPv6. */
-function ace6Make(seq, action, src, dst){
-  return {seq:seq, action:action, fam:6, src:src, dst:dst, matches:0};
+/* An IPv6 ACE names a protocol, a source AND a destination, each as any /
+   host X / X/len, and matches on prefix length — there are no wildcards in
+   IPv6. The protocol defaults to "ipv6" (everything). */
+function ace6Make(seq, action, src, dst, proto, opts){
+  opts=opts||{};
+  return {seq:seq, action:action, fam:6, proto:proto||'ipv6', src:src, dst:dst,
+          sport:opts.sport||null, dport:opts.dport||null, icmp:opts.icmp||null, matches:0};
 }
 function ace6Side(kind, key, pfx){ return {kind:kind, key:key, pfx:pfx}; }
 function ace6SideMatches(side, key){
   if(side.kind==='any') return true;
   return acNet(key, side.pfx)===acNet(side.key, side.pfx);
 }
-/* One entry point for the lab, whichever family the ACE is. dstKey is only
-   consulted by IPv6 entries, and may be omitted for a vty check. */
-function aceHits(ace, srcKey, dstKey){
-  if(ace.fam!==6) return aceMatches(ace, srcKey);
-  return ace6SideMatches(ace.src, srcKey) && (dstKey==null || ace6SideMatches(ace.dst, dstKey));
+/* An extended IPv4 ACE: a protocol, a source AND a destination (each an
+   address and a wildcard — "any" and "host X" are stored that way too),
+   optional tcp/udp ports and an optional ICMP type. Standard entries keep
+   their own flatter shape, so the drills that read them are untouched. */
+function acexMake(seq, action, proto, src, dst, opts){
+  opts=opts||{};
+  return {seq:seq, action:action, ext:true, proto:proto, src:src, dst:dst,
+          sport:opts.sport||null, dport:opts.dport||null, icmp:opts.icmp||null, matches:0};
+}
+function acexSide(kind, ip, wc){
+  if(kind==='any') return {kind:'any', ipInt:0, wcInt:0xFFFFFFFF};
+  if(kind==='host') return {kind:'host', ipInt:ip2int(ip), wcInt:0};
+  return {kind:'net', ipInt:ip2int(ip), wcInt:ip2int(wc)};
+}
+/* pkt: {proto:'icmp'|'tcp'|'udp', sport, dport, icmpType:'echo'|'echo-reply'} */
+function portHits(spec, port){
+  if(!spec) return true;
+  if(port==null) return false;
+  switch(spec.op){
+    case 'eq': return port===spec.a;
+    case 'neq': return port!==spec.a;
+    case 'gt': return port>spec.a;
+    case 'lt': return port<spec.a;
+    default: return port>=spec.a && port<=spec.b;
+  }
+}
+function aceProtoHits(ace, pkt){
+  const p=ace.proto||'ip';
+  if(p==='ip'||p==='ipv6') return true;
+  if(!pkt||pkt.proto!==p) return false;
+  if(p==='icmp') return !ace.icmp || ace.icmp===pkt.icmpType;
+  return portHits(ace.sport, pkt.sport) && portHits(ace.dport, pkt.dport);
+}
+/* One entry point for the lab, whichever family and kind the ACE is. dstKey
+   and pkt are only consulted by entries that name a destination or a
+   protocol (extended IPv4 and IPv6), and dstKey may be omitted. */
+function aceHits(ace, srcKey, dstKey, pkt){
+  if(ace.fam===6) return ace6SideMatches(ace.src, srcKey) && (dstKey==null || ace6SideMatches(ace.dst, dstKey)) && aceProtoHits(ace, pkt);
+  if(ace.ext) return wcMatches(ace.src.ipInt, ace.src.wcInt, srcKey) &&
+    (dstKey==null || wcMatches(ace.dst.ipInt, ace.dst.wcInt, dstKey)) && aceProtoHits(ace, pkt);
+  return aceMatches(ace, srcKey);
+}
+/* Well-known ports by the names IOS prints them with. */
+const PORT_NAMES={ftp:21, ssh:22, telnet:23, smtp:25, domain:53, tftp:69, www:80, pop3:110, ntp:123, snmp:161};
+function portNum(tok){
+  if(tok==null) return null;
+  const t=String(tok).toLowerCase();
+  if(PORT_NAMES[t]!=null) return PORT_NAMES[t];
+  if(!/^\d+$/.test(t)) return null;
+  const n=+t; return n>=0&&n<=65535 ? n : null;
+}
+function portName(n){
+  for(const k in PORT_NAMES) if(PORT_NAMES[k]===n&&k!=='ssh') return k;
+  return String(n);
+}
+function portText(spec){
+  if(!spec) return '';
+  return ' '+spec.op+' '+portName(spec.a)+(spec.op==='range'?' '+portName(spec.b):'');
 }
 /* The page's one piece of wildcard arithmetic. A 1-bit is "don't care", so
    the covered block runs from every don't-care bit at 0 up to every one at
@@ -443,14 +529,28 @@ function ace6SideText(side){
   if(side.kind==='host') return 'host '+ac6Fmt(side.key);
   return ac6Fmt(side.key)+'/'+side.pfx;
 }
+function acexSideText(s){
+  if(s.kind==='any') return 'any';
+  if(s.kind==='host') return 'host '+int2ip(s.ipInt);
+  return int2ip(s.ipInt)+' '+int2ip(s.wcInt);
+}
 function aceText(ace){
-  if(ace.fam===6) return ace.action+' ipv6 '+ace6SideText(ace.src)+' '+ace6SideText(ace.dst);
+  if(ace.fam===6) return ace.action+' '+(ace.proto||'ipv6')+' '+ace6SideText(ace.src)+portText(ace.sport)+' '+
+    ace6SideText(ace.dst)+portText(ace.dport)+(ace.icmp?' '+(ace.icmp==='echo'?'echo-request':ace.icmp):'');
+  if(ace.ext) return ace.action+' '+ace.proto+' '+acexSideText(ace.src)+portText(ace.sport)+' '+
+    acexSideText(ace.dst)+portText(ace.dport)+(ace.icmp?' '+ace.icmp:'');
   if(ace.kind==='any') return ace.action+' any';
   if(ace.kind==='host') return ace.action+' host '+int2ip(ace.ipInt);
   return ace.action+' '+int2ip(ace.ipInt)+' '+int2ip(ace.wcInt);
 }
-function aclMake(name, numbered, fam){
-  return {name:String(name), numbered:!!numbered, fam:fam||4, aces:[]};
+function aclMake(name, numbered, fam, ext){
+  return {name:String(name), numbered:!!numbered, fam:fam||4, ext:!!ext, aces:[]};
+}
+/* IOS's numbered ranges decide a numbered list's type. */
+function aclNumKind(n){
+  if((n>=1&&n<=99)||(n>=1300&&n<=1999)) return 'std';
+  if((n>=100&&n<=199)||(n>=2000&&n<=2699)) return 'ext';
+  return null;
 }
 /* IOS hands out sequence numbers in tens, which is exactly what leaves room
    to insert a line between two existing ones later — the whole point of
@@ -472,9 +572,9 @@ function aclRemoveSeq(acl, seq){
    count:true bumps the per-ACE hit counters, so show access-lists reflects
    the traffic the learner has actually sent — the counters in the real lab
    only appear because pings were run. */
-function aclEvaluate(acl, srcKey, count, dstKey){
+function aclEvaluate(acl, srcKey, count, dstKey, pkt){
   for(let i=0;i<acl.aces.length;i++){
-    if(aceHits(acl.aces[i], srcKey, dstKey)){
+    if(aceHits(acl.aces[i], srcKey, dstKey, pkt)){
       if(count) acl.aces[i].matches++;
       return {action:acl.aces[i].action, ace:acl.aces[i], implicit:false};
     }
@@ -488,6 +588,11 @@ function aclShowLines(acl){
     return ['IPv6 access list '+acl.name].concat(acl.aces.map(function(a){
       return '    '+aceText(a).replace(/[0-9a-f:]+(?=\/|\s|$)/g, function(m){ return m.indexOf(':')>=0 ? m.toUpperCase() : m; })+
         (a.matches?' ('+a.matches+' match'+(a.matches===1?'':'es')+')':'')+' sequence '+a.seq;
+    }));
+  }
+  if(acl.ext){
+    return ['Extended IP access list '+acl.name].concat(acl.aces.map(function(a){
+      return '    '+a.seq+' '+aceText(a)+(a.matches?' ('+a.matches+' match'+(a.matches===1?'':'es')+')':'');
     }));
   }
   const head='Standard IP access list '+acl.name;
@@ -515,7 +620,7 @@ function acById(id){ return acDevices.find(function(d){ return d.id===id; }); }
 
 function acAddRouter(name,x,y){
   const d={id:acNid++, type:'router', name:name, x:x, y:y,
-    ifaces:[], acls:{}, vtyAcl:null, routes:[], nat:natNew(),
+    ifaces:[], acls:{}, vtyAcl:null, routes:[], nat:natNew(), ssh:sshNew(),
     cm:'exec', ci:null, cl:null, log:[], hist:[], hi:0};
   acDevices.push(d); return d;
 }
@@ -641,12 +746,12 @@ function acBestMatch(dstKey, table){
    whole way, because a standard ACL matches on nothing else. An ACL is
    checked twice per hop: inbound on the interface the packet arrives on,
    outbound on the interface it leaves by. */
-function acCheckAcl(router, iface, dir, srcKey, count, dstKey){
+function acCheckAcl(router, iface, dir, srcKey, count, dstKey, pkt){
   const name = dir==='in' ? iface.aclIn : iface.aclOut;
   if(!name) return null;
   const acl=router.acls[name];
   if(!acl) return null;
-  const res=aclEvaluate(acl, srcKey, count, dstKey);
+  const res=aclEvaluate(acl, srcKey, count, dstKey, pkt);
   if(res.action==='permit') return null;
   return {router:router, iface:iface, dir:dir, acl:acl, ace:res.ace, implicit:res.implicit};
 }
@@ -679,7 +784,7 @@ function acForward(start, srcKey, dstKey, count, pkt){
     visited.add(cur.id);
 
     if(ingress){
-      const b=acCheckAcl(cur, ingress, 'in', srcKey, count, dstKey);
+      const b=acCheckAcl(cur, ingress, 'in', srcKey, count, dstKey, {proto:pkt.proto, sport:sport, dport:dport, icmpType:pkt.icmpType});
       if(b){ b.srcKey=srcKey; return {ok:false, blocked:b, reason:acBlockReason(b)}; }
       /* outside → inside: an inside global on the way in becomes the inside
          local it belongs to, before the router looks up where to send it. */
@@ -707,7 +812,7 @@ function acForward(start, srcKey, dstKey, count, pkt){
       if(t){ srcKey=t.src; sport=t.sport; }
     }
     if(!originated){
-      const b=acCheckAcl(cur, out, 'out', srcKey, count, dstKey);
+      const b=acCheckAcl(cur, out, 'out', srcKey, count, dstKey, {proto:pkt.proto, sport:sport, dport:dport, icmpType:pkt.icmpType});
       if(b){ b.srcKey=srcKey; return {ok:false, blocked:b, reason:acBlockReason(b)}; }
     }
     originated=false;
@@ -788,12 +893,15 @@ function acPing(srcIp, dstStr, count, pkt){
   const a = hit ? {router:hit.router, iface:null} : acSubnetOwner(srcIp);
   if(!a) return {ok:false, reason:srcIp+' is not a host or interface on this network'};
   const id = pkt&&pkt.sport!=null ? pkt.sport : (count ? ++acIcmpId : 1);
-  const req={proto:(pkt&&pkt.proto)||'icmp', sport:id, dport:pkt&&pkt.dport!=null?pkt.dport:id, scratch:count?null:[]};
+  const proto=(pkt&&pkt.proto)||'icmp';
+  const req={proto:proto, sport:id, dport:pkt&&pkt.dport!=null?pkt.dport:id, scratch:count?null:[],
+             icmpType:proto==='icmp'?'echo':null};
   const there=acForward(a, acKey(srcIp), acKey(dstStr), count, req);
   if(!there.ok) return there;
   const dstPc=acPcWithIp(acFmt(there.dst));
   if(dstPc){ const x=acPcProblem(dstPc); if(x) return {ok:false, reason:'The request arrived, but '+dstPc.name+' cannot reply: '+x}; }
-  const rep={proto:req.proto, sport:there.dport, dport:there.sport, scratch:req.scratch};
+  const rep={proto:req.proto, sport:there.dport, dport:there.sport, scratch:req.scratch,
+             icmpType:proto==='icmp'?'echo-reply':null};
   const back=acForward(there.at, there.dst, there.src, count, rep);
   if(!back.ok) return {ok:false, blocked:back.blocked,
     reason:'The request arrived, but the reply could not get back: '+back.reason};
@@ -811,55 +919,102 @@ function acPcProblem(pc){
   if(pc.pfx!==own.iface.pfx) return pc.name+"'s mask is a /"+pc.pfx+' but the LAN is a /'+own.iface.pfx;
   return null;
 }
-/* SSH to a router: it has to be routable, and then the vty access-class
-   decides. Modelled as reachability plus the ACL — the page is not testing
-   authentication. */
-function acSsh(srcIp, routerIp, count){
+/* ═══ SSH ═════════════════════════════════════════════════════════
+   A router's SSH server is configuration like anything else: a domain name
+   and RSA keys switch it on (version 2 needs keys of 768 bits or more), and
+   the vty lines decide who gets in — transport input has to allow ssh,
+   login local has to point at a username, and an access-class can refuse
+   the source outright. sshNew() is a router fresh out of the box: no domain,
+   no keys, and IOS's default vty "login" with no password set. */
+function sshNew(){
+  return {domain:null, rsa:0, ver:null, users:{}, enable:null, encrypt:false,
+          vty:{login:'line', password:null, transport:'all'}};
+}
+/* The configuration the ACL and NAT labs arrive with: SSH already done, so
+   those labs keep testing filtering rather than this. */
+function sshReady(r, user, pass){
+  r.ssh.domain='ccna-lab.com'; r.ssh.rsa=1024; r.ssh.ver=2;
+  r.ssh.users[user||'admin']={secret:pass||'cisco'};
+  r.ssh.vty.login='local'; r.ssh.vty.transport='ssh';
+}
+function sshEnabled(r){ return !!(r.ssh.domain&&r.ssh.rsa&&!(r.ssh.ver===2&&r.ssh.rsa<768)); }
+function sshAllowsTransport(t){ return t==='all'||t.split(' ').indexOf('ssh')>=0; }
+/* Why the SSH server itself would turn this login away, or null. Credentials
+   are optional — a grader asking "would SSH work at all?" leaves them out. */
+function sshServerProblem(r, creds){
+  const s=r.ssh, v=s.vty;
+  if(!s.domain&&!s.rsa) return r.name+' has no SSH server running: it needs a domain name and RSA keys (ip domain-name, then crypto key generate rsa)';
+  if(!s.rsa) return r.name+' has no RSA keys, so SSH is off — "crypto key generate rsa" (and a domain name has to exist first)';
+  if(s.ver===2&&s.rsa<768) return r.name+' is set to "ip ssh version 2", which needs RSA keys of at least 768 bits — its keys are '+s.rsa+' bits';
+  if(!sshAllowsTransport(v.transport)) return r.name+"'s vty lines only accept "+(v.transport==='none'?'nothing':v.transport)+' — "transport input ssh"';
+  if(v.login!=='local') return r.name+"'s vty lines use "+(v.login==='none'?'"no login"':'"login" (a line password)')+' — SSH logs in with a username, so it needs "login local"';
+  const names=Object.keys(s.users);
+  if(!names.length) return r.name+' has "login local" on its vty lines but no usernames configured';
+  if(creds){
+    const u=s.users[creds.user];
+    if(!u||(u.secret!=null?u.secret:u.password)!==creds.pass) return '% Login invalid — '+(u?'wrong password for '+creds.user:'there is no user "'+creds.user+'" on '+r.name);
+  }
+  return null;
+}
+/* SSH to a router: a TCP connection to port 22 has to get through the
+   network (interface ACLs included), then the vty access-class decides,
+   then the SSH server's own configuration and the login. */
+function acSsh(srcIp, routerIp, count, creds){
   const hit=acIfaceWithIp(routerIp);
   if(!hit) return {ok:false, reason:routerIp+' is not a router interface'};
-  const reach=acPing(srcIp, routerIp, false);
-  if(!reach.ok) return {ok:false, reason:'Cannot even reach '+routerIp+' — '+reach.reason};
+  const reach=acPing(srcIp, routerIp, false, {proto:'tcp', sport:49152+(acIcmpId%1000), dport:22});
+  if(!reach.ok) return {ok:false, blocked:reach.blocked, reason:'Cannot reach '+routerIp+' on port 22 — '+reach.reason};
   const r=hit.router;
-  if(!r.vtyAcl) return {ok:true};
-  const acl=r.acls[r.vtyAcl];
-  if(!acl) return {ok:true};
-  const res=aclEvaluate(acl, acKey(srcIp), count, acKey(routerIp));
-  if(res.action==='permit') return {ok:true};
-  return {ok:false, deniedByVty:true,
-    reason:'Refused by '+acl.name+' on '+r.name+"'s vty lines"+
-      (res.implicit?' — the implicit deny':' — matched "'+aceText(res.ace)+'"')};
+  if(!sshEnabled(r)){ const why=sshServerProblem(r); return {ok:false, noServer:true, reason:why}; }
+  if(r.vtyAcl&&r.acls[r.vtyAcl]){
+    const acl=r.acls[r.vtyAcl];
+    const res=aclEvaluate(acl, acKey(srcIp), count, acKey(routerIp), {proto:'tcp', dport:22});
+    if(res.action!=='permit') return {ok:false, deniedByVty:true,
+      reason:'Refused by '+acl.name+' on '+r.name+"'s vty lines"+
+        (res.implicit?' — the implicit deny':' — matched "'+aceText(res.ace)+'"')};
+  }
+  const why=sshServerProblem(r, creds);
+  if(why) return {ok:false, login:true, reason:why};
+  return {ok:true, router:r};
 }
 
 /* ═══ CLI ══════════════════════════════════════════════════════════ */
 const AC_KW={
   enable:{}, configure:{terminal:{}}, end:{}, exit:{}, clear:{},
-  show:{ip:{route:{}, interface:{}, nat:{translations:{}, statistics:{}}}, ipv6:{'access-list':{}, interface:{}, route:{}},
+  show:{ip:{route:{}, interface:{brief:{}}, nat:{translations:{}, statistics:{}}, ssh:{}}, ipv6:{'access-list':{}, interface:{brief:{}}, route:{}},
         'access-lists':{}, 'access-list':{}, run:{}},
   interface:{},
   shutdown:{}, clock:{rate:{}},
-  ip:{'access-list':{standard:{}}, 'access-group':{}, address:{}, route:{},
-      nat:{inside:{source:{static:{}, list:{}}}, outside:{}, pool:{}}},
+  ip:{'access-list':{standard:{}, extended:{}}, 'access-group':{}, address:{}, route:{},
+      nat:{inside:{source:{static:{}, list:{}}}, outside:{}, pool:{}},
+      'domain-name':{}, ssh:{version:{}}},
   ipv6:{'access-list':{}, 'traffic-filter':{}, 'access-class':{}},
   'access-list':{},
   line:{vty:{}},
   'access-class':{},
-  permit:{host:{}, any:{}, ipv6:{host:{}, any:{}}},
-  deny:{host:{}, any:{}, ipv6:{host:{}, any:{}}},
+  crypto:{key:{generate:{rsa:{'general-keys':{modulus:{}}}}, zeroize:{rsa:{}}}},
+  username:{}, login:{local:{}}, transport:{input:{ssh:{}, telnet:{}, all:{}, none:{}}},
+  permit:{host:{}, any:{}, ip:{}, icmp:{}, tcp:{}, udp:{}, ipv6:{host:{}, any:{}}},
+  deny:{host:{}, any:{}, ip:{}, icmp:{}, tcp:{}, udp:{}, ipv6:{host:{}, any:{}}},
   sequence:{},
   ping:{},
-  no:{shutdown:{}, ip:{'access-list':{standard:{}}, 'access-group':{}, address:{}, route:{}, nat:{inside:{}, outside:{}, pool:{}}},
+  no:{shutdown:{}, ip:{'access-list':{standard:{}, extended:{}}, 'access-group':{}, address:{}, route:{}, nat:{inside:{}, outside:{}, pool:{}},
+      'domain-name':{}, ssh:{version:{}}},
       ipv6:{'access-list':{}, 'traffic-filter':{}, 'access-class':{}},
-      'access-list':{}, 'access-class':{}, sequence:{}}
+      'access-list':{}, 'access-class':{}, sequence:{}, username:{}, login:{}}
 };
 function acPrompt(d){
+  if(d.cm==='rsa') return 'How many bits in the modulus [512]:';
   return d.name+(d.cm==='conf'?'(config)#':d.cm==='if'?'(config-if)#':
-                 d.cm==='nacl'?'(config-std-nacl)#':d.cm==='nacl6'?'(config-ipv6-acl)#':
+                 d.cm==='nacl'?'(config-std-nacl)#':d.cm==='xacl'?'(config-ext-nacl)#':d.cm==='nacl6'?'(config-ipv6-acl)#':
                  d.cm==='line'?'(config-line)#':'#');
 }
 /* Parses the tail of a permit/deny into an ACE, minus its sequence number.
    Accepts the three forms Lab 8A uses: "host X", "any", and "X wildcard". */
 function acParseAce(action, parts){
   if(!parts.length) return {err:'% Incomplete command'};
+  if(['ip','icmp','tcp','udp'].indexOf(String(parts[0]).toLowerCase())>=0)
+    return {err:'% A standard list matches only the source address — protocols and destinations need an extended list (100-199, or "ip access-list extended <name>")'};
   if(parts[0]==='any') return {ace:aceAny(0, action)};
   if(parts[0]==='host'){
     if(!parts[1]||!isValidIP(parts[1])) return {err:'% Invalid host address'};
@@ -870,6 +1025,47 @@ function acParseAce(action, parts){
   if(!isValidIP(parts[1])) return {err:'% Invalid wildcard mask'};
   return {ace:aceNet(0, action, parts[0], parts[1])};
 }
+/* ── extended IPv4: "<proto> <src> [port] <dst> [port] [icmp-type]" ── */
+function acxParseSide(parts, i){
+  const t=String(parts[i]||'').toLowerCase();
+  if(t==='any') return {side:acexSide('any'), next:i+1};
+  if(t==='host'){
+    if(!isValidIP(parts[i+1]||'')) return {err:'% Invalid host address'};
+    return {side:acexSide('host',parts[i+1]), next:i+2};
+  }
+  if(!isValidIP(parts[i]||'')) return {err:'% Expected any, host <address>, or <address> <wildcard>'};
+  if(!isValidIP(parts[i+1]||'')) return {err:'% An extended entry needs a wildcard after '+parts[i]+' — or use "host '+parts[i]+'"'};
+  return {side:acexSide('net',parts[i],parts[i+1]), next:i+2};
+}
+/* An optional port match after an address: eq | neq | gt | lt | range. */
+function acParsePortOp(parts, i, proto){
+  const op=String(parts[i]||'').toLowerCase();
+  if(['eq','neq','gt','lt','range'].indexOf(op)<0) return {port:null, next:i};
+  if(proto!=='tcp'&&proto!=='udp') return {err:'% Port numbers only go with tcp or udp, not '+proto};
+  const a=portNum(parts[i+1]);
+  if(a==null) return {err:'% Invalid port "'+(parts[i+1]||'')+'"'};
+  if(op==='range'){
+    const b=portNum(parts[i+2]);
+    if(b==null||b<a) return {err:'% Invalid port range'};
+    return {port:{op:op, a:a, b:b}, next:i+3};
+  }
+  return {port:{op:op, a:a}, next:i+2};
+}
+function acxParseAce(action, parts){
+  const proto=String(parts[0]||'').toLowerCase();
+  if(['ip','icmp','tcp','udp'].indexOf(proto)<0)
+    return {err:'% An extended entry names the protocol first: "'+action+' ip|icmp|tcp|udp <source> <destination>"'};
+  const s=acxParseSide(parts,1); if(s.err) return s;
+  const sp=acParsePortOp(parts,s.next,proto); if(sp.err) return sp;
+  const d=acxParseSide(parts,sp.next); if(d.err) return d;
+  const dp=acParsePortOp(parts,d.next,proto); if(dp.err) return dp;
+  let i=dp.next, icmp=null;
+  const t=String(parts[i]||'').toLowerCase();
+  if(proto==='icmp'&&(t==='echo'||t==='echo-reply')){ icmp=t; i++; }
+  if(i<parts.length) return {err:'% Invalid input detected at "'+parts[i]+'"'};
+  return {ace:acexMake(0, action, proto, s.side, d.side, {sport:sp.port, dport:dp.port, icmp:icmp})};
+}
+
 /* One side of an IPv6 entry: any | host X | X/len. Returns where parsing
    got to, so the destination can pick up after the source. */
 function ac6ParseSide(parts, i){
@@ -886,32 +1082,143 @@ function ac6ParseSide(parts, i){
   if(k===null||pfx>128) return {err:'% Invalid IPv6 prefix'};
   return {side:ace6Side('net',k,pfx), next:i+1};
 }
-/* "permit ipv6 <src> <dst> [sequence N]" — the protocol keyword is not
+/* "permit ipv6|icmp|tcp|udp <src> [port] <dst> [port] [sequence N]" — the
+   protocol keyword is not
    optional in IOS, and the sequence number goes LAST, which is the opposite
    of an IPv4 named list. Both are the sort of thing a lab should make you
    type rather than smooth over. */
 function ac6ParseAce(action, parts){
-  if((parts[0]||'').toLowerCase()!=='ipv6')
-    return {err:'% An IPv6 entry names the protocol: "'+action+' ipv6 <source> <destination>"'};
+  const proto=(parts[0]||'').toLowerCase();
+  if(['ipv6','icmp','tcp','udp'].indexOf(proto)<0)
+    return {err:'% An IPv6 entry names the protocol: "'+action+' ipv6|icmp|tcp|udp <source> <destination>"'};
   const a=ac6ParseSide(parts,1); if(a.err) return a;
-  const b=ac6ParseSide(parts,a.next); if(b.err) return b;
-  let seq=null, i=b.next;
+  const sp=acParsePortOp(parts,a.next,proto); if(sp.err) return sp;
+  const b=ac6ParseSide(parts,sp.next); if(b.err) return b;
+  const dp=acParsePortOp(parts,b.next,proto); if(dp.err) return dp;
+  let seq=null, i=dp.next, icmp=null;
+  const t=(parts[i]||'').toLowerCase();
+  if(proto==='icmp'&&(t==='echo-request'||t==='echo-reply')){ icmp=t==='echo-request'?'echo':t; i++; }
   if((parts[i]||'').toLowerCase()==='sequence'){
     if(!/^\d+$/.test(parts[i+1]||'')) return {err:'% "sequence" needs a number'};
     seq=+parts[i+1]; i+=2;
   }
   if(i<parts.length) return {err:'% Invalid input detected'};
-  return {ace:ace6Make(seq||0, action, a.side, b.side), seq:seq};
+  return {ace:ace6Make(seq||0, action, a.side, b.side, proto, {sport:sp.port, dport:dp.port, icmp:icmp}), seq:seq};
+}
+
+/* ── SSH and device-access commands, in global config and on the vty lines.
+   Returns null for anything that isn't one of them. ── */
+function sshGenKeys(d, n){
+  d.ssh.rsa=n;
+  return '% Generating '+n+' bit RSA keys, keys will be non-exportable...[OK]\n'+
+    '*Mar 1 00:12:41.123: %SSH-5-ENABLED: SSH 1.99 has been enabled';
+}
+function acSshCli(d, w, raw, M){
+  const s=d.ssh;
+  if(M(w[0],'ip')&&w[1]&&(M(w[1],'domain-name')||(w[1]==='domain'&&w[2]&&M(w[2],'name')))){
+    const name=w[1]==='domain'?raw[3]:raw[2];
+    if(!name) return '% Usage: ip domain-name <name>';
+    s.domain=name; return '';
+  }
+  if(w[0]==='no'&&M(w[1],'ip')&&w[2]&&(M(w[2],'domain-name')||w[2]==='domain')){ s.domain=null; return ''; }
+  if(M(w[0],'ip')&&w[1]==='ssh'){
+    if(w[2]&&M(w[2],'version')){
+      if(w[3]!=='1'&&w[3]!=='2') return '% Usage: ip ssh version 1|2';
+      s.ver=+w[3];
+      return s.ver===2&&s.rsa&&s.rsa<768 ? '% Please create RSA keys (of at least 768 bits size) to enable SSH v2.' : '';
+    }
+    if(w[2]&&(M(w[2],'time-out')||M(w[2],'authentication-retries'))) return '';
+    return '% Usage: ip ssh version 2 | ip ssh time-out <secs> | ip ssh authentication-retries <n>';
+  }
+  if(w[0]==='no'&&M(w[1],'ip')&&w[2]==='ssh'&&w[3]&&M(w[3],'version')){ s.ver=null; return ''; }
+  if(M(w[0],'crypto')&&w[1]&&M(w[1],'key')){
+    if(w[2]&&M(w[2],'zeroize')){ s.rsa=0; return '% All keys will be removed.\n%SSH-5-DISABLED: SSH 1.99 has been disabled'; }
+    if(!(w[2]&&M(w[2],'generate')&&w[3]&&M(w[3],'rsa')))
+      return '% Usage: crypto key generate rsa [general-keys modulus <360-4096>]';
+    if(!s.domain) return '% Please define a domain-name first.';
+    const head='The name for the keys will be: '+d.name+'.'+s.domain;
+    const mi=w.indexOf('modulus');
+    if(mi>=0){
+      const n=+w[mi+1];
+      if(!(n>=360&&n<=4096)) return '% The modulus is 360 to 4096 bits';
+      return head+'\n'+sshGenKeys(d,n);
+    }
+    /* No modulus on the line: IOS asks for it, and so does this. */
+    d.cmBeforeRsa=d.cm; d.cm='rsa';
+    return head+'\nChoose the size of the key modulus in the range of 360 to 4096 for your\n'+
+      '  General Purpose Keys. Choosing a key modulus greater than 512 may take\n  a few minutes.';
+  }
+  if(w[0]==='username'){
+    const USAGE='% Usage: username <name> [privilege 15] secret <password>';
+    const name=raw[1];
+    if(!name) return USAGE;
+    let i=2;
+    if(w[i]==='privilege') i+=2;
+    const kind=w[i];
+    if(kind!=='secret'&&kind!=='password') return USAGE;
+    let val=raw.slice(i+1).join(' ');
+    if(/^[05] \S/.test(val)) val=val.slice(2);
+    if(!val) return USAGE;
+    s.users[name]=kind==='secret'?{secret:val}:{password:val};
+    return '';
+  }
+  if(w[0]==='no'&&w[1]==='username'){ delete s.users[raw[2]]; return ''; }
+  if(M(w[0],'enable')&&w[1]&&(M(w[1],'secret')||M(w[1],'password'))){ s.enable=raw.slice(2).join(' ')||null; return ''; }
+  if(M(w[0],'service')&&w[1]&&M(w[1],'password-encryption')){ s.encrypt=true; return ''; }
+  if(M(w[0],'hostname')&&w[0].length>=4)
+    return raw[1]===d.name ? '' : '% The device names come from the topology in this lab — '+d.name+' stays '+d.name;
+  if(d.cm==='line'){
+    if(w[0]==='login'){
+      if(!w[1]){ s.vty.login='line'; return ''; }
+      if(M(w[1],'local')){ s.vty.login='local'; return ''; }
+      return '% Usage: login | login local';
+    }
+    if(w[0]==='no'&&w[1]==='login'){ s.vty.login='none'; return ''; }
+    if(M(w[0],'password')&&w[0].length>=4){ s.vty.password=raw.slice(1).join(' ')||null; return ''; }
+    if(M(w[0],'transport')&&w[1]&&M(w[1],'input')){
+      const USAGE='% Usage: transport input ssh | telnet | telnet ssh | all | none';
+      const opts=w.slice(2);
+      if(!opts.length) return USAGE;
+      if(opts.length===1&&(opts[0]==='all'||opts[0]==='none')){ s.vty.transport=opts[0]; return ''; }
+      if(!opts.every(function(o){ return o==='ssh'||o==='telnet'; })) return USAGE;
+      s.vty.transport=opts.filter(function(o,i){ return opts.indexOf(o)===i; }).sort().join(' ');
+      return '';
+    }
+    if(M(w[0],'exec-timeout')) return '';
+  }
+  return null;
+}
+function acShowIpSsh(d){
+  const s=d.ssh, v=s.ver===2?'2.0':s.ver===1?'1.5':'1.99';
+  if(!sshEnabled(d)) return 'SSH Disabled - version '+v+'\n%Please create RSA keys to enable SSH (and of atleast 768 bits for SSH v2).';
+  return 'SSH Enabled - version '+v+'\nAuthentication timeout: 120 secs; Authentication retries: 3';
+}
+/* show run never prints a secret back — only its hash — so a forgotten
+   password stays forgotten, as on a real router. */
+function acFakeHash(str, kind){
+  let h=0; for(let i=0;i<str.length;i++) h=(Math.imul(h,31)+str.charCodeAt(i))>>>0;
+  const abc='./0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+  let out=''; for(let i=0;i<22;i++){ h=(Math.imul(h,1103515245)+12345)>>>0; out+=abc[(h>>>16)%64]; }
+  if(kind===7){ let x=''; for(let i=0;i<str.length;i++) x+=('0'+((str.charCodeAt(i)^(0x30+i))&255).toString(16).toUpperCase()).slice(-2); return '08'+x; }
+  return '$1$'+out.slice(0,4)+'$'+out.slice(4);
 }
 
 function acCli(d, line){
+  /* the modulus question crypto key generate rsa asks, answered on the next line */
+  if(d.cm==='rsa'){
+    const a=line.trim();
+    d.cm=d.cmBeforeRsa||'conf';
+    const n=a===''?512:+a;
+    if(!/^\d*$/.test(a)||n<360||n>4096) return '% The modulus is 360 to 4096 bits — run "crypto key generate rsa" again';
+    return sshGenKeys(d,n);
+  }
   const t=line.trim().replace(/\s+/g,' ');
   if(!t) return '';
   const w=t.toLowerCase().split(' ');
   const raw=t.split(' ');
   const M=function(tok,cand){ return tok&&cand.indexOf(tok)===0; };
 
-  if(M(w[0],'enable')){ d.cm='exec'; d.ci=null; return ''; }
+  if(M(w[0],'enable')&&!w[1]){ d.cm='exec'; d.ci=null; return ''; }
   if(M(w[0],'configure')||w[0]==='conf'){ d.cm='conf'; d.ci=null; return ''; }
   if(M(w[0],'end')){ d.cm='exec'; d.ci=null; return ''; }
   if(M(w[0],'exit')){ d.cm = d.cm==='exec' ? 'exec' : 'conf'; d.ci=null; return ''; }
@@ -928,6 +1235,7 @@ function acCli(d, line){
     const ipw = w[1]&&(w[1]==='ipv6'||M(w[1],'ip'));
     if(ipw&&w[2]&&M(w[2],'access-list')) return acShowAcls(d);
     if(ipw&&w[2]&&M(w[2],'route')) return acShowRoute(d);
+    if(ipw&&w[1]!=='ipv6'&&w[2]==='ssh') return acShowIpSsh(d);
     if(ipw&&w[2]==='nat'){
       if(acLabKind!=='nat') return '% NAT is not part of this lab — see the NAT Lab topic';
       if(w[3]&&M(w[3],'translations')) return natShowTranslations(d);
@@ -935,7 +1243,7 @@ function acCli(d, line){
       return '% Try "show ip nat translations" or "show ip nat statistics"';
     }
     if(ipw&&w[2]&&M(w[2],'interface')){
-      if(!raw[3]) return acShowIfBrief(d);
+      if(!raw[3]||(w[3].length>=2&&M(w[3],'brief'))) return acShowIfBrief(d);
       const f=acIface(d,raw[3]);
       return f ? acShowIface(d,f) : '% Invalid interface';
     }
@@ -977,6 +1285,10 @@ function acCli(d, line){
   }
   if(M(w[0],'line')&&w[1]&&M(w[1],'vty')){ d.cm='line'; return ''; }
 
+  /* ── SSH and device access: domain name, keys, users, vty login ── */
+  const sshOut=acSshCli(d, w, raw, M);
+  if(sshOut!==null) return sshOut;
+
   /* ── addressing, shutdown and static routes: the NAT lab's Hard tier ── */
   if(acLabKind==='nat'){ const b=natBaseCli(d, w, raw); if(b!==null) return b; }
 
@@ -984,7 +1296,7 @@ function acCli(d, line){
      half-working. A dual-stack router would accept them, but they would
      filter traffic this round never sends. ── */
   const V4_ONLY='% This round is IPv6 — use "ipv6 access-list <name>", "ipv6 traffic-filter" and "ipv6 access-class"';
-  const V6_ONLY='% This round is IPv4 — use "access-list <n>" or "ip access-list standard <name>", "ip access-group" and "access-class"';
+  const V6_ONLY='% This round is IPv4 — use "access-list <n>" or "ip access-list standard|extended <name>", "ip access-group" and "access-class"';
   if(acFam===6 && (w[0]==='access-list' || (M(w[0],'ip')&&w[1]==='access-list') ||
      (w[0]==='no'&&(w[1]==='access-list'||(M(w[1],'ip')&&w[2]==='access-list'))))) return V4_ONLY;
   if(acFam===4 && w[0]==='ipv6') return V6_ONLY;
@@ -1021,42 +1333,52 @@ function acCli(d, line){
     }
   }
 
-  /* ── numbered ACL, global config ── */
+  /* ── numbered ACL, global config. The number decides the type: 1-99 and
+     1300-1999 standard, 100-199 and 2000-2699 extended. ── */
   if(w[0]==='access-list'){
     const num=raw[1];
     if(!/^\d+$/.test(num)) return '% Invalid access list number';
-    const n=+num;
-    if(!((n>=1&&n<=99)||(n>=1300&&n<=1999)))
-      return '% This lab covers standard ACLs — use 1-99 or 1300-1999';
+    const kind=aclNumKind(+num);
+    if(!kind) return '% Standard lists are 1-99 or 1300-1999, extended lists 100-199 or 2000-2699';
     const act=w[2];
     if(act!=='permit'&&act!=='deny') return '% Expected permit or deny';
-    const p=acParseAce(act, raw.slice(3));
+    const p=kind==='ext' ? acxParseAce(act, raw.slice(3)) : acParseAce(act, raw.slice(3));
     if(p.err) return p.err;
-    if(!d.acls[num]) d.acls[num]=aclMake(num, true);
+    if(!d.acls[num]) d.acls[num]=aclMake(num, true, 4, kind==='ext');
     p.ace.seq=aclNextSeq(d.acls[num]);
     aclInsert(d.acls[num], p.ace);
     return '';
   }
   if(w[0]==='no'&&w[1]==='access-list'){ delete d.acls[raw[2]]; return ''; }
 
-  /* ── named ACL sub-mode ── */
+  /* ── named ACL sub-mode. "ip access-list extended 100" also edits numbered
+     list 100 by sequence number, as IOS allows. ── */
   if(M(w[0],'ip')&&w[1]==='access-list'){
-    if(w[2]!=='standard') return '% This lab covers standard ACLs — "ip access-list standard <name>"';
+    const type=w[2]&&M(w[2],'standard')?'std':w[2]&&M(w[2],'extended')?'ext':null;
+    if(!type) return '% "ip access-list standard <name>" or "ip access-list extended <name>"';
     const name=raw[3];
     if(!name) return '% Give the access list a name';
-    if(!d.acls[name]) d.acls[name]=aclMake(name, false);
-    d.cm='nacl'; d.ci=name; return '';
+    const isNum=/^\d+$/.test(name);
+    if(isNum&&aclNumKind(+name)!==type)
+      return '% '+name+' is not a valid '+(type==='ext'?'extended':'standard')+' list number';
+    const ex=d.acls[name];
+    if(ex&&ex.ext!==(type==='ext'))
+      return '% A '+(ex.ext?'named extended':'standard')+' IP access list with this name already exists';
+    if(!ex) d.acls[name]=aclMake(name, isNum, 4, type==='ext');
+    d.cm=type==='ext'?'xacl':'nacl'; d.ci=name; return '';
   }
   if(w[0]==='no'&&M(w[1],'ip')&&w[2]==='access-list'){ delete d.acls[raw[4]]; return ''; }
 
-  if(d.cm==='nacl'){
+  if(d.cm==='nacl'||d.cm==='xacl'){
     const acl=d.acls[d.ci];
+    const parse=d.cm==='xacl'?acxParseAce:acParseAce;
     /* "30 permit ..." inserts at that sequence number — Option 2 in Part 4. */
     if(/^\d+$/.test(w[0])){
       const seq=+w[0], act=w[1];
       if(act!=='permit'&&act!=='deny') return '% Expected permit or deny';
-      const p=acParseAce(act, raw.slice(2));
+      const p=parse(act, raw.slice(2));
       if(p.err) return p.err;
+      if(acl.aces.some(function(a){ return a.seq===seq; })) return '% Duplicate sequence number';
       p.ace.seq=seq;
       aclInsert(acl, p.ace);
       return '';
@@ -1065,7 +1387,7 @@ function acCli(d, line){
       return aclRemoveSeq(acl, +w[1]) ? '' : '% Sequence number not found in this access list';
     }
     if(w[0]==='permit'||w[0]==='deny'){
-      const p=acParseAce(w[0], raw.slice(1));
+      const p=parse(w[0], raw.slice(1));
       if(p.err) return p.err;
       p.ace.seq=aclNextSeq(acl);
       aclInsert(acl, p.ace);
@@ -1161,22 +1483,46 @@ function acShowIface(d,f){
     '  Outgoing access list is '+(f.aclOut||'not set'),
     '  Inbound access list is '+(f.aclIn||'not set')].join('\n');
 }
+/* IOS prints full interface names in the brief tables. */
+function acFullIf(n){
+  return n.replace(/^Gi(?=\d)/,'GigabitEthernet').replace(/^G(?=\d)/,'GigabitEthernet').replace(/^Fa(?=\d)/,'FastEthernet')
+    .replace(/^S(?=\d)/,'Serial').replace(/^Lo(?=\d)/,'Loopback');
+}
+/* Line protocol: a shut interface is down/down; a serial link's protocol is
+   up only while the interface at the other end of its cable is up too. */
+function acIfProto(r,f){
+  if(!f.up) return false;
+  if(!f.serial) return true;
+  const n=acIfNorm(f.name);
+  const c=acCables.find(function(c){
+    return c.serial&&((c.a===r.id&&acIfNorm(c.aLabel)===n)||(c.b===r.id&&acIfNorm(c.bLabel)===n));
+  });
+  if(!c) return false;
+  const far=acById(c.a===r.id?c.b:c.a), g=far&&acIface(far, c.a===r.id?c.bLabel:c.aLabel);
+  return !!(g&&g.up);
+}
 function acShowIfBrief(d){
   /* IPv6 addresses do not fit a 16-column field, so that table gets the
-     wider layout show ipv6 interface brief actually uses. */
+     two-line layout show ipv6 interface brief actually uses, link-local first. */
   if(acFam===6){
     const lines=[];
     d.ifaces.forEach(function(f){
-      lines.push(f.name+'  [up/up]');
-      lines.push('    '+(f.ip?f.ip.toUpperCase():'unassigned'));
+      lines.push((acFullIf(f.name)+'                       ').slice(0,23)+
+        '['+(f.up?'up':'administratively down')+'/'+(acIfProto(d,f)?'up':'down')+']');
+      if(f.ip){
+        lines.push('    FE80::'+(d.name==='R1'?'1':d.name==='R2'?'2':'3'));
+        lines.push('    '+f.ip.toUpperCase());
+      } else lines.push('    unassigned');
     });
     return lines.join('\n');
   }
-  const lines=['Interface                  IP-Address      Status                Protocol'];
+  const lines=['Interface              IP-Address      OK? Method Status                Protocol'];
   d.ifaces.forEach(function(f){
-    lines.push((f.name+'                           ').slice(0,27)+
+    lines.push((acFullIf(f.name)+'                       ').slice(0,23)+
       ((f.ip||'unassigned')+'                ').slice(0,16)+
-      (f.up?'up                    up':'administratively down down'));
+      'YES '+(f.ip?'manual ':'unset  ')+
+      ((f.up?'up':'administratively down')+'                      ').slice(0,22)+
+      (acIfProto(d,f)?'up':'down'));
   });
   return lines.join('\n');
 }
@@ -1197,7 +1543,17 @@ function acShowRoute(d){
   return lines.join('\n');
 }
 function acShowRun(d){
-  const v6=acFam===6, lines=['!'];
+  const v6=acFam===6, lines=['!'], s=d.ssh;
+  if(s.encrypt) lines.push('service password-encryption','!');
+  lines.push('hostname '+d.name,'!');
+  if(s.enable) lines.push('enable secret 5 '+acFakeHash(s.enable,5),'!');
+  if(s.domain) lines.push('ip domain-name '+s.domain);
+  Object.keys(s.users).forEach(function(n){
+    const u=s.users[n];
+    lines.push('username '+n+(u.secret!=null?' secret 5 '+acFakeHash(u.secret,5)
+      :(s.encrypt?' password 7 '+acFakeHash(u.password,7):' password '+u.password)));
+  });
+  lines.push('!');
   d.ifaces.forEach(function(f){
     lines.push('interface '+f.name);
     if(f.vlan) lines.push(' encapsulation dot1Q '+f.vlan);
@@ -1219,15 +1575,22 @@ function acShowRun(d){
     const acl=d.acls[n];
     if(acl.fam===6){
       lines.push('ipv6 access-list '+acl.name);
-      acl.aces.forEach(function(a){ lines.push(' '+aceText(a).toUpperCase().replace(/^(PERMIT|DENY) IPV6/, function(m){ return m.toLowerCase(); })+' sequence '+a.seq); });
+      acl.aces.forEach(function(a){ lines.push(' '+aceText(a).replace(/[0-9a-f:]+(?=\/|\s|$)/g, function(m){ return m.indexOf(':')>=0 ? m.toUpperCase() : m; })+' sequence '+a.seq); });
     } else if(acl.numbered) acl.aces.forEach(function(a){ lines.push('access-list '+acl.name+' '+aceText(a)); });
     else {
-      lines.push('ip access-list standard '+acl.name);
+      lines.push('ip access-list '+(acl.ext?'extended ':'standard ')+acl.name);
       acl.aces.forEach(function(a){ lines.push(' '+aceText(a)); });
     }
     lines.push('!');
   });
-  if(d.vtyAcl){ lines.push('line vty 0 4'); lines.push(v6 ? ' ipv6 access-class '+d.vtyAcl+' in' : ' access-class '+d.vtyAcl+' in'); lines.push('!'); }
+  if(d.ssh.ver) lines.push('ip ssh version '+d.ssh.ver, '!');
+  const vty=d.ssh.vty;
+  lines.push('line vty 0 4');
+  if(d.vtyAcl) lines.push(v6 ? ' ipv6 access-class '+d.vtyAcl+' in' : ' access-class '+d.vtyAcl+' in');
+  if(vty.password) lines.push(d.ssh.encrypt?' password 7 '+acFakeHash(vty.password,7):' password '+vty.password);
+  lines.push(vty.login==='local'?' login local':vty.login==='line'?' login':' no login');
+  if(vty.transport!=='all') lines.push(' transport input '+vty.transport);
+  lines.push('!');
   return lines.join('\n');
 }
 
@@ -1342,6 +1705,7 @@ function acBuildTopology(){
   acAddRoute(r3,N.lan99,L,'S0/0/1',A.r2_s1,2);
   acAddRoute(r3,A.dflt,0,'S0/0/1',A.r2_s1,1);
 
+  [r1,r2,r3].forEach(function(r){ sshReady(r); });
   return {r1:r1,r2:r2,r3:r3,s1:s1,s3:s3,pcA:pcA,pcB:pcB,pcC:pcC};
 }
 
@@ -1359,6 +1723,12 @@ function acFindAcl(r,name){ return r.acls[name]||null; }
    as its destination here, so only the source is specified. */
 function aceWantMatches(got, w){
   if(got.action!==w.action) return false;
+  if(w.ext){
+    if(!got.ext) return false;
+    return got.proto===w.proto && acexSideEq(got.src, acexWantSide(w.src)) && acexSideEq(got.dst, acexWantSide(w.dst)) &&
+      portEq(got.sport, w.sport||null) && portEq(got.dport, w.dport||null) && (got.icmp||null)===(w.icmp||null);
+  }
+  if(got.ext) return false;
   if(acFam===6){
     if(got.fam!==6 || got.dst.kind!=='any') return false;
     if(w.kind==='any') return got.src.kind==='any';
@@ -1368,7 +1738,19 @@ function aceWantMatches(got, w){
   if(got.fam===6) return false;
   return got.ipInt===ip2int(w.ip) && got.wcInt===(w.wc==null?0:ip2int(w.wc));
 }
+/* Extended wanted entries: {ext, action, proto, src, dst, dport?, icmp?}, each
+   side {kind:'any'} | {kind:'host', ip} | {kind:'net', ip, wc}. Sides compare
+   by what they cover, so "192.168.10.0 0.0.0.255" and a host typed as
+   "X 0.0.0.0" match the way IOS would store them. */
+function wx(action, proto, src, dst, opts){ return Object.assign({ext:true, action:action, proto:proto, src:src, dst:dst}, opts||{}); }
+function sAny(){ return {kind:'any'}; }
+function sHost(ip){ return {kind:'host', ip:ip}; }
+function sNet(netName, wc){ const A=acPlan(); return {kind:'net', ip:A.n[netName], wc:wc||A.lanWc}; }
+function acexWantSide(sp){ return sp.kind==='any'?acexSide('any'):sp.kind==='host'?acexSide('host',sp.ip):acexSide('net',sp.ip,sp.wc); }
+function acexSideEq(a,b){ return a.wcInt===b.wcInt && ((a.ipInt&~a.wcInt)>>>0)===((b.ipInt&~b.wcInt)>>>0); }
+function portEq(a,b){ if(!a||!b) return !a&&!b; return a.op===b.op&&a.a===b.a&&(a.b||0)===(b.b||0); }
 function aceWantText(w){
+  if(w.ext) return aceText(acexMake(0, w.action, w.proto, acexWantSide(w.src), acexWantSide(w.dst), {sport:w.sport, dport:w.dport, icmp:w.icmp}));
   if(acFam===6){
     const src = w.kind==='any' ? 'any' : w.kind==='host' ? 'host '+w.ip : w.ip+'/'+w.pfx;
     return w.action+' ipv6 '+src+' any';
@@ -1476,29 +1858,33 @@ function acPingReq(fromLabel, srcIp, toLabel, dstIp, shouldWork, why, gate){
       return {ok:false, reason:dstIp+' is still reachable from '+srcIp+' — the policy says it should not be'};
     }};
 }
-function acSshReq(fromLabel, srcIp, router, routerIp, shouldWork, gate){
+/* blockedBy says which control a refusal must come from: the vty
+   access-class (the default) or an interface ACL ('acl'). creds, when given,
+   are the username and password the session logs in with. */
+function acSshReq(fromLabel, srcIp, router, routerIp, shouldWork, gate, blockedBy, creds){
   return {group:'Verify',
-    desc:shouldWork?'<b>'+fromLabel+'</b> ('+mono(srcIp)+') can SSH to '+router.name
+    desc:shouldWork?'<b>'+fromLabel+'</b> ('+mono(srcIp)+') can SSH to '+router.name+(creds?' as '+mono(creds.user):'')
                    :'<b>'+fromLabel+'</b> ('+mono(srcIp)+') is <b>refused</b> SSH to '+router.name,
     test:function(){
       if(gate){ const g=gate(); if(g) return {ok:false, reason:g}; }
-      const r=acSsh(srcIp, routerIp, false);
+      const r=acSsh(srcIp, routerIp, false, creds);
       if(shouldWork) return r.ok ? {ok:true} : {ok:false, reason:r.reason};
-      if(!r.ok && r.deniedByVty) return {ok:true};
-      if(!r.ok) return {ok:false, reason:'It fails, but not because of the vty ACL: '+r.reason};
+      if(!r.ok && (blockedBy==='acl' ? r.blocked : r.deniedByVty)) return {ok:true};
+      if(!r.ok) return {ok:false, reason:'It fails, but not because of the '+(blockedBy==='acl'?'interface ACL':'vty ACL')+': '+r.reason};
       return {ok:false, reason:srcIp+' can still SSH in — the policy says it should not'};
     }};
 }
 /* "Do you have to re-apply the ACL after editing it?" graded as a fact
    rather than a question: the interface binding must still be there afterwards. */
-function acStillAppliedReq(router, ifName, aclName, gate){
+function acStillAppliedReq(router, ifName, aclName, gate, dir){
+  dir=dir||'out';
   const cmd=acPlan().applyCmd;
   return {group:'Verify', desc:'The '+mono(cmd)+' on '+router.name+' '+mono(ifName)+' is still in place after the edit',
     test:function(){
       if(gate){ const g=gate(); if(g) return {ok:false, reason:g}; }
       const f=acIface(router,ifName);
-      if(!f||f.aclOut!==aclName)
-        return {ok:false, reason:'Editing an ACL in place does not remove it from the interface — put '+aclName+' back on '+ifName+' outbound'};
+      if(!f||(dir==='in'?f.aclIn:f.aclOut)!==aclName)
+        return {ok:false, reason:'Editing an ACL in place does not remove it from the interface — put '+aclName+' back on '+ifName+' '+dir+'bound'};
       return {ok:true};
     }};
 }
@@ -1626,10 +2012,215 @@ function genAclLabHard(){
     topo:t
   };
 }
-/* The Version row picks the family the round is BUILT in, the same way the
+/* ── Extended IPv4 tiers ─────────────────────────────────────────────
+   The same Lab 8A network, filtered with extended lists — which match the
+   destination and the protocol too, so they belong close to the SOURCE: an
+   extended list there blocks only the one flow it names. Easy is one deny
+   and the closing permit; Medium filters one protocol and leaves the rest;
+   Hard edits a live list in place by sequence number, the troubleshooting
+   guide's "wrong line or wrong order" fix. */
+const XNOTE_PERMIT='Every extended list needs a final <span class="mono-inl">permit ip any any</span> if anything else is meant to keep working — the implicit deny at the end drops whatever the list does not permit.';
+function genXAclEasy(){
+  const t=acBuildTopology(), A=acPlan();
+  const want=[wx('deny','ip',sNet('lan10'),sNet('lan30')), wx('permit','ip',sAny(),sAny())];
+  return {
+    kind:'easy',
+    title:'A numbered extended ACL',
+    goal:'Stop every host on <b>'+acNetLabel('lan10')+'</b> reaching <b>'+acNetLabel('lan30')+
+      '</b> — any kind of traffic — while everything else keeps working. Use extended access list <b>100</b>.',
+    note:'An extended list matches the destination as well as the source, so it can sit right next to the <b>source</b> without cutting that source off from everywhere else — and dropping the traffic there saves it a trip across the WAN. Work out the router, the interface and the direction. '+XNOTE_PERMIT,
+    hint:'PC-A should still reach PC-B and R3\'s Lo0 ('+A.r3_lo+') once the list is on — only the one destination network is blocked.',
+    reqs:[].concat(
+      acGroup('ACL',
+        acAclReq(t.r1,'100',want,'deny '+acNetLabel('lan10')+' to '+acNetLabel('lan30')+', then permit everything else'),
+        acAppliedReq(t.r1,'Gi0/1.10','100','in','closest to the source')),
+      (function(){ const g=acGateApplied(t.r1,'100','Gi0/1.10','in'); return acGroup('Verify',
+        acPingReq('PC-A',A.pcA,'PC-C',A.pcC,false,'that is the flow the list exists to stop',g),
+        acPingReq('PC-A',A.pcA,'PC-B',A.pcB,true,'other destinations are untouched',g),
+        acPingReq('PC-A',A.pcA,"R3's Lo0",A.r3_lo,true,null,g),
+        acPingReq('PC-B',A.pcB,'PC-C',A.pcC,true,'other sources are untouched',g)); })()
+    ),
+    topo:t
+  };
+}
+function genXAclMedium(){
+  const t=acBuildTopology(), A=acPlan();
+  const lan30Host='192.168.30.50';
+  const want=[
+    wx('permit','icmp',sHost(A.pcC),sNet('lan10')),
+    wx('deny','icmp',sNet('lan30'),sNet('lan10')),
+    wx('deny','tcp',sNet('lan30'),sAny(),{dport:{op:'eq',a:22}}),
+    wx('permit','ip',sAny(),sAny())];
+  return {
+    kind:'medium',
+    title:'A named extended ACL, by protocol',
+    goal:'Build <b>LAN30-FILTER</b>. Hosts on <b>'+acNetLabel('lan30')+'</b> may no longer <b>ping</b> anything on <b>'+acNetLabel('lan10')+
+      '</b> — except <b>PC-C</b> ('+A.pcC+'), the help-desk machine. Nobody on '+acNetLabel('lan30')+' may <b>SSH</b> to any device. Everything else stays allowed.',
+    note:'Four entries, in this order: the PC-C exception, the ICMP deny it is an exception to, the SSH deny (<span class="mono-inl">tcp … eq 22</span>), and the closing permit. The exception has to come <b>before</b> the deny that covers it — the first match wins. '+XNOTE_PERMIT,
+    hint:'Test from PC-C, and from a host that is not PC-C: '+lan30Host+' is a free address on '+acNetLabel('lan30')+'.',
+    reqs:[].concat(
+      acGroup('ACL',
+        acAclReq(t.r3,'LAN30-FILTER',want,'the PC-C exception, the ICMP deny, the SSH deny, then permit ip any any'),
+        acAppliedReq(t.r3,'Gi0/1.30','LAN30-FILTER','in','closest to the source')),
+      (function(){ const g=acGateApplied(t.r3,'LAN30-FILTER','Gi0/1.30','in'); return acGroup('Verify',
+        acPingReq('PC-C',A.pcC,'PC-A',A.pcA,true,'the help-desk exception',g),
+        acPingReq('a host at '+lan30Host,lan30Host,'PC-A',A.pcA,false,'ICMP from '+acNetLabel('lan30')+' to '+acNetLabel('lan10')+' is denied',g),
+        acPingReq('a host at '+lan30Host,lan30Host,'PC-B',A.pcB,true,'only '+acNetLabel('lan10')+' is protected from pings',g),
+        acSshReq('PC-C',A.pcC,t.r1,A.r1_10,false,g,'acl')); })()
+    ),
+    topo:t
+  };
+}
+function genXAclHard(){
+  const t=acBuildTopology(), A=acPlan();
+  /* the Easy tier's list, live on the interface */
+  acEcho(t.r1,['configure terminal',
+    'access-list 100 deny ip '+A.n.lan10+' '+A.lanWc+' '+A.n.lan30+' '+A.lanWc,
+    'access-list 100 permit ip any any',
+    'interface Gi0/1.10','ip access-group 100 in','end']);
+  const admin=A.testHost;
+  const want=[
+    wx('permit','ip',sHost(admin),sNet('lan30')),
+    wx('deny','ip',sNet('lan10'),sNet('lan30')),
+    wx('deny','icmp',sNet('lan10'),sNet('isp',A.ispWc)),
+    wx('permit','ip',sAny(),sAny())];
+  return {
+    kind:'hard',
+    title:'Edit an extended ACL in place',
+    goal:'Access list <b>100</b> is already on R1 Gi0/1.10, blocking '+acNetLabel('lan10')+' from '+acNetLabel('lan30')+
+      '. Two changes: the administrator\'s station <b>'+admin+'</b> is now exempt and may reach '+acNetLabel('lan30')+
+      '; and nobody on '+acNetLabel('lan10')+' may <b>ping</b> the Internet block <b>'+A.n.isp+'/27</b> any more — every other kind of traffic to it stays allowed.',
+    note:'Edit the list <b>in place</b>: <span class="mono-inl">ip access-list extended 100</span> opens a numbered list by sequence number, so the exemption can go in <b>before</b> entry 10 and the new deny <b>between</b> 10 and the closing permit at 20. Run <span class="mono-inl">show access-lists</span> first to see the numbers. Deleting the list and retyping it would leave the interface unfiltered in between.',
+    hint:'The administrator\'s station has no PC on the canvas — '+admin+' is a free address on '+acNetLabel('lan10')+', and the checks send traffic from it.',
+    reqs:[].concat(
+      acGroup('ACL',
+        acAclReq(t.r1,'100',want,'the exemption, the original deny, the new ICMP deny, then the closing permit')),
+      (function(){
+        const gb=acGateAces(t.r1,'100',4);
+        return acGroup('Verify',
+          acStillAppliedReq(t.r1,'Gi0/1.10','100',gb,'in'),
+          acPingReq('the admin station '+admin,admin,'PC-C',A.pcC,true,'the new exemption',gb),
+          acPingReq('PC-A',A.pcA,'PC-C',A.pcC,false,'still blocked for everyone else',gb),
+          acPingReq('PC-A',A.pcA,"R2's Lo0",A.r2_lo,false,'no pinging the Internet block',gb),
+          acSshReq('PC-A',A.pcA,t.r2,A.r2_lo,true,gb));
+      })()
+    ),
+    topo:t
+  };
+}
+/* ═══ SSH Lab ═════════════════════════════════════════════════════
+   The same Lab 8A network with R1's SSH server stripped back to factory:
+   no domain, no keys, no users, and the vty lines on their default "login".
+   Easy states every value; Medium adds an access-class so only one VLAN can
+   manage the router; Hard arrives configured and broken — the guide's
+   section 16 — with two faults drawn from five, each of which shows up in a
+   different show command. */
+const SSH_DOMAINS=['ccna-lab.com','netacad.local','branch.example','lab.cisco'];
+const SSH_USERS=['netadmin','opsadmin','sshuser','admin1'];
+const SSH_PASSES=['Cisc0Lab!','S3cureSSH','N3tAdm1n','Pa55word9'];
+function sshReq(desc, test){ return {group:'SSH', desc:desc, test:test}; }
+function sshConfigReqs(r, dom, user, pass, bits){
+  const s=r.ssh;
+  return [
+    sshReq('Domain name '+mono(dom), function(){
+      return s.domain===dom?{ok:true}:{ok:false, reason:s.domain?'The domain name is '+s.domain+', not '+dom:'No domain name yet — "ip domain-name '+dom+'"'}; }),
+    sshReq('RSA keys of at least '+bits+' bits', function(){
+      return s.rsa>=bits?{ok:true}:{ok:false, reason:s.rsa?'The keys are '+s.rsa+' bits — generate them again with a bigger modulus':'No RSA keys yet — "crypto key generate rsa" (after the domain name)'}; }),
+    sshReq('SSH version 2 only', function(){
+      return s.ver===2?{ok:true}:{ok:false, reason:'"ip ssh version 2" is not set, so R1 still accepts version 1 as well'}; }),
+    sshReq('A local user '+mono(user)+' whose password is stored as a <b>secret</b>', function(){
+      const u=s.users[user];
+      if(!u) return {ok:false, reason:'There is no user '+user+' yet'};
+      if(u.secret==null) return {ok:false, reason:user+'\'s password is stored with "password", in a form that can be read back — use "secret"'};
+      return u.secret===pass?{ok:true}:{ok:false, reason:user+'\'s secret is not the one in the brief'}; }),
+    sshReq('The vty lines log in against the local users', function(){
+      return s.vty.login==='local'?{ok:true}:{ok:false, reason:'The vty lines use '+(s.vty.login==='line'?'"login" (a line password)':'"no login"')+' — "login local"'}; }),
+    sshReq('The vty lines accept SSH and nothing else', function(){
+      return s.vty.transport==='ssh'?{ok:true}:{ok:false, reason:'transport input is "'+s.vty.transport+'" — "transport input ssh" turns telnet off'}; })
+  ];
+}
+function sshStrip(r){ r.ssh=sshNew(); r.vtyAcl=null; }
+function genSshEasy(){
+  const t=acBuildTopology(), A=acPlan(), r=t.r1; sshStrip(r);
+  const dom=choice(SSH_DOMAINS), user=choice(SSH_USERS), pass=choice(SSH_PASSES);
+  return {
+    kind:'easy', title:'Set up SSH on R1',
+    goal:'R1 has no remote access yet. Turn on SSH: domain name <b>'+dom+'</b>, 1024-bit RSA keys, SSH version 2 only, '+
+      'and a local user <b>'+user+'</b> with the secret <b>'+pass+'</b>. Then make the vty lines log in with local users and accept SSH only.',
+    note:'The order matters: the keys are named after the domain, so <span class="mono-inl">crypto key generate rsa</span> refuses until <span class="mono-inl">ip domain-name</span> is set. <span class="mono-inl">show ip ssh</span> tells you whether SSH came up.',
+    hint:'Test from PC-A\'s panel: SSH to '+A.r1_10+' as '+user+'.',
+    reqs:[].concat(sshConfigReqs(r,dom,user,pass,1024),
+      acGroup('Verify', acSshReq('PC-A',A.pcA,r,A.r1_10,true,null,null,{user:user,pass:pass}))),
+    topo:t
+  };
+}
+function genSshMedium(){
+  const t=acBuildTopology(), A=acPlan(), r=t.r1; sshStrip(r);
+  const dom=choice(SSH_DOMAINS), user=choice(SSH_USERS), pass=choice(SSH_PASSES);
+  const want=[wNet('permit','lan10')];
+  return {
+    kind:'medium', title:'SSH, for one VLAN only',
+    goal:'Set up SSH on R1 for the domain <b>'+dom+'</b> with a local account <b>'+user+'</b> (password <b>'+pass+'</b>, never stored readable), version 2 only and no telnet. '+
+      'Only the administrators\' VLAN, <b>'+acNetLabel('lan10')+'</b>, may open a session: build a standard list <b>SSH-ADMINS</b> and put it on the vty lines.',
+    note:'Pick a key size that SSH version 2 accepts. The list needs only one line — the implicit deny refuses everyone else — and it goes on the vty lines with <span class="mono-inl">access-class</span>, not on an interface.',
+    hint:'PC-A ('+A.pcA+') should get in; PC-B ('+A.pcB+') should be refused by the access-class.',
+    reqs:[].concat(sshConfigReqs(r,dom,user,pass,768),
+      acGroup('ACL', acAclReq(r,'SSH-ADMINS',want,'permit '+acNetLabel('lan10')), acVtyReq(r,'SSH-ADMINS')),
+      acGroup('Verify',
+        acSshReq('PC-A',A.pcA,r,A.r1_10,true,null,null,{user:user,pass:pass}),
+        acSshReq('PC-B',A.pcB,r,A.r1_10,false,acGateVty(r,'SSH-ADMINS')))),
+    topo:t
+  };
+}
+/* Hard: five ways the brief's SSH can be broken, two per round. Each leaves
+   a different fingerprint — show ip ssh, show run, show access-lists — and
+   the ticket only says what the administrator sees. */
+const SSH_FAULTS={
+  transport:function(r){ r.ssh.vty.transport='telnet'; },
+  login:function(r){ r.ssh.vty.login='line'; r.ssh.vty.password='cisco'; },
+  keys:function(r){ r.ssh.rsa=512; },
+  user:function(r,user){ delete r.ssh.users[user]; },
+  acl:function(r){ r.acls['SSH-ADMINS'].aces[0]=aceNet(10,'permit',acPlan().n.lan20,acPlan().lanWc); }
+};
+function genSshHard(){
+  const t=acBuildTopology(), A=acPlan(), r=t.r1; sshStrip(r);
+  const dom=choice(SSH_DOMAINS), user=choice(SSH_USERS), pass=choice(SSH_PASSES);
+  acEcho(r,['configure terminal','ip domain-name '+dom,'crypto key generate rsa general-keys modulus 1024','ip ssh version 2',
+    'username '+user+' secret '+pass,'username backup secret Backup123',
+    'ip access-list standard SSH-ADMINS','permit '+A.n.lan10+' '+A.lanWc,'exit',
+    'line vty 0 4','access-class SSH-ADMINS in','login local','transport input ssh','end']);
+  r.log.length=0;
+  const faults=shuffle(Object.keys(SSH_FAULTS)).slice(0,2);
+  faults.forEach(function(f){ SSH_FAULTS[f](r,user); });
+  const creds={user:user,pass:pass};
+  const g=function(){ const x=acSsh(A.pcA,A.r1_10,false,creds); return x.ok?null:'Get PC-A in first — this checks the fix did not loosen anything else'; };
+  return {
+    kind:'hard', title:'Ticket: SSH to R1 is broken', faults:faults,
+    goal:'<b>Ticket:</b> the administrator at PC-A ('+A.pcA+') cannot SSH to R1 as <b>'+user+'</b> with password <b>'+pass+'</b>. '+
+      'Policy: SSH version 2 only, no telnet, and only '+acNetLabel('lan10')+' may manage R1. Find what is wrong with show commands and fix it without breaking the policy.',
+    note:'Two things are wrong. Useful commands: <span class="mono-inl">show ip ssh</span>, <span class="mono-inl">show run</span> (the vty section and the usernames), <span class="mono-inl">show access-lists</span>. A secret cannot be read back from show run — if an account is missing or wrong, set it again from the ticket.',
+    hint:'Try the SSH from PC-A\'s panel first: the refusal message is the first clue.',
+    reqs:[].concat(
+      acGroup('Verify', acSshReq('PC-A',A.pcA,r,A.r1_10,true,null,null,creds)),
+      acGroup('SSH',
+        sshReq('SSH version 2 is still the only version', function(){ const m=g(); if(m) return {ok:false,reason:m};
+          return r.ssh.ver===2&&sshEnabled(r)?{ok:true}:{ok:false, reason:'"ip ssh version 2" has to stay'}; }),
+        sshReq('Telnet is still refused on the vty lines', function(){ const m=g(); if(m) return {ok:false,reason:m};
+          return r.ssh.vty.transport==='ssh'?{ok:true}:{ok:false, reason:'transport input is "'+r.ssh.vty.transport+'" — it should be ssh only'}; })),
+      acGroup('Verify', acSshReq('PC-B',A.pcB,r,A.r1_10,false,g))),
+    topo:t
+  };
+}
+function genSshLab(diff){
+  acFam=4; acLabKind='acl';
+  return diff==='easy'?genSshEasy():diff==='medium'?genSshMedium():genSshHard();
+}
+
+/* The Version row picks the round's list type and family, the same way the
    RIP lab's picks the RIP version — not a display option. */
 function genAclLab(diff){
   acFam = state.ver==='6' ? 6 : 4; acLabKind='acl';
+  if(state.ver==='x') return diff==='easy' ? genXAclEasy() : diff==='medium' ? genXAclMedium() : genXAclHard();
   return diff==='easy' ? genAclLabEasy() : diff==='medium' ? genAclLabMedium() : genAclLabHard();
 }
 
@@ -1728,11 +2319,11 @@ function natEnabled(r){
 function natPoolAddrs(pool){
   const out=[]; for(let k=ip2int(pool.first); k<=ip2int(pool.last); k++) out.push(k); return out;
 }
-function natRuleFor(r, srcKey){
+function natRuleFor(r, srcKey, dstKey, pkt){
   for(const rule of r.nat.rules){
     const acl=r.acls[rule.acl];
     if(!acl) continue;
-    if(aclEvaluate(acl, srcKey, false).action==='permit') return rule;
+    if(aclEvaluate(acl, srcKey, false, dstKey, pkt).action==='permit') return rule;
   }
   return null;
 }
@@ -1766,7 +2357,7 @@ function natOut(r, pkt, count){
     store([flow(g, pkt.sport, 'static')]);
     return {src:g, sport:pkt.sport};
   }
-  const rule=natRuleFor(r, pkt.src);
+  const rule=natRuleFor(r, pkt.src, pkt.dst, pkt);
   if(!rule) return null;
   let igKey, overload=!!rule.overload, rows=[];
   if(rule.iface){
@@ -2643,7 +3234,7 @@ function acRenderRouterCfg(d,panel){
   panel.innerHTML=
     '<div class="cfg-hdr"><div class="cfg-name">'+d.name+'</div>'+
     '<button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="acCloseCfg()">Close</button></div>'+
-    '<div class="cfg-grid"><div>'+
+    '<div class="cfg-grid stack"><div>'+
       '<div class="cfg-sec-lbl">Interfaces</div>'+acIfaceTableHtml(d)+
       (acLabKind==='nat' ? '<div class="cfg-sec-lbl" style="margin-top:14px">Translations</div>'+
         '<pre class="ping-out" style="margin:0">'+esc(natShowTranslations(d))+'</pre>' : '')+
@@ -2665,7 +3256,7 @@ function acRenderPcCfg(d,panel){
     '<div class="pc-form"><span class="pc-form-lbl">IP Address</span>'+
     '<input type="text" class="custom-ip-inp" value="'+d.ip+'" autocomplete="off" spellcheck="false" oninput="acSetPcIp('+d.id+',this.value)">'+
     '<span class="pc-pfx">/'+d.pfx+'</span></div>'+
-    '<div class="cli-note" style="margin-top:6px">The Hard tier has you change this address to test the vty ACL from a permitted and a non-permitted host.</div>'+
+    (state.mode==='lab'?'<div class="cli-note" style="margin-top:6px">The Hard tier has you change this address to test the vty ACL from a permitted and a non-permitted host.</div>':'')+
     '<div class="cfg-sec-lbl" style="margin-top:14px">Ping</div>'+
     '<div class="pc-form"><label class="pc-form-lbl">Target IP</label>'+
     '<input class="custom-ip-inp" id="ac-ping-ip" placeholder="e.g. '+acPlan().pcC+'" autocomplete="off" spellcheck="false" onkeydown="if(event.key===\'Enter\')acPingRun()">'+
@@ -2675,6 +3266,11 @@ function acRenderPcCfg(d,panel){
     '<div class="pc-form"><label class="pc-form-lbl">Router IP</label>'+
     '<input class="custom-ip-inp" id="ac-ssh-ip" placeholder="e.g. '+acPlan().r1_10+'" autocomplete="off" spellcheck="false" onkeydown="if(event.key===\'Enter\')acSshRun()">'+
     '<button class="rand-btn" id="ac-ssh-btn" onclick="acSshRun()">SSH</button></div>'+
+    '<div class="pc-form" style="margin-top:6px"><label class="pc-form-lbl">Username</label>'+
+    '<input class="custom-ip-inp" id="ac-ssh-user" placeholder="e.g. admin" autocomplete="off" spellcheck="false" onkeydown="if(event.key===\'Enter\')acSshRun()">'+
+    '<label class="pc-form-lbl">Password</label>'+
+    '<input class="custom-ip-inp" id="ac-ssh-pass" type="password" autocomplete="off" onkeydown="if(event.key===\'Enter\')acSshRun()"></div>'+
+    (state.mode==='ssh'?'':'<div class="cli-note" style="margin-top:6px">Every router in this lab accepts <b>admin</b> / <b>cisco</b>.</div>')+
     '<pre class="ping-out" id="ac-ssh-out"></pre>';
 }
 function acSetPcIp(id,val){
@@ -2713,10 +3309,18 @@ function acSshRun(){
   const ip=(document.getElementById('ac-ssh-ip').value||'').trim();
   const out=document.getElementById('ac-ssh-out');
   if(!acValid(ip)){ out.textContent='Invalid address.'; return; }
-  const r=acSsh(d.ip, ip, true);
-  out.textContent = r.ok
-    ? 'Connecting to '+ip+'...\nOpen\nUsername: admin\nPassword: *****\n\nR1>  (connected)'
-    : 'Connecting to '+ip+'...\n% Connection refused by remote host\n\n('+r.reason+')';
+  const user=(document.getElementById('ac-ssh-user').value||'').trim();
+  const pass=document.getElementById('ac-ssh-pass').value||'';
+  if(!user){ out.textContent='% A username is required — this is "ssh -l <username> '+ip+'"'; return; }
+  const r=acSsh(d.ip, ip, true, {user:user, pass:pass});
+  const head='C:\\> ssh -l '+user+' '+ip+'\n';
+  /* The SSH Lab's Hard tier is a ticket: the client says only what a real
+     one would, and working out why is the exercise. Elsewhere the reason is
+     shown, because there the lesson is the ACL, not the diagnosis. */
+  const why = state.mode==='ssh'&&state.diff==='hard' ? '' : '\n\n('+r.reason.replace(/^% Login invalid — /,'')+')';
+  out.textContent = r.ok ? head+'Password:\n\n'+r.router.name+'>  (connected as '+user+')'
+    : r.login ? head+'Password:\n\n% Login invalid'+why
+    : head+'% Connection refused by remote host'+why;
   acRefreshCfgKeepScroll();
 }
 /* Re-render the panel after an SSH so the match counters update, but keep
@@ -2729,7 +3333,7 @@ function acRenderTerm(){
   if(!d||d.type!=='router') return;
   const log=document.getElementById('ac-term-log');
   if(!log) return;
-  log.innerHTML=d.log.slice(-18).map(function(l){
+  log.innerHTML=d.log.slice(-300).map(function(l){
     return '<div class="tl'+(l.charAt(0)==='%'?' terr':'')+'">'+esc(l)+'</div>';
   }).join('');
   log.scrollTop=log.scrollHeight;
@@ -4197,6 +4801,7 @@ const TOPIC_FNS={
   match:{gen:genMatch,   render:renderMatch,  grade:matchGrade},
   place:{gen:genPlace,   render:renderPlace,  grade:placeGrade},
   lab:  {gen:genAclLab,  render:renderAclLab, grade:acLabGrade},
+  ssh:  {gen:genSshLab,  render:renderAclLab, grade:acLabGrade},
   terms:{gen:genNatTerms, render:renderNatTerms, grade:natTermsGrade},
   nat:  {gen:genNatLab,  render:renderAclLab, grade:acLabGrade}
 };
@@ -4226,11 +4831,11 @@ function updateChips(){
    configured, or a grid of answer fields. On a one-click drill it is just
    Skip with the score wiped, so it is hidden there. Kept per topic rather
    than per page, because these pages mix both kinds. */
-const TOPIC_RESET={wild:false, range:false, match:false, place:false, lab:true, terms:false, nat:true};
+const TOPIC_RESET={wild:false, range:false, match:false, place:false, lab:true, ssh:true, terms:false, nat:true};
 /* Which topics get the instructions pop-out — the ones with a canvas you
    scroll down to work, leaving the brief behind. Decided per topic for the
    same reason TOPIC_RESET is. */
-const TOPIC_POP={wild:false, range:false, match:false, place:true, lab:true, terms:false, nat:true};
+const TOPIC_POP={wild:false, range:false, match:false, place:true, lab:true, ssh:true, terms:false, nat:true};
 function setBtns(){
   const chk=document.getElementById('chkbtn'), rev=document.getElementById('revbtn'), nxt=document.getElementById('nxtbtn');
   nxt.style.display='none';
@@ -4274,7 +4879,7 @@ function resetGame(){ state.score=0; state.round=1; state.streak=0; loadQ(); }
 /* ─── Controls ──────────────────────────────────────────────────── */
 function setTopic(t,btn){
   state.topic=t;
-  document.querySelectorAll('#tb-rand,#tb-wild,#tb-range,#tb-match,#tb-place,#tb-lab,#tb-terms,#tb-nat').forEach(function(b){ b.classList.remove('on'); });
+  document.querySelectorAll('#tb-rand,#tb-wild,#tb-range,#tb-match,#tb-place,#tb-lab,#tb-ssh,#tb-terms,#tb-nat').forEach(function(b){ b.classList.remove('on'); });
   btn.classList.add('on');
   loadQ();
 }
