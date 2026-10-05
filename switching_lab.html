@@ -2333,17 +2333,17 @@ function buildTrunkScenario(D){
     const vids=pickVids(k), names=pickNames(k);
     const s1=addSwitch(120,30), s2=addSwitch(500,30);
     const sizes=groupSizes(4,k);
-    const {groups,swOf}=buildGroupedPCs([s1,s2],[2,2],sizes,{y:212});
+    const {groups,swOf}=buildGroupedPCs([s1,s2],[2,2],sizes,{y:212,ips:true,vids:vids,hostFor:newHostPool()});
     const [gi,gj]=pickTwoGroups(k);
-    return {type:'trunk',allowIP:false,
+    return {type:'trunk',allowIP:true,
       _meta:{vids,names,groups,sizes},
       title:'Inter-Switch Trunking',
-      instr:`Create and name both VLANs where their PCs live, assign: ${membStr(groups,vids,names,false)}. Then cable SW1 to SW2 and trunk the link so every VLAN can cross it.`,
+      instr:`Create and name both VLANs where their PCs live, assign: ${membStr(groups,vids,names,true)}. Then cable SW1 to SW2 and trunk the link so every VLAN can cross it.`,
       reqs:[
         {group:'Trunking',desc:'SW1 and SW2 are linked and both ends are trunks', test(){ return trunkLinkReq(s1,s2); }},
         groupNamesReq(groups,vids,names,swOf),
         groupAssignReq(groups,vids),
-        groupReachReq(groups),
+        groupIpReachReq(groups),
         isoPairReq(groups[gi][0],groups[gj][0]),
       ]};
   }
@@ -2353,19 +2353,19 @@ function buildTrunkScenario(D){
     const k=pick([2,3]);
     const vids=pickVids(k), names=pickNames(k);
     const sizes=groupSizes(4,k);
-    const {groups,swOf}=buildGroupedPCs([s1,s2,s3],[3,2,3],sizes,{y:212});
+    const {groups,swOf}=buildGroupedPCs([s1,s2,s3],[3,2,3],sizes,{y:212,ips:true,vids:vids,hostFor:newHostPool()});
     const [gi,gj]=pickTwoGroups(k);
-    return {type:'trunk',allowIP:false,
+    return {type:'trunk',allowIP:true,
       _meta:{vids,names,groups,sizes},
       title:'Trunking a Three-Switch Chain',
-      instr:`Traffic must cross SW2 to travel the chain. Create and name each VLAN on the switches that carry its PCs, assign: ${membStr(groups,vids,names,false)}. Then cable and trunk <em>both</em> inter-switch links, and restrict both ends of each trunk to just the VLANs in use (<span class="mono-inl">switchport trunk allowed vlan ${vids.join(',')}</span>).`,
+      instr:`Traffic must cross SW2 to travel the chain. Create and name each VLAN on the switches that carry its PCs, assign: ${membStr(groups,vids,names,true)}. Then cable and trunk <em>both</em> inter-switch links, and restrict both ends of each trunk to just the VLANs in use (<span class="mono-inl">switchport trunk allowed vlan ${vids.join(',')}</span>).`,
       reqs:[
         {group:'Trunking',desc:'SW1\u2013SW2 link exists and is trunked on both ends', test(){ return trunkLinkReq(s1,s2); }},
         {group:'Trunking',desc:'SW2\u2013SW3 link exists and is trunked on both ends', test(){ return trunkLinkReq(s2,s3); }},
         allowedReq([[s1,s2],[s2,s3]],vids,`Both trunks allow only VLANs ${vids.join(',')}, at both ends`),
         groupNamesReq(groups,vids,names,swOf),
         groupAssignReq(groups,vids),
-        groupReachReq(groups),
+        groupIpReachReq(groups),
         isoPairReq(groups[gi][0],groups[gj][0]),
       ]};
   }
@@ -2376,13 +2376,13 @@ function buildTrunkScenario(D){
   const npc=pick([5,6]);
   const vids=pickVids(3), names=pickNames(3);
   const sizes=groupSizes(npc,3);
-  const {groups,swOf}=buildGroupedPCs([s1,s2,s3],[3,2,3],sizes,{y:206});
+  const {groups,swOf}=buildGroupedPCs([s1,s2,s3],[3,2,3],sizes,{y:206,ips:true,vids:vids,hostFor:newHostPool()});
   const [gi,gj]=pickTwoGroups(3);
   const nativeVid=pick([99,199,222,777,888,999]);
-  return {type:'trunk',allowIP:false,
+  return {type:'trunk',allowIP:true,
     _meta:{vids,names,groups,sizes,nativeVid},
     title:'Three Switches, Three VLANs',
-    instr:`${npc} PCs, three VLANs: ${membStr(groups,vids,names,false)}. Create and name each VLAN on the switches that carry its PCs, assign the ports, then cable and trunk both inter-switch links. `+
+    instr:`${npc} PCs, three VLANs: ${membStr(groups,vids,names,true)}. Create and name each VLAN on the switches that carry its PCs, assign the ports, then cable and trunk both inter-switch links. `+
       `These switches are still defaulting to native VLAN 1, which is a VLAN-hopping risk \u2014 move the native VLAN on <em>both</em> backbone links to VLAN <strong>${nativeVid}</strong> with <span class="mono-inl">switchport trunk native vlan ${nativeVid}</span> (must match on both ends of each link). `+
       `Then prune the trunks: each one should carry only the three user VLANs and the native VLAN.`,
     reqs:[
@@ -2393,7 +2393,7 @@ function buildTrunkScenario(D){
       allowedReq([[s1,s2],[s2,s3]],[...vids,nativeVid],'Both trunks allow only the three user VLANs and the native VLAN'),
       groupNamesReq(groups,vids,names,swOf),
       groupAssignReq(groups,vids),
-      groupReachReq(groups),
+      groupIpReachReq(groups),
       isoPairReq(groups[gi][0],groups[gj][0]),
     ]};
 }
@@ -2418,14 +2418,14 @@ function buildEtherScenario(D){
     const [v1]=pickVids(1);
     const s1=addSwitch(140,60), s2=addSwitch(480,60);
     lockPair(s1,s2);
-    const {groups,swOf}=buildGroupedPCs([s1,s2],[1,1],[2],{y:230});
+    const {groups,swOf}=buildGroupedPCs([s1,s2],[1,1],[2],{y:230,ips:true,vids:[v1],hostFor:newHostPool()});
     const pcs=groups[0];
     const proto=pick(['LACP','PAgP']);
     const modes=proto==='LACP'?'<span class="mono-inl">active</span> / <span class="mono-inl">passive</span>':'<span class="mono-inl">desirable</span> / <span class="mono-inl">auto</span>';
-    return {type:'ether',allowIP:false,
+    return {type:'ether',allowIP:true,
       _meta:{vids:[v1],names:[n1],groups,proto},
       title:'EtherChannel Carrying a VLAN',
-      instr:`Bundle the two SW1\u2013SW2 links into one EtherChannel negotiated with <strong>${proto}</strong> (${modes} &mdash; at least one end has to start the negotiation), trunk the bundle on its port-channel interface, then create VLAN ${v1} <strong>${n1}</strong> on both switches and put ${pcs[0].name} and ${pcs[1].name} in it so they can talk over the bundle.`,
+      instr:`Bundle the two SW1\u2013SW2 links into one EtherChannel negotiated with <strong>${proto}</strong> (${modes} &mdash; at least one end has to start the negotiation), trunk the bundle on its port-channel interface, then create VLAN ${v1} <strong>${n1}</strong> (192.168.${v1}.0/24) on both switches and put ${pcs[0].name} and ${pcs[1].name} in it so they can talk over the bundle — ping between them to check.`,
       reqs:[
         {group:'EtherChannel',desc:'Both switches bundle their two member ports into one channel-group',
           test(){ return bundleReq(s1,s2,'SW1\u2013SW2'); }},
@@ -2433,7 +2433,7 @@ function buildEtherScenario(D){
         bundleTrunkReq([[s1,s2]]),
         groupNamesReq(groups,[v1],[n1],swOf),
         groupAssignReq(groups,[v1]),
-        groupReachReq(groups),
+        groupIpReachReq(groups),
       ]};
   }
 
@@ -2441,12 +2441,12 @@ function buildEtherScenario(D){
   const k=2;
   const vids=pickVids(k), names=pickNames(k);
   const s1=addSwitch(70,50), s2=addSwitch(320,50), s3=addSwitch(570,50);
-  const {groups,swOf}=buildGroupedPCs([s1,s2,s3],[2,0,2],[2,2],{y:224});
+  const {groups,swOf}=buildGroupedPCs([s1,s2,s3],[2,0,2],[2,2],{y:224,ips:true,vids:vids,hostFor:newHostPool()});
   const [pA,pB]=shuffle(['LACP','PAgP']);
-  return {type:'ether',allowIP:false,
+  return {type:'ether',allowIP:true,
     _meta:{vids,names,groups,protos:[pA,pB]},
     title:'Dual EtherChannel Backbone',
-    instr:`Run <strong>two cables</strong> between SW1 and SW2 and <strong>two cables</strong> between SW2 and SW3 using the free ports. Bundle each pair into an EtherChannel — SW2\u2019s two bundles must use <em>different</em> group numbers. The SW1–SW2 bundle negotiates with <strong>${pA}</strong> and the SW2–SW3 bundle with <strong>${pB}</strong>. Trunk each bundle on its port-channel interface, then create ${membStr(groups,vids,names,false)} end to end.`,
+    instr:`Run <strong>two cables</strong> between SW1 and SW2 and <strong>two cables</strong> between SW2 and SW3 using the free ports. Bundle each pair into an EtherChannel — SW2\u2019s two bundles must use <em>different</em> group numbers. The SW1–SW2 bundle negotiates with <strong>${pA}</strong> and the SW2–SW3 bundle with <strong>${pB}</strong>. Trunk each bundle on its port-channel interface, then create ${membStr(groups,vids,names,true)} end to end.`,
     reqs:[
       {group:'EtherChannel',desc:'Two links between SW1 &amp; SW2, bundled consistently on both switches',
         test(){ return bundleReq(s1,s2,'SW1\u2013SW2'); }},
@@ -2461,7 +2461,7 @@ function buildEtherScenario(D){
       bundleTrunkReq([[s1,s2],[s2,s3]],8),
       groupNamesReq(groups,vids,names,swOf),
       groupAssignReq(groups,vids),
-      groupReachReq(groups),
+      groupIpReachReq(groups),
     ]};
 }
 
@@ -2794,19 +2794,19 @@ function buildComboScenario(D){
     const s1=addSwitch(140,55), s2=addSwitch(480,55);
     lockPair(s1,s2);
     const sizes=groupSizes(4,k);
-    const {groups,swOf}=buildGroupedPCs([s1,s2],[2,2],sizes,{y:224});
+    const {groups,swOf}=buildGroupedPCs([s1,s2],[2,2],sizes,{y:224,ips:true,vids:vids,hostFor:newHostPool()});
     const [gi,gj]=pickTwoGroups(k);
-    return {type:'combo',allowIP:false,
+    return {type:'combo',allowIP:true,
       _meta:{vids,names,groups,sizes},
       title:'Everything — Bundle, Trunk &amp; VLANs',
-      instr:`Two parallel links join the switches: bundle them into one EtherChannel and trunk the bundle on its port-channel interface. Then create and name both VLANs where their PCs live and assign: ${membStr(groups,vids,names,false)}.`,
+      instr:`Two parallel links join the switches: bundle them into one EtherChannel and trunk the bundle on its port-channel interface. Then create and name both VLANs where their PCs live and assign: ${membStr(groups,vids,names,true)}.`,
       reqs:[
         {group:'EtherChannel',desc:'The two links form one consistent EtherChannel',
           test(){ return bundleReq(s1,s2,'SW1\u2013SW2'); }},
         bundleTrunkReq([[s1,s2]]),
         groupNamesReq(groups,vids,names,swOf),
         groupAssignReq(groups,vids),
-        groupReachReq(groups),
+        groupIpReachReq(groups),
         isoPairReq(groups[gi][0],groups[gj][0]),
       ]};
   }
@@ -2826,12 +2826,12 @@ function buildComboScenario(D){
       let reserve=(sw===singlePair[0]||sw===singlePair[1])?1:0;
       return 4-used-reserve;
     });
-    const {groups,swOf}=buildGroupedPCs([s1,s2,s3],caps,sizes,{y:212});
+    const {groups,swOf}=buildGroupedPCs([s1,s2,s3],caps,sizes,{y:212,ips:true,vids,hostFor:newHostPool()});
     const [gi,gj]=pickTwoGroups(k);
-    return {type:'combo',allowIP:false,
+    return {type:'combo',allowIP:true,
       _meta:{vids,names,groups,sizes,bundlePair,singlePair},
       title:'Everything — Dual-Path Backbone',
-      instr:`${bundlePair[0].name} and ${bundlePair[1].name} share two pre-cabled links: bundle and trunk them. Then cable a single link between ${singlePair[0].name} and ${singlePair[1].name} and trunk it. Finally create, name and assign: ${membStr(groups,vids,names,false)}.`,
+      instr:`${bundlePair[0].name} and ${bundlePair[1].name} share two pre-cabled links: bundle and trunk them. Then cable a single link between ${singlePair[0].name} and ${singlePair[1].name} and trunk it. Finally create, name and assign: ${membStr(groups,vids,names,true)}.`,
       reqs:[
         {group:'EtherChannel',desc:`${bundlePair[0].name}\u2013${bundlePair[1].name} links form one consistent EtherChannel`,
           test(){ return bundleReq(bundlePair[0],bundlePair[1],bundlePair[0].name+'\u2013'+bundlePair[1].name); }},
@@ -2840,7 +2840,7 @@ function buildComboScenario(D){
         bundleTrunkReq([bundlePair]),
         groupNamesReq(groups,vids,names,swOf),
         groupAssignReq(groups,vids),
-        groupReachReq(groups),
+        groupIpReachReq(groups),
         isoPairReq(groups[gi][0],groups[gj][0]),
       ]};
   }
