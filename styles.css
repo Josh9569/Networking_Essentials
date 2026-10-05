@@ -997,6 +997,17 @@ sup  { font-size: .65em; vertical-align: super; }
 .port-table select,
 .port-table input  { font-family: var(--mono); font-size: 12.5px; background: var(--surface-s); border: 1px solid var(--border-m); border-radius: 5px; padding: 3px 6px; color: var(--text); outline: none; width: 100%; max-width: 82px; }
 .port-table input:disabled { opacity: .4; }
+/* The open list of a native <select> is drawn by the browser — white on one,
+   grey on another, never translucent — so lab-shared.js swaps it for this
+   menu, the same surface as .opt-menu / .theme-dd-menu. The <select> itself
+   stays (value, onchange, keyboard), only its popup is replaced. option
+   colours are the fallback for keyboard users who open the native list. */
+.port-table select { max-width: 100px; }
+.port-table select option, .cfg-panel select option { background: var(--bg); color: var(--text); }
+.sel-menu       { position: fixed; z-index: 400; min-width: 90px; background: var(--surface); border: 1px solid var(--border-m); border-radius: var(--r); padding: 4px; box-shadow: 0 4px 16px rgba(0,0,0,.18); }
+.sel-item       { display: block; width: 100%; padding: 5px 10px; border: none; border-radius: 5px; background: transparent; font-family: var(--mono); font-size: 12.5px; color: var(--text); text-align: left; white-space: nowrap; cursor: pointer; }
+.sel-item:hover { background: var(--surface-s); }
+.sel-item.on    { color: var(--info-text); font-weight: 500; }
 /* IP Routing's interface IP/mask columns (routing_game.html) hold real dotted-
    quad values — "255.255.255.255" measures ~127px in this font/size, well
    past the 82px default sized for switching_lab's short VLAN-ID/Ch-Grp
@@ -1172,7 +1183,7 @@ sup  { font-size: .65em; vertical-align: super; }
 .lab-card, .lab-canvas, .dev, .req-row, .cfg-panel, .port-table th,
 .port-table select, .port-table input, .cmd-table code, .vm-inp, .cli-note, .ping-out, .mono-inl,
 .rt-table, .rt-code, .bin-card, .cli-block, .ct-picker-hex-row, .opt-row,
-.ct-drawer-close, .ct-bgtype-btn, .qcard-pop-btn {
+.ct-drawer-close, .ct-bgtype-btn, .qcard-pop-btn, .sel-menu {
   backdrop-filter: var(--custom-blur, none);
   -webkit-backdrop-filter: var(--custom-blur, none);
 }
@@ -1208,7 +1219,7 @@ sup  { font-size: .65em; vertical-align: super; }
 .custom-card .rand-btn, .custom-card .custom-src-btn, .custom-card .custom-cls-btn,
 .afield .tip-ic, .afield .expl-box code,
 .theme-dd-menu .theme-dd-edit, .theme-dd-menu .theme-dd-item,
-.opt-menu .opt-row,
+.opt-menu .opt-row, .sel-menu .sel-item,
 .qcard .qcard-pop-btn,
 .ct-drawer .ct-picker-hex-row, .ct-drawer .ct-drawer-close, .ct-drawer .ct-bgtype-btn,
 .ct-drawer .btn {

@@ -263,6 +263,61 @@
     if (btn) { btn.innerHTML = POPOUT_SVG; btn.title = 'Pop out instructions to a floating panel'; btn.setAttribute('aria-label', btn.title); }
   }
 
+  /* ---------- styled dropdowns ----------
+     A native <select>'s open list is painted by the browser (white in one,
+     low-contrast grey in another, never translucent), so in every lab config
+     panel a mouse press on a <select> opens .sel-menu instead. The <select>
+     stays the source of truth: picking an item sets its value and fires a
+     real "change", so the existing onchange handlers run unchanged, and the
+     keyboard still drives the native control. One delegated listener, since
+     the panels rebuild their selects on every render. */
+  var selMenu = null;
+  function closeSelMenu() { if (selMenu) { selMenu.remove(); selMenu = null; } }
+  function openSelMenu(sel) {
+    closeSelMenu();
+    var r = sel.getBoundingClientRect();
+    var m = document.createElement('div');
+    m.className = 'sel-menu';
+    Array.prototype.forEach.call(sel.options, function (o) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'sel-item' + (o.selected ? ' on' : '');
+      b.textContent = o.textContent;
+      if (o.title) b.title = o.title;
+      b.disabled = o.disabled;
+      b.addEventListener('mousedown', function (e) { e.preventDefault(); });
+      b.addEventListener('click', function () {
+        closeSelMenu();
+        if (sel.value === o.value) return;
+        sel.value = o.value;
+        sel.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+      m.appendChild(b);
+    });
+    m.style.left = r.left + 'px';
+    m.style.top = (r.bottom + 4) + 'px';
+    m.style.minWidth = r.width + 'px';
+    document.body.appendChild(m);
+    /* flip above when there is no room below */
+    var mr = m.getBoundingClientRect();
+    if (mr.bottom > window.innerHeight - 8) m.style.top = Math.max(8, r.top - mr.height - 4) + 'px';
+    m._sel = sel;
+    selMenu = m;
+  }
+  document.addEventListener('mousedown', function (e) {
+    var sel = e.target.closest && e.target.closest('.cfg-panel select');
+    if (sel && !sel.disabled) {
+      e.preventDefault();
+      sel.focus();
+      if (selMenu && selMenu._sel === sel) closeSelMenu(); else openSelMenu(sel);
+      return;
+    }
+    if (selMenu && !selMenu.contains(e.target)) closeSelMenu();
+  }, true);
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeSelMenu(); });
+  window.addEventListener('scroll', closeSelMenu, true);
+  window.addEventListener('resize', closeSelMenu);
+
   window.LabShared = {
     isValidIP: isValidIP,
     toggleQcardPopout: toggleQcardPopout,

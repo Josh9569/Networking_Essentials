@@ -870,7 +870,7 @@ function buildPortTable(){
       `<td><select onchange="uiSetMode(${i},this.value)">`+
         `<option value="access"${p.mode==='access'?' selected':''}>access</option>`+
         `<option value="trunk"${p.mode==='trunk'?' selected':''}>trunk</option>`+
-        `<option value="dynamic"${p.mode==='dynamic'?' selected':''}>dyn. auto</option>`+
+        `<option value="dynamic"${p.mode==='dynamic'?' selected':''} title="dynamic auto, the IOS default">dynamic</option>`+
       `</select></td>`+
       `<td><input type="number" min="1" max="4094" value="${p.vlan}" ${p.mode==='trunk'?'disabled':''} onchange="uiSetVlan(${i},this.value)"></td>`+
       `<td class="pt-chan"><input type="number" min="0" max="6" value="${p.ch}" onchange="uiSetCh(${i},this.value,this.nextElementSibling.value)">`+
