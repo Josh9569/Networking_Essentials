@@ -38,8 +38,11 @@
       return {on:false, max:1, sticky:false, violation:'shutdown',
               macs:[] /* {mac, type:'static'|'sticky'|'dynamic'} */, errd:false, count:0, last:null};
     }
+    /* world.endUp(d,i), when given, says whether a non-switch end (a router
+       interface) is up — so a switch port facing a shut router port reads
+       notconnect, as it does on real kit. */
     function portUp(d,i){
-      if(d.type!=='switch') return true;
+      if(d.type!=='switch') return world.endUp?world.endUp(d,i):true;
       const p=d.ports[i];
       if(p.shut||p.ps.errd) return false;
       const po=p.ch>0?d.pos[p.ch]:null;
@@ -176,7 +179,7 @@
                   'port-security':PS_KW},
       'channel-group':{},   /* no root "shutdown": it would make "sh" ambiguous with show */
       'spanning-tree':{vlan:{}},
-      no:{switchport:{access:{vlan:{}}, mode:{}, trunk:{native:{vlan:{}}, allowed:{vlan:{}}}, 'port-security':PS_KW},
+      no:{vlan:{}, switchport:{access:{vlan:{}}, mode:{}, trunk:{native:{vlan:{}}, allowed:{vlan:{}}}, 'port-security':PS_KW},
           'channel-group':{}, ip:{address:{}, 'default-gateway':{}}, shutdown:{}, interface:{'port-channel':{}}},
     };
     /* Interface names are looked up on the device itself, so a switch with any
@@ -348,6 +351,12 @@
         if(w[1]&&w[1].length>=3&&M(w[1],'shutdown')) return swShutdown(d,false);
         if(w[1]==='ip'&&w[2]&&M(w[2],'default-gateway')){ d.gw=null; return ''; }
         if(d.cm==='svi'&&w[1]==='ip'){ d.ip=null; d.ipVlan=null; return ''; }
+        if(w[1]==='vlan'&&w[2]&&/^\d+$/.test(w[2])){
+          const v=+w[2];
+          if(v===1) return '%Default VLAN 1 may not be deleted.';
+          d.vlans.delete(v); delete d.vlanNames[v];
+          return '';
+        }
         if(w[1]&&M(w[1],'interface')){
           const po=parseNamedIf(w.slice(2).join(' '),'port-channel',2);
           if(po==null) return '% only a port-channel interface can be removed';
@@ -371,7 +380,7 @@
           if(w[2]&&M(w[2],'trunk')&&w[3]&&M(w[3],'native')){ T.forEach(p=>p.native=1); return ''; }
           if(w[2]&&M(w[2],'trunk')&&w[3]&&M(w[3],'allowed')){ T.forEach(p=>p.allowed=null); return ''; }
         }
-        return '% supported: no shutdown, no switchport access vlan, no switchport mode, no switchport trunk native|allowed vlan, no switchport port-security ..., no channel-group, no interface port-channel <n>, no ip default-gateway';
+        return '% supported: no shutdown, no vlan <n>, no switchport access vlan, no switchport mode, no switchport trunk native|allowed vlan, no switchport port-security ..., no channel-group, no interface port-channel <n>, no ip default-gateway';
       }
 
       if(M(w[0],'switchport')||w[0]==='sw') return swSwitchport(d,w,M);
@@ -599,7 +608,7 @@
       if(a&&M(a,'vlan')){
         const map={};
         d.ports.forEach((p,i)=>{ if(effMode(d,i)==='access'){ (map[p.vlan]=map[p.vlan]||[]).push(p.name);} });
-        const vl=[...new Set([...d.vlans,...Object.keys(map).map(Number)])].sort((a,b)=>a-b);
+        const vl=[...new Set([...d.vlans,...(world.strictVlans?[]:Object.keys(map).map(Number))])].sort((a,b)=>a-b);
         let out='VLAN  Name              Ports';
         vl.forEach(v=>{
           out+='\n'+String(v).padEnd(6)+vlanName(d,v).padEnd(18)+(map[v]?map[v].join(', '):'');
@@ -845,7 +854,7 @@
     /* A PC's frames reach its switch: an up access port that port security lets
        this PC's MAC through (pure — learning only happens on real traffic). */
     function pcPortOk(up,pc){
-      return effMode(up.sw,up.i)==='access' && portLinkUp(up.sw,up.i) && psAllows(up.sw,up.i,pc.mac);
+      return effMode(up.sw,up.i)==='access' && portLinkUp(up.sw,up.i) && vlanOn(up.sw,up.port.vlan) && psAllows(up.sw,up.i,pc.mac);
     }
 
     /* VLAN `vlan` crosses this switch-to-switch cable when both ends are up, a
@@ -853,9 +862,16 @@
        VLAN or both are trunks that allow it. A native VLAN mismatch strands the
        two natives — their untagged frames land in the wrong VLAN at the far end —
        while every tagged VLAN still crosses. */
+    /* With world.strictVlans a switch only carries a VLAN that exists in its
+       own VLAN database — as on IOS, where a deleted VLAN takes its access
+       ports inactive and a transit switch drops frames for VLANs it does not
+       have. The switching lab leaves it off: its scenarios only ask for each
+       VLAN on the switches that carry its PCs. */
+    function vlanOn(sw,v){ return !world.strictVlans||sw.vlans.has(v); }
     function linkPasses(c,vlan){
       const A=byId(c.a.d), B=byId(c.b.d);
       if(A.type!=='switch'||B.type!=='switch') return false;
+      if(!vlanOn(A,vlan)||!vlanOn(B,vlan)) return false;
       if(!portLinkUp(A,c.a.i)) return false;
       const pa=A.ports[c.a.i], pb=B.ports[c.b.i];
       if((pa.ch>0||pb.ch>0)&&(chanState(A,c.a.i)!=='P'||chanState(B,c.b.i)!=='P')) return false;
@@ -951,7 +967,7 @@
     }
 
 
-    return {newPort:newPort, newSwitchState:newSwitchState,
+    return {newPort:newPort, newSwitchState:newSwitchState, vlanOn:vlanOn,
       psNew:psNew,
       portUp:portUp,
       portLinkUp:portLinkUp,

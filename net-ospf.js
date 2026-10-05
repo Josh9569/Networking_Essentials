@@ -397,7 +397,9 @@
         const out=opStart(d,6,+w[3]); d.cm='ospf6'; return out;
       }
       if(w[0]==='no'&&M(w[1],'router')&&w[2]&&M(w[2],'ospf')){ d.ospf=opNew(); world.ifaces(d).forEach(function(p){ p.area2=null; }); d.cm='conf'; return ''; }
-      if(w[0]==='no'&&w[1]==='ipv6'&&w[2]&&M(w[2],'router')){ d.ospf6=opNew(); world.ifaces(d).forEach(function(p){ p.area6=null; }); d.cm='conf'; return ''; }
+      /* "ospf" is required: "no ipv6 route ..." would otherwise abbreviate
+         "router" and wipe the whole OSPFv3 process. */
+      if(w[0]==='no'&&w[1]==='ipv6'&&w[2]&&M(w[2],'router')&&w[3]&&M(w[3],'ospf')){ d.ospf6=opNew(); world.ifaces(d).forEach(function(p){ p.area6=null; }); d.cm='conf'; return ''; }
 
       /* router-configuration mode, both versions */
       if(d.cm==='ospf'||d.cm==='ospf6'){
