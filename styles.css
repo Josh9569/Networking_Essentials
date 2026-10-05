@@ -230,10 +230,13 @@ sup  { font-size: .65em; vertical-align: super; }
      it raises min-width, so content that needs more still gets it, and the
      drag itself never goes below the content-sized width. It may use the
      whole gutter — up to 16px short of the viewport edge — rather than the
-     520px ceiling, and both min() terms re-clamp it if the window narrows. */
-  min-width: max(260px, min(var(--pop-w, 0px), calc(max(16px, (100vw - 840px) / 2) - 36px)));
+     520px ceiling, and both min() terms re-clamp it if the window narrows.
+     "100% - 100vw" is minus the page scrollbar (100% of a fixed box is the
+     viewport without it; 100vw includes it), which the right offset above
+     also carries — without it a re-clamped panel sat 1px from the edge. */
+  min-width: max(260px, min(var(--pop-w, 0px), calc(100% - 100vw + max(16px, (100vw - 840px) / 2) - 36px)));
   max-width: max(min(520px, calc(max(16px, (100vw - 840px) / 2) - 52px)),
-                 min(var(--pop-w, 0px), calc(max(16px, (100vw - 840px) / 2) - 36px)));
+                 min(var(--pop-w, 0px), calc(100% - 100vw + max(16px, (100vw - 840px) / 2) - 36px)));
   max-height: calc(100vh - 100px); overflow-y: auto;
   /* Reserve the vertical scrollbar's width up front. Without this, the
      content is measured, width:max-content settles on that, and *then* the
