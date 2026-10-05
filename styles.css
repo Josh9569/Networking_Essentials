@@ -895,6 +895,9 @@ sup  { font-size: .65em; vertical-align: super; }
 .port.p-trunk   { background: var(--info-bg); border-color: var(--info-text); }
 .port.p-chan    { box-shadow: 0 0 0 2.5px #7c3aed; }
 .port.p-pending { background: var(--warn-bg); border-color: var(--warn-text); transform: scale(1.35); }
+/* A switch port that is shut, err-disabled or in a shut port-channel — the
+   red link light Packet Tracer draws at that end of the cable. */
+.port.p-down    { background: var(--err-bg); border-color: var(--err-text); }
 .port.p-ok      { background: var(--ok-bg);  border-color: var(--ok-text);  box-shadow: 0 0 0 3px var(--ok-bg);  transform: scale(1.45); }
 .port.p-bad     { background: var(--err-bg); border-color: var(--err-text); box-shadow: 0 0 0 3px var(--err-bg); transform: scale(1.45); }
 
@@ -972,6 +975,11 @@ sup  { font-size: .65em; vertical-align: super; }
 .cfg-name    { font-size: 14px; font-weight: 600; font-family: var(--mono); }
 .cfg-grid    { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 @media (max-width: 720px){ .cfg-grid { grid-template-columns: 1fr; } }
+/* One column at every width: the switching lab's port table needs the room for
+   its channel column, and IOS show tables (show interfaces trunk, show
+   port-security) are ~80 characters wide and wrap into nonsense at half width. */
+.cfg-grid.stack { grid-template-columns: 1fr; }
+.cfg-grid.stack .term { height: 300px; }
 .cfg-sec-lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--text-t); margin-bottom: .5rem; }
 
 .port-table        { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -980,6 +988,10 @@ sup  { font-size: .65em; vertical-align: super; }
 .port-table tr:last-child td { border-bottom: none; }
 .pt-name           { font-family: var(--mono); font-weight: 500; color: var(--text); }
 .pt-conn           { font-family: var(--mono); font-size: 12px; color: var(--text-s); }
+/* Channel cell: group number and negotiation mode side by side. */
+.pt-chan           { white-space: nowrap; }
+.port-table .pt-chan input  { max-width: 44px; }
+.port-table .pt-chan select { max-width: 92px; margin-left: 4px; }
 .port-table select,
 .port-table input  { font-family: var(--mono); font-size: 12.5px; background: var(--surface-s); border: 1px solid var(--border-m); border-radius: 5px; padding: 3px 6px; color: var(--text); outline: none; width: 100%; max-width: 82px; }
 .port-table input:disabled { opacity: .4; }
