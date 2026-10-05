@@ -240,10 +240,56 @@
      actual layout work is CSS (.qcard.popped in styles.css). */
   var POPOUT_SVG = '<svg viewBox="0 0 24 24"><path d="M11 4H4v16h7M15 8l-4 4 4 4"/></svg>';
   var DOCK_SVG = '<svg viewBox="0 0 24 24"><path d="M11 4H4v16h7M13 8l4 4-4 4"/></svg>';
+  /* The floating panel's left edge widens it by dragging, into whatever
+     gutter is spare (up to 16px short of the viewport edge) and never below
+     the width its content naturally takes. The width is a CSS variable
+     (--pop-w, see .qcard.popped in styles.css) remembered per page, so the
+     panel comes back at the learner's width next round and next visit. */
+  var POP_EDGE = 8;
+  function popWidthKey() { return 'ne-popout-w:' + location.pathname.split('/').pop(); }
+  function bindPopoutResize(qcard) {
+    if (qcard.dataset.popResize) return;
+    qcard.dataset.popResize = '1';
+    var drag = null;
+    function floating() { return qcard.classList.contains('popped') && getComputedStyle(qcard).position === 'fixed'; }
+    function onEdge(e) { return floating() && e.clientX <= qcard.getBoundingClientRect().left + POP_EDGE; }
+    qcard.addEventListener('mousemove', function (e) { if (!drag) qcard.classList.toggle('pop-edge', onEdge(e)); });
+    qcard.addEventListener('mouseleave', function () { if (!drag) qcard.classList.remove('pop-edge'); });
+    qcard.addEventListener('mousedown', function (e) {
+      if (e.button !== 0 || !onEdge(e)) return;
+      e.preventDefault();
+      /* the content-sized width, measured without the learner's width */
+      var had = qcard.style.getPropertyValue('--pop-w');
+      qcard.style.removeProperty('--pop-w');
+      var natural = qcard.getBoundingClientRect().width;
+      if (had) qcard.style.setProperty('--pop-w', had);
+      var r = qcard.getBoundingClientRect();
+      drag = { x: e.clientX, w: r.width, min: natural, max: Math.max(natural, r.right - 16) };
+      document.body.classList.add('pop-resizing');
+    });
+    window.addEventListener('mousemove', function (e) {
+      if (!drag) return;
+      var w = Math.max(drag.min, Math.min(drag.max, drag.w + (drag.x - e.clientX)));
+      qcard.style.setProperty('--pop-w', Math.round(w) + 'px');
+    });
+    window.addEventListener('mouseup', function () {
+      if (!drag) return;
+      drag = null;
+      document.body.classList.remove('pop-resizing');
+      qcard.classList.remove('pop-edge');
+      try { localStorage.setItem(popWidthKey(), qcard.style.getPropertyValue('--pop-w')); } catch (err) {}
+    });
+  }
   function toggleQcardPopout(qcardId, btnId) {
     var qcard = document.getElementById(qcardId);
     if (!qcard) return;
     var popped = qcard.classList.toggle('popped');
+    if (popped) {
+      bindPopoutResize(qcard);
+      var saved = null;
+      try { saved = localStorage.getItem(popWidthKey()); } catch (err) {}
+      if (saved && !qcard.style.getPropertyValue('--pop-w')) qcard.style.setProperty('--pop-w', saved);
+    }
     var btn = document.getElementById(btnId);
     if (btn) {
       btn.innerHTML = popped ? DOCK_SVG : POPOUT_SVG;

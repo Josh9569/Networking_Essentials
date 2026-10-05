@@ -225,8 +225,15 @@ sup  { font-size: .65em; vertical-align: super; }
      fit 260px, but they do fit ~500. Past the ceiling, content wraps as
      before. */
   width: max-content;
-  min-width: 260px;
-  max-width: min(520px, calc(max(16px, (100vw - 840px) / 2) - 52px));
+  /* --pop-w is the width the learner dragged the left edge out to
+     (LabShared.toggleQcardPopout wires the drag). It only ever adds width:
+     it raises min-width, so content that needs more still gets it, and the
+     drag itself never goes below the content-sized width. It may use the
+     whole gutter — up to 16px short of the viewport edge — rather than the
+     520px ceiling, and both min() terms re-clamp it if the window narrows. */
+  min-width: max(260px, min(var(--pop-w, 0px), calc(max(16px, (100vw - 840px) / 2) - 36px)));
+  max-width: max(min(520px, calc(max(16px, (100vw - 840px) / 2) - 52px)),
+                 min(var(--pop-w, 0px), calc(max(16px, (100vw - 840px) / 2) - 36px)));
   max-height: calc(100vh - 100px); overflow-y: auto;
   /* Reserve the vertical scrollbar's width up front. Without this, the
      content is measured, width:max-content settles on that, and *then* the
@@ -264,6 +271,13 @@ sup  { font-size: .65em; vertical-align: super; }
   .qcard.popped .req-note    { font-size: 11px; }
   .qcard.popped .mono-inl    { padding: 0 3px; }
 }
+/* The left edge is the resize handle: highlighted while the pointer is on it,
+   and the ew-resize cursor held everywhere during the drag so it doesn't
+   flicker as the pointer outruns the edge. Only while the panel floats. */
+@media (min-width: 1600px) {
+  .qcard.popped.pop-edge { cursor: ew-resize; box-shadow: inset 3px 0 0 var(--info-text), 0 10px 30px rgba(0,0,0,.20); }
+}
+body.pop-resizing, body.pop-resizing * { cursor: ew-resize !important; user-select: none !important; }
 .qcard.popped .q-prompt   { font-size: 13.5px; margin-bottom: 8px; }
 .qcard.popped .ipdisp     { font-size: 18px; }
 .qcard.popped .req-list   { margin-top: .6rem; gap: 5px; }
