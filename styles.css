@@ -873,6 +873,8 @@ sup  { font-size: .65em; vertical-align: super; }
 .cable:hover  { stroke: var(--err-text); }
 .cable.trunk  { stroke: var(--info-text); }
 .cable.chan   { stroke: #7c3aed; stroke-dasharray: 7 4; }
+/* Serial WAN link (routing_game PPP Links) - Packet Tracer draws them red. */
+.cable.serial { stroke: var(--err-text); }
 .cable.locked { cursor: default; }
 .cable.locked:hover { stroke: inherit; }
 
