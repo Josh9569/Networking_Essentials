@@ -10,6 +10,7 @@
 <script src="options.js"></script>
 <script src="answer-keys.js"></script>
 <script src="lab-shared.js"></script>
+<script src="net-router.js"></script>
 </head>
 <body>
 <div class="wrap">
@@ -1430,17 +1431,11 @@ function rlSerialState(r,i){
   if(!c) return {up:false, why:r.name+' '+p.name+' has no cable'};
   const o=rlOtherEnd(c,r.id), od=rlById(o.d), q=od.ports&&od.ports[o.i];
   if(!q||!q.serial) return {up:false, why:r.name+' '+p.name+' is not cabled to a serial interface'};
-  if(!q.up) return {up:false, why:od.name+' '+q.name+' at the far end is shut down'};
-  const dce=rlSerialRole(r,i)==='DCE'?{r,p}:{r:od,p:q};
-  if(!dce.p.clock) return {up:false, noClock:true, why:'the DCE end ('+dce.r.name+' '+dce.p.name+') has no clock rate'};
-  if(p.encap!==q.encap) return {up:false, why:'encapsulation mismatch — '+r.name+' '+p.name+' runs '+p.encap.toUpperCase()+', '+od.name+' '+q.name+' runs '+q.encap.toUpperCase()};
-  if(p.encap==='ppp'&&(p.auth==='chap'||q.auth==='chap')){
-    const a=r.users[od.name], b=od.users[r.name];
-    if(a==null) return {up:false, auth:true, why:'CHAP fails: '+r.name+' has no "username '+od.name+'" (CHAP looks the peer up by its exact hostname)'};
-    if(b==null) return {up:false, auth:true, why:'CHAP fails: '+od.name+' has no "username '+r.name+'" (CHAP looks the peer up by its exact hostname)'};
-    if(a!==b) return {up:false, auth:true, why:'CHAP fails: the passwords for the '+r.name+'–'+od.name+' link differ at the two ends'};
-  }
-  return {up:true};
+  /* the protocol itself — clock, encapsulation, CHAP — is net-router.js's */
+  const end=function(rt,port,dce){ return {router:rt.name, ifName:port.name, up:port.up, encap:port.encap,
+    auth:port.auth, clock:port.clock, dce:dce, users:rt.users}; };
+  const mineDce=rlSerialRole(r,i)==='DCE';
+  return NetRouter.pppLinkState(end(r,p,mineDce), end(od,q,!mineDce));
 }
 /* An interface that can carry traffic: administratively up, and for a serial
    port, line protocol up as well. The Gigabit ports keep their old meaning
