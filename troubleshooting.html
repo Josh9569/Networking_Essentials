@@ -1466,7 +1466,9 @@ function tsNameIssues(name){
 function tNames(name){ const b=tsNameIssues(name); return b.length?{ok:false, reason:b.join('; ')}:{ok:true}; }
 function tRNative(){
   const f=acIface(tsDev('R2'),'G0/1.1000');
-  return f&&f.vlan===1000&&f.native?{ok:true}:{ok:false, reason:'R2 G0/1.1000 is '+(f&&f.vlan!=null?'dot1Q '+f.vlan+(f.native?' native':' without the native keyword'):'not tagged')};
+  if(f&&f.vlan===1000&&f.native) return {ok:true};
+  return {ok:false, reason:!f?'R2 has no G0/1.1000':f.vlan==null?'R2 G0/1.1000 has no encapsulation, so it is in no VLAN at all'
+    :'R2 G0/1.1000 is dot1Q '+f.vlan+(f.native?' native':' without the native keyword')};
 }
 const TS_T={
   gwA4:{d:'PC-A cannot ping its default gateway, 172.16.10.1', t:()=>tP('PC-A','172.16.10.1')},
@@ -1545,6 +1547,30 @@ function tVlanDesign(){
   const r=tRNative(); if(!r.ok) bad.push(r.reason);
   return bad.length?{ok:false, reason:bad.join('; ')}:{ok:true};
 }
+/* Every address, mask, gateway and VLAN tag as the healthy network had them
+   (snapshotted by genRound before any fault goes in). Without it a ticket
+   can be "solved" by bending the other end to match a fault — pointing the
+   switches' gateway at a wrong R2 address instead of fixing R2. */
+let tsAddrBase=null;
+function tsAddrSig(){
+  const out={};
+  tsDevices.forEach(d=>{
+    if(d.type==='router') d.ifaces.forEach(f=>{
+      out[d.name+' '+f.name]=[f.ip?f.ip+'/'+f.pfx:'no IPv4 address', f.ip6?v6Up(f.ip6)+'/'+f.pfx6:'no IPv6 address',
+        'link-local '+(f.ll6?v6Up(f.ll6):'auto'), f.vlan!=null?'dot1Q '+f.vlan+(f.native?' native':''):'no dot1Q'];
+    });
+    else if(d.type==='switch') out[d.name]=[d.ip?'VLAN '+d.ipVlan+' '+d.ip:'no management address', 'gateway '+(d.gw||'none')];
+    else out[d.name]=[d.ip?d.ip+'/'+d.pfx:'no IPv4 address', 'gateway '+(d.gw||'none'), d.ip6?v6Up(d.ip6)+'/'+d.pfx6:'no IPv6 address', 'IPv6 gateway '+(d.gw6?v6Up(d.gw6):'none')];
+  });
+  return out;
+}
+function tAddressing(){
+  const now=tsAddrSig(), bad=[];
+  Object.keys(tsAddrBase||{}).forEach(k=>tsAddrBase[k].forEach((v,i)=>{
+    if(now[k][i]!==v) bad.push(k+' has '+now[k][i]+' — the table says '+v);
+  }));
+  return bad.length?{ok:false, reason:bad.join('; ')}:{ok:true};
+}
 function tSaved(){
   const bad=tsDevices.filter(d=>d.type!=='pc'&&tsConfigSig(tsRunText(d))!==tsConfigSig(d.startup)).map(d=>d.name);
   return bad.length?{ok:false, reason:'Not saved since the last change: '+bad.join(', ')}:{ok:true};
@@ -1559,6 +1585,7 @@ const TS_RULES=[
   {d:"R2's vty lines still refuse SSH from outside Sales and Management (ADMIN)", t:tAdminVty},
   {d:'Every PC port still has port security (sticky, maximum 1)', t:tPsec},
   {d:"Every switch still has the VLAN table's VLANs and names, and every trunk uses native VLAN 1000", t:tVlanDesign},
+  {d:'Every address, mask, gateway and VLAN tag still matches the addressing table — fix the fault, not the far end', t:tAddressing},
   {d:'Every device you changed is saved — copy running-config startup-config', t:tSaved}
 ];
 
@@ -1638,11 +1665,11 @@ fault({id:'iv-shut', cat:'iv', kind:'down', lvl:1, keys:['r2-g01'], dev:'R2', ru
   show:'show ip interface brief', fix:{dev:'R2', lines:['interface g0/1',' no shutdown']}});
 fault({id:'iv-shut10', cat:'iv', kind:'down', lvl:1, keys:['r2-sub10-shut'], dev:'R2', run:['interface g0/1.10',' shutdown'],
   tickets:['gwA4','gwC4','A_net4','C_D4','A_D6','A_net6','ssh_R2'],
-  cause:"R2 G0/1.10, Sales' gateway subinterface, is administratively down. G0/1 itself is up, so HR and Management still work.",
+  cause:"R2 G0/1.10, Sales' gateway subinterface, is administratively down. G0/1 itself is up: this takes down VLAN 10's gateway only, not the other subinterfaces.",
   show:'show ip interface brief', fix:{dev:'R2', lines:['interface g0/1.10',' no shutdown']}});
 fault({id:'iv-shut20', cat:'iv', kind:'down', lvl:1, keys:['r2-sub20-shut'], dev:'R2', run:['interface g0/1.20',' shutdown'],
   tickets:['gwB4','B_D4','B_net4','D_B4','B_net6'],
-  cause:"R2 G0/1.20, HR's gateway subinterface, is administratively down. G0/1 itself is up, so Sales and Management still work.",
+  cause:"R2 G0/1.20, HR's gateway subinterface, is administratively down. G0/1 itself is up: this takes down VLAN 20's gateway only, not the other subinterfaces.",
   show:'show ip interface brief', fix:{dev:'R2', lines:['interface g0/1.20',' no shutdown']}});
 /* ip4 — a subinterface carries the wrong IPv4 address */
 fault({id:'iv-ip', cat:'iv', kind:'ip4', lvl:1, keys:['r2-sub10-ip'], dev:'R2', run:['interface g0/1.10',' ip address 172.16.10.254 255.255.255.0'],
@@ -1677,16 +1704,16 @@ fault({id:'iv-native', cat:'iv', kind:'native', lvl:3, keys:['r2-sub1000'], dev:
   show:'show vlans', fix:{dev:'R2', lines:['interface g0/1.1000',' encapsulation dot1Q 1000 native']}});
 fault({id:'iv-native-none', cat:'iv', kind:'native', lvl:3, keys:['r2-sub1000'], dev:'R2', run:['interface g0/1.1000',' no encapsulation dot1Q'],
   tickets:['chk_rnative'],
-  cause:'R2 G0/1.1000 has no encapsulation at all. A subinterface with no dot1Q VLAN belongs to none, so the trunk\'s untagged native VLAN 1000 has nowhere to land.',
+  cause:"R2 G0/1.1000 has no encapsulation at all, so no subinterface is marked native. Untagged frames from S1's native VLAN 1000 are handled by G0/1 itself, which has no address, instead of by G0/1.1000.",
   show:'show vlans', fix:{dev:'R2', lines:['interface g0/1.1000',' encapsulation dot1Q 1000 native']}});
 /* ip6 — a subinterface carries the wrong IPv6 prefix */
 fault({id:'iv-ip6', cat:'iv', kind:'ip6', lvl:2, keys:['r2-sub20-6'], dev:'R2', run:['interface g0/1.20',' no ipv6 address 2001:CAFE:ACAD:20::1/64',' ipv6 address 2001:CAFE:ACAD:21::1/64'],
   tickets:['B_net6'],
-  cause:"R2 G0/1.20 has 2001:CAFE:ACAD:21::1/64 instead of :20::1/64. PC-B still reaches its link-local gateway, but no router has a route back to HR's real prefix.",
+  cause:"R2 G0/1.20 has 2001:CAFE:ACAD:21::1/64 instead of :20::1/64. HR's IPv6 gateway is the link-local FE80::2, which this leaves alone — but no router has a route back to HR's real prefix any more.",
   show:'show ipv6 interface brief', fix:{dev:'R2', lines:['interface g0/1.20',' no ipv6 address 2001:CAFE:ACAD:21::1/64',' ipv6 address 2001:CAFE:ACAD:20::1/64']}});
 fault({id:'iv-ip6-10', cat:'iv', kind:'ip6', lvl:2, keys:['r2-sub10-6'], dev:'R2', run:['interface g0/1.10',' no ipv6 address 2001:CAFE:ACAD:10::1/64',' ipv6 address 2001:CAFE:ACAD:11::1/64'],
   tickets:['A_net6','A_D6','D_A6'],
-  cause:"R2 G0/1.10 has 2001:CAFE:ACAD:11::1/64 instead of :10::1/64. PC-A still reaches its link-local gateway, but no router has a route back to Sales' real prefix.",
+  cause:"R2 G0/1.10 has 2001:CAFE:ACAD:11::1/64 instead of :10::1/64. Sales' IPv6 gateway is the link-local FE80::2, which this leaves alone — but no router has a route back to Sales' real prefix any more.",
   show:'show ipv6 interface brief', fix:{dev:'R2', lines:['interface g0/1.10',' no ipv6 address 2001:CAFE:ACAD:11::1/64',' ipv6 address 2001:CAFE:ACAD:10::1/64']}});
 /* ── PPP ── */
 /* PPP faults are built per round, for whichever links are serial —
@@ -1941,19 +1968,21 @@ function genRound(topic,diff){
   TS_TOPO=tsTopoFor(topic,diff);
   for(let attempt=0;attempt<200;attempt++){
     tsBuild();
+    tsAddrBase=tsAddrSig();
     /* every fault shows on its own, so a draw that never settles falls
        back to its first fault rather than ship one that hides another */
     faults=(attempt<199?tsPickFaults(topic,diff):tsPickFaults(topic,diff).slice(0,1)).map(tsResolve);
     faults.forEach(tsApplyFault);
     tsReload();
     ids=[];
-    const shown=faults.every(f=>{
-      const red=f.tickets.filter(id=>!TS_T[id].t().ok);
-      if(!red.length) return false;
-      const fresh=red.filter(id=>ids.indexOf(id)<0);
-      const id=fresh.length?choice(fresh):red[0];
+    /* faults with the fewest failing tickets choose first, so a fault with
+       one symptom keeps it rather than lose it to one that had several */
+    const reds=faults.map(f=>f.tickets.filter(id=>!TS_T[id].t().ok));
+    const shown=reds.every(r=>r.length);
+    if(shown) faults.map((f,i)=>i).sort((a,b)=>reds[a].length-reds[b].length).forEach(i=>{
+      const fresh=reds[i].filter(id=>ids.indexOf(id)<0);
+      const id=fresh.length?choice(fresh):reds[i][0];
       if(ids.indexOf(id)<0) ids.push(id);
-      return true;
     });
     if(shown) break;
   }
