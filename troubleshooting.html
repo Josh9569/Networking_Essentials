@@ -1920,6 +1920,14 @@ function tsApplyFault(f){
   if(f.run) tsExec(tsDev(f.dev),f.run);
   if(f.apply) f.apply();
 }
+/* The reveal lists a round's faults in order and its fixes are typed in
+   that order, so a fix that recreates a VLAN goes before the rest: a switch
+   refuses "switchport access vlan 20" while VLAN 20 does not exist. The
+   others keep the order they were drawn in. */
+function tsFixOrder(faults){
+  const makesVlan=f=>!!(f.fix.lines&&f.fix.lines.some(l=>/^vlan \d+$/i.test(l)));
+  return faults.filter(makesVlan).concat(faults.filter(f=>!makesVlan(f)));
+}
 /* Fixes are run the same way, so the harness proves every one of them
    through the real CLI. */
 function tsApplyFix(f){
@@ -1986,6 +1994,7 @@ function genRound(topic,diff){
     });
     if(shown) break;
   }
+  faults=tsFixOrder(faults);
   /* the faulty configuration is what was saved — a reload brings it back */
   tsDevices.forEach(d=>{ if(d.type!=='pc'){ d.startup=tsRunText(d); d.cm='exec'; d.ci=null; } });
   const tickets=ids.map(id=>({group:'Tickets', desc:TS_T[id].d, id:id, test:TS_T[id].t}));
