@@ -1761,7 +1761,7 @@ function rlRouterPortWithIp(ipStr){
    look up the destination in the current router's table; a connected
    winner means "arrived, verify the last hop is really cabled", a static
    winner means "jump to whoever owns that next-hop IP and keep going". */
-function rlResolvePing(srcPc,dstStr){
+function rlResolvePing(srcPc,dstStr,trace){
   if(!srcPc.ip||!isValidIP(srcPc.ip)) return {ok:false,reason:srcPc.name+' has no valid IP'};
   if(!dstStr||!isValidIP(dstStr)) return {ok:false,reason:'Invalid destination address'};
   const dstInt=ip2int(dstStr);
@@ -1775,22 +1775,27 @@ function rlResolvePing(srcPc,dstStr){
   if(netIntOf(ip2int(srcPc.ip),gwPort.pfx)!==netIntOf(ip2int(gwPort.ip),gwPort.pfx))
     return {ok:false,reason:srcPc.name+"'s IP isn't in the same subnet as "+gw.name+' '+gwPort.name};
 
-  return rlResolveFrom(gw,dstStr);
+  return rlResolveFrom(gw,dstStr,trace,gwPort);
 }
 /* The hop-by-hop walk from a router, shared by a PC's ping (starting at its
    gateway) and a router's own ping. A packet addressed to one of the current
-   router's live interfaces has arrived. */
-function rlResolveFrom(start,dstStr){
+   router's live interfaces has arrived.
+   trace (optional) is tracert's record of the walk (LabShared.traceHops):
+   each router the packet arrives at, by the port it arrived on (inPort for
+   the first), marked .fwd once it routes the packet on. */
+function rlResolveFrom(start,dstStr,trace,inPort){
   const dstInt=ip2int(dstStr);
-  let current=start;
+  let current=start, ingress=inPort||null;
   const visited=new Set();
   for(let hop=0; hop<8; hop++){
+    if(trace) trace.push({dev:current, ip:ingress&&ingress.ip||null});
     if(current.ports.some(p=>p.ip===dstStr&&rlLive(current,p))) return {ok:true};
-    if(visited.has(current.id)) return {ok:false,reason:'Routing loop detected at '+current.name};
+    if(visited.has(current.id)) return {ok:false,loop:true,reason:'Routing loop detected at '+current.name};
     visited.add(current.id);
     const table=rlRoutingTable(current);
     const winner=bestMatch(dstInt,table);
-    if(!winner) return {ok:false,reason:current.name+' has no route to '+dstStr};
+    if(!winner) return {ok:false,noRoute:true,reason:current.name+' has no route to '+dstStr};
+    if(trace) trace[trace.length-1].fwd=true;
 
     if(winner.source.code==='C'){
       const portIdx=current.ports.indexOf(winner._port);
@@ -1813,7 +1818,7 @@ function rlResolveFrom(start,dstStr){
          - next-hop only: find the port whose subnet contains the next-hop.
          - fully specified: exit interface AND next-hop both given, always
            unambiguous regardless of point-to-point or multi-access. */
-    let viaIdx=-1, nextRouter=null;
+    let viaIdx=-1, nextRouter=null, nextPort=null;
     if(winner._route && winner._route.exitIface!=null){
       viaIdx=winner._route.exitIface;
       const p=current.ports[viaIdx];
@@ -1823,7 +1828,7 @@ function rlResolveFrom(start,dstStr){
         if(!hit||hit.router===current) return {ok:false,reason:'Next hop '+winner._route.nextHop+" doesn't belong to any other router's up interface"};
         if(!rlL2Neighbors(current.id,viaIdx).includes(hit.router))
           return {ok:false,reason:current.name+' '+p.name+' cannot reach next-hop '+winner._route.nextHop+' — check the cabling'};
-        nextRouter=hit.router;
+        nextRouter=hit.router; nextPort=hit.port;
       } else {
         /* Interface-only is only reliable on a genuine point-to-point link —
            i.e. the port's cable leads DIRECTLY to a router, not to a switch.
@@ -1833,10 +1838,10 @@ function rlResolveFrom(start,dstStr){
            working, forcing the next-hop (or fully specified) form instead. */
         const c=rlPortCable(current.id,viaIdx);
         if(!c) return {ok:false,reason:current.name+' '+p.name+' is not cabled'};
-        const otherDev=rlById(rlOtherEnd(c,current.id).d);
+        const far=rlOtherEnd(c,current.id), otherDev=rlById(far.d);
         if(otherDev.type==='switch') return {ok:false,reason:current.name+' '+p.name+" leads to a switch — that's a multi-access link, so an exit-interface-only route is ambiguous there. Add the next-hop IP too (a \"fully specified\" route)."};
         if(otherDev.type!=='router') return {ok:false,reason:current.name+' '+p.name+' has no router on the other end'};
-        nextRouter=otherDev;
+        nextRouter=otherDev; nextPort=otherDev.ports[far.i];
       }
     } else {
       const nh=winner._route.nextHop;
@@ -1846,9 +1851,9 @@ function rlResolveFrom(start,dstStr){
       if(viaIdx<0) return {ok:false,reason:current.name+' cannot reach next-hop '+nh};
       if(!rlL2Neighbors(current.id,viaIdx).includes(hit.router))
         return {ok:false,reason:current.name+' '+current.ports[viaIdx].name+' cannot reach next-hop '+nh};
-      nextRouter=hit.router;
+      nextRouter=hit.router; nextPort=hit.port;
     }
-    current=nextRouter;
+    current=nextRouter; ingress=nextPort;
   }
   return {ok:false,reason:'Too many hops — check for a routing loop'};
 }
@@ -2919,36 +2924,38 @@ function rlRenderPcCfg(d,panel){
       <input type="text" class="custom-ip-inp" value="${d.ip||''}" placeholder="e.g. 192.168.1.10" autocomplete="off" spellcheck="false" oninput="rlSetPcIp(${d.id},this.value)"><span class="pc-pfx">/${d.pfx}</span>
     </div>
     <div class="svi-conflict" id="rl-pc-ip-err" style="display:none"></div>
-    <div class="cfg-sec-lbl" style="margin-top:14px">Ping</div>
-    <div class="pc-form">
-      <label class="pc-form-lbl">Target IP</label>
-      <input class="custom-ip-inp" id="rl-ping-ip" placeholder="e.g. 172.214.3.1"
-             autocomplete="off" spellcheck="false" onkeydown="if(event.key==='Enter')rlPingRun()">
-      <button class="rand-btn" id="rl-ping-btn" onclick="rlPingRun()">Ping</button>
-    </div>
-    <pre class="ping-out" id="rl-ping-out"></pre>`;
+    ${LabShared.pcToolHtml('rl-ping',{placeholder:'e.g. 172.214.3.1'})}`;
 }
-let rlPingGen=0;
-function rlPingRun(){
-  const d=rlSelected!=null?rlById(rlSelected):null;
-  if(!d||d.type!=='pc') return;
-  const myGen=++rlPingGen, pcId=d.id;
-  LabShared.runPing({
-    inputId:'rl-ping-ip', btnId:'rl-ping-btn', outId:'rl-ping-out',
-    resolve: dst=>{
-      if(!d.ip||!isValidIP(d.ip)) return {msg:d.name+' has no valid IP'};
-      if(!isValidIP(dst)) return {msg:'invalid target address'};
-      if(dst===d.ip) return {ok:true};
-      const r=rlResolvePing(d,dst);
-      if(!r.ok) return {ok:false};
-      d._arpKnown = d._arpKnown || new Set();
-      const firstTime = !d._arpKnown.has(dst);
-      d._arpKnown.add(dst);
-      return {ok:true, firstTime};
-    },
-    stillActive: ()=>myGen===rlPingGen && rlSelected===pcId
-  });
+/* A ping is only a success when the echo reply gets back too — a static
+   route in one direction only is the classic way to break that — from the
+   destination PC, or from the router that owns the address. */
+function rlReplyOk(dst,srcIp){
+  const pc=rlDeviceWithIp(dst), hit=!pc&&rlRouterPortWithIp(dst);
+  return pc ? rlResolvePing(pc,srcIp).ok : hit ? rlResolveFrom(hit.router,srcIp).ok : false;
 }
+/* The PC panel's Ping | Tracert (LabShared.pcTool). */
+LabShared.pcTool('rl-ping', {
+  pc:()=>{ const d=rlSelected!=null?rlById(rlSelected):null; return d&&d.type==='pc'?d:null; },
+  ping:(d,dst)=>{
+    if(!d.ip||!isValidIP(d.ip)) return {msg:d.name+' has no valid IP'};
+    if(!isValidIP(dst)) return {msg:'invalid target address'};
+    if(dst===d.ip) return {ok:true};
+    if(!rlResolvePing(d,dst).ok||!rlReplyOk(dst,d.ip)) return {ok:false};
+    d._arpKnown = d._arpKnown || new Set();
+    const firstTime = !d._arpKnown.has(dst);
+    d._arpKnown.add(dst);
+    return {ok:true, firstTime};
+  },
+  /* Each hop's Time Exceeded has to route back to the PC on its own. */
+  trace:(d,dst)=>{
+    if(!d.ip||!isValidIP(d.ip)) return {msg:d.name+' has no valid IP'};
+    if(!isValidIP(dst)) return {msg:'invalid target address'};
+    const path=[];
+    let res=dst===d.ip?{ok:true}:rlResolvePing(d,dst,path);
+    if(res.ok&&dst!==d.ip&&!rlReplyOk(dst,d.ip)) res={ok:false, arrived:true};
+    return {path, res, dst, back:e=>rlResolveFrom(e.dev,d.ip).ok};
+  }
+});
 function rlRenderSwitchCfg(d,panel){
   panel.innerHTML=`
     <div class="cfg-hdr"><div class="cfg-name">${d.name}</div><span class="cfg-hdr-btns">${RLCON.pinBtnHtml(d)}<button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="rlCloseCfgPanel()">Close</button></span></div>

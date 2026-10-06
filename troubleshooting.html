@@ -459,7 +459,13 @@ function tsForward(fam,start,srcKey,dstKey,count,pkt){
   let sport=pkt.sport, dport=pkt.dport, natted=false;
   const seen=new Set();
   for(let hop=0;hop<16;hop++){
-    if(seen.has(cur.id)) return {ok:false, reason:'Routing loop — the packet for '+fFmt(fam,dstKey)+' came back to '+cur.name};
+    /* tracert's record of the walk (LabShared.traceHops): every router the
+       probe arrives at, and the address it arrived on */
+    if(pkt.path){
+      const k=ingress&&tsHasAddr(ingress,fam)?tsAddrKey(ingress,fam):null;
+      pkt.path.push({dev:cur, key:k, ip:k==null?null:fam===4?int2ip(k):op6Fmt(k), src:srcKey, sport:sport});
+    }
+    if(seen.has(cur.id)) return {ok:false, loop:true, reason:'Routing loop — the packet for '+fFmt(fam,dstKey)+' came back to '+cur.name};
     seen.add(cur.id);
     if(ingress){
       const b=tsAclHit(fam,cur,ingress,'in',srcKey,dstKey,{proto:pkt.proto, sport:sport, dport:dport, icmpType:pkt.icmpType},count);
@@ -473,8 +479,10 @@ function tsForward(fam,start,srcKey,dstKey,count,pkt){
       return {ok:true, at:{kind:'rtr', dev:cur}, dst:dstKey, src:srcKey, sport:sport, dport:dport, natted:natted};
     if(fam===6&&!cur.unicast6) return {ok:false, reason:cur.name+' is not routing IPv6 (no "ipv6 unicast-routing"), so it drops the packet for '+fFmt(6,dstKey)};
     const win=tsLookup(cur,fam,dstKey);
-    if(!win) return {ok:false, reason:cur.name+' has no route to '+fFmt(fam,dstKey)};
+    if(!win) return {ok:false, noRoute:true, reason:cur.name+' has no route to '+fFmt(fam,dstKey)};
     const out=win.f;
+    /* routed: this is where the TTL runs out, so it is a tracert hop */
+    if(pkt.path) pkt.path[pkt.path.length-1].fwd=true;
     if(fam===4&&ingress&&ingress.nat==='inside'&&out.nat==='outside'&&natEnabled(cur)){
       const t=natOut(cur,{src:srcKey, sport:sport, proto:pkt.proto, dst:dstKey, dport:dport, scratch:pkt.scratch},count);
       if(t&&t.drop) return {ok:false, reason:t.reason};
@@ -575,7 +583,7 @@ function tsPing(dev,dstStr,count,opt){
   const id=count?++tsIcmpId:7;
   const proto=opt.proto||'icmp';
   const req={proto:proto, sport:opt.sport!=null?opt.sport:id, dport:opt.dport!=null?opt.dport:id,
-             icmpType:proto==='icmp'?'echo':null, scratch:count?null:[]};
+             icmpType:proto==='icmp'?'echo':null, scratch:opt.scratch||(count?null:[]), path:opt.path};
   const there=dev.type==='router'
     ? tsForward(fam,{router:dev, iface:null},srcKey,dstKey,count,req)
     : tsHostSend(fam,dev,srcKey,dstKey,count,req);
@@ -584,7 +592,7 @@ function tsPing(dev,dstStr,count,opt){
   const back=there.at.kind==='rtr'
     ? tsForward(fam,{router:there.at.dev, iface:null},there.dst,there.src,count,rep)
     : tsHostSend(fam,there.at.dev,there.dst,there.src,count,rep);
-  if(!back.ok) return {ok:false, blocked:back.blocked, reason:'The request arrived, but the reply did not get back: '+back.reason};
+  if(!back.ok) return {ok:false, arrived:true, blocked:back.blocked, reason:'The request arrived, but the reply did not get back: '+back.reason};
   return {ok:true, at:there.at, natted:there.natted};
 }
 /* SSH: a TCP session to port 22 has to get through the network, then the
@@ -1959,11 +1967,7 @@ function tsPcHtml(d){
     '<div class="pc-form" style="margin-top:6px">'+tsPcRow('IPv6 Address','ts-pc-ip6',v6,'e.g. 2001:DB8:5::10/64',250)+'</div>'+
     '<div class="pc-form" style="margin-top:6px">'+tsPcRow('IPv6 Gateway','ts-pc-gw6',d.gw6?v6Up(d.gw6):'','e.g. FE80::1')+'</div>'+
     '<div class="cli-note" id="ts-pc-msg" style="margin-top:8px;display:none"></div>'+
-    '<div class="cfg-sec-lbl" style="margin-top:14px">Ping</div>'+
-    '<div class="pc-form"><label class="pc-form-lbl" for="ts-ping-ip">Target</label>'+
-    '<input class="custom-ip-inp" id="ts-ping-ip" placeholder="IPv4 or IPv6" style="width:250px" autocomplete="off" spellcheck="false" onkeydown="if(event.key===\'Enter\')tsPingRun()">'+
-    '<button class="rand-btn" id="ts-ping-btn" onclick="tsPingRun()">Ping</button></div>'+
-    '<pre class="ping-out" id="ts-ping-out"></pre>'+
+    LabShared.pcToolHtml('ts-ping', {label:'Target', placeholder:'IPv4 or IPv6', width:'250px'})+
     '<div class="cfg-sec-lbl" style="margin-top:14px">SSH</div>'+
     '<div class="pc-form"><label class="pc-form-lbl" for="ts-ssh-ip">Router</label>'+
     '<input class="custom-ip-inp" id="ts-ssh-ip" placeholder="e.g. 172.20.5.1" autocomplete="off" spellcheck="false" onkeydown="if(event.key===\'Enter\')tsSshRun()">'+
@@ -1989,27 +1993,38 @@ function tsSetPc(el){
   if(msg){ msg.style.display=err?'':'none'; msg.textContent=err||''; }
   tsRenderCanvas();
 }
-let tsPingGen=0;
-function tsPingRun(){
-  const d=tsSel!=null?tsById(tsSel):null;
-  if(!d||d.type!=='pc') return;
-  const myGen=++tsPingGen, id=d.id;
-  LabShared.runPing({
-    inputId:'ts-ping-ip', btnId:'ts-ping-btn', outId:'ts-ping-out',
-    resolve:function(dst){
-      const fam=famOf(dst);
-      if(!fam) return {msg:'invalid target address'};
-      if(!(fam===4?d.ip:d.ip6)) return {msg:d.name+' has no '+(fam===6?'IPv6':'IPv4')+' address'};
-      const r=tsPing(d,dst,true);
-      tsRenderCanvas();
-      if(!r.ok) return {ok:false};
-      d._arp=d._arp||new Set();
-      const first=!d._arp.has(dst); d._arp.add(dst);
-      return {ok:true, firstTime:first};
-    },
-    stillActive:function(){ return myGen===tsPingGen&&tsSel===id; }
-  });
-}
+/* The PC panel's Ping | Tracert (LabShared.pcTool). */
+LabShared.pcTool('ts-ping', {
+  pc:function(){ const d=tsSel!=null?tsById(tsSel):null; return d&&d.type==='pc'?d:null; },
+  ping:function(d,dst){
+    const fam=famOf(dst);
+    if(!fam) return {msg:'invalid target address'};
+    if(!(fam===4?d.ip:d.ip6)) return {msg:d.name+' has no '+(fam===6?'IPv6':'IPv4')+' address'};
+    const r=tsPing(d,dst,true);
+    tsRenderCanvas();
+    if(!r.ok) return {ok:false};
+    d._arp=d._arp||new Set();
+    const first=!d._arp.has(dst); d._arp.add(dst);
+    return {ok:true, firstTime:first};
+  },
+  /* The ping's own echo, walked once and recorded — real traffic, so it
+     counts like the ping: NAT entries, ACL matches, port security learning
+     (or tripping). Each hop's Time Exceeded has to route home on its own,
+     through the same ACLs and NAT. Like the ping, it names no reason:
+     where it stops is the clue. */
+  trace:function(d,dst){
+    const fam=famOf(dst);
+    if(!fam) return {msg:'invalid target address'};
+    if(!(fam===4?d.ip:d.ip6)) return {msg:d.name+' has no '+(fam===6?'IPv6':'IPv4')+' address'};
+    const path=[], k=fKey(fam,dst);
+    const res=tsPing(d,dst,true,{path:path});
+    tsRenderCanvas();
+    return {path:path, res:res, dst:fam===4?int2ip(k):op6Fmt(k), back:function(e,type){
+      return e.key!=null && tsForward(fam,{router:e.dev, iface:null},e.key,e.src,false,
+        {proto:'icmp', icmpType:type, sport:0, dport:e.sport, scratch:null}).ok;
+    }};
+  }
+});
 /* The client says what a real one would — working out why is the job. */
 function tsSshRun(){
   const d=tsSel!=null?tsById(tsSel):null;

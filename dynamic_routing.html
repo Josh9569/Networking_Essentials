@@ -1979,7 +1979,7 @@ function rpAllBest(dstInt, table){
    routes to one summarised /16 and only one of them leads anywhere useful.
    Declaring that "reachable" because a path exists would hide the bug the
    lab is about. */
-function rpResolvePing(srcPc, dstStr){
+function rpResolvePing(srcPc, dstStr, trace){
   if(!srcPc.ip||!isValidIP(srcPc.ip)) return {ok:false, reason:srcPc.name+' has no valid IP'};
   if(!dstStr||!isValidIP(dstStr)) return {ok:false, reason:'Invalid destination address'};
   const c=rpPortCable(srcPc.id,0);
@@ -1990,7 +1990,7 @@ function rpResolvePing(srcPc, dstStr){
   if(!gwPort.ip||!gwPort.up) return {ok:false, reason:gw.name+' '+gwPort.name+" isn't addressed and up yet"};
   if(netIntOf(ip2int(srcPc.ip),gwPort.pfx)!==netIntOf(ip2int(gwPort.ip),gwPort.pfx))
     return {ok:false, reason:srcPc.name+"'s IP isn't in the same subnet as "+gw.name+' '+gwPort.name};
-  return rpForward(gw, ip2int(dstStr), dstStr, new Set(), 0);
+  return rpForward(gw, ip2int(dstStr), dstStr, new Set(), 0, trace, gwPort);
 }
 function rpPcWithIp(ipStr){ return rpDevices.find(function(d){ return d.type==='pc'&&d.ip===ipStr; }); }
 function rpRouterPortWithIp(ipStr){
@@ -2001,16 +2001,25 @@ function rpRouterPortWithIp(ipStr){
   }
   return null;
 }
-function rpForward(router, dstInt, dstStr, visited, depth){
+/* trace (optional) is tracert's record of the walk (LabShared.traceHops):
+   each router the packet arrives at, by the port it arrived on (inPort),
+   marked .fwd once it routes the packet on — where a TTL runs out. Across
+   equal-cost paths it keeps ONE: the first that fails if any does (that is
+   the one the ping fails on), else the first. */
+function rpForward(router, dstInt, dstStr, visited, depth, trace, inPort){
+  if(trace) trace.push({dev:router, ip:inPort&&inPort.ip||null});
   if(depth>10) return {ok:false, reason:'Too many hops — the packet is looping'};
-  if(visited.has(router.id)) return {ok:false, reason:'Routing loop detected at '+router.name};
+  if(visited.has(router.id)) return {ok:false, loop:true, reason:'Routing loop detected at '+router.name};
   visited.add(router.id);
 
   const table=rpRoutingTable(router);
   const paths=rpAllBest(dstInt, table);
-  if(!paths.length) return {ok:false, reason:router.name+' has no route to '+dstStr};
+  if(!paths.length) return {ok:false, noRoute:true, reason:router.name+' has no route to '+dstStr};
+  if(trace&&!paths.some(function(w){ return w.code==='C'&&w._port.ip===dstStr; })) trace[trace.length-1].fwd=true;
 
+  let kept=null;
   for(const w of paths){
+    const sub=trace?[]:null;
     if(w.code==='C'){
       /* A loopback has no segment and no cable: it answers for its own
          address and nothing else. */
@@ -2020,9 +2029,12 @@ function rpForward(router, dstInt, dstStr, visited, depth){
       }
       const dest=rpPcWithIp(dstStr);
       const idx=router.ports.indexOf(w._port);
+      /* a PC on the segment, this router's own address, or the router on
+         the far side of the link (pinging the next router's interface) */
       const onSeg = dest
         ? rpL2Neighbors(router.id,idx).some(function(n){ return n.dev===dest; })
-        : (w._port.ip===dstStr);
+        : w._port.ip===dstStr || rpL2Neighbors(router.id,idx).some(function(n){
+            const p=n.dev.type==='router'&&n.dev.ports[n.port]; return !!p&&p.up&&p.ip===dstStr; });
       if(!onSeg) return {ok:false, reason:dstStr+' is not actually reachable out of '+router.name+' '+w.iface};
       continue;
     }
@@ -2040,8 +2052,9 @@ function rpForward(router, dstInt, dstStr, visited, depth){
       const vidx=router.ports.indexOf(via);
       const nb=rpL2Neighbors(router.id,vidx).filter(function(n){ return n.dev.type==='router'; });
       if(nb.length!==1) return {ok:false, reason:router.name+' '+via.name+' does not lead to exactly one router, so an exit-interface default is ambiguous there'};
-      const rr=rpForward(nb[0].dev, dstInt, dstStr, new Set(visited), depth+1);
-      if(!rr.ok) return rr;
+      const rr=rpForward(nb[0].dev, dstInt, dstStr, new Set(visited), depth+1, sub, nb[0].dev.ports[nb[0].port]);
+      if(!rr.ok){ if(trace) trace.push.apply(trace,sub); return rr; }
+      if(trace&&!kept) kept=sub;
       continue;
     }
     const hit=rpRouterPortWithIp(w.nextHop);
@@ -2049,15 +2062,26 @@ function rpForward(router, dstInt, dstStr, visited, depth){
     /* Each equal-cost path gets its own copy of the visited set: two
        different next-hops are two different journeys, and one of them
        passing through a router the other also used is not a loop. */
-    const r=rpForward(hit.router, dstInt, dstStr, new Set(visited), depth+1);
+    const r=rpForward(hit.router, dstInt, dstStr, new Set(visited), depth+1, sub, hit.port);
     if(!r.ok){
+      if(trace) trace.push.apply(trace,sub);
       return paths.length>1
-        ? {ok:false, reason:router.name+' load-balances across '+paths.length+' equal-cost routes to '+
+        ? {ok:false, noRoute:r.noRoute, loop:r.loop, reason:router.name+' load-balances across '+paths.length+' equal-cost routes to '+
              int2ip(w.netInt)+'/'+w.prefix+', and the one via '+w.nextHop+' fails: '+r.reason}
         : r;
     }
+    if(trace&&!kept) kept=sub;
   }
+  if(trace&&kept) trace.push.apply(trace,kept);
   return {ok:true};
+}
+/* A ping is only a success when the echo reply gets back too: from the
+   destination PC, or from the router that owns the address. */
+function rpReplyOk(dstStr, srcIp){
+  const pc=rpPcWithIp(dstStr);
+  if(pc) return rpResolvePing(pc, srcIp).ok;
+  const r=rpDevices.find(function(d){ return d.type==='router'&&rpAllIfaces(d).some(function(p){ return p.ip===dstStr; }); });
+  return !!r&&rpForward(r, ip2int(srcIp), srcIp, new Set(), 0).ok;
 }
 
 /* ── CLI ──
@@ -3178,11 +3202,7 @@ function rpRenderPcCfg(d,panel){
       '<div class="pc-form"><span class="pc-form-lbl">IPv6 Address</span>'+
       '<input type="text" class="custom-ip-inp" value="'+(d.ip6?op6Up(d.ip6):'')+'" autocomplete="off" spellcheck="false" oninput="opSetPcIp6('+d.id+',this.value)">'+
       '<span class="pc-pfx">/64</span></div>'+
-      '<div class="cfg-sec-lbl" style="margin-top:14px">Ping</div>'+
-      '<div class="pc-form"><label class="pc-form-lbl">Target IPv6</label>'+
-      '<input class="custom-ip-inp" id="rp-ping-ip" placeholder="e.g. 2001:DB8:ACAD:30::10" autocomplete="off" spellcheck="false" onkeydown="if(event.key===\'Enter\')rpPingRun()">'+
-      '<button class="rand-btn" id="rp-ping-btn" onclick="rpPingRun()">Ping</button></div>'+
-      '<pre class="ping-out" id="rp-ping-out"></pre>';
+      LabShared.pcToolHtml('rp-ping', {label:'Target IPv6', placeholder:'e.g. 2001:DB8:ACAD:30::10'});
     return;
   }
   panel.innerHTML=
@@ -3192,11 +3212,7 @@ function rpRenderPcCfg(d,panel){
     '<input type="text" class="custom-ip-inp" value="'+(d.ip||'')+'" placeholder="e.g. 192.168.1.10" autocomplete="off" spellcheck="false" oninput="rpSetPcIp('+d.id+',this.value)">'+
     '<span class="pc-pfx">/'+d.pfx+'</span></div>'+
     '<div class="svi-conflict" id="rp-pc-ip-err" style="display:none"></div>'+
-    '<div class="cfg-sec-lbl" style="margin-top:14px">Ping</div>'+
-    '<div class="pc-form"><label class="pc-form-lbl">Target IP</label>'+
-    '<input class="custom-ip-inp" id="rp-ping-ip" placeholder="e.g. 192.168.20.10" autocomplete="off" spellcheck="false" onkeydown="if(event.key===\'Enter\')rpPingRun()">'+
-    '<button class="rand-btn" id="rp-ping-btn" onclick="rpPingRun()">Ping</button></div>'+
-    '<pre class="ping-out" id="rp-ping-out"></pre>';
+    LabShared.pcToolHtml('rp-ping', {placeholder:'e.g. 192.168.20.10'});
 }
 function rpRenderSwitchCfg(d,panel){
   panel.innerHTML=
@@ -3281,33 +3297,50 @@ function opSetPcIp6(did,val){
   if(k!=null) d.ip6=op6Fmt(k); else if(!val.trim()) d.ip6=null;
   rpRenderCanvas();
 }
-let rpPingGen=0;
-function rpPingRun(){
-  const d=rpSelected!=null?rpById(rpSelected):null;
-  if(!d||d.type!=='pc') return;
-  const myGen=++rpPingGen, pcId=d.id;
-  LabShared.runPing({
-    inputId:'rp-ping-ip', btnId:'rp-ping-btn', outId:'rp-ping-out',
-    resolve:function(dst){
-      if(state.data&&state.data.fam===6){
-        if(!d.ip6) return {msg:d.name+' has no IPv6 address'};
-        if(op6Parse(dst)==null) return {msg:'invalid IPv6 address'};
-        if(op6Parse(dst)===op6Parse(d.ip6)) return {ok:true};
-        return opResolvePing6(d,dst).ok?{ok:true}:{ok:false};
-      }
-      if(!d.ip||!isValidIP(d.ip)) return {msg:d.name+' has no valid IP'};
-      if(!isValidIP(dst)) return {msg:'invalid target address'};
-      if(dst===d.ip) return {ok:true};
-      const r=rpResolvePing(d,dst);
-      if(!r.ok) return {ok:false};
-      d._arpKnown=d._arpKnown||new Set();
-      const firstTime=!d._arpKnown.has(dst);
-      d._arpKnown.add(dst);
-      return {ok:true, firstTime:firstTime};
-    },
-    stillActive:function(){ return myGen===rpPingGen && rpSelected===pcId; }
-  });
+/* The PC panel's Ping | Tracert (LabShared.pcTool), in whichever family
+   the round is. Both need the echo reply home, not just the request there. */
+function rpPcBad(d, dst){
+  if(state.data&&state.data.fam===6){
+    if(!d.ip6) return {msg:d.name+' has no IPv6 address'};
+    if(op6Parse(dst)==null) return {msg:'invalid IPv6 address'};
+  } else {
+    if(!d.ip||!isValidIP(d.ip)) return {msg:d.name+' has no valid IP'};
+    if(!isValidIP(dst)) return {msg:'invalid target address'};
+  }
+  return null;
 }
+LabShared.pcTool('rp-ping', {
+  pc:function(){ const d=rpSelected!=null?rpById(rpSelected):null; return d&&d.type==='pc'?d:null; },
+  ping:function(d,dst){
+    const bad=rpPcBad(d,dst); if(bad) return bad;
+    if(state.data&&state.data.fam===6){
+      if(op6Parse(dst)===op6Parse(d.ip6)) return {ok:true};
+      return opResolvePing6(d,dst).ok&&opReplyOk6(op6Parse(dst),d.ip6)?{ok:true}:{ok:false};
+    }
+    if(dst===d.ip) return {ok:true};
+    if(!rpResolvePing(d,dst).ok||!rpReplyOk(dst,d.ip)) return {ok:false};
+    d._arpKnown=d._arpKnown||new Set();
+    const firstTime=!d._arpKnown.has(dst);
+    d._arpKnown.add(dst);
+    return {ok:true, firstTime:firstTime};
+  },
+  /* Each hop's Time Exceeded has to route back to the PC on its own. */
+  trace:function(d,dst){
+    const bad=rpPcBad(d,dst); if(bad) return bad;
+    const path=[];
+    if(state.data&&state.data.fam===6){
+      const k=op6Parse(dst), self=k===op6Parse(d.ip6);
+      let res=self?{ok:true}:opResolvePing6(d,dst,path);
+      if(res.ok&&!self&&!opReplyOk6(k,d.ip6)) res={ok:false, arrived:true};
+      return {path:path, res:res, dst:op6Fmt(k), back:function(e){
+        return opForward6(e.dev, op6Parse(d.ip6), new Set(), 0).ok; }};
+    }
+    let res=dst===d.ip?{ok:true}:rpResolvePing(d,dst,path);
+    if(res.ok&&dst!==d.ip&&!rpReplyOk(dst,d.ip)) res={ok:false, arrived:true};
+    return {path:path, res:res, dst:dst, back:function(e){
+      return rpForward(e.dev, ip2int(d.ip), d.ip, new Set(), 0).ok; }};
+  }
+});
 
 /* ── Terminal ──
    One delegated document listener, because the input element is rebuilt
@@ -3465,15 +3498,19 @@ function opAllBest6(dstKey,t){
   return b?t.filter(function(e){ return e.pfx===b.pfx&&e.net===b.net; }):[];
 }
 function opPcWithIp6(key){ return rpDevices.find(function(d){ return d.type==='pc'&&d.ip6&&op6Parse(d.ip6)===key; }); }
-function opForward6(router, dstKey, visited, depth){
+function opForward6(router, dstKey, visited, depth, trace, inPort){
   const dstStr=op6Fmt(dstKey).toUpperCase();
+  if(trace) trace.push({dev:router, ip:inPort&&inPort.ip6?op6Fmt(op6Parse(inPort.ip6)):null});
   if(depth>10) return {ok:false, reason:'Too many hops — the packet is looping'};
-  if(visited.has(router.id)) return {ok:false, reason:'Routing loop detected at '+router.name};
+  if(visited.has(router.id)) return {ok:false, loop:true, reason:'Routing loop detected at '+router.name};
   visited.add(router.id);
   if(opAllPorts(router).some(function(p){ return p.up&&p.ip6&&op6Parse(p.ip6)===dstKey; })) return {ok:true};
   const paths=opAllBest6(dstKey, opTable6(router));
-  if(!paths.length) return {ok:false, reason:router.name+' has no IPv6 route to '+dstStr};
+  if(!paths.length) return {ok:false, noRoute:true, reason:router.name+' has no IPv6 route to '+dstStr};
+  if(trace) trace[trace.length-1].fwd=true;
+  let kept=null;
   for(const w of paths){
+    const sub=trace?[]:null;
     if(w.code==='C'){
       if(w._port.loopback) return {ok:false, reason:'Nothing answers to '+dstStr+' behind '+router.name+' '+w.iface};
       const idx=router.ports.indexOf(w._port);
@@ -3492,12 +3529,23 @@ function opForward6(router, dstKey, visited, depth){
     const idx=w._ifaceIdx!=null?w._ifaceIdx:router.ports.findIndex(function(p){ return p.name===w.iface; });
     const nb=rpL2Neighbors(router.id,idx).find(function(n){ return n.dev.type==='router'&&opLL(n.dev,n.dev.ports[n.port])===w.nextHop; });
     if(!nb) return {ok:false, reason:'Next hop '+w.nextHop+' is not on '+router.name+' '+w.iface};
-    const rr=opForward6(nb.dev, dstKey, new Set(visited), depth+1);
-    if(!rr.ok) return paths.length>1 ? {ok:false, reason:router.name+' load-balances, and the path via '+w.nextHop+' fails: '+rr.reason} : rr;
+    const rr=opForward6(nb.dev, dstKey, new Set(visited), depth+1, sub, nb.dev.ports[nb.port]);
+    if(!rr.ok){
+      if(trace) trace.push.apply(trace,sub);
+      return paths.length>1 ? {ok:false, noRoute:rr.noRoute, loop:rr.loop, reason:router.name+' load-balances, and the path via '+w.nextHop+' fails: '+rr.reason} : rr;
+    }
+    if(trace&&!kept) kept=sub;
   }
+  if(trace&&kept) trace.push.apply(trace,kept);
   return {ok:true};
 }
-function opResolvePing6(pc, dstStr){
+function opReplyOk6(dstKey, srcStr){
+  const pc=opPcWithIp6(dstKey);
+  if(pc) return opResolvePing6(pc, srcStr).ok;
+  const r=rpDevices.find(function(d){ return d.type==='router'&&opAllPorts(d).some(function(p){ return p.up&&p.ip6&&op6Parse(p.ip6)===dstKey; }); });
+  return !!r&&opForward6(r, op6Parse(srcStr), new Set(), 0).ok;
+}
+function opResolvePing6(pc, dstStr, trace){
   const dk=op6Parse(dstStr||'');
   if(!pc.ip6) return {ok:false, reason:pc.name+' has no IPv6 address'};
   if(dk==null) return {ok:false, reason:'Invalid IPv6 address'};
@@ -3507,7 +3555,7 @@ function opResolvePing6(pc, dstStr){
   if(!gp.ip6||!gp.up) return {ok:false, reason:gw.name+' '+gp.name+' has no IPv6 address or is down'};
   if(!gw.unicast6) return {ok:false, reason:gw.name+' is not routing IPv6 — "ipv6 unicast-routing" is off, so it will not forward for '+pc.name};
   if(op6Net(op6Parse(pc.ip6),64)!==op6Net(op6Parse(gp.ip6),gp.pfx6)) return {ok:false, reason:pc.name+"'s address is not on "+gw.name+' '+gp.name+"'s prefix"};
-  return opForward6(gw, dk, new Set(), 0);
+  return opForward6(gw, dk, new Set(), 0, trace, gp);
 }
 /* both directions, in whichever family the round is */
 function opPingBoth(a,b,fam){

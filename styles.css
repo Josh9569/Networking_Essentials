@@ -570,6 +570,7 @@ body.pop-resizing, body.pop-resizing * { cursor: ew-resize !important; user-sele
 :root[data-theme="custom"] .rt-code.src-S,
 :root[data-theme="custom"] .bin-card-ip.sel,
 :root[data-theme="custom"] .ct-bgtype-btn.on,
+:root[data-theme="custom"] .pt-opt.on,
 :root[data-theme="custom"] #ct-customize.on {
   color: var(--accent-ink);
 }
@@ -1202,6 +1203,18 @@ body.con-sizing-v-body, body.con-sizing-v-body * { cursor: ns-resize !important;
 .ping-out     { font-family: var(--mono); font-size: 12px; margin: 8px 0 0; padding: 8px 10px; border-radius: var(--r); background: var(--surface-s); border: 1px solid var(--border); min-height: 20px; white-space: pre-wrap; color: var(--text-s); }
 .ping-out.pok  { border-color: var(--ok-bdr); background: var(--ok-bg); color: var(--ok-text); }
 .ping-out.perr { border-color: var(--err-bdr); background: var(--err-bg); color: var(--err-text); }
+/* The PC panel's Ping | Tracert switch (LabShared.pcToolHtml), standing where
+   the "Ping" heading was: two joined rectangles, lettered like the
+   .cfg-sec-lbl it replaced, the chosen one in .cbtn.on's selected colours.
+   A tracert that never gets an answer runs to hop 30, so the output scrolls
+   (runTrace keeps it pinned to the newest line) rather than growing the
+   panel by thirty lines. */
+.pt-tog       { display: inline-flex; margin: 14px 0 .5rem; border: 1px solid var(--border-m); border-radius: var(--r); overflow: hidden; }
+.pt-opt       { padding: 3px 12px; border: none; background: transparent; cursor: pointer; font-family: var(--font); font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--text-t); transition: all .15s; }
+.pt-opt + .pt-opt { border-left: 1px solid var(--border-m); }
+.pt-opt:hover { background: var(--surface-s); color: var(--text); }
+.pt-opt.on    { background: var(--info-bg); color: var(--info-text); font-weight: 600; }
+.pt-out       { max-height: 300px; overflow-y: auto; }
 .mono-inl     { font-family: var(--mono); font-size: .92em; background: var(--surface-s); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; }
 
 /* IP address conflicts (Switching Lab) */
@@ -1312,7 +1325,7 @@ body.con-sizing-v-body, body.con-sizing-v-body * { cursor: ns-resize !important;
 .lab-card, .lab-canvas, .dev, .req-row, .cfg-panel, .port-table th,
 .port-table select, .port-table input, .cmd-table code, .vm-inp, .cli-note, .ping-out, .mono-inl,
 .rt-table, .rt-code, .bin-card, .cli-block, .ct-picker-hex-row, .opt-row,
-.ct-drawer-close, .ct-bgtype-btn, .qcard-pop-btn, .sel-menu {
+.ct-drawer-close, .ct-bgtype-btn, .qcard-pop-btn, .sel-menu, .pt-opt {
   backdrop-filter: var(--custom-blur, none);
   -webkit-backdrop-filter: var(--custom-blur, none);
 }
@@ -1339,7 +1352,7 @@ body.con-sizing-v-body, body.con-sizing-v-body * { cursor: ns-resize !important;
 .game-card .tag, .game-card .card-footer,
 .cfg-panel .vm-inp, .cfg-panel .ping-out, .cfg-panel .cli-note,
 .cfg-panel .port-table th, .cfg-panel .port-table select, .cfg-panel .port-table input,
-.cfg-panel .rand-btn, .cfg-panel .custom-ip-inp,
+.cfg-panel .rand-btn, .cfg-panel .custom-ip-inp, .cfg-panel .pt-opt,
 .lab-card .lab-canvas, .lab-card .dev, .lab-card .rand-btn,
 .sub-panel .sub-hdr, .sub-panel .sub-ltr, .sub-panel .afield,
 .sub-panel .expl-box code,

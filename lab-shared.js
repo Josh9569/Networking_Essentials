@@ -77,6 +77,13 @@
     return { getZoom: zoomOf };
   }
 
+  /* Green / red / neutral on a .ping-out, leaving any other class it carries
+     (the PC tool's scrolling .pt-out) alone. */
+  function outState(out, st) {
+    out.classList.remove('pok', 'perr');
+    if (st) out.classList.add(st);
+  }
+
   /* ---------- ping UI ----------
      Drives the "Pinging X with 32 bytes of data..." animated reveal against
      a <pre class="ping-out">, exactly the same probe-sequence choreography
@@ -97,11 +104,11 @@
     var out = document.getElementById(cfg.outId);
     var btn = document.getElementById(cfg.btnId);
     var r = cfg.resolve(dst);
-    if (r.msg) { out.textContent = '% ' + r.msg; out.className = 'ping-out perr'; return; }
+    if (r.msg) { out.textContent = '% ' + r.msg; outState(out, 'perr'); return; }
     var seq = r.ok
       ? (r.firstTime ? ['.', '!', '!', '!'] : ['!', '!', '!', '!'])
       : ['.', '.', '.', '.'];
-    out.className = 'ping-out';
+    outState(out, '');
     out.textContent = 'Pinging ' + dst + ' with 32 bytes of data:\n';
     if (btn) btn.disabled = true;
     var i = 0;
@@ -116,10 +123,172 @@
       var got = seq.filter(function (c) { return c === '!'; }).length;
       var sent = seq.length;
       out.textContent += '\nPing statistics for ' + dst + ':\n    Packets: Sent = ' + sent + ', Received = ' + got + ', Lost = ' + (sent - got) + ' (' + Math.round((sent - got) / sent * 100) + '% loss)';
-      out.className = 'ping-out ' + (r.ok ? 'pok' : 'perr');
+      outState(out, r.ok ? 'pok' : 'perr');
       if (btn) btn.disabled = false;
     };
     setTimeout(step, 260);
+  }
+
+  /* ---------- tracert ----------
+     A PC's tracert, printed the way Windows prints it, over whatever
+     forwarding model the page has. The page does not write a second walker:
+     its own forwarder, handed an array, records each router a probe ARRIVES
+     at ({dev, ip: the address it arrived on, ...}) and sets .fwd on the ones
+     that got as far as forwarding it. That is the point where a real router
+     decrements the TTL, so the .fwd routers are exactly the ones that answer
+     a tracert hop with Time Exceeded — a router that drops the probe on the
+     way in (an inbound ACL, no route) never appears as a hop of its own; it
+     reports instead.
+
+     traceHops(t) turns one recorded walk into the lines tracert prints:
+       t.path   the recorded arrivals, in order
+       t.res    the page's ping result for the same probe: ok (there and
+                back), arrived (it got there, the reply did not), noRoute,
+                blocked (an ACL), loop — anything else is a silent drop
+       t.back(entry, type) -> bool   can that router's ICMP message
+                ('time-exceeded' | 'unreachable') get back to the PC? A hop
+                whose answer is lost prints "Request timed out." like real
+                tracert, which is what NAT missing on the way out looks like.
+       t.dst    the destination as it should print
+     Returns up to TRACE_MAX entries: {ip} a hop that answered, {ip, note}
+     a router reporting unreachable, {ip, done} the destination, null a
+     timeout. Anything that does not end in a reply runs on to hop 30. */
+  var TRACE_MAX = 30;
+  function traceHops(t) {
+    var res = t.res || {}, path = t.path || [], out = [];
+    var back = t.back || function () { return true; };
+    var hop = function (e) { return back(e, 'time-exceeded') ? { ip: e.ip } : null; };
+    if (res.loop && path.length > 1) {
+      /* A routing loop: from the router it came back to, the probe goes round
+         the same routers again until its TTL runs out. The router it came back
+         to forwards the same way it did the first time, so the loop is
+         everything after its first visit. */
+      var last = path[path.length - 1], j = -1, seq = path.slice();
+      for (var k = 0; k < path.length - 1; k++) if (path[k].dev === last.dev) { j = k; break; }
+      var cycle = j >= 0 ? path.slice(j + 1) : [];
+      while (cycle.length && seq.length < TRACE_MAX) seq = seq.concat(cycle);
+      return seq.slice(0, TRACE_MAX).map(hop);
+    }
+    path.forEach(function (e) { if (e.fwd) out.push(hop(e)); });
+    var end = null;
+    if (res.ok) end = { ip: t.dst, done: true };
+    else if (!res.arrived) {
+      var L = path[path.length - 1];
+      if (L && (res.noRoute || res.blocked) && back(L, 'unreachable'))
+        end = { ip: L.ip, note: res.noRoute ? 'Destination net unreachable.' : 'Destination host unreachable.' };
+    }
+    out.push(end);
+    if (!end) while (out.length < TRACE_MAX) out.push(null);
+    return out.slice(0, TRACE_MAX);
+  }
+  /* One line of tracert output, in Windows' columns: the hop number in 3,
+     each probe's time in 9, two spaces, then who answered. */
+  function traceLine(n, h) {
+    var num = ('   ' + n).slice(-3);
+    if (!h) return num + '     *        *        *     Request timed out.';
+    if (h.note) return num + '  ' + h.ip + '  reports: ' + h.note;
+    var col = function () {
+      var ms = n === 1 ? '<1' : String(Math.max(1, n - 1 + Math.floor(Math.random() * 3) - 1));
+      return ('      ' + ms).slice(-6) + ' ms';
+    };
+    return num + col() + col() + col() + '  ' + h.ip;
+  }
+  /* The animated reveal, the same choreography as runPing: one line per hop,
+     slower while hops answer and quicker once it is plainly timing out to
+     the end. cfg is runPing's, with trace(dst) in place of resolve(dst):
+       {msg}                        validation error, no animation
+       {path, res, back, dst}       see traceHops */
+  function runTrace(cfg) {
+    var dst = document.getElementById(cfg.inputId).value.trim();
+    var out = document.getElementById(cfg.outId);
+    var btn = document.getElementById(cfg.btnId);
+    var r = cfg.trace(dst);
+    if (r.msg) { out.textContent = '% ' + r.msg; outState(out, 'perr'); return; }
+    var hops = traceHops({ path: r.path, res: r.res, back: r.back, dst: r.dst || dst });
+    var reached = hops.some(function (h) { return h && h.done; });
+    outState(out, '');
+    out.textContent = 'Tracing route to ' + (r.dst || dst) + ' over a maximum of ' + TRACE_MAX + ' hops\n\n';
+    if (btn) btn.disabled = true;
+    var i = 0, quiet = 0;
+    var step = function () {
+      if (!cfg.stillActive()) { if (btn) btn.disabled = false; return; }
+      out.textContent += traceLine(i + 1, hops[i]) + '\n';
+      out.scrollTop = out.scrollHeight;
+      i++;
+      if (i < hops.length) { setTimeout(step, hops[i - 1] ? 300 : (++quiet <= 3 ? 450 : 110)); return; }
+      out.textContent += '\nTrace complete.';
+      outState(out, reached ? 'pok' : 'perr');
+      if (btn) btn.disabled = false;
+    };
+    setTimeout(step, 300);
+  }
+
+  /* ---------- the PC's Ping | Tracert tool ----------
+     Every lab PC panel has the same block: a Ping / Tracert pill where the
+     "Ping" heading used to be, one target box, one button, one output. The
+     page registers once, by an id prefix:
+       pcTool('ac-ping', {pc, ping, trace})
+         pc()            the PC whose panel is open, or null
+         ping(pc, dst)   runPing's resolve
+         trace(pc, dst)  runTrace's trace
+     and renders the block wherever its panel is built with
+       pcToolHtml('ac-ping', {label, placeholder, width})
+     which makes ids <prefix>-ip / -btn / -out — the same ids every page used
+     for its ping, so nothing else had to change. The chosen tool is held
+     here per prefix, so it survives the panel being rebuilt and moving from
+     one PC to another. A run is cancelled the moment its PC is no longer
+     the open one, or the other tool is picked. */
+  var pcTools = {};
+  function pcToolState(key) { return pcTools[key] || (pcTools[key] = { mode: 'ping', gen: 0, cfg: null }); }
+  function pcTool(key, cfg) { pcToolState(key).cfg = cfg; }
+  function pcToolHtml(key, o) {
+    o = o || {};
+    var t = pcToolState(key), q = "'" + key + "'";
+    var opt = function (m, label) {
+      return '<button type="button" class="pt-opt' + (t.mode === m ? ' on' : '') + '" data-mode="' + m + '"' +
+        ' aria-pressed="' + (t.mode === m) + '" onclick="LabShared.pcToolMode(' + q + ',\'' + m + '\')">' + label + '</button>';
+    };
+    return '<div class="pt-tog" id="' + key + '-tog" role="group" aria-label="PC network tool">' +
+        opt('ping', 'Ping') + opt('tracert', 'Tracert') + '</div>' +
+      '<div class="pc-form"><label class="pc-form-lbl" for="' + key + '-ip">' + (o.label || 'Target IP') + '</label>' +
+        '<input class="custom-ip-inp" id="' + key + '-ip" placeholder="' + (o.placeholder || '') + '"' +
+        (o.width ? ' style="width:' + o.width + '"' : '') + ' autocomplete="off" spellcheck="false"' +
+        ' onkeydown="if(event.key===\'Enter\')LabShared.pcToolRun(' + q + ')">' +
+        '<button class="rand-btn" id="' + key + '-btn" onclick="LabShared.pcToolRun(' + q + ')">' + (t.mode === 'ping' ? 'Ping' : 'Tracert') + '</button></div>' +
+      '<pre class="ping-out pt-out" id="' + key + '-out"></pre>';
+  }
+  function pcToolMode(key, mode) {
+    var t = pcToolState(key);
+    if (t.mode === mode) return;
+    t.mode = mode; t.gen++;
+    var tog = document.getElementById(key + '-tog');
+    if (tog) [].forEach.call(tog.querySelectorAll('.pt-opt'), function (b) {
+      var on = b.getAttribute('data-mode') === mode;
+      b.classList.toggle('on', on); b.setAttribute('aria-pressed', on);
+    });
+    var btn = document.getElementById(key + '-btn'), out = document.getElementById(key + '-out');
+    if (btn) { btn.textContent = mode === 'ping' ? 'Ping' : 'Tracert'; btn.disabled = false; }
+    if (out) { out.textContent = ''; outState(out, ''); }
+  }
+  /* The panel was rebuilt for a different state: drop the output and any run
+     still animating into it. */
+  function pcToolStop(key) {
+    var t = pcToolState(key); t.gen++;
+    var btn = document.getElementById(key + '-btn'), out = document.getElementById(key + '-out');
+    if (btn) btn.disabled = false;
+    if (out) { out.textContent = ''; outState(out, ''); }
+  }
+  function pcToolRun(key) {
+    var t = pcToolState(key), cfg = t.cfg;
+    var pc = cfg && cfg.pc();
+    if (!pc) return;
+    var my = ++t.gen;
+    var o = {
+      inputId: key + '-ip', btnId: key + '-btn', outId: key + '-out',
+      stillActive: function () { return t.gen === my && cfg.pc() === pc; }
+    };
+    if (t.mode === 'tracert') { o.trace = function (dst) { return cfg.trace(pc, dst); }; runTrace(o); }
+    else { o.resolve = function (dst) { return cfg.ping(pc, dst); }; runPing(o); }
   }
 
   /* ---------- requirements checklist ----------
@@ -1397,6 +1566,13 @@
     dockQcardPopout: dockQcardPopout,
     attachCanvasDrag: attachCanvasDrag,
     runPing: runPing,
+    runTrace: runTrace,
+    traceHops: traceHops,
+    pcTool: pcTool,
+    pcToolHtml: pcToolHtml,
+    pcToolMode: pcToolMode,
+    pcToolRun: pcToolRun,
+    pcToolStop: pcToolStop,
     tabComplete: tabComplete,
     renderReqList: renderReqList,
     /* Shared device-box geometry so both labs' switches/PCs render (and
