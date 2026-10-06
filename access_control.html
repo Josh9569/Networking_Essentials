@@ -751,14 +751,31 @@ const AC_KW={
 /* Every command acCli understands, by shape: this page's base plus the
    shared ACL, NAT and SSH lists. A line that fits none of them gets IOS's
    caret (see cliGrammar in lab-shared.js). */
-const AC_GRAMMAR=LabShared.cliGrammar([
-  'enable', 'configure [terminal]', 'end', 'exit', 'cls', 'clear',
-  'show running-config', 'show ip|ipv6 route', 'show ip|ipv6 interface [brief]', 'show ip|ipv6 interface <if>',
-  'show ip|ipv6 access-lists [<word>]', 'ping <addr> [source <if>]',
-  'interface <if>', 'line vty <n> [<n>]',
-  'shutdown', 'no shutdown', 'clock rate <n>', 'no clock rate [<n>]', 'ip address <ip> <ip>', 'no ip address [<ip> <ip>]',
-  'ip route <ip> <ip> <ip>|<if>', 'no ip route <ip> <ip> [<ip>|<if>]'
-]).concat(NetRouter.ACL_GRAMMAR, NetRouter.NAT_GRAMMAR, NetRouter.SSH_GRAMMAR);
+const AC_GRAMMAR=LabShared.cliGrammar({
+  'any': ['cls', 'clear'],
+  'exec': ['enable', 'configure [terminal]',
+    'show running-config', 'show ip|ipv6 route', 'show ip|ipv6 interface [brief]', 'show ip|ipv6 interface <if>',
+    'show ip|ipv6 access-lists [<word>]', 'ping <addr> [source <if>]'],
+  'cfg exec': ['exit'],
+  'cfg': ['end'],
+  'config': ['interface <if>', 'line vty <n> [<n>]',
+    'ip route <ip> <ip> <ip>|<if>', 'no ip route <ip> <ip> [<ip>|<if>]'],
+  'if': ['shutdown', 'no shutdown'],
+  'ser': ['clock rate <n>', 'no clock rate [<n>]'],
+  'routed': ['ip address <ip> <ip>', 'no ip address [<ip> <ip>]']
+}).concat(NetRouter.ACL_GRAMMAR, NetRouter.NAT_GRAMMAR, NetRouter.SSH_GRAMMAR);
+/* where the console is, as the grammar's mode tags: the current mode, then
+   (config), which a sub-mode falls back to */
+const AC_CONFIG=['cfg','config'];
+function acLevels(d){
+  if(d.cm==='if') return [['cfg','if','routed',NetRouter.ifKind(acIface(d,d.ci))], AC_CONFIG];
+  if(d.cm==='line') return [['cfg','line','vty'], AC_CONFIG];
+  if(d.cm==='nacl') return [['cfg','nacl-std'], AC_CONFIG];
+  if(d.cm==='xacl') return [['cfg','nacl-ext'], AC_CONFIG];
+  if(d.cm==='nacl6') return [['cfg','nacl6'], AC_CONFIG];
+  if(d.cm==='conf') return [AC_CONFIG];
+  return [['exec']];
+}
 function acPrompt(d){
   if(d.cm==='rsa') return 'How many bits in the modulus [512]:';
   return d.name+(d.cm==='conf'?'(config)#':d.cm==='if'?'(config-if)#':
@@ -767,7 +784,7 @@ function acPrompt(d){
 }
 /* Parses the tail of a permit/deny into an ACE, minus its sequence number.
    Accepts the three forms Lab 8A uses: "host X", "any", and "X wildcard". */
-function acCli(d, line){
+function acCli(d, line, lv){
   /* the modulus question crypto key generate rsa asks, answered on the next line */
   if(d.cm==='rsa'){
     const a=line.trim();
@@ -777,11 +794,14 @@ function acCli(d, line){
     return sshGenKeys(d,n);
   }
   const pp=LabShared.cliPipe(acPrompt(d), line);
-  if(pp) return pp.err||LabShared.cliFilter(acCli(d,pp.base),pp);
-  const bad=LabShared.cliCheck(AC_GRAMMAR, acPrompt(d), line);
-  if(bad) return bad;
-  /* "do" runs an exec command from any configuration mode */
-  if(/^do\s/i.test(line.trim())) return acCli(d, line.trim().slice(3));
+  if(pp) return pp.err||LabShared.cliFilter(acCli(d,pp.base,lv),pp);
+  /* refused unless it belongs in this mode; a global command typed in a
+     sub-mode drops back to (config) first, as IOS does */
+  const v=LabShared.cliCheck(AC_GRAMMAR, acPrompt(d), line, {levels:lv||acLevels(d), hint:true, device:'router'});
+  if(typeof v==='string') return v;
+  if(v&&v.up){ d.cm='conf'; d.ci=null; }
+  /* "do" runs an EXEC command from a configuration mode */
+  if(/^do\s/i.test(line.trim())) return acCli(d, line.trim().slice(3), [['exec']]);
   const t=line.trim().replace(/\s+/g,' ');
   if(!t) return '';
   const w=t.toLowerCase().split(' ');
@@ -885,8 +905,10 @@ function acCli(d, line){
 
   return '% Invalid input detected';
 }
+/* a form's (or a generator's) commands, typed as a learner would have to:
+   wrapped in configure terminal / end (LabShared.cliConfigSeq) */
 function acEcho(d, cmds){
-  cmds.forEach(function(c){
+  LabShared.cliConfigSeq(d.cm==='exec', cmds).forEach(function(c){
     d.log.push(acPrompt(d)+' '+c);
     const out=acCli(d,c);
     if(out) out.split('\n').forEach(function(l){ d.log.push(l); });
@@ -2515,6 +2537,7 @@ const ACCON=LabShared.createConsoles({
   id:'ac', mainIds:{input:'ac-term-in', log:'ac-term-log', prompt:'ac-term-prompt'},
   device:id=>acById(id), hasCli:d=>d.type==='router',
   prompt:d=>acPrompt(d), run:(d,line)=>acCli(d,line), keywords:()=>AC_KW, logLines:300,
+  canStart:(d,l)=>LabShared.cliCanStart(AC_GRAMMAR,l,acLevels(d)),
   after:()=>{ acRenderCanvas(); acRefreshCfg(); }, dockAfter:'ac-cfg'
 });
 function acRenderTerm(){ ACCON.refresh(); }

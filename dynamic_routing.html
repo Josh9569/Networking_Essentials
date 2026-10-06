@@ -2065,8 +2065,8 @@ function rpForward(router, dstInt, dstStr, visited, depth){
    plus 'rip' for router-configuration mode), so the helper form and the
    typed terminal can never disagree — both funnel through rpCli. */
 function rpParseIfName(text){
-  const m=String(text).toLowerCase().replace(/\s+/g,'').match(/^(gi|gigabitethernet)0\/(\d+)$/);
-  if(!m) return -1;
+  const m=String(text).toLowerCase().replace(/\s+/g,'').match(/^([a-z]+)0\/(\d+)$/);
+  if(!m||'gigabitethernet'.indexOf(m[1])!==0) return -1;
   const n=+m[2];
   return (n>=0&&n<RP_PORTN) ? n : -1;
 }
@@ -2100,28 +2100,47 @@ const RP_KW={
 /* Every command rpCli understands, by shape: RIP, addressing and the IPv6
    default route here, OSPF from net-ospf.js. A line that fits none of them
    gets IOS's caret (see cliGrammar in lab-shared.js). */
-const RP_GRAMMAR=LabShared.cliGrammar([
-  'enable', 'configure [terminal]', 'end', 'exit', 'cls', 'clear',
-  'show ip route', 'show ip protocols', 'show ip interface [brief]', 'show running-config',
-  'show ipv6 route', 'show ipv6 interface [brief]',
-  'interface <if>', 'router rip', 'no router rip',
-  'shutdown', 'no shutdown', 'ip address <ip> <ip>', 'no ip address [<ip> <ip>]',
-  'ip route <ip> <ip> <ip>|<if>', 'no ip route [<ip> <ip> [<ip>|<if>]]',
-  'version 1|2', 'no version [1|2]', 'network <ip>', 'no network <ip>', 'auto-summary', 'no auto-summary',
-  'ipv6 route <v6p> <v6>|<if>', 'no ipv6 route [<v6p> [<v6>|<if>]]',
-  'ipv6 address <v6p>', 'ipv6 address <v6> link-local', 'no ipv6 address [<v6p>]', 'ipv6 enable'
-]).concat(NetOspf.GRAMMAR);
-function rpCli(d, line){
+const RP_GRAMMAR=LabShared.cliGrammar({
+  'any': ['cls', 'clear'],
+  'exec': ['enable', 'configure [terminal]',
+    'show ip route', 'show ip protocols', 'show ip interface [brief]', 'show running-config',
+    'show ipv6 route', 'show ipv6 interface [brief]'],
+  'cfg exec': ['exit'],
+  'cfg': ['end'],
+  'config': ['interface <if>', 'router rip', 'no router rip',
+    'ip route <ip> <ip> <ip>|<if>', 'no ip route [<ip> <ip> [<ip>|<if>]]',
+    'ipv6 route <v6p> <v6>|<if>', 'no ipv6 route [<v6p> [<v6>|<if>]]'],
+  'if': ['shutdown', 'no shutdown'],
+  'routed': ['ip address <ip> <ip>', 'no ip address [<ip> <ip>]',
+    'ipv6 address <v6p>', 'ipv6 address <v6> link-local', 'no ipv6 address [<v6p>]', 'ipv6 enable'],
+  'rip': ['version 1|2', 'no version [1|2]', 'network <ip>', 'no network <ip>', 'auto-summary', 'no auto-summary']
+}).concat(NetOspf.GRAMMAR);
+/* where the console is, as the grammar's mode tags: the current mode, then
+   (config), which a sub-mode falls back to */
+const RP_CONFIG=['cfg','config'];
+function rpLevels(d){
+  if(d.cm==='if') return [['cfg','if','routed',d.cl!=null?'lo':'eth'], RP_CONFIG];
+  if(d.cm==='rip') return [['cfg','router','rip'], RP_CONFIG];
+  if(d.cm==='ospf') return [['cfg','router','ospf'], RP_CONFIG];
+  if(d.cm==='ospf6') return [['cfg','rtr'], RP_CONFIG];
+  if(d.cm==='conf') return [RP_CONFIG];
+  return [['exec']];
+}
+const RP_HINTS={router:{go:'enter the routing process ("router rip" or "router ospf 1")'}};
+function rpCli(d, line, lv){
   const t=line.trim().replace(/\s+/g,' ');
   const M=function(tok,cand){ return tok&&cand.indexOf(tok)===0; };
   if(d.cm==='opclear'){ rpInvalidate(); return opCli(d,t,t.toLowerCase().split(' '),M); }
   if(!t) return '';
   const pp=LabShared.cliPipe(rpPromptFor(d), line);
-  if(pp) return pp.err||LabShared.cliFilter(rpCli(d,pp.base),pp);
-  const bad=LabShared.cliCheck(RP_GRAMMAR, rpPromptFor(d), line);
-  if(bad) return bad;
-  /* "do" runs an exec command from any configuration mode */
-  if(/^do\s/i.test(t)) return rpCli(d, t.slice(3));
+  if(pp) return pp.err||LabShared.cliFilter(rpCli(d,pp.base,lv),pp);
+  /* refused unless it belongs in this mode; a global command typed in a
+     sub-mode drops back to (config) first, as IOS does */
+  const v=LabShared.cliCheck(RP_GRAMMAR, rpPromptFor(d), line, {levels:lv||rpLevels(d), hint:true, hints:RP_HINTS, device:'router'});
+  if(typeof v==='string') return v;
+  if(v&&v.up){ d.cm='conf'; d.ci=null; d.cl=null; }
+  /* "do" runs an EXEC command from a configuration mode */
+  if(/^do\s/i.test(t)) return rpCli(d, t.slice(3), [['exec']]);
   const w=t.toLowerCase().split(' ');
   rpInvalidate();
 
@@ -2250,8 +2269,10 @@ function rpPromptFor(d){
   if(d.cm==='opclear') return 'Reset ALL OSPF processes? [no]:';
   return d.name+(d.cm==='conf'?'(config)#':d.cm==='if'?'(config-if)#':d.cm==='rip'||d.cm==='ospf'?'(config-router)#':d.cm==='ospf6'?'(config-rtr)#':'#');
 }
+/* a form's (or a generator's) commands, typed as a learner would have to:
+   wrapped in configure terminal / end (LabShared.cliConfigSeq) */
 function rpEchoCli(d, cmds){
-  cmds.forEach(function(c){
+  LabShared.cliConfigSeq(d.cm==='exec', cmds).forEach(function(c){
     d.log.push(rpPromptFor(d)+' '+c);
     const out=rpCli(d,c);
     if(out) out.split('\n').forEach(function(l){ d.log.push(l); });
@@ -3299,6 +3320,7 @@ const RPCON=LabShared.createConsoles({
   id:'rp', mainIds:{input:'rp-term-in', log:'rp-term-log', prompt:'rp-term-prompt'},
   device:id=>rpById(id), hasCli:d=>d.type==='router',
   prompt:d=>rpPromptFor(d), run:(d,line)=>rpCli(d,line), keywords:()=>RP_KW, logLines:300,
+  canStart:(d,l)=>LabShared.cliCanStart(RP_GRAMMAR,l,rpLevels(d)),
   after:()=>{ rpRenderCanvas(); rpRefreshCfg(); }, dockAfter:'rp-cfg'
 });
 function rpRenderTerm(){ RPCON.refresh(); }

@@ -279,7 +279,7 @@
 
     <div class="tool-block" id="t-cmdref">
       <div class="tool-block-title">Command Reference</div>
-      <p class="tool-note">The CLI accepts Cisco IOS syntax with standard abbreviations (e.g. <code>conf t</code>, <code>int fa0/1</code>, <code>sw mo ac</code>). Commands work at any prompt level for convenience. Press <strong>Tab</strong> to auto-complete keywords and use the <strong>&uarr; / &darr;</strong> arrow keys for command history.</p>
+      <p class="tool-note">The CLI accepts Cisco IOS syntax with standard abbreviations (e.g. <code>conf t</code>, <code>int fa0/1</code>, <code>sw mo ac</code>). As on a real switch, each command only works in its own mode: <code>show</code> at <code>#</code> (or <code>do show</code> in configuration mode), <code>switchport</code> on a switch port, <code>ip address</code> on an SVI. A wrong-mode command is refused with a hint saying where it belongs. Press <strong>Tab</strong> to auto-complete keywords and use the <strong>&uarr; / &darr;</strong> arrow keys for command history.</p>
       <table class="cmd-table">
         <tbody>
           <tr><td class="cmd">configure terminal</td><td>Enter config mode (<code>conf t</code>)</td></tr>
@@ -692,7 +692,7 @@ function uiSetSVI(){
     d.log.push('% management IP needs a VLAN number (1\u20134094) and a valid IPv4 address');
     renderTerm(); return;
   }
-  echoCli(d,['interface vlan '+v,'ip address '+ip,'exit']);
+  echoCli(d,['interface vlan '+v,'ip address '+ip+' 255.255.255.0','exit']);
   buildPortTable(); render();
 }
 /* ── ping ── */
@@ -827,8 +827,13 @@ function vmAdd(){
   buildVlanMgr(); buildPortTable();
 }
 
-function echoCli(d,cmds){
-  cmds.forEach(c=>{
+/* A form's commands, typed as a learner would have to: wrapped in configure
+   terminal / end so they are valid from whatever mode the console is in
+   (LabShared.cliConfigSeq). beforeEnd runs while still in the last mode. */
+function echoCli(d,cmds,beforeEnd){
+  const seq=LabShared.cliConfigSeq(d.cm==='exec',cmds);
+  seq.forEach((c,k)=>{
+    if(k===seq.length-1&&beforeEnd) beforeEnd();
     d.log.push(prompt_(d)+' '+c);
     const out=cli(d,c);
     if(out) out.split('\n').forEach(l=>d.log.push(l));
@@ -856,9 +861,10 @@ function uiSetVlan(i,v){
   const d=byId(selected);
   const n=Math.max(1,Math.min(4094,parseInt(v)||1));
   if(!d.vlans.has(n)){
-    echoCli(d,['interface '+d.ports[i].name.toLowerCase()]);
-    d.log.push(prompt_(d)+' switchport access vlan '+n);
-    d.log.push('% VLAN '+n+' does not exist — create it first: "vlan '+n+'" then "name <name>"');
+    echoCli(d,['interface '+d.ports[i].name.toLowerCase()],()=>{
+      d.log.push(prompt_(d)+' switchport access vlan '+n);
+      d.log.push('% VLAN '+n+' does not exist — create it first: "vlan '+n+'" then "name <name>"');
+    });
     renderTerm();
     buildPortTable();               /* reverts the input to the port's real VLAN */
     render();
@@ -881,6 +887,7 @@ const SWCON=LabShared.createConsoles({
   id:'sw', mainIds:{input:'term-in', log:'term-log', prompt:'term-prompt'},
   device:byId, hasCli:d=>d.type==='switch',
   prompt:d=>prompt_(d), run:(d,line)=>cli(d,line), keywords:()=>KW, logLines:300,
+  canStart:(d,l)=>LabShared.cliCanStart(SWE.GRAMMAR,l,SWE.levels(d)),
   after:()=>{ render(); const sd=selected!=null&&byId(selected); if(sd&&sd.type==='switch') buildPortTable(); },
   dockAfter:'cfg', btnClass:'rand-btn'
 });

@@ -29,35 +29,52 @@
   const STD_ACE='( any | host <ip> | <ip> [<ip>] ) [log]';
   const EXT_ACE='ip|icmp|tcp|udp '+SIDE4+' '+PORT+' '+SIDE4+' '+PORT+' [echo|echo-reply] [log]';
   const V6_ACE='ipv6|icmp|tcp|udp '+SIDE6+' '+PORT+' '+SIDE6+' '+PORT+' [echo-request|echo-reply] [log] [sequence <n>]';
-  const ACL_GRAMMAR=window.LabShared.cliGrammar([
-    'access-list <n> permit|deny '+STD_ACE, 'access-list <n> permit|deny '+EXT_ACE, 'no access-list <n>',
-    'ip access-list standard|extended <word>', 'no ip access-list standard|extended <word>',
-    'ipv6 access-list <word>', 'no ipv6 access-list <word>',
-    '[<n>] permit|deny '+STD_ACE, '[<n>] permit|deny '+EXT_ACE, '[<n>] permit|deny '+V6_ACE,
-    'no <n>', 'no sequence <n>',
-    'ip access-group <word> in|out', 'no ip access-group [<word>] in|out',
-    'ipv6 traffic-filter <word> in|out', 'no ipv6 traffic-filter <word> in|out',
-    'access-class <word> in', 'no access-class [<word> in]', 'ipv6 access-class <word> in', 'no ipv6 access-class [<word> in]',
-    'show access-lists [<word>]', 'show ip access-lists [<word>]', 'show ipv6 access-list [<word>]'
-  ]);
-  const NAT_GRAMMAR=window.LabShared.cliGrammar([
-    'ip nat inside|outside', 'no ip nat inside|outside',
-    'ip nat pool <word> <ip> <ip> ( netmask <ip> | prefix-length <n> )',
+  /* Grouped by mode (lab-shared.js cliGrammar): an entry belongs in its own
+     kind of list — a standard entry in (config-std-nacl), a protocol-led one
+     in (config-ext-nacl), an IPv6 one in (config-ipv6-acl) — the list is
+     applied on a Layer 3 interface, and access-class on the vty lines (a
+     level carries 'vty' or 'con' beside 'line'). */
+  const ACL_GRAMMAR=window.LabShared.cliGrammar({
+    'config': ['access-list <n> permit|deny '+STD_ACE, 'access-list <n> permit|deny '+EXT_ACE, 'no access-list <n>',
+      'ip access-list standard|extended <word>', 'no ip access-list standard|extended <word>',
+      'ipv6 access-list <word>', 'no ipv6 access-list <word>'],
+    'nacl-std': ['[<n>] permit|deny '+STD_ACE],
+    'nacl-ext': ['[<n>] permit|deny '+EXT_ACE],
+    'nacl-std nacl-ext': ['no <n>'],
+    'nacl6': ['[<n>] permit|deny '+V6_ACE, 'no sequence <n>'],
+    'routed': ['ip access-group <word> in|out', 'no ip access-group [<word>] in|out',
+      'ipv6 traffic-filter <word> in|out', 'no ipv6 traffic-filter <word> in|out'],
+    'vty': ['access-class <word> in', 'no access-class [<word> in]', 'ipv6 access-class <word> in', 'no ipv6 access-class [<word> in]'],
+    'exec': ['show access-lists [<word>]', 'show ip access-lists [<word>]', 'show ipv6 access-list [<word>]']
+  });
+  const NAT_GRAMMAR=window.LabShared.cliGrammar({
+    'routed': ['ip nat inside|outside', 'no ip nat inside|outside'],
+    'config': ['ip nat pool <word> <ip> <ip> ( netmask <ip> | prefix-length <n> )',
     'no ip nat pool <word> [<ip> <ip> ( netmask <ip> | prefix-length <n> )]',
     'ip nat inside source static <ip> <ip>', 'no ip nat inside source static <ip> <ip>',
     'ip nat inside source list <word> pool <word> [overload]', 'ip nat inside source list <word> interface <if> overload',
-    'no ip nat inside source list <word> [pool <word> [overload]]', 'no ip nat inside source list <word> interface <if> [overload]',
-    'clear ip nat translation *', 'show ip nat translations|statistics'
-  ]);
-  const SSH_GRAMMAR=window.LabShared.cliGrammar([
-    'ip domain-name <word>', 'ip domain name <word>', 'no ip domain-name [<word>]', 'no ip domain name [<word>]',
-    'ip ssh version 1|2', 'ip ssh time-out <n>', 'ip ssh authentication-retries <n>', 'no ip ssh version [1|2]',
-    'crypto key generate rsa [general-keys] [modulus <n>]', 'crypto key zeroize rsa',
-    'username <word> [privilege <n>] secret|password <line>', 'no username <word>',
-    'enable secret|password <line>', 'service password-encryption', 'hostname <word>',
-    'login [local]', 'no login', 'password <line>',
-    'transport input ssh|telnet|all|none [ssh|telnet]', 'exec-timeout <n> [<n>]', 'show ip ssh'
-  ]);
+    'no ip nat inside source list <word> [pool <word> [overload]]', 'no ip nat inside source list <word> interface <if> [overload]'],
+    'exec': ['clear ip nat translation *', 'show ip nat translations|statistics']
+  });
+  const SSH_GRAMMAR=window.LabShared.cliGrammar({
+    'config': ['ip domain-name <word>', 'ip domain name <word>', 'no ip domain-name [<word>]', 'no ip domain name [<word>]',
+      'ip ssh version 1|2', 'ip ssh time-out <n>', 'ip ssh authentication-retries <n>', 'no ip ssh version [1|2]',
+      'crypto key generate rsa [general-keys] [modulus <n>]', 'crypto key zeroize rsa',
+      'username <word> [privilege <n>] secret|password <line>', 'no username <word>',
+      'enable secret|password <line>', 'service password-encryption', 'hostname <word>'],
+    'line': ['login [local]', 'no login', 'password <line>', 'exec-timeout <n> [<n>]'],
+    'vty': ['transport input ssh|telnet|all|none [ssh|telnet]'],
+    'exec': ['show ip ssh']
+  });
+  /* the kind of interface a router's interface record is, as the grammar's
+     mode tag: a sub-interface (g0/1.10), a loopback, a serial, or Ethernet */
+  function ifKind(f){
+    const n=String(f&&f.name||'');
+    if((f&&f.parent)||/\.\d+$/.test(n)) return 'sub';
+    if((f&&f.loopback)||/^lo/i.test(n)) return 'lo';
+    if((f&&f.serial)||/^s/i.test(n)) return 'ser';
+    return 'eth';
+  }
 
   function ac6Parse(str){
     const t=String(str||'').trim().toLowerCase();
@@ -959,6 +976,7 @@
 
   window.NetRouter={
     ACL_GRAMMAR:ACL_GRAMMAR,
+    ifKind:ifKind,
     NAT_GRAMMAR:NAT_GRAMMAR,
     SSH_GRAMMAR:SSH_GRAMMAR,
     ac6Parse:ac6Parse,

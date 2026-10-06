@@ -1455,24 +1455,42 @@ const RL_KW={
 };
 /* Every command rlCli understands, by shape. A line that fits none of them
    gets IOS's caret (see cliGrammar in lab-shared.js). */
-const RL_GRAMMAR=LabShared.cliGrammar([
-  'enable', 'configure [terminal]', 'end', 'exit', 'cls', 'clear',
-  'show ip route', 'show ip interface [brief]', 'show interfaces <if>', 'show controllers <if>', 'show running-config',
-  'ping <ip>', 'username <word> password|secret <line>', 'no username <word>', 'hostname <word>',
-  'interface <if>', 'encapsulation ppp|hdlc', 'ppp authentication chap|pap', 'no ppp authentication [chap|pap]',
-  'clock rate <n>', 'no clock rate [<n>]', 'bandwidth <n>', 'description <line>', 'shutdown', 'no shutdown',
-  'ip address <ip> <ip>', 'no ip address [<ip> <ip>]',
-  'ip route <ip> <ip> <ip>', 'ip route <ip> <ip> <if> [<ip>]', 'no ip route <ip> <ip> <ip>', 'no ip route <ip> <ip> <if> [<ip>]'
-]);
-function rlCli(d,line){
+const RL_GRAMMAR=LabShared.cliGrammar({
+  'any': ['cls', 'clear'],
+  'exec': ['enable', 'configure [terminal]',
+    'show ip route', 'show ip interface [brief]', 'show interfaces <if>', 'show controllers <if>', 'show running-config',
+    'ping <ip>'],
+  'cfg exec': ['exit'],
+  'cfg': ['end'],
+  'config': ['username <word> password|secret <line>', 'no username <word>', 'hostname <word>', 'interface <if>',
+    'ip route <ip> <ip> <ip>', 'ip route <ip> <ip> <if> [<ip>]', 'no ip route <ip> <ip> <ip>', 'no ip route <ip> <ip> <if> [<ip>]'],
+  'if': ['bandwidth <n>', 'description <line>', 'shutdown', 'no shutdown'],
+  'routed': ['ip address <ip> <ip>', 'no ip address [<ip> <ip>]'],
+  /* PPP, HDLC and the clock live only on a serial interface: typed on a
+     Gigabit port they are refused, as on a real router */
+  'ser': ['encapsulation ppp|hdlc', 'ppp authentication chap|pap', 'no ppp authentication [chap|pap]',
+    'clock rate <n>', 'no clock rate [<n>]']
+});
+/* where the console is, as the grammar's mode tags: the current mode first,
+   then (config), which a sub-mode falls back to */
+const RL_CONFIG=['cfg','config'];
+function rlLevels(d){
+  if(d.cm==='if'){ const p=d.ports[d.ci]; return [['cfg','if','routed',p&&p.serial?'ser':'eth'], RL_CONFIG]; }
+  if(d.cm==='conf') return [RL_CONFIG];
+  return [['exec']];
+}
+function rlCli(d,line,lv){
   const t=line.trim().replace(/\s+/g,' ');
   if(!t) return '';
   const pp=LabShared.cliPipe(rlPromptFor(d), line);
-  if(pp) return pp.err||LabShared.cliFilter(rlCli(d,pp.base),pp);
-  const bad=LabShared.cliCheck(RL_GRAMMAR, rlPromptFor(d), line);
-  if(bad) return bad;
-  /* "do" runs an exec command from any configuration mode */
-  if(/^do\s/i.test(t)) return rlCli(d, t.slice(3));
+  if(pp) return pp.err||LabShared.cliFilter(rlCli(d,pp.base,lv),pp);
+  /* refused unless it belongs in this mode; a global command typed in
+     (config-if) drops back to (config) first, as IOS does */
+  const v=LabShared.cliCheck(RL_GRAMMAR, rlPromptFor(d), line, {levels:lv||rlLevels(d), hint:true, device:'router'});
+  if(typeof v==='string') return v;
+  if(v&&v.up){ d.cm='conf'; d.ci=null; }
+  /* "do" runs an EXEC command from a configuration mode */
+  if(/^do\s/i.test(t)) return rlCli(d, t.slice(3), [['exec']]);
   const w=t.toLowerCase().split(' ');
   const M=(tok,cand)=>tok&&cand.startsWith(tok);
 
@@ -1531,16 +1549,13 @@ function rlCli(d,line){
 
   if(d.cm==='if'){
     const sp=d.ports[d.ci];
-    const SER_ONLY='% '+sp.name+' is not a serial interface — encapsulation, PPP and clock rate are set on S0/0/0 or S0/0/1';
     if(M(w[0],'encapsulation')){
-      if(!sp.serial) return SER_ONLY;
       const e=w[1]&&M(w[1],'ppp')?'ppp':w[1]&&M(w[1],'hdlc')?'hdlc':null;
       if(!e) return '% Usage: encapsulation ppp | encapsulation hdlc';
       sp.encap=e; if(e==='hdlc') sp.auth=null;
       return '';
     }
     if(M(w[0],'ppp')&&w[1]&&M(w[1],'authentication')){
-      if(!sp.serial) return SER_ONLY;
       if(sp.encap!=='ppp') return '% PPP commands need "encapsulation ppp" on this interface first';
       if(w[2]&&M(w[2],'chap')){ sp.auth='chap'; return ''; }
       if(w[2]&&M(w[2],'pap')) return '% This lab models CHAP — "ppp authentication chap"';
@@ -1548,7 +1563,6 @@ function rlCli(d,line){
     }
     if(w[0]==='no'&&w[1]&&M(w[1],'ppp')){ sp.auth=null; return ''; }
     if(M(w[0],'clock')&&w[1]&&M(w[1],'rate')){
-      if(!sp.serial) return SER_ONLY;
       const n=+w[2];
       if(!CLOCK_RATES.includes(n)) return '% Invalid clock rate — e.g. 64000, 128000 or 2000000';
       if(rlSerialRole(d,d.ci)==='DTE') return '% This command applies only to DCE interfaces';
@@ -1689,8 +1703,11 @@ function rlRouterPing(d,dst){
 function rlPromptFor(d){
   return d.name+(d.cm==='conf'?'(config)#':d.cm==='if'?'(config-if)#':'#');
 }
+/* a configuration form's commands, typed as a learner would have to:
+   wrapped in configure terminal / end, valid from whatever mode the console
+   is in (LabShared.cliConfigSeq) */
 function rlEchoCli(d,cmds){
-  cmds.forEach(c=>{
+  LabShared.cliConfigSeq(d.cm==='exec', cmds).forEach(c=>{
     d.log.push(rlPromptFor(d)+' '+c);
     const out=rlCli(d,c);
     if(out) out.split('\n').forEach(l=>d.log.push(l));
@@ -2989,6 +3006,7 @@ const RLCON=LabShared.createConsoles({
   id:'rl', mainIds:{input:'rl-term-in', log:'rl-term-log', prompt:'rl-term-prompt'},
   device:id=>rlById(id), hasCli:d=>d.type==='router',
   prompt:d=>rlPromptFor(d), run:(d,line)=>rlCli(d,line), keywords:()=>RL_KW, escape:s=>rlEsc(s), logLines:300,
+  canStart:(d,l)=>LabShared.cliCanStart(RL_GRAMMAR,l,rlLevels(d)),
   after:()=>{ rlRenderCanvas(); rlRefreshCfg(); }, dockAfter:'rl-cfg'
 });
 function rlRenderTerm(){ RLCON.refresh(); }

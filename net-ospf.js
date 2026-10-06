@@ -91,20 +91,21 @@
 
   /* The shapes of the commands ospfCli understands, for a page that checks
      lines against a grammar before running them (lab-shared.js cliCheck). */
-  const GRAMMAR=window.LabShared.cliGrammar([
-    'router ospf <n>', 'no router ospf <n>', 'ipv6 router ospf <n>', 'no ipv6 router ospf <n>',
-    'ipv6 unicast-routing', 'no ipv6 unicast-routing',
-    'router-id <ip>', 'no router-id [<ip>]',
-    'network <ip> <ip> area <area>', 'no network <ip> <ip> [area <area>]',
-    'passive-interface <if>', 'no passive-interface <if>',
-    'default-information originate [always]', 'no default-information originate [always]',
-    'auto-cost reference-bandwidth <n>', 'log-adjacency-changes [detail]',
-    'ip ospf <n> area <area>', 'ip ospf cost <n>', 'no ip ospf [<n> area <area>]', 'no ip ospf cost [<n>]',
-    'ipv6 ospf <n> area <area>', 'ipv6 ospf cost <n>', 'no ipv6 ospf [<n> area <area>]', 'no ipv6 ospf cost [<n>]',
-    'clear ip|ipv6 ospf process',
-    'show ip|ipv6 ospf [neighbor]', 'show ip|ipv6 ospf interface [brief]', 'show ip|ipv6 ospf interface <if>',
-    'show ip|ipv6 protocols'
-  ]);
+  /* grouped by mode: 'router' is any (config-router) — RIP or OSPF — 'ospf'
+     an OSPFv2 process only, 'rtr' the OSPFv3 process (config-rtr) */
+  const GRAMMAR=window.LabShared.cliGrammar({
+    'config': ['router ospf <n>', 'no router ospf <n>', 'ipv6 router ospf <n>', 'no ipv6 router ospf <n>',
+      'ipv6 unicast-routing', 'no ipv6 unicast-routing'],
+    'ospf rtr': ['router-id <ip>', 'no router-id [<ip>]', 'auto-cost reference-bandwidth <n>', 'log-adjacency-changes [detail]'],
+    'router rtr': ['passive-interface <if>', 'no passive-interface <if>',
+      'default-information originate [always]', 'no default-information originate [always]'],
+    'ospf': ['network <ip> <ip> area <area>', 'no network <ip> <ip> [area <area>]'],
+    'routed': ['ip ospf <n> area <area>', 'ip ospf cost <n>', 'no ip ospf [<n> area <area>]', 'no ip ospf cost [<n>]',
+      'ipv6 ospf <n> area <area>', 'ipv6 ospf cost <n>', 'no ipv6 ospf [<n> area <area>]', 'no ipv6 ospf cost [<n>]'],
+    'exec': ['clear ip|ipv6 ospf process',
+      'show ip|ipv6 ospf [neighbor]', 'show ip|ipv6 ospf interface [brief]', 'show ip|ipv6 ospf interface <if>',
+      'show ip|ipv6 protocols']
+  });
   function create(world){
     const fullIf=world.fullIf||function(n){ return n.replace(/^Gi/,'GigabitEthernet').replace(/^S(?=\d)/,'Serial').replace(/^Lo(?=\d)/,'Loopback'); };
     const ifUp=world.ifUp||function(r,f){ return !!f.up; };

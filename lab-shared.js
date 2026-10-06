@@ -210,19 +210,26 @@
      when more than one keyword matches. Returns the new input value;
      callers are expected to also preventDefault the Tab keypress
      themselves, since this only computes the replacement text. */
-  function tabComplete(kwTree, val, onAmbiguous) {
+  /* allow(words), when given, keeps only completions that can begin a valid
+     command in the console's current mode (cliCanStart) — Tab at # offers
+     "show" but not "switchport", as on IOS. "do " in front completes the
+     EXEC command after it. */
+  function tabComplete(kwTree, val, onAmbiguous, allow) {
+    var dm = allow ? /^(\s*do\s+)(.*)$/i.exec(val) : null;
+    if (dm) return 'do ' + tabComplete(kwTree, dm[2], onAmbiguous, function (ws) { return allow(['do'].concat(ws)); });
+    var ok = function (ws) { return !allow || allow(ws); };
     var endsSpace = /\s$/.test(val);
     var parts = val.trim().length ? val.trim().split(/\s+/) : [];
     var walk = endsSpace ? parts : parts.slice(0, -1);
     var node = kwTree, consumed = [];
     for (var i = 0; i < walk.length; i++) {
       var p = walk[i];
-      var ks = Object.keys(node).filter(function (k) { return k.indexOf(p.toLowerCase()) === 0; });
+      var ks = Object.keys(node).filter(function (k) { return k.indexOf(p.toLowerCase()) === 0 && ok(consumed.concat([k])); });
       if (ks.length === 1) { node = node[ks[0]]; consumed.push(ks[0]); }
       else return val;
     }
     var partial = endsSpace ? '' : (parts[parts.length - 1] || '').toLowerCase();
-    var cands = Object.keys(node).filter(function (k) { return k.indexOf(partial) === 0; });
+    var cands = Object.keys(node).filter(function (k) { return k.indexOf(partial) === 0 && ok(consumed.concat([k])); });
     if (!cands.length) return val;
     var head = consumed.join(' ') + (consumed.length ? ' ' : '');
     if (cands.length === 1) return head + cands[0] + ' ';
@@ -413,8 +420,25 @@
                     parses it, e.g. an ACE)
        [ ... ]      optional
        ( a b | c )  one of several sequences
-     Shape only, never mode: the handlers already say "select an interface
-     first" and the like, which helps a learner more than a caret would. */
+
+     MODES. A grammar may be a plain list (every pattern fits in every mode —
+     the OSPF Cost drill's read-only CLI) or an object whose keys are mode
+     tags and whose values are lists: {'exec': [...], 'config': [...],
+     'if': [...]}; a key may hold several tags ('cfg exec': ['exit']). A
+     pattern fits where the current mode carries one of its tags:
+       exec      privileged EXEC (#)            config  global configuration
+       cfg       every configuration mode       any     everywhere (lab-only cls)
+       if        any interface                  routed  a Layer 3 interface
+       eth       a router's Ethernet port       ser     a serial interface
+       sub       a sub-interface (g0/0.10)      lo      a loopback
+       l2        a switch's Layer 2 interface   swport  a switch port or range
+       po        a switch port-channel          svi     interface vlan N
+       vlan      (config-vlan)    router  (config-router)    rtr  (config-rtr)
+       line      (config-line)    nacl-std / nacl-ext / nacl6   the ACL modes
+     cliCheck takes the mode as LEVELS: the current mode's tags first, then
+     the mode IOS falls back to — a sub-mode's command list is searched,
+     then global configuration's, so "hostname R2" typed in (config-if)
+     runs and leaves you in (config). */
   var IF_TYPES = ['fastethernet', 'gigabitethernet', 'ethernet', 'serial', 'loopback', 'port-channel', 'vlan'];
   var V6_RE = /^[0-9a-f]*:[0-9a-f:.]*$/i, IFNUM_RE = /^\d+(\/\d+)*(\.\d+)?$/;
   function ifWord(w) { w = w.toLowerCase(); return IF_TYPES.some(function (t) { return t.indexOf(w) === 0; }); }
@@ -438,7 +462,15 @@
     }
     return seq([]);
   }
-  function cliGrammar(patterns) { return patterns.map(cliCompile); }
+  function cliGrammar(spec) {
+    if (Array.isArray(spec)) return spec.map(function (p) { return { tags: null, seq: cliCompile(p) }; });
+    var out = [];
+    Object.keys(spec).forEach(function (k) {
+      var tags = k.split(/\s+/);
+      spec[k].forEach(function (p) { out.push({ tags: tags, seq: cliCompile(p) }); });
+    });
+    return out;
+  }
   function typeEnds(ty, toks, i) {
     var t = toks[i], n = toks.length, m;
     switch (ty) {
@@ -483,21 +515,225 @@
     });
     return out;
   }
-  /* null when the line fits (or only stops short); otherwise IOS's caret
-     error. The caret lines up with the echo every lab prints, "<prompt>
-     <line>", so pass the prompt that was shown. A leading "do" is skipped. */
-  function cliCheck(grammar, prompt, line) {
-    var raw = String(line == null ? '' : line), toks = raw.trim().split(/\s+/).filter(Boolean);
-    if (!toks.length) return null;
-    var shift = toks.length > 1 && toks[0].toLowerCase() === 'do' ? 1 : 0;
-    var t = toks.slice(shift), ctx = { toks: t, far: -1, short: false };
-    for (var k = 0; k < grammar.length; k++) {
-      var ends = matchSeq(grammar[k], 0, 0, ctx);
-      if (ends.indexOf(t.length) >= 0) return null;
+  function patFits(pat, level) {
+    if (!pat.tags || !level) return true;
+    for (var i = 0; i < pat.tags.length; i++) if (pat.tags[i] === 'any' || level.indexOf(pat.tags[i]) >= 0) return true;
+    return false;
+  }
+  /* how far toks get against the patterns that fit level: full, short, far */
+  function cliTry(grammar, toks, level) {
+    var ctx = { toks: toks, far: -1, short: false }, full = false;
+    for (var k = 0; k < grammar.length && !full; k++) {
+      if (!patFits(grammar[k], level)) continue;
+      var ends = matchSeq(grammar[k].seq, 0, 0, ctx);
+      if (ends.indexOf(toks.length) >= 0) full = true;
       ends.forEach(function (e) { if (e > ctx.far) ctx.far = e; });
     }
-    if (ctx.short) return null;
-    return cliCaretAt(prompt, raw, Math.max(0, ctx.far) + shift);
+    return { full: full, short: !full && ctx.short, far: ctx.far };
+  }
+  /* The tags of every pattern the line fits fully, wherever it belongs —
+     what the learning labs' hint is built from — and the command's leading
+     keywords as written in the pattern ("clock rate", "show"). */
+  function cliWhere(grammar, toks) {
+    var tags = {}, name = null;
+    grammar.forEach(function (pat) {
+      var ctx = { toks: toks, far: -1, short: false };
+      if (matchSeq(pat.seq, 0, 0, ctx).indexOf(toks.length) < 0) return;
+      (pat.tags || ['any']).forEach(function (t) { tags[t] = 1; });
+      if (!name) {
+        /* the leading keywords, spelled out ("sh ip ro" -> "show ip route"),
+           walked against what was typed: past a leading "no" and an ACL
+           sequence number, stopping at the first value */
+        var kws = [], ti = 0, seq = pat.seq;
+        for (var i = 0; i < seq.length && kws.length < 3 && ti < toks.length; i++) {
+          var n = seq[i], tok = toks[ti].toLowerCase();
+          if (n.t === 'opt') { if (/^\d+$/.test(tok) && !kws.length) ti++; continue; }
+          if (n.t !== 'el') break;
+          var hit = null;
+          n.alts.forEach(function (a) { if (!hit && a.kw && a.kw.indexOf(tok) === 0) hit = a.kw; });
+          if (!hit) break;
+          ti++;
+          if (hit === 'no' && !kws.length) continue;
+          kws.push(hit);
+        }
+        name = kws.join(' ');
+      }
+    });
+    return { tags: tags, name: name };
+  }
+  /* The learning labs' one-line hint under IOS's error: where the command
+     WOULD have worked and how to get there. The trainer passes hint:false —
+     the exam gives only the caret. Per tag: what the command is, how to get
+     to where it belongs (go), and — for an interface or ACL of the wrong kind —
+     what is wrong with the one the console is in. A page may override a
+     tag's "go" (ctx.hints, e.g. "router rip" on a RIP round). */
+  var CLI_HINTS = {
+    ser: { what: 'a serial-interface command', go: 'select a serial interface ("interface s0/0/0")', wrong: 'this interface is not serial' },
+    sub: { what: 'a sub-interface command', go: 'select a sub-interface ("interface g0/0.10")', wrong: 'it goes on a sub-interface ("interface g0/0.10"), not on this interface' },
+    eth: { what: 'an Ethernet-interface command', go: 'select an Ethernet interface ("interface g0/0")', wrong: 'this interface is not Ethernet' },
+    lo: { what: 'a loopback command', go: 'select a loopback ("interface loopback 0")', wrong: 'this interface is not a loopback' },
+    svi: { what: 'an SVI command', go: 'select an SVI ("interface vlan 1")', wrong: 'it goes on an SVI ("interface vlan 1"), not on this interface' },
+    l2: { what: 'a Layer 2 switch-port command', go: 'select a switch port ("interface fa0/1")', wrong: 'this interface is Layer 3 (switchport commands belong on a switch port)' },
+    swport: { what: 'a switch-port command', go: 'select a switch port ("interface fa0/1")', wrong: 'it goes on a physical switch port (or a range of them), not on this interface' },
+    routed: { what: 'a Layer 3 interface command', go: 'select an interface ("interface g0/1")', wrong: 'a switch port is Layer 2 (the address goes on an SVI, "interface vlan 1")' },
+    if: { what: 'an interface command', go: 'select an interface ("interface g0/1")' },
+    vlan: { what: 'a VLAN command', go: 'enter the VLAN ("vlan 10")' },
+    rip: { what: 'a RIP command', go: 'enter the RIP process ("router rip")', wrong: 'this is not the RIP process (RIP commands go under "router rip")' },
+    ospf: { what: 'an OSPF command', go: 'enter the OSPF process ("router ospf 1")', wrong: 'this is not an OSPFv2 process (they go under "router ospf 1")' },
+    router: { what: 'a routing-process command', go: 'enter the routing process (e.g. "router ospf 1")' },
+    rtr: { what: 'an OSPFv3 process command', go: 'enter the process ("ipv6 router ospf 1")', wrong: 'this is not the OSPFv3 process ("ipv6 router ospf 1")' },
+    line: { what: 'a line command', go: 'enter the lines ("line vty 0 4")' },
+    vty: { what: 'a vty-line command', go: 'enter the vty lines ("line vty 0 4")', wrong: 'it goes on the vty lines ("line vty 0 4"), not the console line' },
+    'nacl-std': { what: 'a standard access-list entry', go: 'open the list ("ip access-list standard NAME")', wrong: 'this list is not a standard list' },
+    'nacl-ext': { what: 'an extended access-list entry', go: 'open the list ("ip access-list extended NAME")', wrong: 'this list is not an extended list' },
+    nacl6: { what: 'an IPv6 access-list entry', go: 'open the list ("ipv6 access-list NAME")', wrong: 'this is not an IPv6 list' }
+  };
+  var CLI_SWITCH_GO = { if: 'select an interface ("interface fa0/1")' };
+  var CLI_IF_TAGS = ['if', 'routed', 'eth', 'ser', 'sub', 'lo', 'svi', 'l2', 'swport', 'po'];
+  var CLI_ACL_TAGS = ['nacl-std', 'nacl-ext', 'nacl6'];
+  var CLI_RT_TAGS = ['router', 'rip', 'ospf', 'rtr'];
+  var CLI_LN_TAGS = ['line', 'vty', 'con'];
+  var CLI_HINT_ORDER = ['ser', 'sub', 'eth', 'lo', 'svi', 'l2', 'swport', 'routed', 'if', 'nacl-std', 'nacl-ext', 'nacl6', 'vty', 'line', 'rip', 'ospf', 'router', 'rtr', 'vlan', 'config', 'cfg', 'exec'];
+  /* Commands of the OTHER kind of device: refused everywhere here (this
+     device's grammar has no mode for them), and worth saying why — typing
+     "switchport" on a router port is the classic version of this mistake.
+     ctx.device picks the list. */
+  var CLI_FOREIGN = {
+    router: {
+      switchport: 'is a switch command \u2014 a router\u2019s interfaces are Layer 3 and have no switchport settings',
+      'channel-group': 'is a switch command (EtherChannel) \u2014 it bundles switch ports, not router interfaces',
+      'spanning-tree': 'is a switch command \u2014 routers do not run spanning tree',
+      vlan: 'is a switch command \u2014 on a router a VLAN is a sub-interface ("interface g0/0.10" then "encapsulation dot1Q 10")'
+    },
+    switch: {
+      router: 'is a router command \u2014 a Layer 2 switch does not run a routing protocol',
+      encapsulation: 'is a router command \u2014 a switch port has no encapsulation to set (a trunk is "switchport mode trunk")',
+      clock: 'is a router serial-interface command \u2014 a switch has no serial ports',
+      ppp: 'is a router serial-interface command \u2014 a switch has no serial ports',
+      network: 'is a routing-process command \u2014 a Layer 2 switch has no routing process'
+    }
+  };
+  function cliForeign(toks, ctx) {
+    var list = ctx.device && CLI_FOREIGN[ctx.device], t = toks[0] && toks[0].toLowerCase();
+    if (!list || !t || t.length < 2) return '';
+    var keys = Object.keys(list).filter(function (k) { return k.indexOf(t) === 0; });
+    return keys.length === 1 ? '"' + keys[0] + '" ' + list[keys[0]] : '';
+  }
+  function cliHint(grammar, toks, levels, ctx, isDo) {
+    var w = cliWhere(grammar, toks);
+    if (!Object.keys(w.tags).length) return cliForeign(toks, ctx);   /* fits nowhere: the other device's, or just the caret */
+    var here = levels[0], has = function (t) { return here.indexOf(t) >= 0; };
+    var inCfg = has('cfg'), inIf = has('if'), inAcl = CLI_ACL_TAGS.some(has), inRt = CLI_RT_TAGS.some(has), inLn = CLI_LN_TAGS.some(has);
+    var cmd = '"' + (w.name || toks.join(' ')) + '"';    /* "no 10" has no keyword of its own to name */
+    if (isDo) return '"do" is only needed in configuration mode \u2014 at # just type ' + cmd;
+    var over = ctx.hints || {};
+    for (var i = 0; i < CLI_HINT_ORDER.length; i++) {
+      var t = CLI_HINT_ORDER[i];
+      if (!w.tags[t]) continue;
+      if (t === 'exec') {
+        if (!inCfg) continue;
+        return cmd + ' is an EXEC command \u2014 from configuration mode type: do ' + toks.join(' ');
+      }
+      if (t === 'cfg') return cmd + ' only works in configuration mode \u2014 you are already at the privileged EXEC prompt (#)';
+      if (t === 'config') return cmd + ' is a global configuration command \u2014 type "configure terminal" first';
+      var isIf = CLI_IF_TAGS.indexOf(t) >= 0, isAcl = CLI_ACL_TAGS.indexOf(t) >= 0, isRt = CLI_RT_TAGS.indexOf(t) >= 0, isLn = CLI_LN_TAGS.indexOf(t) >= 0;
+      if (isIf && !inIf) t = 'if';               /* outside an interface, which kind is detail */
+      var h = CLI_HINTS[t], go = (over[t] && over[t].go) || (ctx.device === 'switch' && CLI_SWITCH_GO[t]) || h.go;
+      if (!inCfg) return cmd + ' is a configuration command \u2014 first "configure terminal", then ' + go;
+      if (h.wrong && ((isIf && inIf) || (isAcl && inAcl) || (isRt && inRt) || (isLn && inLn))) return cmd + ' is ' + h.what + ' \u2014 ' + h.wrong;
+      return cmd + ' is ' + h.what + ' \u2014 first ' + go;
+    }
+    return '';
+  }
+  /* The result of checking a line:
+       null         it fits the current mode (or only stops short of it, so a
+                    handler's usage message can answer)
+       {up: k}      it fits the k-th fallback level instead — the page moves
+                    the device up to that mode, then runs it
+       a string     IOS's error: the caret under the first word that fits no
+                    pattern of the current mode or its fallbacks, then the
+                    learning labs' hint
+     The caret lines up with the echo every lab prints, "<prompt> <line>", so
+     pass the prompt that was shown. Without ctx every pattern fits (the
+     shape-only check). ctx.strict (the trainer) answers a line that only
+     stops short with IOS's "% Incomplete command." instead of letting a
+     handler's friendlier usage message through. A leading "do" is accepted only in a configuration
+     mode, and what follows it is checked as an EXEC command. */
+  function cliCheck(grammar, prompt, line, ctx) {
+    var raw = String(line == null ? '' : line), toks = raw.trim().split(/\s+/).filter(Boolean);
+    if (!toks.length) return null;
+    var levels = ctx && ctx.levels ? ctx.levels : [null];
+    var isDo = toks.length > 1 && toks[0].toLowerCase() === 'do';
+    var hint = function (t, at, d) {
+      var h = ctx && ctx.hint ? cliHint(grammar, t, levels, ctx, d) : '';
+      return cliCaretAt(prompt, raw, at) + (h ? '\n\u2192 ' + h : '');
+    };
+    if (isDo) {
+      var rest = toks.slice(1);
+      if (levels[0] && levels[0].indexOf('cfg') < 0) return hint(rest, 0, true);
+      var r = cliTry(grammar, rest, levels[0] ? ['exec'] : null);
+      if (r.full || r.short) return null;
+      return hint(rest, Math.max(0, r.far) + 1, false);
+    }
+    var far = -1, shortUp = false;
+    for (var k = 0; k < levels.length; k++) {
+      var res = cliTry(grammar, toks, levels[k]);
+      if (res.full) return k ? { up: k } : null;
+      if (res.short) {
+        if (k) { shortUp = true; continue; }
+        if (ctx && ctx.strict) return '% Incomplete command.';
+        /* A line that only stops short here usually wants its handler's usage
+           message — unless it is a complete command somewhere else ("ip nat
+           inside" at (config)#, where only "ip nat inside source ..." lives):
+           then it is in the wrong mode, and says so like any other. */
+        var ws = ctx && ctx.levels ? cliWhere(grammar, toks) : null;
+        if (!ws || !Object.keys(ws.tags).length) return null;
+        /* the same kind of mode (RIP's "network 10.0.0.0" under OSPF, which
+           is more likely an OSPF network missing its area) keeps the usage */
+        var fam = function (t) {
+          return CLI_IF_TAGS.indexOf(t) >= 0 ? 'if' : CLI_ACL_TAGS.indexOf(t) >= 0 ? 'acl'
+            : CLI_RT_TAGS.indexOf(t) >= 0 ? 'rt' : CLI_LN_TAGS.indexOf(t) >= 0 ? 'ln' : t;
+        };
+        var hereFam = levels[0].map(fam);
+        if (Object.keys(ws.tags).some(function (t) { return hereFam.indexOf(fam(t)) >= 0; })) return null;
+        var hs = ctx.hint ? cliHint(grammar, toks, levels, ctx, false) : '';
+        return '% Incomplete command.' + (hs ? '\n\u2192 ' + hs : '');
+      }
+      if (res.far > far) far = res.far;
+    }
+    if (shortUp) {
+      var hs = ctx && ctx.hint ? cliHint(grammar, toks, levels, ctx, false) : '';
+      return '% Incomplete command.' + (hs ? '\n→ ' + hs : '');
+    }
+    return hint(toks, Math.max(0, far), false);
+  }
+
+  /* Can these words begin a command valid in this mode (or one its
+     sub-mode falls back to)? What Tab completion is filtered by. */
+  function cliCanStart(grammar, line, levels) {
+    var toks = String(line).trim().split(/\s+/).filter(Boolean);
+    if (!toks.length) return true;
+    if (toks[0].toLowerCase() === 'do' && toks.length > 1) {
+      if (levels[0].indexOf('cfg') < 0) return false;
+      var r = cliTry(grammar, toks.slice(1), ['exec']);
+      return r.full || r.short;
+    }
+    for (var k = 0; k < levels.length; k++) {
+      var r2 = cliTry(grammar, toks, levels[k]);
+      if (r2.full || r2.short) return true;
+    }
+    return false;
+  }
+
+  /* What a configuration form types for the learner: its commands wrapped
+     in "configure terminal" (when the console is at #) and "end", so they are
+     valid in whatever mode the console was left in — a form's own leading
+     "configure terminal" / trailing "end" are dropped and re-added. A form's
+     "interface X" typed from another sub-mode falls back to (config) as on
+     IOS, so no form needs to know where the console is. */
+  function cliConfigSeq(inExec, cmds) {
+    var body = cmds.filter(function (c) { return !/^\s*(conf(igure)?(\s+t(erminal)?)?|end)\s*$/i.test(c); });
+    return (inExec ? ['configure terminal'] : []).concat(body, ['end']);
   }
 
   /* ---------- output filters: show ... | include|exclude|begin|section ----------
@@ -678,6 +914,8 @@
        dockAfter   id of the element the pins dock under when the window is
                    too narrow to float them beside the page
        isError(line), escape(s), btnClass, logLines   (optional)
+       canStart(d, line)  can these words begin a command in d's current
+                   mode? (LabShared.cliCanStart) — Tab completes only those
        windows     how many pinned windows the right-hand gutter is split
                    into, top to bottom (default 2). Each is a snap zone: a
                    pin fills its own band of the screen and can't be dragged
@@ -989,7 +1227,7 @@
       if (!d) return;
       var log = term.querySelector('.term-log'), pr = term.querySelector('.term-prompt');
       log.innerHTML = (d.log || []).slice(-(cfg.logLines || 400)).map(function (l) {
-        return '<div class="tl' + (isErr(l) ? ' terr' : '') + '">' + esc(l) + '</div>';
+        return '<div class="tl' + (isErr(l) ? ' terr' : l.charAt(0) === '→' ? ' thint' : '') + '">' + esc(l) + '</div>';
       }).join('');
       log.scrollTop = log.scrollHeight;
       if (pr) pr.textContent = cfg.prompt(d);
@@ -1037,7 +1275,8 @@
         else { d.hi = d.hist.length; inp.value = ''; }
       } else if (e.key === 'Tab') {
         e.preventDefault();
-        inp.value = tabComplete(cfg.keywords(d), inp.value, function (c) { d.log.push(c.join('   ')); refresh(); });
+        inp.value = tabComplete(cfg.keywords(d), inp.value, function (c) { d.log.push(c.join('   ')); refresh(); },
+          cfg.canStart ? function (ws) { return cfg.canStart(d, ws.join(' ')); } : null);
       }
     }
     /* Clicking a pinned device on the canvas lands in its pinned console. */
@@ -1149,6 +1388,8 @@
     createConsoles: createConsoles,
     cliGrammar: cliGrammar,
     cliCheck: cliCheck,
+    cliConfigSeq: cliConfigSeq,
+    cliCanStart: cliCanStart,
     cliPipe: cliPipe,
     cliFilter: cliFilter,
     isValidIP: isValidIP,

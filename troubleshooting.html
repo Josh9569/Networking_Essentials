@@ -239,7 +239,7 @@ function tsPortName(dev,i){ return dev.type==='router'?dev.ifaces[i].name:dev.ty
 /* The switch engine, in strict-VLAN mode: a switch carries only VLANs in
    its own database, so "VLAN missing" is a real fault here. */
 const SWE=NetSwitch.create({
-  strictVlans:true,
+  strictVlans:true, hints:false,   /* the exam gives IOS's caret and nothing more */
   devices:()=>tsDevices, cables:()=>tsCables, byId:id=>tsById(id),
   portCable:(id,i)=>tsPortCable(id,i), otherEnd:(c,id)=>tsOther(c,id),
   endUp:(d,i)=>d.type==='router'?!!d.ifaces[i].up:true
@@ -616,33 +616,54 @@ function tsSsh(pc,ipStr,creds){
 const TS_SLOTS={in4:'aclIn', out4:'aclOut', in6:'acl6In', out6:'acl6Out', vty4:'vtyAcl', vty6:'vty6Acl'};
 const TS_CLOCKS=[1200,2400,4800,9600,19200,38400,56000,64000,72000,125000,128000,148000,250000,500000,800000,1000000,1300000,2000000,4000000];
 const SYSLOG=/^%[A-Za-z][A-Za-z0-9_]*-\d-[A-Z0-9_]+:/;
-const EXEC_ONLY='% Invalid input detected — that is a configuration command; enter "configure terminal" first';
 /* Every router command, by shape: this page's base plus the shared
    engines' own lists. A line that fits none of them gets IOS's caret and
    never reaches a handler (see cliGrammar in lab-shared.js). Keep the base
    list in step with tsRtrCli/tsIfCli/tsRouteCli/tsRtrShow. */
-const TS_RGRAMMAR=LabShared.cliGrammar([
-  'enable', 'disable', 'configure [terminal]', 'end', 'exit', 'cls', 'clear',
-  'show running-config', 'show startup-config', 'show interfaces [<if>]', 'show controllers <if>',
-  'show cdp neighbors [detail]', 'show vlans',
-  'show ip|ipv6 route [ospf|static|connected]', 'show ip|ipv6 interface [brief]', 'show ip|ipv6 interface <if>',
-  'ping <addr> [source <if>]', 'copy running-config startup-config', 'write [memory]',
-  'interface <if>', 'no interface <if>', 'line vty <n> [<n>]', 'line console <n>', 'logging synchronous',
-  'ip address <ip> <ip>', 'no ip address [<ip> <ip>]',
-  'ipv6 address <v6p>', 'ipv6 address <v6> link-local', 'no ipv6 address [<v6p>]', 'no ipv6 address <v6> link-local',
-  'ipv6 enable', 'no ipv6 enable', 'shutdown', 'no shutdown',
-  'encapsulation dot1q <n> [native]', 'encapsulation ppp|hdlc', 'no encapsulation [ppp|hdlc]', 'no encapsulation dot1q [<n> [native]]',
-  'ppp authentication chap|pap', 'no ppp authentication [chap|pap]', 'clock rate <n>', 'no clock rate [<n>]',
-  'description <line>', 'no description', 'bandwidth <n>', 'duplex auto|full|half', 'speed auto|<n>', 'mtu <n>', 'delay <n>',
-  'ip route <ip> <ip> <ip> [<n>]', 'ip route <ip> <ip> <if> [<ip>] [<n>]', 'no ip route <ip> <ip> [<ip>|<if>]',
-  'ipv6 route <v6p> <v6>', 'ipv6 route <v6p> <if> [<v6>]', 'no ipv6 route <v6p> [<v6>|<if>]',
-  'banner motd <line>', 'ip domain-lookup', 'no ip domain-lookup', 'ip cef', 'ipv6 cef', 'ip routing',
-  'cdp run', 'no cdp run', 'security <line>'
-]).concat(NetOspf.GRAMMAR, NetRouter.ACL_GRAMMAR, NetRouter.NAT_GRAMMAR, NetRouter.SSH_GRAMMAR);
+const TS_RGRAMMAR=LabShared.cliGrammar({
+  'any': ['cls', 'clear'],
+  'exec': ['enable', 'disable', 'configure [terminal]',
+    'show running-config', 'show startup-config', 'show interfaces [<if>]', 'show controllers <if>',
+    'show cdp neighbors [detail]', 'show vlans',
+    'show ip|ipv6 route [ospf|static|connected]', 'show ip|ipv6 interface [brief]', 'show ip|ipv6 interface <if>',
+    'ping <addr> [source <if>]', 'copy running-config startup-config', 'write [memory]'],
+  'cfg exec': ['exit'],
+  'cfg': ['end'],
+  'config': ['interface <if>', 'no interface <if>', 'line vty <n> [<n>]', 'line console <n>',
+    'ip route <ip> <ip> <ip> [<n>]', 'ip route <ip> <ip> <if> [<ip>] [<n>]', 'no ip route <ip> <ip> [<ip>|<if>]',
+    'ipv6 route <v6p> <v6>', 'ipv6 route <v6p> <if> [<v6>]', 'no ipv6 route <v6p> [<v6>|<if>]',
+    'banner motd <line>', 'ip domain-lookup', 'no ip domain-lookup', 'ip cef', 'ipv6 cef', 'ip routing',
+    'cdp run', 'no cdp run', 'security <line>'],
+  'line': ['logging synchronous'],
+  'if': ['shutdown', 'no shutdown', 'description <line>', 'no description', 'bandwidth <n>', 'mtu <n>', 'delay <n>'],
+  'routed': ['ip address <ip> <ip>', 'no ip address [<ip> <ip>]',
+    'ipv6 address <v6p>', 'ipv6 address <v6> link-local', 'no ipv6 address [<v6p>]', 'no ipv6 address <v6> link-local',
+    'ipv6 enable', 'no ipv6 enable'],
+  'eth': ['duplex auto|full|half', 'speed auto|<n>'],
+  'sub': ['encapsulation dot1q <n> [native]', 'no encapsulation dot1q [<n> [native]]'],
+  'ser': ['encapsulation ppp|hdlc', 'no encapsulation [ppp|hdlc]',
+    'ppp authentication chap|pap', 'no ppp authentication [chap|pap]', 'clock rate <n>', 'no clock rate [<n>]']
+}).concat(NetOspf.GRAMMAR, NetRouter.ACL_GRAMMAR, NetRouter.NAT_GRAMMAR, NetRouter.SSH_GRAMMAR);
+/* where a router's console is, as the grammar's mode tags: the current
+   mode, then (config), which a sub-mode falls back to — "ip route" straight
+   after "router ospf 1" is legal, and leaves you in (config) */
+const TS_CONFIG=['cfg','config'];
+function tsRtrLevels(d){
+  if(d.cm==='if') return [['cfg','if','routed',NetRouter.ifKind(acIface(d,d.ci))], TS_CONFIG];
+  if(d.cm==='line') return [['cfg','line','vty'], TS_CONFIG];
+  if(d.cm==='con') return [['cfg','line','con'], TS_CONFIG];
+  if(d.cm==='nacl') return [['cfg','nacl-std'], TS_CONFIG];
+  if(d.cm==='xacl') return [['cfg','nacl-ext'], TS_CONFIG];
+  if(d.cm==='nacl6') return [['cfg','nacl6'], TS_CONFIG];
+  if(d.cm==='ospf') return [['cfg','router','ospf'], TS_CONFIG];
+  if(d.cm==='ospf6') return [['cfg','rtr'], TS_CONFIG];
+  if(d.cm==='conf') return [TS_CONFIG];
+  return [['exec']];
+}
 /* the switch engine's own list, plus what this page's wrapper adds */
-const TS_SGRAMMAR=NetSwitch.GRAMMAR.concat(LabShared.cliGrammar([
-  'ping <ip>', 'show cdp neighbors [detail]', 'show startup-config', 'copy running-config startup-config', 'write [memory]'
-]));
+const TS_SGRAMMAR=NetSwitch.GRAMMAR.concat(LabShared.cliGrammar({
+  'exec': ['ping <ip>', 'show cdp neighbors [detail]', 'show startup-config', 'copy running-config startup-config', 'write [memory]']
+}));
 function tsRtrPrompt(d){
   if(d.cm==='rsa') return 'How many bits in the modulus [512]:';
   if(d.cm==='opclear') return 'Reset ALL OSPF processes? [no]:';
@@ -650,20 +671,6 @@ function tsRtrPrompt(d){
   const m={conf:'(config)', if:f&&f.parent?'(config-subif)':'(config-if)', line:'(config-line)', con:'(config-line)',
     nacl:'(config-std-nacl)', xacl:'(config-ext-nacl)', nacl6:'(config-ipv6-acl)', ospf:'(config-router)', ospf6:'(config-rtr)'}[d.cm]||'';
   return d.name+m+'#';
-}
-/* A global command typed in a sub-mode drops back to global configuration
-   first, as on IOS — "ip route" straight after "router ospf 1" is legal. */
-function tsIsGlobal(w){
-  const a=w[0]==='no'?w.slice(1):w;
-  if(!a.length) return false;
-  if(a[0]==='ip'||a[0]==='ipv6'){
-    if(a[1]&&a[1].length>=2&&M(a[1],'route')) return true;
-    if(a[0]==='ip'&&a[1]==='nat'&&(a[2]==='pool'||(a[2]==='inside'&&a[3]==='source'))) return true;
-    if(a[0]==='ip'&&a[1]&&(M(a[1],'domain-name')||a[1]==='ssh')) return true;
-    return a[0]==='ipv6'&&!!a[1]&&a[1].length>=3&&M(a[1],'unicast-routing');
-  }
-  return a[0]==='access-list'||a[0]==='username'||(a[0].length>=3&&M(a[0],'crypto'))||(a[0].length>=4&&M(a[0],'hostname'))||
-    (a[0].length>=3&&M(a[0],'enable')&&!!a[1]);
 }
 function tsLinkMsgs(d,f){
   const n=acFullIf(f.name);
@@ -682,8 +689,11 @@ function tsRtrCli(d,line){
   let t=line.trim().replace(/\s+/g,' ');
   if(d.cm==='opclear') return ospfCli(d,t,t.toLowerCase().split(' '),M)||'';
   if(!t) return '';
-  const bad=LabShared.cliCheck(TS_RGRAMMAR, tsRtrPrompt(d), line);
-  if(bad) return bad;
+  /* pure IOS: refused with the caret unless it belongs in this mode; a
+     global command typed in a sub-mode drops back to (config) first */
+  const v=LabShared.cliCheck(TS_RGRAMMAR, tsRtrPrompt(d), line, {levels:tsRtrLevels(d), hint:false, strict:true});
+  if(typeof v==='string') return v;
+  if(v&&v.up){ d.cm='conf'; d.ci=null; }
   if(/^do /i.test(t)) t=t.slice(3).trim();
   const w=t.toLowerCase().split(' '), raw=t.split(' ');
 
@@ -693,7 +703,7 @@ function tsRtrCli(d,line){
   if(w[0]==='end'){ d.cm='exec'; d.ci=null; return ''; }
   if(w[0].length>=2&&M(w[0],'exit')){ d.cm=d.cm==='exec'||d.cm==='conf'?'exec':'conf'; d.ci=null; return ''; }
 
-  /* ── exec commands, allowed in any mode ── */
+  /* ── EXEC commands: the grammar has already checked they were typed at # (or after "do") ── */
   const isShow=(w[0]==='sh'&&!(d.cm==='if'&&!w[1]))||(w[0].length>=3&&M(w[0],'show'));
   if(isShow) return tsRtrShow(d,w,raw,t);
   if(w[0].length>=2&&M(w[0],'ping')) return tsRtrPing(d,w,raw);
@@ -707,8 +717,6 @@ function tsRtrCli(d,line){
     d.log.length=0; return '';
   }
   if(w[0]==='cls'){ d.log.length=0; return ''; }
-  if(d.cm==='exec') return EXEC_ONLY;
-  if(d.cm!=='conf'&&tsIsGlobal(w)){ d.cm='conf'; d.ci=null; }
 
   /* ── OSPF, ipv6 unicast-routing ── */
   const o=ospfCli(d,t,w,M); if(o!==null) return o;
@@ -735,6 +743,7 @@ function tsRtrCli(d,line){
     return '% Usage: line vty 0 4 | line console 0';
   }
   if(d.cm==='con'&&['password','login','logging','exec-timeout','no'].some(k=>M(w[0],k))) return '';
+  if(d.cm==='line'&&M(w[0],'logging')) return '';   /* logging synchronous is a no-op here, on vty as on the console */
 
   /* ── services from net-router.js ── */
   const s=acSshCli(d,w,raw,M); if(s!==null) return s;
@@ -1171,14 +1180,15 @@ function tsRtrRun(d){
    net-switch.js's own CLI, with the few things a troubleshooting session
    adds on top: ping from the management SVI, show cdp neighbors, saving,
    "do", and the exec/config distinction. */
-const TS_SW_EXEC=['enable','configure','end','exit','show','clear','ping','copy','write','disable'];
 function tsSwCli(d,line){
   OSPF.opInvalidate();
   let t=line.trim().replace(/\s+/g,' ');
   if(!t) return '';
-  const bad=LabShared.cliCheck(TS_SGRAMMAR, SWE.prompt_(d), line);
-  if(bad) return bad;
-  if(/^do /i.test(t)) t=t.slice(3).trim();
+  const v=LabShared.cliCheck(TS_SGRAMMAR, SWE.prompt_(d), line, {levels:SWE.levels(d), hint:false, strict:true});
+  if(typeof v==='string') return v;
+  if(v&&v.up) SWE.lift(d);
+  const isDo=/^do /i.test(t);
+  if(isDo) t=t.slice(3).trim();
   const w=t.toLowerCase().split(' ');
   if(w[0].length>=2&&M(w[0],'ping')) return tsSwPing(d,w[1]);
   if((w[0]==='sh'||(w[0].length>=3&&M(w[0],'show')))&&w[1]&&w[1].length>=2&&M(w[1],'cdp'))
@@ -1186,8 +1196,7 @@ function tsSwCli(d,line){
   if((w[0]==='sh'||(w[0].length>=3&&M(w[0],'show')))&&w[1]&&(w[1]==='start'||(w[1].length>=3&&M(w[1],'startup-config'))))
     return d.startup||'startup-config is not present';
   if((w[0].length>=3&&M(w[0],'copy'))||w[0]==='wr'||(w[0].length>=3&&M(w[0],'write'))) return tsCopyRun(d,w);
-  if(d.cm==='exec'&&w[0]!=='sh'&&w[0]!=='en'&&w[0]!=='conf'&&w[0]!=='cls'&&!TS_SW_EXEC.some(k=>w[0].length>=2&&M(w[0],k))) return EXEC_ONLY;
-  return SWE.cli(d,t);
+  return SWE.cli(d,t,isDo?[['exec']]:undefined);
 }
 function tsSwPing(d,dst){
   if(!dst||!isValidIP(dst)) return '% Usage: ping <a.b.c.d>';
@@ -1225,7 +1234,7 @@ const TS_RKW={
       'access-group':{}, ospf:{}, 'domain-name':{}, ssh:{version:{}}},
   ipv6:{address:{}, route:{}, 'unicast-routing':{}, router:{ospf:{}}, ospf:{}, 'access-list':{}, 'traffic-filter':{}, enable:{}},
   router:{ospf:{}}, 'router-id':{}, network:{}, 'passive-interface':{}, 'default-information':{originate:{}},
-  encapsulation:{dot1q:{}, ppp:{}, hdlc:{}}, ppp:{authentication:{chap:{}}}, clock:{rate:{}},
+  encapsulation:{dot1q:{}, ppp:{}, hdlc:{}}, ppp:{authentication:{chap:{}}}, clock:{rate:{}}, shutdown:{},
   'access-list':{}, permit:TS_ACE_KW, deny:TS_ACE_KW, sequence:{},
   username:{}, crypto:{key:{generate:{rsa:{}}, zeroize:{rsa:{}}}}, login:{local:{}}, transport:{input:{ssh:{}, telnet:{}}},
   no:{shutdown:{}, ip:{address:{}, route:{}, nat:{inside:{}, outside:{}, pool:{}}, 'access-group':{}, ospf:{}},
@@ -1326,12 +1335,18 @@ let tsBuildErrors=[];
 /* Run commands silently (no echo into the console log), from exec, in
    global configuration. Anything a command complains about is kept for the
    harness, because a build line that fails would be a fault nobody chose. */
+/* A script is typed from #: configure terminal, its lines, and an "end"
+   only if it is still in a configuration mode (a fix that ends with
+   "clear ip ospf process" / "yes" is already back at #, where "end" is
+   invalid input). */
 function tsExec(d,lines){
-  ['configure terminal'].concat(lines,['end']).forEach(l=>{
+  const run=l=>{
     const out=d.type==='router'?tsRtrCli(d,l):tsSwCli(d,l);
     const bad=String(out||'').split('\n').some(x=>/^%/.test(x)&&!SYSLOG.test(x)&&!/^% ?[Nn]ote|^% All keys will be removed|^% OSPF: Reload|^% Generating/.test(x));
     if(bad) tsBuildErrors.push(d.name+': '+l.trim()+' → '+out);
-  });
+  };
+  ['configure terminal'].concat(lines).forEach(run);
+  if(d.cm!=='exec') run('end');
 }
 function tsBuild(){
   tsDevices=[]; tsCables=[]; tsNid=1; tsSel=null; tsBuildErrors=[];
@@ -1924,6 +1939,7 @@ const TSCON=LabShared.createConsoles({
   id:'ts', mainIds:{input:'ts-term-in', log:'ts-term-log', prompt:'ts-term-prompt'},
   device:tsById, hasCli:d=>d.type!=='pc',
   prompt:tsPrompt, run:tsCli, keywords:d=>d.type==='router'?TS_RKW:TS_SKW,
+  canStart:(d,l)=>d.type==='router'?LabShared.cliCanStart(TS_RGRAMMAR,l,tsRtrLevels(d)):LabShared.cliCanStart(TS_SGRAMMAR,l,SWE.levels(d)),
   isError:l=>l.charAt(0)==='%'&&!SYSLOG.test(l), escape:esc,
   after:()=>tsRenderCanvas(), dockAfter:'ts-cfg'
 });
