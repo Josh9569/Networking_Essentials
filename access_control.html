@@ -1826,6 +1826,7 @@ function natRenderPcCfg(d, panel){
   panel.innerHTML=
     '<div class="cfg-hdr"><div class="cfg-name">'+d.name+'</div>'+
     '<span class="cfg-hdr-btns">'+ACCON.pinBtnHtml(d)+'<button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="acCloseCfg()">Close</button></span></div>'+
+    '<div class="cfg-sec-lbl">IP Configuration</div>'+
     '<div class="pc-form"><span class="pc-form-lbl">IP Address</span>'+
     '<input type="text" class="custom-ip-inp" value="'+val(d.ip)+'" placeholder="e.g. 172.20.5.9" autocomplete="off" spellcheck="false" oninput="natSetPc('+d.id+',\'ip\',this.value)"></div>'+
     '<div class="pc-form"><span class="pc-form-lbl">Subnet Mask</span>'+
@@ -2467,6 +2468,7 @@ function acRenderPcCfg(d,panel){
   panel.innerHTML=
     '<div class="cfg-hdr"><div class="cfg-name">'+d.name+'</div>'+
     '<span class="cfg-hdr-btns">'+ACCON.pinBtnHtml(d)+'<button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="acCloseCfg()">Close</button></span></div>'+
+    '<div class="cfg-sec-lbl">IP Configuration</div>'+
     '<div class="pc-form"><span class="pc-form-lbl">IP Address</span>'+
     '<input type="text" class="custom-ip-inp" value="'+d.ip+'" autocomplete="off" spellcheck="false" oninput="acSetPcIp('+d.id+',this.value)">'+
     '<span class="pc-pfx">/'+d.pfx+'</span></div>'+
