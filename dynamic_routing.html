@@ -3293,6 +3293,8 @@ function rpPingRun(){
    every time the config panel re-renders (same reason routing_game.html
    does it this way rather than binding per element like the OSPF Cost
    terminal above, whose input is never replaced mid-round). */
+/* Consoles — the shared LabShared.createConsoles: the panel's own, plus the
+   two pinned snap windows beside the page. */
 const RPCON=LabShared.createConsoles({
   id:'rp', mainIds:{input:'rp-term-in', log:'rp-term-log', prompt:'rp-term-prompt'},
   device:id=>rpById(id), hasCli:d=>d.type==='router',

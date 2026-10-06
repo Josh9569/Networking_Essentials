@@ -875,8 +875,8 @@ function uiSetCh(i,v,mode){
   buildPortTable(); render();
 }
 
-/* Consoles — the shared LabShared.createConsoles: the panel's own, and one
-   pinned beside the page for a second switch. */
+/* Consoles — the shared LabShared.createConsoles: the panel's own, plus the
+   two pinned snap windows beside the page. */
 const SWCON=LabShared.createConsoles({
   id:'sw', mainIds:{input:'term-in', log:'term-log', prompt:'term-prompt'},
   device:byId, hasCli:d=>d.type==='switch',

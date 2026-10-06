@@ -2978,8 +2978,8 @@ function rlSetPcIp(did,val){
 /* ── CLI terminal render + input (ported from switching_lab's renderTerm /
    the Enter-key handler on #term-in — one delegated listener, since the
    input element gets rebuilt every time the config panel re-renders). ── */
-/* Consoles — the shared LabShared.createConsoles: the panel's own, and one
-   pinned beside the page for a second router. */
+/* Consoles — the shared LabShared.createConsoles: the panel's own, plus the
+   two pinned snap windows beside the page. */
 const RLCON=LabShared.createConsoles({
   id:'rl', mainIds:{input:'rl-term-in', log:'rl-term-log', prompt:'rl-term-prompt'},
   device:id=>rlById(id), hasCli:d=>d.type==='router',

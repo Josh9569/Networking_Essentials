@@ -1919,7 +1919,7 @@ function tsCli(d,line){
   return run(line);
 }
 /* Consoles — the shared LabShared.createConsoles: the panel's own console,
-   and a pinned one beside the page for a second device. */
+   plus the two pinned snap windows beside the page. */
 const TSCON=LabShared.createConsoles({
   id:'ts', mainIds:{input:'ts-term-in', log:'ts-term-log', prompt:'ts-term-prompt'},
   device:tsById, hasCli:d=>d.type!=='pc',

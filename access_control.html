@@ -2509,8 +2509,8 @@ function acSshRun(){
 function acRefreshCfgKeepScroll(){ acRenderCanvas(); }
 
 /* ═══ Terminal ═════════════════════════════════════════════════════ */
-/* Consoles — the shared LabShared.createConsoles: the panel's own, and one
-   pinned beside the page for a second router. */
+/* Consoles — the shared LabShared.createConsoles: the panel's own, plus the
+   two pinned snap windows beside the page. */
 const ACCON=LabShared.createConsoles({
   id:'ac', mainIds:{input:'ac-term-in', log:'ac-term-log', prompt:'ac-term-prompt'},
   device:id=>acById(id), hasCli:d=>d.type==='router',
