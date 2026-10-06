@@ -144,7 +144,8 @@
    router-on-a-stick for three VLANs, a branch router (R3), three switches
    with an LACP EtherChannel and port security, and four PCs. OSPFv2 and
    OSPFv3 run in two areas; an extended IPv4 ACL and an IPv6 ACL enforce a
-   small policy; every router takes SSH.
+   small policy; every router takes SSH. Which inter-router link is serial
+   varies on the PPP topic and on Hard Exam/Everything (see TS_TOPO).
 
    Nothing here is a second engine. Switching is net-switch.js (the
    switching lab's), OSPF is net-ospf.js (the OSPF Lab's), ACLs/NAT/SSH/PPP
@@ -1263,15 +1264,12 @@ const TS_CFG={
     'ipv6 route 2001:CAFE:ACAD::/48 2001:CAFE:ABC::2'],
   R1:['ipv6 unicast-routing',
     'router ospf 1',' router-id 1.1.1.1','ipv6 router ospf 1',' router-id 1.1.1.1',
-    'username R2 password cisco','username admin secret cisco','ip domain-name cisco.com',
+    'username admin secret cisco','ip domain-name cisco.com',
     'crypto key generate rsa general-keys modulus 1024','ip ssh version 2',
     'line vty 0 4',' login local',' transport input ssh',
     'interface G0/0',' ip address 220.100.100.2 255.255.255.252',' ipv6 address FE80::1 link-local',' ipv6 address 2001:CAFE:ABC::2/64',
     ' ip nat outside',' no shutdown',
-    'interface G0/1',' ip address 10.0.13.1 255.255.255.252',' ipv6 address FE80::1 link-local',' ipv6 address 2001:CAFE:ACAD:13::1/64',
-    ' ipv6 ospf 1 area 5',' ip nat inside',' no shutdown',
-    'interface S0/0/0',' ip address 10.0.12.1 255.255.255.252',' ipv6 address FE80::1 link-local',' ipv6 address 2001:CAFE:ACAD:12::1/64',
-    ' ipv6 ospf 1 area 0',' encapsulation ppp',' ppp authentication chap',' clock rate 128000',' ip nat inside',' no shutdown',
+    '@links',
     'router ospf 1',' network 10.0.12.0 0.0.0.3 area 0',' network 10.0.13.0 0.0.0.3 area 5',' default-information originate',
     'ipv6 router ospf 1',' default-information originate',
     'ip route 0.0.0.0 0.0.0.0 220.100.100.1','ipv6 route ::/0 2001:CAFE:ABC::1',
@@ -1280,7 +1278,7 @@ const TS_CFG={
     'ip nat inside source list 1 pool NAT-POOL overload'],
   R2:['ipv6 unicast-routing',
     'router ospf 1',' router-id 2.2.2.2','ipv6 router ospf 1',' router-id 2.2.2.2',
-    'username R1 password cisco','username admin secret cisco','ip domain-name cisco.com',
+    'username admin secret cisco','ip domain-name cisco.com',
     'crypto key generate rsa general-keys modulus 1024','ip ssh version 2',
     'line vty 0 4',' login local',' transport input ssh',
     'interface G0/1',' no shutdown',
@@ -1290,8 +1288,7 @@ const TS_CFG={
     ' ipv6 address 2001:CAFE:ACAD:20::1/64',' ipv6 ospf 1 area 0',
     'interface G0/1.99',' encapsulation dot1Q 99',' ip address 172.16.99.1 255.255.255.0',
     'interface G0/1.1000',' encapsulation dot1Q 1000 native',
-    'interface S0/0/0',' ip address 10.0.12.2 255.255.255.252',' ipv6 address FE80::2 link-local',' ipv6 address 2001:CAFE:ACAD:12::2/64',
-    ' ipv6 ospf 1 area 0',' encapsulation ppp',' ppp authentication chap',' no shutdown',
+    '@links',
     'router ospf 1',' network 10.0.12.0 0.0.0.3 area 0',' network 172.16.10.0 0.0.0.255 area 0',' network 172.16.20.0 0.0.0.255 area 0',
     ' network 172.16.99.0 0.0.0.255 area 0',' passive-interface G0/1.10',' passive-interface G0/1.20',' passive-interface G0/1.99',
     'ipv6 router ospf 1',' passive-interface G0/1.10',' passive-interface G0/1.20',
@@ -1305,8 +1302,7 @@ const TS_CFG={
     'username admin secret cisco','ip domain-name cisco.com',
     'crypto key generate rsa general-keys modulus 1024','ip ssh version 2',
     'line vty 0 4',' login local',' transport input ssh',
-    'interface G0/0',' ip address 10.0.13.2 255.255.255.252',' ipv6 address FE80::3 link-local',' ipv6 address 2001:CAFE:ACAD:13::2/64',
-    ' ipv6 ospf 1 area 5',' no shutdown',
+    '@links',
     'interface G0/1',' ip address 172.16.30.1 255.255.255.0',' ipv6 address FE80::3 link-local',' ipv6 address 2001:CAFE:ACAD:30::1/64',
     ' ipv6 ospf 1 area 5',' no shutdown',
     'router ospf 1',' network 10.0.13.0 0.0.0.3 area 5',' network 172.16.30.0 0.0.0.255 area 5',' passive-interface G0/1',
@@ -1339,6 +1335,49 @@ const TS_PCS={
 };
 /* VLAN table — what every switch is supposed to have. */
 const TS_VLANS={S1:{10:'Sales',20:'HR',99:'Management',1000:'Native'}, S2:{10:'Sales',20:'HR',99:'Management',1000:'Native'}, S3:{30:'Branch'}};
+/* ═══ The links between routers ═════════════════════════════════════
+   R1–R2 (10.0.12.0/30, OSPF area 0) and R1–R3 (10.0.13.0/30, area 5) keep
+   their addresses every round; which interfaces carry them, and which of
+   them is serial, depends on the round:
+     std   R1 S0/0/0 (DCE) to R2 S0/0/0 serial, R1 G0/1 to R3 G0/0. The
+           network every topic uses.
+     swap  the serial link moved: R1 G0/1 to R2 G0/0, R1 S0/0/0 to R3 S0/0/0.
+     dual  both serial: R1 S0/0/0 to R2 S0/0/0, R1 S0/0/1 to R3 S0/0/0.
+   The PPP topic is always dual, so its faults can sit on either link. Exam
+   and Everything on Hard put the one serial link on either pair, with the
+   DCE at either end, so it can't be assumed. Text that names a link's
+   interface writes it {R1@12}, {R2@12}, {R1@13} or {R3@13}; tsSub fills it
+   in for the round. */
+let TS_TOPO=null;
+const TS_LINK_IP={
+  '12':{area:0, R1:['10.0.12.1','FE80::1','2001:CAFE:ACAD:12::1/64'], R2:['10.0.12.2','FE80::2','2001:CAFE:ACAD:12::2/64']},
+  '13':{area:5, R1:['10.0.13.1','FE80::1','2001:CAFE:ACAD:13::1/64'], R3:['10.0.13.2','FE80::3','2001:CAFE:ACAD:13::2/64']}
+};
+function tsLink(id,far,serial,ifR1,ifFar,dce){ const ifs={R1:ifR1}; ifs[far]=ifFar; return {id:id, far:far, serial:serial, ifs:ifs, dce:serial?dce:null}; }
+function tsTopoFor(topic,diff){
+  const rot=(topic==='exam'||topic==='all')&&diff==='hard', end=far=>choice(['R1',far]);
+  if(topic==='ppp') return {kind:'dual', links:{'12':tsLink('12','R2',true,'S0/0/0','S0/0/0',end('R2')), '13':tsLink('13','R3',true,'S0/0/1','S0/0/0',end('R3'))}};
+  if(rot&&Math.random()<0.5) return {kind:'swap', links:{'12':tsLink('12','R2',false,'G0/1','G0/0'), '13':tsLink('13','R3',true,'S0/0/0','S0/0/0',end('R3'))}};
+  return {kind:'std', links:{'12':tsLink('12','R2',true,'S0/0/0','S0/0/0',rot?end('R2'):'R1'), '13':tsLink('13','R3',false,'G0/1','G0/0')}};
+}
+function tsLinks(){ return ['12','13'].map(id=>TS_TOPO.links[id]); }
+function tsSub(s){ return typeof s==='string'?s.replace(/\{(R[123])@(1[23])\}/g,(m,r,id)=>TS_TOPO.links[id].ifs[r]):s; }
+/* A router's share of the links: the CHAP username for each serial
+   neighbour, then each link interface. */
+function tsLinkLines(name){
+  const mine=tsLinks().filter(l=>name in l.ifs), out=[];
+  mine.forEach(l=>{ if(l.serial) out.push('username '+(name==='R1'?l.far:'R1')+' password cisco'); });
+  mine.forEach(l=>{
+    const a=TS_LINK_IP[l.id][name];
+    out.push('interface '+l.ifs[name],' ip address '+a[0]+' 255.255.255.252',' ipv6 address '+a[1]+' link-local',
+      ' ipv6 address '+a[2],' ipv6 ospf 1 area '+TS_LINK_IP[l.id].area);
+    if(l.serial){ out.push(' encapsulation ppp',' ppp authentication chap'); if(l.dce===name) out.push(' clock rate 128000'); }
+    if(name==='R1') out.push(' ip nat inside');
+    out.push(' no shutdown');
+  });
+  return out;
+}
+function tsCfgFor(name){ return [].concat.apply([],TS_CFG[name].map(l=>l==='@links'?tsLinkLines(name):[l])); }
 let tsBuildErrors=[];
 /* Run commands silently (no echo into the console log), from exec, in
    global configuration. Anything a command complains about is kept for the
@@ -1359,21 +1398,23 @@ function tsExec(d,lines){
 function tsBuild(){
   tsDevices=[]; tsCables=[]; tsNid=1; tsSel=null; tsBuildErrors=[];
   const ISP=tsAddRouter('ISP',336,58,'Internet',[['G0/0'],['Lo0',{loopback:true}]]);
-  const R1=tsAddRouter('R1',336,162,'edge',[['G0/0'],['G0/1'],['S0/0/0',{serial:true, dce:true}],['S0/0/1',{serial:true}]]);
-  const R2=tsAddRouter('R2',96,266,'HQ',[['G0/0'],['G0/1'],['S0/0/0',{serial:true}],['S0/0/1',{serial:true}]]);
-  const R3=tsAddRouter('R3',574,266,'branch',[['G0/0'],['G0/1'],['S0/0/0',{serial:true}],['S0/0/1',{serial:true}]]);
+  /* a serial port is DCE when the round's link puts that end there */
+  const phys=name=>['G0/0','G0/1','S0/0/0','S0/0/1'].map(n=>[n, /^S/.test(n)
+    ?{serial:true, dce:tsLinks().some(l=>l.serial&&l.dce===name&&l.ifs[name]===n)}:{}]);
+  const R1=tsAddRouter('R1',336,162,'edge',phys('R1'));
+  const R2=tsAddRouter('R2',96,266,'HQ',phys('R2'));
+  const R3=tsAddRouter('R3',574,266,'branch',phys('R3'));
   const S1=tsAddSwitch('S1',44,374), S2=tsAddSwitch('S2',318,374), S3=tsAddSwitch('S3',562,374);
   const A=tsAddPc('PC-A',74,466,TS_PCS['PC-A']), B=tsAddPc('PC-B',262,466,TS_PCS['PC-B']),
         C=tsAddPc('PC-C',398,466,TS_PCS['PC-C']), D=tsAddPc('PC-D',592,466,TS_PCS['PC-D']);
   ISP.ifaces[1].up=true;
   tsCable(ISP,'G0/0',R1,'G0/0');
-  tsCable(R1,'S0/0/0',R2,'S0/0/0',{serial:true});
-  tsCable(R1,'G0/1',R3,'G0/0');
+  tsLinks().forEach(l=>tsCable(R1,l.ifs.R1,tsDev(l.far),l.ifs[l.far],l.serial?{serial:true}:undefined));
   tsCable(R2,'G0/1',S1,'Gi0/1');
   tsCable(S1,'Fa0/1',S2,'Fa0/1'); tsCable(S1,'Fa0/2',S2,'Fa0/2');
   tsCable(R3,'G0/1',S3,'Gi0/1');
   tsCable(S1,'Fa0/6',A,'NIC'); tsCable(S2,'Fa0/6',B,'NIC'); tsCable(S2,'Fa0/7',C,'NIC'); tsCable(S3,'Fa0/6',D,'NIC');
-  ['ISP','R1','R2','R3','S1','S2','S3'].forEach(n=>tsExec(tsDev(n),TS_CFG[n]));
+  ['ISP','R1','R2','R3','S1','S2','S3'].forEach(n=>tsExec(tsDev(n),tsCfgFor(n)));
   /* the network has been running: each secured port has learned its PC */
   [A,B,C,D].forEach(pc=>{ const up=SWE.pcUplink(pc); SWE.psFrame(up.sw,up.i,pc.mac); });
 }
@@ -1462,13 +1503,21 @@ function tNatUsed(){
   return r.natted?{ok:true}:{ok:false, reason:"PC-A's traffic reaches the Internet untranslated — R1's NAT is not doing it"};
 }
 function tChap(){
-  const r1=acIface(tsDev('R1'),'S0/0/0'), r2=acIface(tsDev('R2'),'S0/0/0'), bad=[];
-  [[tsDev('R1'),r1],[tsDev('R2'),r2]].forEach(x=>{
-    if(x[1].encap!=='ppp') bad.push(x[0].name+' S0/0/0 is not running PPP');
-    else if(x[1].auth!=='chap') bad.push(x[0].name+' S0/0/0 has no "ppp authentication chap"');
+  const bad=[];
+  tsLinks().filter(l=>l.serial).forEach(l=>{
+    const ends=['R1',l.far].map(n=>[tsDev(n),acIface(tsDev(n),l.ifs[n])]), before=bad.length;
+    ends.forEach(x=>{
+      if(x[1].encap!=='ppp') bad.push(x[0].name+' '+x[1].name+' is not running PPP');
+      else if(x[1].auth!=='chap') bad.push(x[0].name+' '+x[1].name+' has no "ppp authentication chap"');
+    });
+    const st=tsPpp(ends[0][0],ends[0][1]);
+    if(bad.length===before&&!st.up) bad.push('the R1–'+l.far+' link is down: '+st.why);
   });
-  if(!bad.length&&!tsPpp(tsDev('R1'),r1).up) bad.push('the link is down: '+tsPpp(tsDev('R1'),r1).why);
   return bad.length?{ok:false, reason:bad.join('; ')}:{ok:true};
+}
+function tChapDesc(){
+  const s=tsLinks().filter(l=>l.serial);
+  return s.length>1?'Both serial links still run PPP with CHAP at both ends':'The R1–'+s[0].far+' link still runs PPP with CHAP at both ends';
 }
 function tAdminVty(){
   const r=tsSsh(tsDev('PC-B'),'172.16.20.1',{user:'admin', pass:'cisco'});
@@ -1505,7 +1554,7 @@ const TS_RULES=[
   {d:'PC-C (172.16.10.100) can still reach the branch', t:()=>tP('PC-C','172.16.30.10')},
   {d:'NO-ICMP still stops pings between HR and the branch over IPv6', t:()=>tBlocked('PC-B','2001:cafe:acad:30::10')},
   {d:'Traffic to the Internet is still translated by PAT on R1', t:tNatUsed},
-  {d:'The R1–R2 link still runs PPP with CHAP at both ends', t:tChap},
+  {d:tChapDesc, t:tChap},
   {d:'R1, R2 and R3 still accept only SSH on their vty lines, with local usernames', t:tVty},
   {d:"R2's vty lines still refuse SSH from outside Sales and Management (ADMIN)", t:tAdminVty},
   {d:'Every PC port still has port security (sticky, maximum 1)', t:tPsec},
@@ -1593,28 +1642,15 @@ fault({id:'iv-ip6', cat:'iv', lvl:2, keys:['r2-sub20-6'], dev:'R2', run:['interf
   cause:"R2 G0/1.20 has 2001:CAFE:ACAD:21::1/64 instead of :20::1/64. PC-B still reaches its link-local gateway, but no router has a route back to HR's real prefix.",
   show:'show ipv6 interface brief', fix:{dev:'R2', lines:['interface g0/1.20',' no ipv6 address 2001:CAFE:ACAD:21::1/64',' ipv6 address 2001:CAFE:ACAD:20::1/64']}});
 /* ── PPP ── */
-fault({id:'ppp-clock', cat:'ppp', lvl:1, keys:['r1-s0-clock'], dev:'R1', run:['interface s0/0/0',' no clock rate'], tickets:['B_D4','A_net4'],
-  cause:'R1 S0/0/0 is the DCE end of the serial cable but has no clock rate, so the link never comes up.',
-  show:'show controllers s0/0/0', fix:{dev:'R1', lines:['interface s0/0/0',' clock rate 128000']}});
-fault({id:'ppp-encap', cat:'ppp', lvl:1, keys:['r2-s0-encap'], dev:'R2', run:['interface s0/0/0',' encapsulation hdlc'], tickets:['B_D4','A_net4'],
-  cause:"R2 S0/0/0 runs HDLC while R1 runs PPP. The encapsulations have to match — and going to HDLC also dropped R2's CHAP setting.",
-  show:'show interfaces s0/0/0', fix:{dev:'R2', lines:['interface s0/0/0',' encapsulation ppp',' ppp authentication chap']}});
-fault({id:'ppp-user', cat:'ppp', lvl:2, keys:['r1-chap'], dev:'R1', run:['no username R2','username r2 password cisco'], tickets:['B_D4','A_net4'],
-  cause:'R1\'s CHAP username for its neighbour is "r2". CHAP looks the peer up by its exact hostname, R2, and the match is case-sensitive.',
-  show:'show interfaces s0/0/0', fix:{dev:'R1', lines:['no username r2','username R2 password cisco']}});
-fault({id:'ppp-pass', cat:'ppp', lvl:2, keys:['r2-chap'], dev:'R2', run:['username R1 password class'], tickets:['B_D4','A_net4'],
-  cause:'R2\'s CHAP password for R1 is "class", but R1 uses "cisco" — both ends of a CHAP link share one password.',
-  show:'show interfaces s0/0/0', fix:{dev:'R2', lines:['username R1 password cisco']}});
-fault({id:'ppp-shut', cat:'ppp', lvl:1, keys:['r2-s0-shut'], dev:'R2', run:['interface s0/0/0',' shutdown'], tickets:['B_D4','A_net4'],
-  cause:'R2 S0/0/0, its only link to R1, is administratively down.',
-  show:'show ip interface brief', fix:{dev:'R2', lines:['interface s0/0/0',' no shutdown']}});
+/* PPP faults are built per round, for whichever links are serial —
+   see tsPppFaults below. */
 /* ── addressing and IPv6 ── */
-fault({id:'ad-r3-shut', cat:'addr', lvl:1, keys:['r3-g00'], dev:'R3', run:['interface g0/0',' shutdown'], tickets:['B_D4','D_net4'],
-  cause:"R3 G0/0, the branch's only link to R1, is administratively down.",
-  show:'show ip interface brief', fix:{dev:'R3', lines:['interface g0/0',' no shutdown']}});
-fault({id:'ad-r1-ip', cat:'addr', lvl:1, keys:['r1-g01-ip'], dev:'R1', run:['interface g0/1',' ip address 10.0.13.5 255.255.255.252'], tickets:['B_D4','D_net4'],
-  cause:"R1 G0/1 has 10.0.13.5/30 — a different subnet from R3's 10.0.13.2/30 — so the two cannot talk and OSPF never forms across the link.",
-  show:'show ip interface brief', fix:{dev:'R1', lines:['interface g0/1',' ip address 10.0.13.1 255.255.255.252']}});
+fault({id:'ad-r3-shut', cat:'addr', lvl:1, keys:['shut-R3@13'], dev:'R3', run:['interface {R3@13}',' shutdown'], tickets:['B_D4','D_net4'],
+  cause:"R3 {R3@13}, the branch's only link to R1, is administratively down.",
+  show:'show ip interface brief', fix:{dev:'R3', lines:['interface {R3@13}',' no shutdown']}});
+fault({id:'ad-r1-ip', cat:'addr', lvl:1, keys:['r1-13-ip'], dev:'R1', run:['interface {R1@13}',' ip address 10.0.13.5 255.255.255.252'], tickets:['B_D4','D_net4'],
+  cause:"R1 {R1@13} has 10.0.13.5/30 — a different subnet from R3's 10.0.13.2/30 — so the two cannot talk and OSPF never forms across the link.",
+  show:'show ip interface brief', fix:{dev:'R1', lines:['interface {R1@13}',' ip address 10.0.13.1 255.255.255.252']}});
 fault({id:'ad-unicast6', cat:'addr', lvl:2, keys:['r3-uni6'], dev:'R3', run:['no ipv6 unicast-routing'], tickets:['D_A6','D_net6'],
   cause:'R3 has no "ipv6 unicast-routing". It will not forward IPv6 at all, and OSPFv3 cannot run without it.',
   show:'show ipv6 protocols', fix:{dev:'R3', lines:['ipv6 unicast-routing']}});
@@ -1636,13 +1672,14 @@ fault({id:'ad-pc-gw6', cat:'addr', lvl:2, keys:['pca'], dev:'PC-A', apply:()=>{ 
 fault({id:'ad-pc-ip', cat:'addr', lvl:2, keys:['pcc'], dev:'PC-C', apply:()=>{ tsDev('PC-C').ip='172.16.10.110'; }, tickets:['C_D4'],
   cause:'PC-C is addressed 172.16.10.110 instead of 172.16.10.100. POLICY-1 only lets .100 reach the branch, so the wrong address gets PC-C filtered like the rest of Sales.',
   show:'ipconfig', fix:{pc:'PC-C', set:{ip:'172.16.10.100'}}});
-/* ── OSPF ── */
-fault({id:'os-passive', cat:'ospf', lvl:1, keys:['r2-o4-pass'], dev:'R2', run:['router ospf 1',' passive-interface s0/0/0'], tickets:['B_D4','A_net4'],
-  cause:'R2 S0/0/0 is passive in OSPF, so R2 sends no hellos to R1 and learns no route off its own site.',
-  show:'show ip protocols', fix:{dev:'R2', lines:['router ospf 1',' no passive-interface s0/0/0']}});
+/* ── OSPF ── (os3-passive also claims r3-uni6: without ipv6 unicast-routing
+   R3 refuses "ipv6 router ospf 1", so it can't be planted alongside ad-unicast6) */
+fault({id:'os-passive', cat:'ospf', lvl:1, keys:['r2-o4-pass'], dev:'R2', run:['router ospf 1',' passive-interface {R2@12}'], tickets:['B_D4','A_net4'],
+  cause:'R2 {R2@12} is passive in OSPF, so R2 sends no hellos to R1 and learns no route off its own site.',
+  show:'show ip protocols', fix:{dev:'R2', lines:['router ospf 1',' no passive-interface {R2@12}']}});
 fault({id:'os-area', cat:'ospf', lvl:2, keys:['r3-o4-13'], dev:'R3', run:['router ospf 1',' no network 10.0.13.0 0.0.0.3 area 5',' network 10.0.13.0 0.0.0.3 area 0'], tickets:['B_D4','D_net4'],
   cause:"R3 puts its link to R1 in area 0, while R1's end is in area 5. The areas have to match for the two to become neighbours.",
-  show:'show ip ospf interface g0/0', fix:{dev:'R3', lines:['router ospf 1',' no network 10.0.13.0 0.0.0.3 area 0',' network 10.0.13.0 0.0.0.3 area 5']}});
+  show:'show ip ospf interface {R3@13}', fix:{dev:'R3', lines:['router ospf 1',' no network 10.0.13.0 0.0.0.3 area 0',' network 10.0.13.0 0.0.0.3 area 5']}});
 fault({id:'os-net', cat:'ospf', lvl:1, keys:['r3-o4-30'], dev:'R3', run:['router ospf 1',' no network 172.16.30.0 0.0.0.255 area 5'], tickets:['B_D4','D_net4'],
   cause:'R3 has no network statement for 172.16.30.0/24, so the branch LAN is never advertised.',
   show:'show ip protocols', fix:{dev:'R3', lines:['router ospf 1',' network 172.16.30.0 0.0.0.255 area 5']}});
@@ -1655,15 +1692,15 @@ fault({id:'os-rid', cat:'ospf', lvl:3, keys:['r3-rid'], dev:'R3', run:['router o
 fault({id:'os-deforig', cat:'ospf', lvl:2, keys:['r1-o4-def'], dev:'R1', run:['router ospf 1',' no default-information originate'], tickets:['A_net4','D_net4'],
   cause:'R1 has a default route to ISP but no longer advertises it into OSPF, so R2 and R3 have no way out.',
   show:'show ip route on R2 or R3 (no O*E2 route)', fix:{dev:'R1', lines:['router ospf 1',' default-information originate']}});
-fault({id:'os3-passive', cat:'ospf', lvl:2, keys:['r3-o6-pass'], dev:'R3', run:['ipv6 router ospf 1',' passive-interface g0/0'], tickets:['D_A6','D_net6'],
-  cause:'R3 G0/0 is passive in OSPFv3, so R3 has no IPv6 neighbour and learns no IPv6 routes.',
-  show:'show ipv6 ospf interface g0/0', fix:{dev:'R3', lines:['ipv6 router ospf 1',' no passive-interface g0/0']}});
-fault({id:'os3-if', cat:'ospf', lvl:1, keys:['r2-o6-s0'], dev:'R2', run:['interface s0/0/0',' no ipv6 ospf 1 area 0'], tickets:['A_D6','A_net6'],
-  cause:'R2 S0/0/0 is not in OSPFv3. OSPFv3 is enabled per interface, and this one is missing "ipv6 ospf 1 area 0".',
-  show:'show ipv6 ospf interface brief', fix:{dev:'R2', lines:['interface s0/0/0',' ipv6 ospf 1 area 0']}});
-fault({id:'os3-area', cat:'ospf', lvl:2, keys:['r1-o6-g01'], dev:'R1', run:['interface g0/1',' ipv6 ospf 1 area 0'], tickets:['D_A6','D_net6'],
-  cause:"R1 G0/1 is in OSPFv3 area 0, but R3's end of the link is in area 5.",
-  show:'show ipv6 ospf interface g0/1', fix:{dev:'R1', lines:['interface g0/1',' ipv6 ospf 1 area 5']}});
+fault({id:'os3-passive', cat:'ospf', lvl:2, keys:['r3-o6-pass','r3-uni6'], dev:'R3', run:['ipv6 router ospf 1',' passive-interface {R3@13}'], tickets:['D_A6','D_net6'],
+  cause:'R3 {R3@13} is passive in OSPFv3, so R3 has no IPv6 neighbour and learns no IPv6 routes.',
+  show:'show ipv6 ospf interface {R3@13}', fix:{dev:'R3', lines:['ipv6 router ospf 1',' no passive-interface {R3@13}']}});
+fault({id:'os3-if', cat:'ospf', lvl:1, keys:['r2-o6-12'], dev:'R2', run:['interface {R2@12}',' no ipv6 ospf 1 area 0'], tickets:['A_D6','A_net6'],
+  cause:'R2 {R2@12} is not in OSPFv3. OSPFv3 is enabled per interface, and this one is missing "ipv6 ospf 1 area 0".',
+  show:'show ipv6 ospf interface brief', fix:{dev:'R2', lines:['interface {R2@12}',' ipv6 ospf 1 area 0']}});
+fault({id:'os3-area', cat:'ospf', lvl:2, keys:['r1-o6-13'], dev:'R1', run:['interface {R1@13}',' ipv6 ospf 1 area 0'], tickets:['D_A6','D_net6'],
+  cause:"R1 {R1@13} is in OSPFv3 area 0, but R3's end of the link is in area 5.",
+  show:'show ipv6 ospf interface {R1@13}', fix:{dev:'R1', lines:['interface {R1@13}',' ipv6 ospf 1 area 5']}});
 fault({id:'os3-deforig', cat:'ospf', lvl:2, keys:['r1-o6-def'], dev:'R1', run:['ipv6 router ospf 1',' no default-information originate'], tickets:['A_net6','D_net6'],
   cause:'R1 no longer advertises its IPv6 default route into OSPFv3, so R2 and R3 have no IPv6 way out.',
   show:'show ipv6 route on R2 or R3 (no OE2 ::/0)', fix:{dev:'R1', lines:['ipv6 router ospf 1',' default-information originate']}});
@@ -1705,9 +1742,9 @@ fault({id:'nat-pool', cat:'nat', lvl:2, keys:['r1-n-pool'], dev:'R1', run:['ip n
 fault({id:'nat-rule', cat:'nat', lvl:1, keys:['r1-n-rule'], dev:'R1', run:['no ip nat inside source list 1 pool NAT-POOL overload'], tickets:['A_net4','D_net4'],
   cause:'R1 has the pool and the access list but no "ip nat inside source" statement tying them together.',
   show:'show ip nat statistics', fix:{dev:'R1', lines:['ip nat inside source list 1 pool NAT-POOL overload']}});
-fault({id:'nat-s0', cat:'nat', lvl:2, keys:['r1-n-s0'], dev:'R1', run:['interface s0/0/0',' no ip nat inside'], tickets:['A_net4','B_net4'],
-  cause:'R1 S0/0/0, the link to HQ, is missing "ip nat inside", so traffic from Sales and HR leaves untranslated. The branch, on G0/1, still works.',
-  show:'show ip nat statistics', fix:{dev:'R1', lines:['interface s0/0/0',' ip nat inside']}});
+fault({id:'nat-hq', cat:'nat', lvl:2, keys:['r1-n-12'], dev:'R1', run:['interface {R1@12}',' no ip nat inside'], tickets:['A_net4','B_net4'],
+  cause:'R1 {R1@12}, the link to HQ, is missing "ip nat inside", so traffic from Sales and HR leaves untranslated. The branch, on {R1@13}, still works.',
+  show:'show ip nat statistics', fix:{dev:'R1', lines:['interface {R1@12}',' ip nat inside']}});
 /* ── ACLs ── */
 fault({id:'acl-permit', cat:'acl', lvl:1, keys:['policy1'], dev:'R2', run:['ip access-list extended POLICY-1',' no 30'], tickets:['A_net4','A_B4'],
   cause:'POLICY-1 lost its final "permit ip any any", so the implicit deny drops everything from Sales the list does not explicitly permit.',
@@ -1764,8 +1801,47 @@ fault({id:'acl-vty-deny', cat:'acl', lvl:1, keys:['admin'], dev:'R2', run:['ip a
     cause:R+"'s admin password was changed to \"Cisco\" — passwords are case-sensitive. A secret only ever shows as a hash, so the fix is to set it again.",
     show:'the login itself — the secret is hashed in the config', fix:{dev:R, lines:['username admin secret cisco']}});
 });
+/* ── PPP, for each serial link in this round's topology ──
+   Every complaint a dead link really causes is a candidate ticket (genRound
+   keeps only the ones failing), so the PC that reports it varies. Keys name
+   the setting, shared with any other fault that touches it. */
+const TS_PPP_T={
+  '12':['A_net4','B_net4','B_D4','C_D4','D_B4','A_D6','D_A6','A_net6','B_net6','ssh_R1'],
+  '13':['B_D4','C_D4','D_B4','D_net4','A_D6','D_A6','D_net6']
+};
+function tsPppFaults(){
+  const out=[];
+  tsLinks().filter(l=>l.serial).forEach(l=>{
+    const ends=['R1',l.far], other=r=>r==='R1'?l.far:'R1', ifOf=r=>l.ifs[r], lc=r=>ifOf(r).toLowerCase(), k='@'+l.id;
+    const add=o=>out.push(Object.assign({cat:'ppp', link:l.id, tickets:TS_PPP_T[l.id]},o));
+    add({id:'ppp-clock'+k, lvl:1, keys:['clock'+k], dev:l.dce, run:['interface '+ifOf(l.dce),' no clock rate'],
+      cause:l.dce+' '+ifOf(l.dce)+' is the DCE end of the R1–'+l.far+' serial cable but has no clock rate, so the link never comes up.',
+      show:'show controllers '+lc(l.dce), fix:{dev:l.dce, lines:['interface '+lc(l.dce),' clock rate 128000']}});
+    ends.forEach(r=>{
+      const o=other(r);
+      add({id:'ppp-encap'+k+r, lvl:1, keys:['encap'+k], dev:r, run:['interface '+ifOf(r),' encapsulation hdlc'],
+        cause:r+' '+ifOf(r)+' runs HDLC while '+o+' runs PPP. The encapsulations have to match — and going to HDLC also dropped '+r+"'s CHAP setting.",
+        show:'show interfaces '+lc(r), fix:{dev:r, lines:['interface '+lc(r),' encapsulation ppp',' ppp authentication chap']}});
+      add({id:'ppp-user'+k+r, lvl:2, keys:['chap-'+r+'-'+o], dev:r, run:['no username '+o,'username '+o.toLowerCase()+' password cisco'],
+        cause:r+'\'s CHAP username for '+o+' is "'+o.toLowerCase()+'". CHAP looks the peer up by its exact hostname, '+o+', and the match is case-sensitive.',
+        show:'show interfaces '+lc(r), fix:{dev:r, lines:['no username '+o.toLowerCase(),'username '+o+' password cisco']}});
+      add({id:'ppp-pass'+k+r, lvl:2, keys:['chap-'+r+'-'+o], dev:r, run:['username '+o+' password class'],
+        cause:r+'\'s CHAP password for '+o+' is "class", but '+o+' uses "cisco" — both ends of a CHAP link share one password.',
+        show:'show interfaces '+lc(r), fix:{dev:r, lines:['username '+o+' password cisco']}});
+      add({id:'ppp-shut'+k+r, lvl:1, keys:['shut-'+r+k], dev:r, run:['interface '+ifOf(r),' shutdown'],
+        cause:r+' '+ifOf(r)+', its serial link to '+o+', is administratively down.',
+        show:'show ip interface brief', fix:{dev:r, lines:['interface '+lc(r),' no shutdown']}});
+    });
+  });
+  return out;
+}
 const CATS=['sw','iv','ppp','addr','ospf','rt','nat','acl','ssh'];
 const CAT_LABEL={sw:'Switching', iv:'Inter-VLAN routing', ppp:'PPP', addr:'Addressing & IPv6', ospf:'OSPF', rt:'Static & default routes', nat:'NAT', acl:'ACLs', ssh:'SSH'};
+/* A fault as this round's topology has it: interface placeholders filled in. */
+function tsResolve(f){
+  return Object.assign({},f,{run:f.run&&f.run.map(tsSub), cause:tsSub(f.cause), show:tsSub(f.show),
+    fix:f.fix.lines?Object.assign({},f.fix,{lines:f.fix.lines.map(tsSub)}):f.fix});
+}
 function tsApplyFault(f){
   if(f.run) tsExec(tsDev(f.dev),f.run);
   if(f.apply) f.apply();
@@ -1788,8 +1864,11 @@ function tsPickFaults(topic,diff){
     while(i<w.length-1&&r>=w[i]){ r-=w[i]; i++; }
     out.push(ok[i]); ok[i].keys.forEach(k=>used.add(k));
   };
-  const pool=cat=>FAULTS.filter(f=>f.cat===cat&&f.lvl<=L);
-  if(topic==='all') CATS.forEach(c=>take(pool(c)));
+  const ppp=tsPppFaults();
+  const pool=cat=>(cat==='ppp'?ppp:FAULTS.filter(f=>f.cat===cat)).filter(f=>f.lvl<=L);
+  /* PPP on Hard: a fault on each serial link, then one more anywhere */
+  if(topic==='ppp'&&diff==='hard'){ shuffle(['12','13']).forEach(id=>take(pool('ppp').filter(f=>f.link===id))); take(pool('ppp')); }
+  else if(topic==='all') CATS.forEach(c=>take(pool(c)));
   else if(topic==='exam') shuffle(CATS.slice()).slice(0,{easy:3,medium:4,hard:5}[diff]).forEach(c=>take(pool(c)));
   else for(let i=0;i<{easy:1,medium:2,hard:3}[diff];i++) take(pool(topic));
   return out;
@@ -1802,11 +1881,12 @@ function tsTicketsOk(){ return state.data.tickets.every(t=>t.test().ok); }
    breaks nothing visible is thrown away and redrawn. */
 function genRound(topic,diff){
   let faults, ids;
+  TS_TOPO=tsTopoFor(topic,diff);
   for(let attempt=0;attempt<200;attempt++){
     tsBuild();
     /* every fault shows on its own, so a draw that never settles falls
        back to its first fault rather than ship one that hides another */
-    faults=attempt<199?tsPickFaults(topic,diff):tsPickFaults(topic,diff).slice(0,1);
+    faults=(attempt<199?tsPickFaults(topic,diff):tsPickFaults(topic,diff).slice(0,1)).map(tsResolve);
     faults.forEach(tsApplyFault);
     tsReload();
     ids=[];
@@ -1824,7 +1904,7 @@ function genRound(topic,diff){
   tsDevices.forEach(d=>{ if(d.type!=='pc'){ d.startup=tsRunText(d); d.cm='exec'; d.ci=null; } });
   const tickets=ids.map(id=>({group:'Tickets', desc:TS_T[id].d, id:id, test:TS_T[id].t}));
   const gate={ok:false, reason:'Checked once every ticket is fixed'};
-  const rules=TS_RULES.map(r=>({group:'Design rules', desc:r.d, test:function(){ return tsTicketsOk()?r.t():gate; }}));
+  const rules=TS_RULES.map(r=>({group:'Design rules', desc:typeof r.d==='function'?r.d():r.d, test:function(){ return tsTicketsOk()?r.t():gate; }}));
   return {faults:faults, tickets:tickets, reqs:tickets.concat(rules)};
 }
 
@@ -2053,14 +2133,13 @@ const TS_ADDR=[
   ['ISP','G0/0','220.100.100.1/30','2001:CAFE:ABC::1/64',''],
   ['ISP','Lo0','5.5.5.5/32','2001:5:5::5/128','Internet'],
   ['R1','G0/0','220.100.100.2/30','2001:CAFE:ABC::2/64<span class="cell-alt">FE80::1</span>',''],
-  ['R1','G0/1','10.0.13.1/30','2001:CAFE:ACAD:13::1/64<span class="cell-alt">FE80::1</span>',''],
-  ['R1','S0/0/0<span class="cell-alt">DCE</span>','10.0.12.1/30','2001:CAFE:ACAD:12::1/64<span class="cell-alt">FE80::1</span>',''],
+  '@R1',
   ['R2','G0/1.10','172.16.10.1/24','2001:CAFE:ACAD:10::1/64<span class="cell-alt">FE80::2</span>',''],
   ['R2','G0/1.20','172.16.20.1/24','2001:CAFE:ACAD:20::1/64<span class="cell-alt">FE80::2</span>',''],
   ['R2','G0/1.99','172.16.99.1/24','',''],
   ['R2','G0/1.1000','none — native','',''],
-  ['R2','S0/0/0','10.0.12.2/30','2001:CAFE:ACAD:12::2/64<span class="cell-alt">FE80::2</span>',''],
-  ['R3','G0/0','10.0.13.2/30','2001:CAFE:ACAD:13::2/64<span class="cell-alt">FE80::3</span>',''],
+  '@R2',
+  '@R3',
   ['R3','G0/1','172.16.30.1/24','2001:CAFE:ACAD:30::1/64<span class="cell-alt">FE80::3</span>',''],
   ['S1','VLAN 99','172.16.99.11/24','','172.16.99.1'],
   ['S2','VLAN 99','172.16.99.12/24','','172.16.99.1'],
@@ -2069,6 +2148,20 @@ const TS_ADDR=[
   ['PC-C','NIC','172.16.10.100/24','2001:CAFE:ACAD:10::100/64','172.16.10.1<span class="cell-alt">FE80::2</span>'],
   ['PC-D','NIC','172.16.30.10/24','2001:CAFE:ACAD:30::10/64','172.16.30.1<span class="cell-alt">FE80::3</span>']
 ];
+/* '@R1' and the like stand for that router's link interfaces this round,
+   in interface order, the DCE end marked. */
+function tsAddrRows(){
+  const rows=[];
+  TS_ADDR.forEach(r=>{
+    if(typeof r!=='string'){ rows.push(r); return; }
+    const n=r.slice(1);
+    tsLinks().filter(l=>n in l.ifs).sort((a,b)=>a.ifs[n]<b.ifs[n]?-1:1).forEach(l=>{
+      const a=TS_LINK_IP[l.id][n];
+      rows.push([n, l.ifs[n]+(l.dce===n?'<span class="cell-alt">DCE</span>':''), a[0]+'/30', a[2]+'<span class="cell-alt">'+a[1]+'</span>','']);
+    });
+  });
+  return rows;
+}
 const TS_VLAN_ROWS=[
   ['10','Sales','172.16.10.0/24','S1 Fa0/6 (PC-A)<span class="cell-alt">S2 Fa0/7 (PC-C)</span>'],
   ['20','HR','172.16.20.0/24','S2 Fa0/6 (PC-B)'],
@@ -2079,7 +2172,7 @@ const TS_VLAN_ROWS=[
 const TS_DESIGN=[
   'Trunks: S1 Gi0/1 to R2, and Port-channel1 between S1 and S2 (Fa0/1–2; LACP, S1 active and S2 passive). Native VLAN 1000, allowed VLANs 10, 20, 99 and 1000.',
   'Port security on every PC port: sticky, maximum 1, violation shutdown.',
-  'R1–R2 serial link: PPP with CHAP, password cisco. R1 S0/0/0 is the DCE end, clocked at 128000.',
+  '@links',
   'OSPF process 1, for IPv4 and IPv6: area 0 is the R1–R2 link and R2’s LANs; area 5 is the R1–R3 link and the branch LAN. Router IDs 1.1.1.1, 2.2.2.2 and 3.3.3.3. LAN interfaces are passive. R1 advertises its default routes into both.',
   'R1: default routes to ISP for IPv4 and IPv6. PAT on pool NAT-POOL (100.30.20.1–6 /29) for access list 1, which permits VLANs 10 and 20 and the branch. ISP routes 100.30.20.0/29 and 2001:CAFE:ACAD::/48 back to R1.',
   'POLICY-1 (R2 G0/1.10, inbound): of Sales, only 172.16.10.100 may reach the branch LAN; everything else is permitted.',
@@ -2087,6 +2180,11 @@ const TS_DESIGN=[
   'SSH version 2 on R1, R2 and R3: domain cisco.com, 1024-bit keys, user admin / cisco, vty lines login local and transport input ssh.',
   'ADMIN (R2 vty lines, access-class in): only Sales and Management may open a session to R2.'
 ];
+function tsDesignRows(){
+  return [].concat.apply([],TS_DESIGN.map(s=>s!=='@links'?[s]:tsLinks().map(l=>l.serial
+    ? 'R1–'+l.far+' serial link (R1 '+l.ifs.R1+' to '+l.far+' '+l.ifs[l.far]+'): PPP with CHAP, password cisco. '+l.dce+' '+l.ifs[l.dce]+' is the DCE end, clocked at 128000.'
+    : 'R1–'+l.far+' link: Ethernet, R1 '+l.ifs.R1+' to '+l.far+' '+l.ifs[l.far]+'.')));
+}
 function tsPref(k){ try{ return localStorage.getItem('ne-ts-'+k)!=='0'; }catch(e){ return true; } }
 function tsTogglePref(k){ try{ localStorage.setItem('ne-ts-'+k, tsPref(k)?'0':'1'); }catch(e){} tsApplyPrefs(); }
 function tsApplyPrefs(){
@@ -2118,9 +2216,9 @@ function tsHtmlTable(head,rows,addrCols){
    learner reads once and then consults. Every section collapses and
    remembers it. */
 function tsRefHtml(){
-  return tsSecBtn('addr','Addressing Table')+'<div id="ts-body-addr">'+tsHtmlTable(['Device','Interface','IPv4','IPv6 / link-local','Gateway'],TS_ADDR,[2,3])+'</div>'+
+  return tsSecBtn('addr','Addressing Table')+'<div id="ts-body-addr">'+tsHtmlTable(['Device','Interface','IPv4','IPv6 / link-local','Gateway'],tsAddrRows(),[2,3])+'</div>'+
     tsSecBtn('vlan','VLAN Table')+'<div id="ts-body-vlan">'+tsHtmlTable(['VLAN','Name','Network','Ports'],TS_VLAN_ROWS,[2])+'</div>'+
-    tsSecBtn('design','Design')+'<div id="ts-body-design">'+TS_DESIGN.map(s=>'<div class="tool-note">'+esc(s)+'</div>').join('')+'</div>';
+    tsSecBtn('design','Design')+'<div id="ts-body-design">'+tsDesignRows().map(s=>'<div class="tool-note">'+esc(s)+'</div>').join('')+'</div>';
 }
 function tsFixText(f){
   if(f.fix.pc) return f.fix.pc+' › IP Configuration: '+Object.keys(f.fix.set).map(k=>({ip:'IPv4 Address', pfx:'Subnet Mask', gw:'Default Gateway', gw6:'IPv6 Gateway'}[k])+' '+
