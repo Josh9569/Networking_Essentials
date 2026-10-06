@@ -949,6 +949,8 @@ body.pop-resizing, body.pop-resizing * { cursor: ew-resize !important; user-sele
 .port.p-trunk   { background: var(--info-bg); border-color: var(--info-text); }
 .port.p-chan    { box-shadow: 0 0 0 2.5px #7c3aed; }
 .port.p-pending { background: var(--warn-bg); border-color: var(--warn-text); transform: scale(1.35); }
+/* a serial port (routing_game's PPP routers): a square carrying its number, 1 = S0/0/0, 2 = S0/0/1 */
+.port.p-serial  { width: 16px; height: 16px; border-radius: 3px; font: 700 9px/12px var(--mono); text-align: center; color: var(--text); user-select: none; }
 /* A switch port that is shut, err-disabled or in a shut port-channel — the
    red link light Packet Tracer draws at that end of the cable. */
 .port.p-down    { background: var(--err-bg); border-color: var(--err-text); }
