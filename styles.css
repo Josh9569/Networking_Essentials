@@ -1081,6 +1081,79 @@ body.pop-resizing, body.pop-resizing * { cursor: ew-resize !important; user-sele
 .term-prompt { font-family: var(--mono); font-size: 12px; color: #7ec050; white-space: nowrap; }
 .term-in     { flex: 1; background: transparent; border: none; outline: none; font-family: var(--mono); font-size: 12.5px; color: #f0f0ec; }
 
+/* ── Pinned consoles (LabShared.createConsoles) ──
+   A device panel's Pin button moves its console into the right-hand gutter
+   (the instructions pop-out has the left one). The gutter is split into
+   snap windows, like window snapping: with two, window 1 is the top half of
+   the screen and window 2 the bottom half. A pin sits at the top of its
+   window, can be resized down and to the right within it — the corner grip,
+   not the browser's own resize, so it can show the halfway line and spring
+   back off it — and moved to the other window by its four-arrow handle,
+   pushing whoever is there into the window it left.
+   The Pin button exists only where pins can float: at 1600px — the same
+   line the pop-out floats at — the gutter is ~340px. A pin made on a wide
+   window that then narrows docks under the device panel instead
+   (.con-pins without .floating): stacked, vertical resize only. */
+.cfg-hdr-btns          { display: flex; gap: 6px; align-items: center; }
+button.con-pin-btn     { display: none; align-items: center; gap: 5px; }
+button.con-pin-btn svg { width: 13px; height: 13px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.btn.con-pin-btn, .btn.con-close-btn { padding: 4px 12px; font-size: 12px; }
+@media (min-width: 1600px) { button.con-pin-btn { display: inline-flex; } }
+.con-pin-tag  { margin-left: 8px; font-family: var(--font); font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--info-text); }
+.con-pins     { display: flex; flex-direction: column; gap: 12px; }
+/* Lines keep their columns and scroll sideways rather than wrap — show
+   tables are ~80 characters and a pin starts narrower than that. */
+.con-pin      { position: relative; display: flex; flex-direction: column; overflow: hidden; height: 340px; min-height: 180px; }
+.con-pin .term          { flex: 1 1 auto; height: auto; min-height: 0; max-height: none; resize: none; }
+.con-pin .term-log      { overflow: auto; }
+.con-pin .term-log .tl  { white-space: pre; word-break: normal; }
+.con-pins:not(.floating) .con-pin { width: auto !important; }
+.con-pins:not(.floating) .con-move, .con-pins:not(.floating) .con-guide, .con-pins:not(.floating) .con-snap { display: none; }
+
+/* the move handle (top left of every pin) and the resize grip (bottom right) */
+.con-move     { display: inline-flex; align-items: center; margin-right: 8px; color: var(--text-t); cursor: move; }
+.con-move:hover { color: var(--info-text); }
+.con-move svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.con-grip     { position: absolute; right: 3px; bottom: 3px; width: 14px; height: 14px; cursor: nwse-resize; z-index: 3;
+                background: linear-gradient(135deg, transparent 0 52%, var(--text-t) 52% 60%, transparent 60% 70%, var(--text-t) 70% 78%, transparent 78%); opacity: .7; }
+.con-grip:hover { opacity: 1; }
+.con-pins:not(.floating) .con-grip { cursor: ns-resize; }
+
+/* Floating: a click-through layer the size of the window, so each pin can be
+   placed at its own window's top. Pins sit beside .wrap's right edge (.wrap
+   is 840px and centred, so that edge is 50% + 420px; 50% of a fixed box
+   excludes the scrollbar) and stop 16px short of the window's edge. */
+.con-pins.floating { position: fixed; inset: 0; z-index: 45; pointer-events: none; display: block; }
+.con-pins.floating .con-pin { position: absolute; top: 84px; left: calc(50% + 440px); pointer-events: auto; margin: 0;
+  width: min(560px, calc(50% - 456px)); min-width: 280px; max-width: calc(50% - 456px);
+  box-shadow: 0 10px 30px rgba(0,0,0,.20);
+  transition: top .3s cubic-bezier(.2,.8,.2,1), max-height .3s ease, transform .32s cubic-bezier(.2,.9,.25,1.12); }
+.con-pins.floating .con-pin.con-dragging { transition: none; z-index: 4; box-shadow: 0 18px 44px rgba(0,0,0,.35); }   /* above the guide line (3) */
+.con-pins.floating .con-pin.con-sizing   { transition: none; }
+.con-pin.con-bounce { transition: height .45s cubic-bezier(.34,1.56,.64,1), width .45s cubic-bezier(.34,1.56,.64,1) !important; }
+/* the line between windows: shown while a pin is moved or resized, and
+   pulsing when a resize runs into it */
+.con-guide    { position: absolute; z-index: 3; left: calc(50% + 440px); right: 16px; height: 0; border-top: 2px dashed var(--info-text); opacity: 0; transition: opacity .15s ease; pointer-events: none; }
+.con-pins.con-moving .con-guide, .con-pins.con-sizing-host .con-guide { opacity: .55; }
+.con-guide.hit { opacity: 1 !important; animation: con-guide-hit .5s ease infinite; }
+@keyframes con-guide-hit { 50% { border-top-color: var(--err-text); } }
+/* where a moved pin will land */
+.con-snap     { position: absolute; z-index: 1; left: calc(50% + 440px); right: 16px; border: 2px solid var(--info-text); background: var(--info-bg); border-radius: var(--rl); opacity: 0; pointer-events: none; transition: top .2s ease, height .2s ease, opacity .15s ease; }
+.con-pins.con-moving .con-snap { opacity: .45; }
+body.con-moving-body, body.con-moving-body * { cursor: move !important; user-select: none; }
+body.con-sizing-body, body.con-sizing-body * { cursor: nwse-resize !important; user-select: none; }
+body.con-sizing-v-body, body.con-sizing-v-body * { cursor: ns-resize !important; user-select: none; }
+.con-pin.con-flash { animation: con-flash .9s ease; }
+@keyframes con-flash { 30% { border-color: var(--info-text); box-shadow: 0 0 0 3px var(--info-bg), 0 10px 30px rgba(0,0,0,.20); } }
+
+/* "Pin to window 1 or 2" — the shared .sel-menu dropdown */
+.con-menu      { min-width: 230px; }
+.con-menu-lbl  { padding: 4px 10px 6px; font-family: var(--font); font-size: 10.5px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--text-t); }
+.con-menu-opt  { display: flex; align-items: center; gap: 9px; font-family: var(--font); }
+.con-menu-opt svg { width: 16px; height: 16px; flex-shrink: 0; stroke: currentColor; fill: none; stroke-width: 1.4; }
+.con-menu-opt svg .fill { fill: var(--info-text); stroke: none; opacity: .75; }
+.con-menu-sub  { margin-left: auto; padding-left: 14px; font-family: var(--mono); font-size: 11.5px; color: var(--text-t); }
+
 /* command reference table */
 .cmd-table      { width: 100%; border-collapse: collapse; font-size: 13px; }
 .cmd-table td   { padding: 6px 10px; border-bottom: 1px solid var(--border); color: var(--text-s); }

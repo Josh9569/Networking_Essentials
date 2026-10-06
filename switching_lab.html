@@ -100,7 +100,8 @@
   <div class="cfg-panel" id="cfg" style="display:none">
     <div class="cfg-hdr">
       <span class="cfg-name" id="cfg-name">SW1</span>
-      <span style="display:flex;gap:6px">
+      <span class="cfg-hdr-btns">
+        <span id="cfg-pin" style="display:contents"></span>
         <button class="rand-btn" id="cfg-del" style="display:none" onclick="delSelected()">Delete &#128465;</button>
         <button class="rand-btn" onclick="closeCfg()">Close &times;</button>
       </span>
@@ -141,13 +142,7 @@
       </div>
       <div>
         <div class="cfg-sec-lbl">CLI Terminal</div>
-        <div class="term">
-          <div class="term-log" id="term-log"></div>
-          <div class="term-inrow">
-            <span class="term-prompt" id="term-prompt">SW1#</span>
-            <input class="term-in" id="term-in" autocomplete="off" spellcheck="false">
-          </div>
-        </div>
+        <div id="cfg-con"></div>
       </div>
     </div>
     <div id="cfg-pc" style="display:none">
@@ -608,6 +603,7 @@ function onDevClick(did){
   const d=byId(did);
   if(qclick==='root'&&d.type==='switch'){ selectRootCand(did); return; }
   if(qclick) return;
+  if(SWCON.focusPinned(did)) return;
   if(d.type==='router'){
     if(gmode==='sandbox'){ selected=did; openCfg(); render(); return; }
     setHint('The router is pre-configured — cable it to a switch and set that switch port to trunk.');
@@ -627,6 +623,7 @@ function openCfg(){
   const d=byId(selected); if(!d) return;
   document.getElementById('cfg').style.display='';
   document.getElementById('cfg-del').style.display=gmode==='sandbox'?'':'none';
+  document.getElementById('cfg-pin').innerHTML=SWCON.pinBtnHtml(d);
   if(d.type==='router'){
     document.getElementById('cfg-sw').style.display='none';
     document.getElementById('cfg-pc').style.display='none';
@@ -644,6 +641,7 @@ function openCfg(){
     document.getElementById('pt-wrap').style.display=showPT?'':'none';
     document.getElementById('vlan-mgr').style.display=showVM?'':'none';
     document.getElementById('cli-only-note').style.display=(!showPT)?'':'none';
+    document.getElementById('cfg-con').innerHTML=SWCON.mainHtml(d);
     buildPortTable(); renderTerm();
   } else {
     document.getElementById('cfg-name').textContent=d.name;
@@ -682,6 +680,7 @@ function delSelected(){
   cables=cables.filter(c=>c.a.d!==id&&c.b.d!==id);
   devices=devices.filter(x=>x.id!==id);
   closeCfg();
+  SWCON.refresh();
   setHint('Device removed.');
 }
 function uiSetSVI(){
@@ -834,7 +833,7 @@ function echoCli(d,cmds){
     const out=cli(d,c);
     if(out) out.split('\n').forEach(l=>d.log.push(l));
   });
-  if(selected===d.id) renderTerm();
+  renderTerm();
 }
 /* The helper form edits what an engineer would: a bundle member's VLAN
    settings are changed on its port-channel interface, which carries them to
@@ -860,7 +859,7 @@ function uiSetVlan(i,v){
     echoCli(d,['interface '+d.ports[i].name.toLowerCase()]);
     d.log.push(prompt_(d)+' switchport access vlan '+n);
     d.log.push('% VLAN '+n+' does not exist — create it first: "vlan '+n+'" then "name <name>"');
-    if(selected===d.id) renderTerm();
+    renderTerm();
     buildPortTable();               /* reverts the input to the port's real VLAN */
     render();
     return;
@@ -876,44 +875,16 @@ function uiSetCh(i,v,mode){
   buildPortTable(); render();
 }
 
-function renderTerm(){
-  const d=byId(selected); if(!d) return;
-  const log=document.getElementById('term-log');
-  log.innerHTML=d.log.slice(-300).map(l=>`<div class="tl${l.startsWith('%')?' terr':''}">${l.replace(/</g,'&lt;')}</div>`).join('');
-  log.scrollTop=log.scrollHeight;
-  document.getElementById('term-prompt').textContent=prompt_(d);
-}
-document.getElementById('term-in').addEventListener('keydown',e=>{
-  const d=selected!=null?byId(selected):null;
-  if(!d||d.type!=='switch') return;
-  if(e.key==='Enter'){
-    const line=e.target.value;
-    e.target.value='';
-    if(line.trim()) d.hist.push(line);
-    d.hi=d.hist.length;
-    d.log.push(prompt_(d)+' '+line);
-    const out=cli(d,line);
-    if(out) out.split('\n').forEach(l=>d.log.push(l));
-    render(); renderTerm(); buildPortTable();
-  } else if(e.key==='ArrowUp'){
-    e.preventDefault();
-    if(!d.hist.length) return;
-    d.hi=Math.max(0,d.hi-1);
-    e.target.value=d.hist[d.hi]||'';
-  } else if(e.key==='ArrowDown'){
-    e.preventDefault();
-    if(!d.hist.length) return;
-    d.hi=Math.min(d.hist.length,d.hi+1);
-    e.target.value=d.hi===d.hist.length?'':d.hist[d.hi];
-  } else if(e.key==='Tab'){
-    e.preventDefault();
-    e.target.value=tabComplete(d,e.target.value);
-  }
+/* Consoles — the shared LabShared.createConsoles: the panel's own, plus the
+   two pinned snap windows beside the page. */
+const SWCON=LabShared.createConsoles({
+  id:'sw', mainIds:{input:'term-in', log:'term-log', prompt:'term-prompt'},
+  device:byId, hasCli:d=>d.type==='switch',
+  prompt:d=>prompt_(d), run:(d,line)=>cli(d,line), keywords:()=>KW, logLines:300,
+  after:()=>{ render(); const sd=selected!=null&&byId(selected); if(sd&&sd.type==='switch') buildPortTable(); },
+  dockAfter:'cfg', btnClass:'rand-btn'
 });
-
-function tabComplete(d,val){
-  return LabShared.tabComplete(KW, val, cands=>{ d.log.push(cands.join('   ')); renderTerm(); });
-}
+function renderTerm(){ SWCON.refresh(); }
 
 /* ═══ IP conflict detection ══════════════════════════════════════════════
    Two devices with the same IP are only a real conflict once they are
@@ -1004,6 +975,7 @@ function clearMarks(){
   devices.forEach(d=>{ d._mark=null; d.ports.forEach(p=>p._mark=null); });
 }
 function resetTopo(){
+  SWCON.unpinAll();
   devices=[];cables=[];nid=1;cid=1;swCount=0;pcCount=0;rtCount=0;
   pending=null;selected=null;qclick=null;clearMarks();
   document.getElementById('cfg').style.display='none';

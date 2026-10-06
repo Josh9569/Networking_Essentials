@@ -1797,7 +1797,7 @@ function natRenderPcCfg(d, panel){
   const val=function(x){ return esc(x||''); };
   panel.innerHTML=
     '<div class="cfg-hdr"><div class="cfg-name">'+d.name+'</div>'+
-    '<button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="acCloseCfg()">Close</button></div>'+
+    '<span class="cfg-hdr-btns">'+ACCON.pinBtnHtml(d)+'<button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="acCloseCfg()">Close</button></span></div>'+
     '<div class="pc-form"><span class="pc-form-lbl">IP Address</span>'+
     '<input type="text" class="custom-ip-inp" value="'+val(d.ip)+'" placeholder="e.g. 172.20.5.9" autocomplete="off" spellcheck="false" oninput="natSetPc('+d.id+',\'ip\',this.value)"></div>'+
     '<div class="pc-form"><span class="pc-form-lbl">Subnet Mask</span>'+
@@ -2380,7 +2380,7 @@ function acEdgeLabel(svg,near,far,text){
 }
 
 /* ═══ Config panel ═════════════════════════════════════════════════ */
-function acOpenCfg(id){ acSelected=id; acRenderCanvas(); acRefreshCfg(); }
+function acOpenCfg(id){ if(ACCON.focusPinned(id)) return; acSelected=id; acRenderCanvas(); acRefreshCfg(); }
 function acCloseCfg(){ acSelected=null; acRenderCanvas(); const p=document.getElementById('ac-cfg'); if(p) p.style.display='none'; }
 function acRefreshCfg(){
   const d=acSelected!=null?acById(acSelected):null;
@@ -2410,34 +2410,30 @@ function acAclListHtml(d){
   if(!names.length) return '<div class="cli-note">No access lists on '+d.name+' yet.</div>';
   return '<pre class="ping-out" style="margin:0">'+esc(acShowAcls(d))+'</pre>';
 }
-function acTermHtml(){
-  return '<div class="term"><div class="term-log" id="ac-term-log"></div>'+
-    '<div class="term-inrow"><span class="term-prompt" id="ac-term-prompt"></span>'+
-    '<input class="term-in" id="ac-term-in" autocomplete="off" spellcheck="false"></div></div>';
-}
+function acTermHtml(d){ return ACCON.mainHtml(d); }
 function acRenderRouterCfg(d,panel){
   panel.innerHTML=
     '<div class="cfg-hdr"><div class="cfg-name">'+d.name+'</div>'+
-    '<button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="acCloseCfg()">Close</button></div>'+
+    '<span class="cfg-hdr-btns">'+ACCON.pinBtnHtml(d)+'<button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="acCloseCfg()">Close</button></span></div>'+
     '<div class="cfg-grid stack"><div>'+
       '<div class="cfg-sec-lbl">Interfaces</div>'+acIfaceTableHtml(d)+
       (acLabKind==='nat' ? '<div class="cfg-sec-lbl" style="margin-top:14px">Translations</div>'+
         '<pre class="ping-out" style="margin:0">'+esc(natShowTranslations(d))+'</pre>' : '')+
       '<div class="cfg-sec-lbl" style="margin-top:14px">Access Lists</div>'+acAclListHtml(d)+
-    '</div><div><div class="cfg-sec-lbl">CLI</div>'+acTermHtml()+'</div></div>';
+    '</div><div><div class="cfg-sec-lbl">CLI</div>'+acTermHtml(d)+'</div></div>';
   acRenderTerm();
 }
 function acRenderSwitchCfg(d,panel){
   panel.innerHTML=
     '<div class="cfg-hdr"><div class="cfg-name">'+d.name+'</div>'+
-    '<button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="acCloseCfg()">Close</button></div>'+
+    '<span class="cfg-hdr-btns">'+ACCON.pinBtnHtml(d)+'<button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="acCloseCfg()">Close</button></span></div>'+
     '<div class="cli-note">VLANs, access ports and port security are already configured. This lab is about the filtering that goes on top, so there is nothing to change here.</div>';
 }
 function acRenderPcCfg(d,panel){
   if(acLabKind==='nat') return natRenderPcCfg(d,panel);
   panel.innerHTML=
     '<div class="cfg-hdr"><div class="cfg-name">'+d.name+'</div>'+
-    '<button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="acCloseCfg()">Close</button></div>'+
+    '<span class="cfg-hdr-btns">'+ACCON.pinBtnHtml(d)+'<button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="acCloseCfg()">Close</button></span></div>'+
     '<div class="pc-form"><span class="pc-form-lbl">IP Address</span>'+
     '<input type="text" class="custom-ip-inp" value="'+d.ip+'" autocomplete="off" spellcheck="false" oninput="acSetPcIp('+d.id+',this.value)">'+
     '<span class="pc-pfx">/'+d.pfx+'</span></div>'+
@@ -2513,44 +2509,15 @@ function acSshRun(){
 function acRefreshCfgKeepScroll(){ acRenderCanvas(); }
 
 /* ═══ Terminal ═════════════════════════════════════════════════════ */
-function acRenderTerm(){
-  const d=acSelected!=null?acById(acSelected):null;
-  if(!d||d.type!=='router') return;
-  const log=document.getElementById('ac-term-log');
-  if(!log) return;
-  log.innerHTML=d.log.slice(-300).map(function(l){
-    return '<div class="tl'+(l.charAt(0)==='%'?' terr':'')+'">'+esc(l)+'</div>';
-  }).join('');
-  log.scrollTop=log.scrollHeight;
-  const pr=document.getElementById('ac-term-prompt');
-  if(pr) pr.textContent=acPrompt(d);
-}
-document.addEventListener('keydown', function(e){
-  const input=document.getElementById('ac-term-in');
-  if(!input||document.activeElement!==input) return;
-  const d=acSelected!=null?acById(acSelected):null;
-  if(!d||d.type!=='router') return;
-  if(e.key==='Enter'){
-    const line=input.value; input.value='';
-    if(line.trim()){ d.hist.push(line); d.hi=d.hist.length; }
-    d.log.push(acPrompt(d)+' '+line);
-    const out=acCli(d,line);
-    if(out) out.split('\n').forEach(function(l){ d.log.push(l); });
-    acRenderTerm(); acRenderCanvas(); acRefreshCfg();
-    const fresh=document.getElementById('ac-term-in');
-    if(fresh) fresh.focus();
-  } else if(e.key==='ArrowUp'){
-    e.preventDefault();
-    if(d.hi>0){ d.hi--; input.value=d.hist[d.hi]||''; }
-  } else if(e.key==='ArrowDown'){
-    e.preventDefault();
-    if(d.hi<d.hist.length-1){ d.hi++; input.value=d.hist[d.hi]||''; }
-    else { d.hi=d.hist.length; input.value=''; }
-  } else if(e.key==='Tab'){
-    e.preventDefault();
-    input.value=LabShared.tabComplete(AC_KW, input.value, function(cands){ d.log.push(cands.join('   ')); acRenderTerm(); });
-  }
+/* Consoles — the shared LabShared.createConsoles: the panel's own, plus the
+   two pinned snap windows beside the page. */
+const ACCON=LabShared.createConsoles({
+  id:'ac', mainIds:{input:'ac-term-in', log:'ac-term-log', prompt:'ac-term-prompt'},
+  device:id=>acById(id), hasCli:d=>d.type==='router',
+  prompt:d=>acPrompt(d), run:(d,line)=>acCli(d,line), keywords:()=>AC_KW, logLines:300,
+  after:()=>{ acRenderCanvas(); acRefreshCfg(); }, dockAfter:'ac-cfg'
 });
+function acRenderTerm(){ ACCON.refresh(); }
 
 /* ═══ Lab brief + render ═══════════════════════════════════════════ */
 function acTasksShown(){ try{ return localStorage.getItem('ne-acl-tasks')!=='0'; }catch(e){ return true; } }
@@ -3998,6 +3965,7 @@ function pickTopic(){
 }
 function loadQ(){
   state.done=false;
+  ACCON.unpinAll();
   const t=pickTopic();
   state.mode=t;
   state.ver=verOf(t);

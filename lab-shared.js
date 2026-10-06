@@ -658,9 +658,495 @@
     return slot;
   }
 
+  /* ---------- device consoles ----------
+     Every lab CLI goes through one of these: a .term bound to a DEVICE
+     (data-did on the .term), never to "whichever device is selected". That
+     is what lets a page show more than one console at once — the main one
+     in the device panel, plus pinned ones beside the page. A device carries
+     its own log/hist/hi, so a console is only a view of it; that is also why
+     a pinned device's main slot becomes a placeholder rather than a second
+     copy of the same view.
+
+     createConsoles(cfg) makes one page's manager. The page supplies only
+     what differs between labs:
+       id          short page key — element ids, storage, the registry
+       mainIds     {input, log, prompt}: the main console's element ids
+       device(id)  -> the device, or null
+       hasCli(d)   -> true for devices with a CLI (only those get a console)
+       prompt(d)   run(d, line) -> output     keywords(d) -> the Tab tree
+       after(d)    the page's own refresh after a command (canvas, panel)
+       dockAfter   id of the element the pins dock under when the window is
+                   too narrow to float them beside the page
+       isError(line), escape(s), btnClass, logLines   (optional)
+       windows     how many pinned windows the right-hand gutter is split
+                   into, top to bottom (default 2). Each is a snap zone: a
+                   pin fills its own band of the screen and can't be dragged
+                   past the band's edge. More windows later is this number.
+     The page puts mainHtml(d) where its terminal goes and pinBtnHtml(d)
+     beside its Close button, calls refresh() wherever it used to redraw
+     its terminal, focusPinned(id) at the top of its device-click handler,
+     and unpinAll() when a round starts. */
+  var CON_REG = {}, CON_WIDE = 1600, CON_TOP = 84, CON_EDGE = 16, CON_GAP = 12, CON_MINW = 280, CON_MINH = 180;
+  var CON_PIN_SVG = '<svg viewBox="0 0 24 24"><path d="M12 17v5"/><path d="M9 3h6l-1 6 4 4v2H6v-2l4-4z"/></svg>';
+  var CON_MOVE_SVG = '<svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18"/><path d="M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3"/></svg>';
+  function conEsc(s) {
+    return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; });
+  }
+  function conId(v) { return isNaN(+v) ? v : +v; }
+  /* which band of the screen window k (0-based) of n is: the bands are
+     equal shares of the WINDOW's height — with two, the halfway line is the
+     middle of the screen — less a gap between them, with the top one
+     starting below the page header and the bottom one 16px off the edge */
+  function conBand(k, n) {
+    var H = window.innerHeight;
+    var top = k ? Math.round(H * k / n) + CON_GAP / 2 : CON_TOP;
+    var bottom = k < n - 1 ? Math.round(H * (k + 1) / n) - CON_GAP / 2 : H - CON_EDGE;
+    return { top: top, max: Math.max(CON_MINH, bottom - top) };
+  }
+  function conWinIcon(k, n) {
+    var h = 13 / n;
+    return '<svg viewBox="0 0 16 16"><rect x="1.5" y="1.5" width="13" height="13" rx="2"/>' +
+      '<rect class="fill" x="1.5" y="' + (1.5 + h * k) + '" width="13" height="' + h + '" rx="1"/></svg>';
+  }
+  function conWinName(k, n) {
+    return 'Window ' + (k + 1) + (n === 2 ? (k ? ' · bottom' : ' · top') : '');
+  }
+  var conMenu = null;
+  function closeConMenu() { if (conMenu) { conMenu.remove(); conMenu = null; } }
+
+  function createConsoles(cfg) {
+    var N = cfg.windows || 2, slots = [], host = null, guides = [], snap = null, drag = null;
+    for (var i = 0; i < N; i++) slots.push(null);
+    var mq = window.matchMedia('(min-width: ' + CON_WIDE + 'px)');
+    var esc = cfg.escape || conEsc;
+    var isErr = cfg.isError || function (l) { return l.charAt(0) === '%'; };
+    var btn = cfg.btnClass || 'btn btn-s';
+    var sizeKey = 'ne-con-pin:' + cfg.id;
+
+    function devOf(el) { return cfg.device(conId(el.getAttribute('data-did'))); }
+    function anyPinned() { return slots.some(Boolean); }
+    function slotOfId(id) {
+      for (var k = 0; k < N; k++) if (slots[k] && String(slots[k].id) === String(id)) return k;
+      return -1;
+    }
+    function floating() { return mq.matches; }
+    function termHtml(d, ids) {
+      return '<div class="term" data-con="' + cfg.id + '" data-did="' + esc(d.id) + '">' +
+        '<div class="term-log" id="' + ids.log + '"></div>' +
+        '<div class="term-inrow"><span class="term-prompt" id="' + ids.prompt + '"></span>' +
+        '<input class="term-in" id="' + ids.input + '" autocomplete="off" spellcheck="false"></div></div>';
+    }
+    function pinIds(k) {
+      return { input: cfg.id + '-term-in-pin' + k, log: cfg.id + '-term-log-pin' + k, prompt: cfg.id + '-term-prompt-pin' + k };
+    }
+    function mainState(d) { var k = slots.indexOf(d); return k < 0 ? 'term' : 'pin' + k; }
+    function mainInner(d) {
+      var k = slots.indexOf(d);
+      return k >= 0
+        ? '<div class="cli-note con-placeholder">' + esc(d.name) + '’s console is pinned to window ' + (k + 1) +
+          '. Click another device to open a second console window.</div>'
+        : termHtml(d, cfg.mainIds);
+    }
+    /* the main console slot for d, for the page's own panel template */
+    function mainHtml(d) {
+      return '<div class="con-slot" id="' + cfg.id + '-con-main" data-did="' + esc(d.id) + '" data-state="' + mainState(d) + '">' + mainInner(d) + '</div>';
+    }
+    /* the Pin button for the panel header; CSS shows it only where a pin can float */
+    function pinBtnHtml(d) {
+      if (!d || !cfg.hasCli(d)) return '';
+      return '<button type="button" class="' + btn + ' con-pin-btn" data-con-act="pin" data-con="' + cfg.id + '" data-did="' + esc(d.id) +
+        '" title="Pin this console beside the page, then open another device’s">' + CON_PIN_SVG + 'Pin</button>';
+    }
+    function panelHtml(d, k) {
+      return '<div class="cfg-panel con-pin" data-con="' + cfg.id + '" data-slot="' + k + '">' +
+        '<div class="cfg-hdr"><div class="cfg-name">' +
+          '<span class="con-move" title="Drag to the other window">' + CON_MOVE_SVG + '</span>' + esc(d.name) +
+          '<span class="con-pin-tag">Window ' + (k + 1) + '</span></div>' +
+        '<button type="button" class="' + btn + ' con-close-btn" data-con-act="unpin" data-con="' + cfg.id + '" data-did="' + esc(d.id) + '">Close</button></div>' +
+        termHtml(d, pinIds(k)) +
+        '<span class="con-grip" title="Drag to resize"></span></div>';
+    }
+    /* a panel that changes window keeps its element (so its log, scroll and
+       focus survive the move) and only takes the new window's ids and tag */
+    function setSlot(p, k) {
+      p.setAttribute('data-slot', k);
+      var ids = pinIds(k);
+      p.querySelector('.term-log').id = ids.log;
+      p.querySelector('.term-prompt').id = ids.prompt;
+      p.querySelector('.term-in').id = ids.input;
+      p.querySelector('.con-pin-tag').textContent = 'Window ' + (k + 1);
+    }
+    function panelAt(k) { return host ? host.querySelector('.con-pin[data-slot="' + k + '"]') : null; }
+
+    function sizes() { try { return JSON.parse(localStorage.getItem(sizeKey) || '{}') || {}; } catch (err) { return {}; } }
+    /* w is null for a docked resize: there the pin is full width, which says
+       nothing about how wide it should float */
+    function saveSize(k, w, h) {
+      var all = sizes(), was = all[k] || {};
+      all[k] = { w: w == null ? was.w : Math.round(w), h: Math.round(h) };
+      try { localStorage.setItem(sizeKey, JSON.stringify(all)); } catch (err) {}
+    }
+
+    /* Floating, the pins live on <body> (a blurred or transformed card would
+       otherwise become their containing block), in a click-through layer the
+       size of the window; docked, they stack in the page flow straight after
+       cfg.dockAfter. */
+    function ensureHost() {
+      if (host) return;
+      host = document.createElement('div');
+      host.className = 'con-pins';
+      for (var j = 1; j < N; j++) { var g = document.createElement('div'); g.className = 'con-guide'; host.appendChild(g); guides.push(g); }
+      snap = document.createElement('div'); snap.className = 'con-snap'; host.appendChild(snap);
+      host.addEventListener('mousedown', onHostDown);
+    }
+    function place() {
+      if (!anyPinned()) {
+        if (host && host.parentNode) host.parentNode.removeChild(host);
+        return;
+      }
+      ensureHost();
+      var wide = floating();
+      host.classList.toggle('floating', wide);
+      if (wide) {
+        if (host.parentNode !== document.body) document.body.appendChild(host);
+      } else {
+        var a = cfg.dockAfter && document.getElementById(cfg.dockAfter);
+        if (a && a.parentNode) { if (a.nextSibling !== host) a.parentNode.insertBefore(host, a.nextSibling); }
+        else if (host.parentNode !== document.body) document.body.appendChild(host);
+      }
+      layout();
+    }
+    /* Each pin sits at the top of its own band and may not be taller than
+       it; docked, the bands mean nothing and the pins just stack. */
+    function layout() {
+      if (!host) return;
+      var wide = floating();
+      [].forEach.call(host.querySelectorAll('.con-pin'), function (p) {
+        if (!wide) { p.style.top = ''; p.style.maxHeight = ''; return; }
+        var b = conBand(+p.getAttribute('data-slot'), N);
+        p.style.top = b.top + 'px';
+        p.style.maxHeight = b.max + 'px';
+        if (p.offsetHeight > b.max) p.style.height = b.max + 'px';
+      });
+      guides.forEach(function (g, j) { g.style.top = Math.round(window.innerHeight * (j + 1) / N) + 'px'; });
+    }
+    function renderPins() {
+      if (anyPinned()) ensureHost();
+      for (var k = 0; k < N; k++) {
+        var d = slots[k], el = panelAt(k);
+        if (!d) { if (el) el.parentNode.removeChild(el); continue; }
+        if (el && el._dev === d) continue;
+        var tmp = document.createElement('div');
+        tmp.innerHTML = panelHtml(d, k);
+        var p = tmp.firstChild;
+        p._dev = d;
+        var sz = sizes()[k];
+        if (sz && sz.w) p.style.width = sz.w + 'px';
+        if (sz && sz.h) p.style.height = sz.h + 'px';
+        /* placed before it is attached, so a new pin appears in its window
+           rather than sliding there from the top one */
+        if (floating()) { var bd = conBand(k, N); p.style.top = bd.top + 'px'; p.style.maxHeight = bd.max + 'px'; }
+        if (el) host.replaceChild(p, el); else host.appendChild(p);
+      }
+      place();
+    }
+    function onWidth() {
+      closeConMenu();
+      if (!anyPinned() || !host) return;
+      if (host.classList.contains('floating') !== floating()) place(); else layout();
+    }
+    mq.addEventListener('change', onWidth);
+    window.addEventListener('resize', onWidth);
+
+    /* ── dragging: the four-arrow handle moves a pin to another window,
+       the corner grip resizes it within its own ── */
+    function onHostDown(e) {
+      if (e.button !== 0) return;
+      var p = e.target.closest && e.target.closest('.con-pin');
+      if (!p) return;
+      if (e.target.closest('.con-grip')) startSize(e, p);
+      else if (e.target.closest('.con-move') && floating()) startMove(e, p);
+    }
+    function bandAt(y) { return Math.max(0, Math.min(N - 1, Math.floor(y / (window.innerHeight / N)))); }
+    function showSnap(k) {
+      var b = conBand(k, N);
+      snap.style.top = b.top + 'px';
+      snap.style.height = b.max + 'px';
+    }
+    function startMove(e, p) {
+      e.preventDefault();
+      var k = +p.getAttribute('data-slot');
+      drag = { kind: 'move', p: p, from: k, to: k, x: e.clientX, y: e.clientY, pushed: null };
+      p.classList.add('con-dragging');
+      host.classList.add('con-moving');
+      document.body.classList.add('con-moving-body');
+      showSnap(k);
+    }
+    function moveTo(e) {
+      var dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      drag.p.style.transform = 'translate(' + dx + 'px,' + dy + 'px)';
+      var t = bandAt(e.clientY);
+      if (t === drag.to) return;
+      /* crossing into another window pushes whoever is in it into the one
+         this pin came from; crossing back puts them home again */
+      if (drag.pushed) {
+        var home = conBand(+drag.pushed.getAttribute('data-slot'), N);
+        drag.pushed.style.top = home.top + 'px';
+        drag.pushed.style.maxHeight = home.max + 'px';
+        drag.pushed = null;
+      }
+      if (t !== drag.from) {
+        var other = panelAt(t);
+        if (other) {
+          var from = conBand(drag.from, N);
+          other.style.top = from.top + 'px';
+          other.style.maxHeight = from.max + 'px';
+          drag.pushed = other;
+        }
+      }
+      drag.to = t;
+      showSnap(t);
+    }
+    function endMove() {
+      var p = drag.p, from = drag.from, to = drag.to, pushed = drag.pushed;
+      var before = p.getBoundingClientRect();
+      if (to !== from) {
+        var dv = slots[from];
+        slots[from] = slots[to];
+        slots[to] = dv;
+        setSlot(p, to);
+        if (pushed) setSlot(pushed, from);
+      }
+      p.classList.remove('con-dragging');
+      p.style.transition = 'none';
+      p.style.transform = '';
+      layout();
+      /* glide from where it was let go into its window */
+      var after = p.getBoundingClientRect();
+      p.style.transform = 'translate(' + (before.left - after.left) + 'px,' + (before.top - after.top) + 'px)';
+      void p.offsetWidth;
+      p.style.transition = '';
+      p.style.transform = '';
+      refresh();
+    }
+    /* A pin can be pulled a little past its edge, against resistance, and
+       springs back when let go — the band's line is a wall, not a stop that
+       silently eats the drag. */
+    function band(v, min, max) {
+      if (v < min) return min;
+      return v > max ? max + Math.min(24, (v - max) * 0.25) : v;
+    }
+    function startSize(e, p) {
+      e.preventDefault();
+      var r = p.getBoundingClientRect(), k = +p.getAttribute('data-slot'), wide = floating();
+      drag = { kind: 'size', p: p, k: k, x: e.clientX, y: e.clientY, w: r.width, h: r.height, wide: wide,
+        maxH: wide ? conBand(k, N).max : 1200,
+        maxW: wide ? Math.max(CON_MINW, document.documentElement.clientWidth - r.left - CON_EDGE) : r.width };
+      p.classList.add('con-sizing');
+      host.classList.add('con-sizing-host');
+      document.body.classList.add(wide ? 'con-sizing-body' : 'con-sizing-v-body');
+    }
+    function sizeTo(e) {
+      var w = band(drag.w + (drag.wide ? e.clientX - drag.x : 0), CON_MINW, drag.maxW);
+      var h = band(drag.h + e.clientY - drag.y, CON_MINH, drag.maxH);
+      if (drag.wide) drag.p.style.width = w + 'px';
+      drag.p.style.height = h + 'px';
+      drag.p.style.maxHeight = 'none';
+      var hit = h > drag.maxH, g = guides[drag.k];
+      if (g) g.classList.toggle('hit', hit);
+      drag.over = hit || w > drag.maxW;
+    }
+    function endSize() {
+      var p = drag.p, w = Math.min(p.offsetWidth, drag.maxW), h = Math.min(p.offsetHeight, drag.maxH);
+      /* past the edge: spring back (an overshooting ease, so it visibly
+         bounces off the line), and only re-clamp once it has settled */
+      if (drag.over) {
+        p.classList.add('con-bounce');
+        void p.offsetWidth;
+        setTimeout(function () { p.classList.remove('con-bounce'); layout(); }, 470);
+      }
+      if (drag.wide) p.style.width = w + 'px';
+      p.style.height = h + 'px';
+      p.classList.remove('con-sizing');
+      guides.forEach(function (g) { g.classList.remove('hit'); });
+      if (!drag.over) layout();
+      saveSize(drag.k, drag.wide ? w : null, h);
+    }
+    window.addEventListener('mousemove', function (e) {
+      if (!drag) return;
+      if (drag.kind === 'move') moveTo(e); else sizeTo(e);
+    });
+    window.addEventListener('mouseup', function () {
+      if (!drag) return;
+      if (drag.kind === 'move') endMove(); else endSize();
+      if (host) host.classList.remove('con-moving', 'con-sizing-host');
+      document.body.classList.remove('con-moving-body', 'con-sizing-body', 'con-sizing-v-body');
+      drag = null;
+    });
+
+    function fill(term) {
+      var d = devOf(term);
+      if (!d) return;
+      var log = term.querySelector('.term-log'), pr = term.querySelector('.term-prompt');
+      log.innerHTML = (d.log || []).slice(-(cfg.logLines || 400)).map(function (l) {
+        return '<div class="tl' + (isErr(l) ? ' terr' : '') + '">' + esc(l) + '</div>';
+      }).join('');
+      log.scrollTop = log.scrollHeight;
+      if (pr) pr.textContent = cfg.prompt(d);
+    }
+    /* Redraw every console this page has open. Pins whose device no longer
+       exists (a new round reuses ids) are dropped first. */
+    function refresh() {
+      var gone = false;
+      for (var k = 0; k < N; k++) if (slots[k] && cfg.device(slots[k].id) !== slots[k]) { slots[k] = null; gone = true; }
+      if (gone) renderPins();
+      var slot = document.getElementById(cfg.id + '-con-main');
+      if (slot) {
+        var d = devOf(slot);
+        if (d) {
+          var want = mainState(d);
+          if (slot.getAttribute('data-state') !== want) { slot.innerHTML = mainInner(d); slot.setAttribute('data-state', want); }
+        }
+      }
+      [].forEach.call(document.querySelectorAll('.term[data-con="' + cfg.id + '"]'), fill);
+    }
+    function onKey(e, inp, term) {
+      var d = devOf(term);
+      if (!d || !cfg.hasCli(d)) return;
+      d.log = d.log || []; d.hist = d.hist || [];
+      if (d.hi == null) d.hi = d.hist.length;
+      if (e.key === 'Enter') {
+        var line = inp.value, id = inp.id;
+        inp.value = '';
+        if (line.trim()) d.hist.push(line);
+        d.hi = d.hist.length;
+        d.log.push(cfg.prompt(d) + ' ' + line);
+        var out = cfg.run(d, line);
+        if (out) String(out).split('\n').forEach(function (l) { d.log.push(l); });
+        if (cfg.after) cfg.after(d);
+        refresh();
+        /* the page's refresh may have rebuilt the panel this input lived in */
+        var again = document.getElementById(id);
+        if (again && document.activeElement !== again) again.focus({ preventScroll: true });
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (d.hi > 0) { d.hi--; inp.value = d.hist[d.hi] || ''; }
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (d.hi < d.hist.length - 1) { d.hi++; inp.value = d.hist[d.hi] || ''; }
+        else { d.hi = d.hist.length; inp.value = ''; }
+      } else if (e.key === 'Tab') {
+        e.preventDefault();
+        inp.value = tabComplete(cfg.keywords(d), inp.value, function (c) { d.log.push(c.join('   ')); refresh(); });
+      }
+    }
+    /* Clicking a pinned device on the canvas lands in its pinned console. */
+    function focusPinned(id) {
+      var k = slotOfId(id);
+      if (k < 0 || cfg.device(slots[k].id) !== slots[k]) return false;
+      var panel = panelAt(k);
+      if (!panel) return false;
+      if (!floating()) panel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      var inp = panel.querySelector('.term-in');
+      if (inp) inp.focus({ preventScroll: true });
+      panel.classList.remove('con-flash');
+      void panel.offsetWidth;
+      panel.classList.add('con-flash');
+      return true;
+    }
+    /* Pin d into window k (replacing whoever is there). */
+    function pin(id, k) {
+      var d = cfg.device(id);
+      if (!d || !cfg.hasCli(d)) return;
+      if (slots.indexOf(d) >= 0) { focusPinned(id); return; }
+      if (k == null || k < 0 || k >= N) { k = slots.indexOf(null); if (k < 0) k = 0; }
+      slots[k] = d;
+      renderPins();
+      refresh();
+      focusPinned(id);
+    }
+    /* The Pin button: straight into window 1 when nothing is pinned yet,
+       otherwise a menu asking which window. */
+    function requestPin(id, b) {
+      var d = cfg.device(id);
+      if (!d || !cfg.hasCli(d)) return;
+      if (slots.indexOf(d) >= 0) { focusPinned(id); return; }
+      if (conMenu && conMenu._btn === b) { closeConMenu(); return; }
+      closeConMenu();
+      if (N === 1 || !anyPinned() || !floating() || !b) { pin(id); return; }
+      var m = document.createElement('div');
+      m.className = 'sel-menu con-menu';
+      var html = '<div class="con-menu-lbl">Pin ' + esc(d.name) + '’s console to</div>';
+      for (var k = 0; k < N; k++) {
+        html += '<button type="button" class="sel-item con-menu-opt" data-k="' + k + '">' + conWinIcon(k, N) +
+          '<span>' + conWinName(k, N) + '</span><span class="con-menu-sub">' + (slots[k] ? esc(slots[k].name) : 'empty') + '</span></button>';
+      }
+      m.innerHTML = html;
+      document.body.appendChild(m);
+      var r = b.getBoundingClientRect(), mh = m.offsetHeight;
+      m.style.left = Math.max(8, r.right - m.offsetWidth) + 'px';
+      m.style.top = (r.bottom + 6 + mh > window.innerHeight - 8 ? r.top - 6 - mh : r.bottom + 6) + 'px';
+      m.addEventListener('click', function (e) {
+        var o = e.target.closest && e.target.closest('[data-k]');
+        if (!o) return;
+        closeConMenu();
+        pin(id, +o.getAttribute('data-k'));
+      });
+      m._btn = b;
+      conMenu = m;
+    }
+    function unpin(id) {
+      var k = slotOfId(id);
+      if (k < 0) return;
+      slots[k] = null;
+      renderPins();
+      refresh();
+    }
+    function unpinAll() {
+      closeConMenu();
+      if (!anyPinned()) return;
+      for (var k = 0; k < N; k++) slots[k] = null;
+      renderPins();
+      refresh();
+    }
+    var api = {
+      mainHtml: mainHtml, pinBtnHtml: pinBtnHtml, refresh: refresh,
+      pin: pin, requestPin: requestPin, unpin: unpin, unpinAll: unpinAll, focusPinned: focusPinned,
+      isPinned: function (id) { return slotOfId(id) >= 0; },
+      pinned: function () { return slots.slice(); },
+      _key: onKey
+    };
+    CON_REG[cfg.id] = api;
+    return api;
+  }
+  /* One listener each for every page's consoles: keys typed into any
+     console's input, and the Pin / Close buttons. A .term without data-con
+     (the OSPF Cost drill's read-only CLI) is left to its own handler. */
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closeConMenu();
+    var t = e.target;
+    if (!t || !t.classList || !t.classList.contains('term-in') || !t.closest) return;
+    var term = t.closest('.term[data-con]');
+    var c = term && CON_REG[term.getAttribute('data-con')];
+    if (c) c._key(e, t, term);
+  });
+  document.addEventListener('click', function (e) {
+    var b = e.target && e.target.closest && e.target.closest('[data-con-act]');
+    var c = b && CON_REG[b.getAttribute('data-con')];
+    if (!c) return;
+    var id = conId(b.getAttribute('data-did'));
+    if (b.getAttribute('data-con-act') === 'pin') c.requestPin(id, b); else c.unpin(id);
+  });
+  /* the window menu closes on a press anywhere else (its own button toggles it) */
+  document.addEventListener('mousedown', function (e) {
+    if (conMenu && !conMenu.contains(e.target) && !(conMenu._btn && conMenu._btn.contains(e.target))) closeConMenu();
+  }, true);
+  window.addEventListener('scroll', function () { closeConMenu(); }, true);
+
   window.LabShared = {
     cablePaths: cablePaths,
     portSlots: portSlots,
+    createConsoles: createConsoles,
     cliGrammar: cliGrammar,
     cliCheck: cliCheck,
     cliPipe: cliPipe,
