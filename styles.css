@@ -928,6 +928,10 @@ body.pop-resizing, body.pop-resizing * { cursor: ew-resize !important; user-sele
 .cable.chan   { stroke: #7c3aed; stroke-dasharray: 7 4; }
 /* Serial WAN link (routing_game PPP Links) - Packet Tracer draws them red. */
 .cable.serial { stroke: var(--err-text); }
+/* The DCE end of a serial cable (LabShared.dceTag): a tag sitting on the cable. */
+.dce-tag       { pointer-events: none; }
+.dce-tag rect  { fill: var(--surface); stroke: var(--err-text); stroke-width: 1.5; }
+.dce-tag text  { font: 700 9px var(--mono); fill: var(--err-text); letter-spacing: .04em; }
 .cable.locked { cursor: default; }
 .cable.locked:hover { stroke: inherit; }
 

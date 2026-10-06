@@ -1130,8 +1130,8 @@ function acBuildTopology(){
   acAddIface(r3,'Lo0',A.r3_lo,A.lanPfx,{loopback:true});
   acAddIface(r3,'S0/0/1',A.r3_s,A.serPfx,{serial:true});
 
-  acCable(r1,r2,{serial:true,aLabel:'S0/0/0',bLabel:'S0/0/0'});
-  acCable(r2,r3,{serial:true,aLabel:'S0/0/1',bLabel:'S0/0/1'});
+  acCable(r1,r2,{serial:true,dce:'a',aLabel:'S0/0/0',bLabel:'S0/0/0'});
+  acCable(r2,r3,{serial:true,dce:'a',aLabel:'S0/0/1',bLabel:'S0/0/1'});
   acCable(r1,s1,{aLabel:'G0/1',bLabel:'F0/5'});
   acCable(r3,s3,{aLabel:'G0/1',bLabel:'F0/5'});
   acCable(s1,pcA,{aLabel:'F0/6'});
@@ -1732,7 +1732,7 @@ function natBuildTopology(kind, bare){
     /* A loopback is up the moment it exists; a physical port starts shut. */
     f.up = !bare || f.loopback;
   });
-  acCable(gw,isp,{serial:true,aLabel:'S0/0/1',bLabel:'S0/0/0'});
+  acCable(gw,isp,{serial:true,dce:'b',aLabel:'S0/0/1',bLabel:'S0/0/0'});
   acCable(gw,s1,{aLabel:'G0/1',bLabel:'F0/5'});
   pcs.forEach(function(pc,i){ acCable(s1,pc,{aLabel:'F0/'+(6+i)}); });
   if(!bare){
@@ -2347,6 +2347,15 @@ function acRenderCanvas(){
     svg.appendChild(l);
     if(c.aLabel) acEdgeLabel(svg,p,q,c.aLabel);
     if(c.bLabel) acEdgeLabel(svg,q,p,c.bLabel);
+    /* a serial cable's dce names the end ('a' or 'b') that supplies the clock */
+    if(c.serial&&c.dce){
+      /* level with that end's port name, but off the cable's lower side —
+         the names sit above it */
+      const from=c.dce==='a'?p:q, to=c.dce==='a'?q:p;
+      const L=Math.hypot(to[0]-from[0],to[1]-from[1])||1, ux=(to[0]-from[0])/L, uy=(to[1]-from[1])/L;
+      const n=ux>=0?[-uy,ux]:[uy,-ux];
+      svg.insertAdjacentHTML('beforeend', LabShared.dceTag([from,to], L*0.26, [n[0]*12,n[1]*12]));
+    }
   });
 
   /* Loopbacks as the usual stub symbol: an arm off the top with a T-bar. */
@@ -2568,9 +2577,9 @@ function acAddrRows(){
     ['R1','Gi0/1.10',A.r1_10+L,'VLAN 10 — PC-A'],
     ['R1','Gi0/1.20',A.r1_20+L,'VLAN 20 — PC-B'],
     ['R1','Gi0/1.99',A.r1_99+L,'VLAN 99 — management'],
-    ['R1','S0/0/0',A.r1_s+S,'R2 S0/0/0'],
+    ['R1','S0/0/0 (DCE)',A.r1_s+S,'R2 S0/0/0'],
     ['R2','S0/0/0',A.r2_s0+S,'R1 S0/0/0'],
-    ['R2','S0/0/1',A.r2_s1+S,'R3 S0/0/1'],
+    ['R2','S0/0/1 (DCE)',A.r2_s1+S,'R3 S0/0/1'],
     ['R2','Lo0',A.r2_lo+'/'+A.loPfx,'simulated Internet'],
     ['R3','Gi0/1.30',A.r3_30+L,'VLAN 30 — PC-C'],
     ['R3','Gi0/1.100',A.r3_100+L,'VLAN 100 — management'],
@@ -3735,6 +3744,8 @@ function acPlTopoHtml(d){
   svg+=acPlLabel((P.r1.x+P.rw+P.r2.x)/2, P.yWire-12, t.wan+'/'+t.wanPfx, 'middle', 'text');
   svg+=acPlLabel(P.r1.x+P.rw+4, P.yIf, 'S0/0/0');
   svg+=acPlLabel(P.r2.x-4, P.yIf, 'S0/0/0', 'end');
+  /* R1 S0/0/0 is the DCE end, as in the ACL lab */
+  svg+=LabShared.dceTag([[P.r1.x+P.rw, P.yWire],[P.r2.x, P.yWire]], 16, [0,-3]);
 
   /* LAN1 and LAN3: a bar out to the side of the router, with the host above
      it. Interface names sit BELOW the wire so they clear the bar, which stops

@@ -1870,6 +1870,14 @@ function tsRenderCanvas(){
       const l=tsSvg('line',{x1:p[0], y1:p[1], x2:q[0], y2:q[1], class:'cable'},svg);
       l.style.pointerEvents='none';
       if(c.serial) l.style.strokeDasharray='7 4';
+      /* the DCE end is the interface built with dce:true: tagged level with
+         that end's port name (below), on the other side of the cable */
+      if(c.serial) [[A,c.a,p,q],[B,c.b,q,p]].forEach(e=>{
+        const f=e[0].type==='router'&&e[0].ifaces[e[1].i];
+        if(!f||!f.dce) return;
+        const dx=e[3][0]-e[2][0], dy=e[3][1]-e[2][1], L=Math.hypot(dx,dy)||1;
+        svg.insertAdjacentHTML('beforeend', LabShared.dceTag([e[2],e[3]], Math.min(30,L*0.32), Math.abs(dx)>Math.abs(dy)?[0,12]:[-22,0]));
+      });
       [[c.a,A,p,q],[c.b,B,q,p]].forEach(e=>{
         const end=e[0], dev=e[1], at=e[2], to=e[3];
         const dx=to[0]-at[0], dy=to[1]-at[1], L=Math.hypot(dx,dy)||1;

@@ -1032,6 +1032,50 @@
     return out;
   }
 
+  /* ---------- the DCE end of a serial cable ----------
+     Packet Tracer marks the DCE end of a serial cable (the end that has to
+     supply the clock); every page with a serial link marks it the same way:
+     a small "DCE" tag sitting on the cable a short way out from that end.
+     Returned as markup so it suits both an SVG built from a string and one
+     built node by node (svg.insertAdjacentHTML('beforeend', ...)).
+       pts:  the cable as a polyline, STARTING at the DCE end — [[x,y], ...]
+       dist: how far along the cable to centre the tag (default 30px; never
+             past 40% of the cable, so it stays visibly at its own end)
+       off:  optional [dx, dy] nudge off the cable, to clear a page's own
+             port labels (put it on the far side of the cable from them)
+     pathPoints turns one of cablePaths' path strings back into that polyline
+     (its corner curves are a few px, so their end points are near enough). */
+  function pathPoints(d) {
+    var n = (d.match(/-?\d*\.?\d+(?:e-?\d+)?/gi) || []).map(Number), cmds = d.match(/[MLQ]/g) || [], pts = [], k = 0;
+    cmds.forEach(function (c) {
+      if (c === 'Q') k += 2;
+      pts.push([n[k], n[k + 1]]); k += 2;
+    });
+    return pts;
+  }
+  function dceTag(pts, dist, off) {
+    var segs = [], total = 0;
+    for (var i = 1; i < pts.length; i++) {
+      var L = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]);
+      segs.push(L); total += L;
+    }
+    var want = Math.min(dist == null ? 30 : dist, total * 0.4), x = pts[0][0], y = pts[0][1];
+    for (var j = 0; j < segs.length; j++) {
+      if (want <= segs[j] || j === segs.length - 1) {
+        var t = segs[j] ? Math.min(1, want / segs[j]) : 0;
+        x = pts[j][0] + (pts[j + 1][0] - pts[j][0]) * t;
+        y = pts[j][1] + (pts[j + 1][1] - pts[j][1]) * t;
+        break;
+      }
+      want -= segs[j];
+    }
+    if (off) { x += off[0]; y += off[1]; }
+    return '<g class="dce-tag" transform="translate(' + x.toFixed(1) + ' ' + y.toFixed(1) + ')">' +
+      '<title>DCE end of the serial cable: this interface supplies the clock (clock rate)</title>' +
+      '<rect x="-14" y="-7.5" width="28" height="15" rx="4"></rect>' +
+      '<text x="0" y="0.5" text-anchor="middle" dominant-baseline="middle">DCE</text></g>';
+  }
+
   /* ---------- port slots ----------
      Which slot along a box's bottom edge each port is drawn in. A port keeps
      its name and number; only where its circle sits changes, so that every
@@ -1553,6 +1597,8 @@
 
   window.LabShared = {
     cablePaths: cablePaths,
+    pathPoints: pathPoints,
+    dceTag: dceTag,
     portSlots: portSlots,
     createConsoles: createConsoles,
     cliGrammar: cliGrammar,
