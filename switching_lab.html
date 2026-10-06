@@ -154,10 +154,7 @@
         <span class="pc-pfx">/ 24</span>
         <span class="pc-ip-hint" id="pc-ip-hint"></span>
       </div>
-      <div class="pc-form">
-        <label class="pc-form-lbl">MAC Address</label>
-        <span class="mono-inl" id="pc-mac"></span>
-      </div>
+      <div id="pc-mac-row"></div>
       <div id="pc-tool"></div>
     </div>
   </div>
@@ -645,7 +642,7 @@ function buildPCForm(){
   const d=byId(selected); if(!d||d.type!=='pc') return;
   refreshIPConflicts();
   document.getElementById('pc-ip').value=d.ip||'';
-  document.getElementById('pc-mac').textContent=macUp(d.mac);
+  document.getElementById('pc-mac-row').innerHTML=LabShared.pcMacHtml(d.mac,{style:'margin-top:6px'});
   const hint=document.getElementById('pc-ip-hint');
   if(d.ip&&d._ipConflict){ hint.textContent='\u26a0 Duplicate IP on the network \u2014 change it'; hint.className='pc-ip-hint bad'; }
   else { hint.textContent=''; hint.className='pc-ip-hint'; }

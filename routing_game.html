@@ -2067,7 +2067,8 @@ function genRoute(diff){
    section 8. The LANs, the PCs and the static routes across the link are
    already done, so the only thing standing between PC1 and PC2 is the serial
    link itself. Easy names the DCE end and every value; Medium adds CHAP and
-   makes you find the DCE end with show controllers; Hard arrives configured
+   leaves the DCE end off the table (the cable's DCE tag and show controllers
+   still say which it is); Hard arrives configured
    with two faults drawn from six, and gives you only the ticket. */
 function pppEncapReq(r,i){
   const p=r.ports[i];
@@ -2164,7 +2165,7 @@ function genPpp(diff){
   if(diff==='medium'){
     return {title:'PPP with CHAP',
       goal:`Bring up the <b>${t.r1.name}–${t.r2.name}</b> serial link with PPP and <b>CHAP</b> authentication (shared password <b>${pass}</b>), so <b>${t.pc1.name}</b> can reach <b>${t.pc2.name}</b>.`,
-      note:`Which end is DCE is not on the table — <span class="mono-inl">show controllers s0/0/x</span> says, and only that end takes a clock rate. For CHAP each router needs <span class="mono-inl">username &lt;the other router's hostname&gt; password ${pass}</span> plus <span class="mono-inl">ppp authentication chap</span> on its serial interface.`,
+      note:`Which end is DCE is not on the table — the cable's DCE tag marks it, and <span class="mono-inl">show controllers s0/0/x</span> confirms it from the router. Only that end takes a clock rate. For CHAP each router needs <span class="mono-inl">username &lt;the other router's hostname&gt; password ${pass}</span> plus <span class="mono-inl">ppp authentication chap</span> on its serial interface.`,
       addr:pppAddr(t,false),
       reqs:[...reqsAddr(),
         ...rlGroup('PPP', pppEncapReq(t.r1,t.r1s), pppEncapReq(t.r2,t.r2s), pppClockReq(t.dce.r,t.dce.i,false),
@@ -2780,6 +2781,12 @@ function rlRenderCanvas(){
     hl.setAttribute('d',routes[ci]);
     hl.setAttribute('class','cable-hit'); hl.dataset.cid=c.id;
     svg.appendChild(hl);
+    /* the same end rlSerialRole calls DCE: the round's choice, else the a end */
+    if(ser){
+      const pts=LabShared.pathPoints(routes[ci]), dce=c.dce||c.a;
+      if(!(dce.d===c.a.d&&dce.i===c.a.i)) pts.reverse();
+      svg.insertAdjacentHTML('beforeend', LabShared.dceTag(pts, 44));
+    }
   });
 
   rlDevices.forEach(d=>{
