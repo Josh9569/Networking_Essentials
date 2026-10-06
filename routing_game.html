@@ -2783,10 +2783,11 @@ function rlRenderCanvas(){
       let cls='port';
       if(rlPending&&rlPending.d===d.id&&rlPending.i===i) cls+=' p-pending';
       else if(p&&p.ip&&rlLive(d,p)) cls+=' p-acc';
-      /* Serial ports are squares numbered 1 (S0/0/0) and 2 (S0/0/1), so on
-         a PPP round they can't be mistaken for the Gigabit circles beside them. */
+      /* Serial ports are squares carrying their own number — 0 for S0/0/0,
+         1 for S0/0/1 — so on a PPP round they can't be mistaken for the
+         Gigabit circles beside them. */
       const ser=p&&p.serial, r=ser?8:7;
-      if(ser){ cls+=' p-serial'; pel.textContent=String(+p.name.split('/').pop()+1); }
+      if(ser){ cls+=' p-serial'; pel.textContent=p.name.split('/').pop(); }
       pel.className=cls;
       pel.style.left=(d.x+px-r)+'px'; pel.style.top=(d.y+py-r)+'px';
       pel.dataset.did=d.id; pel.dataset.pi=i;
