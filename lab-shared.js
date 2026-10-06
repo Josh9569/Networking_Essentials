@@ -658,9 +658,266 @@
     return slot;
   }
 
+  /* ---------- device consoles ----------
+     Every lab CLI goes through one of these: a .term bound to a DEVICE
+     (data-did on the .term), never to "whichever device is selected". That
+     is what lets a page show more than one console at once — the main one
+     in the device panel, plus pinned ones beside the page. A device carries
+     its own log/hist/hi, so a console is only a view of it; that is also why
+     a pinned device's main slot becomes a placeholder rather than a second
+     copy of the same view.
+
+     createConsoles(cfg) makes one page's manager. The page supplies only
+     what differs between labs:
+       id          short page key — element ids, storage, the registry
+       mainIds     {input, log, prompt}: the main console's element ids
+       device(id)  -> the device, or null
+       hasCli(d)   -> true for devices with a CLI (only those get a console)
+       prompt(d)   run(d, line) -> output     keywords(d) -> the Tab tree
+       after(d)    the page's own refresh after a command (canvas, panel)
+       dockAfter   id of the element the pins dock under when the window is
+                   too narrow to float them beside the page
+       isError(line), escape(s), btnClass, logLines   (optional)
+       maxPinned   how many may be pinned at once (default 1). Past it the
+                   oldest is replaced; the pins stack in the gutter, each
+                   with its own Close and resize handle, so raising this is
+                   the whole of "more than one pinned console".
+     The page puts mainHtml(d) where its terminal goes and pinBtnHtml(d)
+     beside its Close button, calls refresh() wherever it used to redraw
+     its terminal, focusPinned(id) at the top of its device-click handler,
+     and unpinAll() when a round starts. */
+  var CON_REG = {}, CON_WIDE = 1600;
+  var CON_PIN_SVG = '<svg viewBox="0 0 24 24"><path d="M12 17v5"/><path d="M9 3h6l-1 6 4 4v2H6v-2l4-4z"/></svg>';
+  function conEsc(s) {
+    return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; });
+  }
+  function conId(v) { return isNaN(+v) ? v : +v; }
+  function createConsoles(cfg) {
+    var max = cfg.maxPinned || 1, pins = [], host = null, built = '';
+    var mq = window.matchMedia('(min-width: ' + CON_WIDE + 'px)');
+    var esc = cfg.escape || conEsc;
+    var isErr = cfg.isError || function (l) { return l.charAt(0) === '%'; };
+    var btn = cfg.btnClass || 'btn btn-s';
+    var sizeKey = 'ne-con-pin:' + cfg.id;
+
+    function devOf(el) { return cfg.device(conId(el.getAttribute('data-did'))); }
+    function isPinned(d) { return pins.indexOf(d) >= 0; }
+    function pinnedById(id) {
+      for (var i = 0; i < pins.length; i++) if (String(pins[i].id) === String(id)) return pins[i];
+      return null;
+    }
+    function termHtml(d, ids) {
+      return '<div class="term" data-con="' + cfg.id + '" data-did="' + esc(d.id) + '">' +
+        '<div class="term-log" id="' + ids.log + '"></div>' +
+        '<div class="term-inrow"><span class="term-prompt" id="' + ids.prompt + '"></span>' +
+        '<input class="term-in" id="' + ids.input + '" autocomplete="off" spellcheck="false"></div></div>';
+    }
+    function pinIds(k) {
+      return { input: cfg.id + '-term-in-pin' + k, log: cfg.id + '-term-log-pin' + k, prompt: cfg.id + '-term-prompt-pin' + k };
+    }
+    function mainInner(d) {
+      return isPinned(d)
+        ? '<div class="cli-note con-placeholder">' + esc(d.name) + '’s console is pinned. Click another device to open a second console window.</div>'
+        : termHtml(d, cfg.mainIds);
+    }
+    /* the main console slot for d, for the page's own panel template */
+    function mainHtml(d) {
+      return '<div class="con-slot" id="' + cfg.id + '-con-main" data-did="' + esc(d.id) + '" data-state="' +
+        (isPinned(d) ? 'pin' : 'term') + '">' + mainInner(d) + '</div>';
+    }
+    /* the Pin button for the panel header; CSS shows it only where a pin can float */
+    function pinBtnHtml(d) {
+      if (!d || !cfg.hasCli(d)) return '';
+      return '<button type="button" class="' + btn + ' con-pin-btn" data-con-act="pin" data-con="' + cfg.id + '" data-did="' + esc(d.id) +
+        '" title="Pin this console beside the page, then open another device’s">' + CON_PIN_SVG + 'Pin</button>';
+    }
+    function pinHtml(d, k) {
+      return '<div class="cfg-panel con-pin" data-con="' + cfg.id + '">' +
+        '<div class="cfg-hdr"><div class="cfg-name">' + esc(d.name) + '<span class="con-pin-tag">Pinned</span></div>' +
+        '<button type="button" class="' + btn + ' con-close-btn" data-con-act="unpin" data-con="' + cfg.id + '" data-did="' + esc(d.id) + '">Close</button></div>' +
+        termHtml(d, pinIds(k)) + '</div>';
+    }
+
+    /* Floating, the pins live on <body> so no blurred or transformed card
+       can become their containing block; docked, they sit in the page flow
+       straight after cfg.dockAfter. */
+    function place() {
+      if (!pins.length) {
+        if (host && host.parentNode) host.parentNode.removeChild(host);
+        built = '';
+        return;
+      }
+      if (!host) {
+        host = document.createElement('div');
+        host.className = 'con-pins';
+        host.addEventListener('mousedown', function (e) {
+          var p = e.target.closest && e.target.closest('.con-pin');
+          host._rs = p ? { el: p, w: p.offsetWidth, h: p.offsetHeight } : null;
+        });
+      }
+      var wide = mq.matches;
+      host.classList.toggle('floating', wide);
+      if (wide) {
+        if (host.parentNode !== document.body) document.body.appendChild(host);
+      } else {
+        var a = cfg.dockAfter && document.getElementById(cfg.dockAfter);
+        if (a && a.parentNode) { if (a.nextSibling !== host) a.parentNode.insertBefore(host, a.nextSibling); }
+        else if (host.parentNode !== document.body) document.body.appendChild(host);
+      }
+    }
+    function renderPins() {
+      place();
+      if (!pins.length) return;
+      var key = pins.map(function (d) { return d.id; }).join(',');
+      if (key === built) return;
+      built = key;
+      host.innerHTML = pins.map(pinHtml).join('');
+      var size = null;
+      try { size = JSON.parse(localStorage.getItem(sizeKey) || 'null'); } catch (err) {}
+      if (size) [].forEach.call(host.querySelectorAll('.con-pin'), function (p) {
+        p.style.width = size.w + 'px'; p.style.height = size.h + 'px';
+      });
+    }
+    /* A resize is the browser's own corner handle, so it is noticed after
+       the fact: a press inside a pin that ends with a different size. */
+    window.addEventListener('mouseup', function () {
+      var r = host && host._rs;
+      if (!r) return;
+      host._rs = null;
+      if (r.el.offsetWidth === r.w && r.el.offsetHeight === r.h) return;
+      try { localStorage.setItem(sizeKey, JSON.stringify({ w: r.el.offsetWidth, h: r.el.offsetHeight })); } catch (err) {}
+    });
+    /* re-dock or re-float when the window crosses the line; resize as well as
+       the media query's own change event, which not every resize delivers */
+    function onWidth() { if (pins.length && host && host.classList.contains('floating') !== mq.matches) place(); }
+    mq.addEventListener('change', onWidth);
+    window.addEventListener('resize', onWidth);
+
+    function fill(term) {
+      var d = devOf(term);
+      if (!d) return;
+      var log = term.querySelector('.term-log'), pr = term.querySelector('.term-prompt');
+      log.innerHTML = (d.log || []).slice(-(cfg.logLines || 400)).map(function (l) {
+        return '<div class="tl' + (isErr(l) ? ' terr' : '') + '">' + esc(l) + '</div>';
+      }).join('');
+      log.scrollTop = log.scrollHeight;
+      if (pr) pr.textContent = cfg.prompt(d);
+    }
+    /* Redraw every console this page has open. Pins whose device no longer
+       exists (a new round reuses ids) are dropped first. */
+    function refresh() {
+      var n = pins.length;
+      pins = pins.filter(function (d) { return cfg.device(d.id) === d; });
+      if (pins.length !== n) renderPins();
+      var slot = document.getElementById(cfg.id + '-con-main');
+      if (slot) {
+        var d = devOf(slot);
+        if (d) {
+          var want = isPinned(d) ? 'pin' : 'term';
+          if (slot.getAttribute('data-state') !== want) { slot.innerHTML = mainInner(d); slot.setAttribute('data-state', want); }
+        }
+      }
+      [].forEach.call(document.querySelectorAll('.term[data-con="' + cfg.id + '"]'), fill);
+    }
+    function onKey(e, inp, term) {
+      var d = devOf(term);
+      if (!d || !cfg.hasCli(d)) return;
+      d.log = d.log || []; d.hist = d.hist || [];
+      if (d.hi == null) d.hi = d.hist.length;
+      if (e.key === 'Enter') {
+        var line = inp.value, id = inp.id;
+        inp.value = '';
+        if (line.trim()) d.hist.push(line);
+        d.hi = d.hist.length;
+        d.log.push(cfg.prompt(d) + ' ' + line);
+        var out = cfg.run(d, line);
+        if (out) String(out).split('\n').forEach(function (l) { d.log.push(l); });
+        if (cfg.after) cfg.after(d);
+        refresh();
+        /* the page's refresh may have rebuilt the panel this input lived in */
+        var again = document.getElementById(id);
+        if (again && document.activeElement !== again) again.focus({ preventScroll: true });
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (d.hi > 0) { d.hi--; inp.value = d.hist[d.hi] || ''; }
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (d.hi < d.hist.length - 1) { d.hi++; inp.value = d.hist[d.hi] || ''; }
+        else { d.hi = d.hist.length; inp.value = ''; }
+      } else if (e.key === 'Tab') {
+        e.preventDefault();
+        inp.value = tabComplete(cfg.keywords(d), inp.value, function (c) { d.log.push(c.join('   ')); refresh(); });
+      }
+    }
+    /* Clicking a pinned device on the canvas lands in its pinned console. */
+    function focusPinned(id) {
+      var d = pinnedById(id);
+      if (!d || cfg.device(d.id) !== d || !host) return false;
+      var panel = host.querySelectorAll('.con-pin')[pins.indexOf(d)];
+      if (!panel) return false;
+      if (!mq.matches) panel.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      var inp = panel.querySelector('.term-in');
+      if (inp) inp.focus({ preventScroll: true });
+      panel.classList.remove('con-flash');
+      void panel.offsetWidth;
+      panel.classList.add('con-flash');
+      return true;
+    }
+    function pin(id) {
+      var d = cfg.device(id);
+      if (!d || !cfg.hasCli(d)) return;
+      if (isPinned(d)) { focusPinned(id); return; }
+      pins.push(d);
+      while (pins.length > max) pins.shift();
+      renderPins();
+      refresh();
+      focusPinned(id);
+    }
+    function unpin(id) {
+      var d = pinnedById(id);
+      if (!d) return;
+      pins.splice(pins.indexOf(d), 1);
+      renderPins();
+      refresh();
+    }
+    function unpinAll() {
+      if (!pins.length) return;
+      pins = [];
+      renderPins();
+      refresh();
+    }
+    var api = {
+      mainHtml: mainHtml, pinBtnHtml: pinBtnHtml, refresh: refresh,
+      pin: pin, unpin: unpin, unpinAll: unpinAll, focusPinned: focusPinned,
+      isPinned: function (id) { return !!pinnedById(id); },
+      pinned: function () { return pins.slice(); },
+      _key: onKey
+    };
+    CON_REG[cfg.id] = api;
+    return api;
+  }
+  /* One listener each for every page's consoles: keys typed into any
+     console's input, and the Pin / Close buttons. A .term without data-con
+     (the OSPF Cost drill's read-only CLI) is left to its own handler. */
+  document.addEventListener('keydown', function (e) {
+    var t = e.target;
+    if (!t || !t.classList || !t.classList.contains('term-in') || !t.closest) return;
+    var term = t.closest('.term[data-con]');
+    var c = term && CON_REG[term.getAttribute('data-con')];
+    if (c) c._key(e, t, term);
+  });
+  document.addEventListener('click', function (e) {
+    var b = e.target && e.target.closest && e.target.closest('[data-con-act]');
+    var c = b && CON_REG[b.getAttribute('data-con')];
+    if (!c) return;
+    var id = conId(b.getAttribute('data-did'));
+    if (b.getAttribute('data-con-act') === 'pin') c.pin(id); else c.unpin(id);
+  });
+
   window.LabShared = {
     cablePaths: cablePaths,
     portSlots: portSlots,
+    createConsoles: createConsoles,
     cliGrammar: cliGrammar,
     cliCheck: cliCheck,
     cliPipe: cliPipe,

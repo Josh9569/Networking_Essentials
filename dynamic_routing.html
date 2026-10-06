@@ -3049,7 +3049,7 @@ function rpOnCableClick(e){
 }
 
 /* ── Config panel ── */
-function rpOpenCfg(did){ rpSelected=did; rpRenderCanvas(); rpRefreshCfg(); }
+function rpOpenCfg(did){ if(RPCON.focusPinned(did)) return; rpSelected=did; rpRenderCanvas(); rpRefreshCfg(); }
 function rpCloseCfg(){ rpSelected=null; rpRenderCanvas(); const p=document.getElementById('rp-cfg'); if(p) p.style.display='none'; }
 function rpRefreshCfg(){
   const d=rpSelected!=null?rpById(rpSelected):null;
@@ -3127,22 +3127,18 @@ function rpDefaultRouteFormHtml(d){
   });
   return html+'</select></div>';
 }
-function rpTermHtml(){
-  return '<div class="term"><div class="term-log" id="rp-term-log"></div>'+
-    '<div class="term-inrow"><span class="term-prompt" id="rp-term-prompt"></span>'+
-    '<input class="term-in" id="rp-term-in" autocomplete="off" spellcheck="false"></div></div>';
-}
+function rpTermHtml(d){ return RPCON.mainHtml(d); }
 function rpRenderRouterCfg(d,panel){
   const helper=state.data&&state.data.helper;
   panel.innerHTML=
     '<div class="cfg-hdr"><div class="cfg-name">'+d.name+'</div>'+
-    '<button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="rpCloseCfg()">Close</button></div>'+
+    '<span class="cfg-hdr-btns">'+RPCON.pinBtnHtml(d)+'<button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="rpCloseCfg()">Close</button></span></div>'+
     (state.mode==='ospflab' ? '<div class="cfg-grid stack"><div>'+
       '<div class="cfg-sec-lbl">Interfaces</div>'+
       (helper ? rpPortTableHtml(d) : '<div class="cli-note">'+(state.data&&state.data.fam===6?'IPv6 round':'Hard mode')+' — interfaces are configured through the CLI.</div>')+
       '<div class="cli-note" style="margin-top:10px">'+(state.data&&state.data.fam===6?'OSPFv3':'OSPF')+' is configured from the CLI — the process, the router ID, '+
         (state.data&&state.data.fam===6?'"ipv6 ospf 1 area" on each interface':'"network &lt;address&gt; &lt;wildcard&gt; area &lt;n&gt;"')+', passive interfaces and the default route.</div>'+
-      '</div><div><div class="cfg-sec-lbl">CLI</div>'+rpTermHtml()+'</div></div>' :
+      '</div><div><div class="cfg-sec-lbl">CLI</div>'+rpTermHtml(d)+'</div></div>' :
     '<div class="cfg-grid stack"><div>'+
       '<div class="cfg-sec-lbl">Interfaces</div>'+
       (helper ? rpPortTableHtml(d) : '<div class="cli-note">Hard mode — address interfaces through the CLI (interface, ip address, no shutdown).</div>')+
@@ -3150,14 +3146,14 @@ function rpRenderRouterCfg(d,panel){
       (helper ? rpDefaultRouteFormHtml(d) : '<div class="cli-note">Hard mode — CLI only (ip route 0.0.0.0 0.0.0.0 &lt;interface&gt;).</div>')+
       '<div class="cfg-sec-lbl" style="margin-top:14px">RIP</div>'+
       (helper ? rpRipFormHtml(d) : '<div class="cli-note">Hard mode — configure RIP through the CLI (router rip, version, network, no auto-summary, default-information originate).</div>')+
-    '</div><div><div class="cfg-sec-lbl">CLI</div>'+rpTermHtml()+'</div></div>');
+    '</div><div><div class="cfg-sec-lbl">CLI</div>'+rpTermHtml(d)+'</div></div>');
   rpRenderTerm();
 }
 function rpRenderPcCfg(d,panel){
   if(state.data&&state.data.fam===6){
     panel.innerHTML=
       '<div class="cfg-hdr"><div class="cfg-name">'+d.name+'</div>'+
-      '<button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="rpCloseCfg()">Close</button></div>'+
+      '<span class="cfg-hdr-btns">'+RPCON.pinBtnHtml(d)+'<button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="rpCloseCfg()">Close</button></span></div>'+
       '<div class="pc-form"><span class="pc-form-lbl">IPv6 Address</span>'+
       '<input type="text" class="custom-ip-inp" value="'+(d.ip6?op6Up(d.ip6):'')+'" autocomplete="off" spellcheck="false" oninput="opSetPcIp6('+d.id+',this.value)">'+
       '<span class="pc-pfx">/64</span></div>'+
@@ -3170,7 +3166,7 @@ function rpRenderPcCfg(d,panel){
   }
   panel.innerHTML=
     '<div class="cfg-hdr"><div class="cfg-name">'+d.name+'</div>'+
-    '<button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="rpCloseCfg()">Close</button></div>'+
+    '<span class="cfg-hdr-btns">'+RPCON.pinBtnHtml(d)+'<button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="rpCloseCfg()">Close</button></span></div>'+
     '<div class="pc-form"><span class="pc-form-lbl">IP Address</span>'+
     '<input type="text" class="custom-ip-inp" value="'+(d.ip||'')+'" placeholder="e.g. 192.168.1.10" autocomplete="off" spellcheck="false" oninput="rpSetPcIp('+d.id+',this.value)">'+
     '<span class="pc-pfx">/'+d.pfx+'</span></div>'+
@@ -3184,7 +3180,7 @@ function rpRenderPcCfg(d,panel){
 function rpRenderSwitchCfg(d,panel){
   panel.innerHTML=
     '<div class="cfg-hdr"><div class="cfg-name">'+d.name+'</div>'+
-    '<button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="rpCloseCfg()">Close</button></div>'+
+    '<span class="cfg-hdr-btns">'+RPCON.pinBtnHtml(d)+'<button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="rpCloseCfg()">Close</button></span></div>'+
     '<div class="cli-note">An unmanaged Layer 2 switch — nothing to configure.</div>';
 }
 
@@ -3297,47 +3293,13 @@ function rpPingRun(){
    every time the config panel re-renders (same reason routing_game.html
    does it this way rather than binding per element like the OSPF Cost
    terminal above, whose input is never replaced mid-round). */
-function rpRenderTerm(){
-  const d=rpSelected!=null?rpById(rpSelected):null;
-  if(!d||d.type!=='router') return;
-  const log=document.getElementById('rp-term-log');
-  if(!log) return;
-  log.innerHTML=d.log.slice(-300).map(function(l){
-    return '<div class="tl'+(l.charAt(0)==='%'?' terr':'')+'">'+esc(l)+'</div>';
-  }).join('');
-  log.scrollTop=log.scrollHeight;
-  const pr=document.getElementById('rp-term-prompt');
-  if(pr) pr.textContent=rpPromptFor(d);
-}
-document.addEventListener('keydown', function(e){
-  const input=document.getElementById('rp-term-in');
-  if(!input||document.activeElement!==input) return;
-  const d=rpSelected!=null?rpById(rpSelected):null;
-  if(!d||d.type!=='router') return;
-  if(e.key==='Enter'){
-    const line=input.value; input.value='';
-    if(line.trim()){ d.hist.push(line); d.hi=d.hist.length; }
-    d.log.push(rpPromptFor(d)+' '+line);
-    const out=rpCli(d,line);
-    if(out) out.split('\n').forEach(function(l){ d.log.push(l); });
-    rpRenderTerm(); rpRenderCanvas(); rpRefreshCfg();
-    /* rpRefreshCfg() has just rebuilt this very input, so the node that had
-       focus no longer exists — refocus the fresh one or the next command
-       goes nowhere. */
-    const fresh=document.getElementById('rp-term-in');
-    if(fresh) fresh.focus();
-  } else if(e.key==='ArrowUp'){
-    e.preventDefault();
-    if(d.hi>0){ d.hi--; input.value=d.hist[d.hi]||''; }
-  } else if(e.key==='ArrowDown'){
-    e.preventDefault();
-    if(d.hi<d.hist.length-1){ d.hi++; input.value=d.hist[d.hi]||''; }
-    else { d.hi=d.hist.length; input.value=''; }
-  } else if(e.key==='Tab'){
-    e.preventDefault();
-    input.value=LabShared.tabComplete(RP_KW, input.value, function(cands){ d.log.push(cands.join('   ')); rpRenderTerm(); });
-  }
+const RPCON=LabShared.createConsoles({
+  id:'rp', mainIds:{input:'rp-term-in', log:'rp-term-log', prompt:'rp-term-prompt'},
+  device:id=>rpById(id), hasCli:d=>d.type==='router',
+  prompt:d=>rpPromptFor(d), run:(d,line)=>rpCli(d,line), keywords:()=>RP_KW, logLines:300,
+  after:()=>{ rpRenderCanvas(); rpRefreshCfg(); }, dockAfter:'rp-cfg'
 });
+function rpRenderTerm(){ RPCON.refresh(); }
 
 /* ── Brief + checklist ── */
 function rpTasksShown(){ try{ return localStorage.getItem('ne-riplab-tasks')!=='0'; }catch(e){ return true; } }
@@ -3891,6 +3853,7 @@ function pickTopic(){
 }
 function loadQ(){
   state.done=false;
+  RPCON.unpinAll();
   const t=pickTopic();
   state.mode=t;
   syncVersionButtons();

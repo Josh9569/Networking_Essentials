@@ -1881,6 +1881,7 @@ function tsRenderCanvas(){
 
 /* ═══ Panels ═══════════════════════════════════════════════════════ */
 function tsOpenCfg(id){
+  if(TSCON.focusPinned(id)) return;
   tsSel=id;
   const d=tsById(id);
   if(d&&d.type==='switch') tsCdpNativeWarn(d);
@@ -1890,7 +1891,8 @@ function tsOpenCfg(id){
 function tsCloseCfg(){ tsSel=null; tsRenderCanvas(); const p=document.getElementById('ts-cfg'); if(p) p.style.display='none'; }
 function tsCfgHdr(d){
   return '<div class="cfg-hdr"><div class="cfg-name">'+esc(d.name)+'</div>'+
-    '<button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="tsCloseCfg()">Close</button></div>';
+    '<span class="cfg-hdr-btns">'+TSCON.pinBtnHtml(d)+
+    '<button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="tsCloseCfg()">Close</button></span></div>';
 }
 function tsRefreshCfg(){
   const d=tsSel!=null?tsById(tsSel):null, panel=document.getElementById('ts-cfg');
@@ -1900,9 +1902,7 @@ function tsRefreshCfg(){
   if(d.type==='pc'){ panel.innerHTML=tsPcHtml(d); return; }
   panel.innerHTML=tsCfgHdr(d)+
     '<div class="cfg-sec-lbl">Console</div>'+
-    '<div class="term"><div class="term-log" id="ts-term-log"></div>'+
-    '<div class="term-inrow"><span class="term-prompt" id="ts-term-prompt"></span>'+
-    '<input class="term-in" id="ts-term-in" autocomplete="off" spellcheck="false"></div></div>'+
+    TSCON.mainHtml(d)+
     '<div class="cli-note" style="margin-top:8px">'+(d.type==='router'
       ? 'Tab completes, ↑/↓ recall. "do" runs show commands from configuration mode. Save with copy running-config startup-config.'
       : 'Tab completes, ↑/↓ recall. ping works from the management SVI. Save with copy running-config startup-config.')+'</div>';
@@ -1918,37 +1918,16 @@ function tsCli(d,line){
   }
   return run(line);
 }
-function tsRenderTerm(){
-  const d=tsSel!=null?tsById(tsSel):null;
-  if(!d||d.type==='pc') return;
-  const log=document.getElementById('ts-term-log');
-  if(!log) return;
-  log.innerHTML=d.log.slice(-400).map(l=>'<div class="tl'+(l.charAt(0)==='%'&&!SYSLOG.test(l)?' terr':'')+'">'+esc(l)+'</div>').join('');
-  log.scrollTop=log.scrollHeight;
-  const pr=document.getElementById('ts-term-prompt'); if(pr) pr.textContent=tsPrompt(d);
-}
-document.addEventListener('keydown',function(e){
-  const input=document.getElementById('ts-term-in');
-  if(!input||document.activeElement!==input) return;
-  const d=tsSel!=null?tsById(tsSel):null;
-  if(!d||d.type==='pc') return;
-  if(e.key==='Enter'){
-    const line=input.value; input.value='';
-    if(line.trim()){ d.hist.push(line); d.hi=d.hist.length; }
-    d.log.push(tsPrompt(d)+' '+line);
-    const out=tsCli(d,line);
-    if(out) out.split('\n').forEach(l=>d.log.push(l));
-    tsRenderTerm(); tsRenderCanvas();
-  } else if(e.key==='ArrowUp'){
-    e.preventDefault(); if(d.hi>0){ d.hi--; input.value=d.hist[d.hi]||''; }
-  } else if(e.key==='ArrowDown'){
-    e.preventDefault();
-    if(d.hi<d.hist.length-1){ d.hi++; input.value=d.hist[d.hi]||''; } else { d.hi=d.hist.length; input.value=''; }
-  } else if(e.key==='Tab'){
-    e.preventDefault();
-    input.value=LabShared.tabComplete(d.type==='router'?TS_RKW:TS_SKW, input.value, function(c){ d.log.push(c.join('   ')); tsRenderTerm(); });
-  }
+/* Consoles — the shared LabShared.createConsoles: the panel's own console,
+   and a pinned one beside the page for a second device. */
+const TSCON=LabShared.createConsoles({
+  id:'ts', mainIds:{input:'ts-term-in', log:'ts-term-log', prompt:'ts-term-prompt'},
+  device:tsById, hasCli:d=>d.type!=='pc',
+  prompt:tsPrompt, run:tsCli, keywords:d=>d.type==='router'?TS_RKW:TS_SKW,
+  isError:l=>l.charAt(0)==='%'&&!SYSLOG.test(l), escape:esc,
+  after:()=>tsRenderCanvas(), dockAfter:'ts-cfg'
 });
+function tsRenderTerm(){ TSCON.refresh(); }
 /* ── the PC: IP Configuration, ping and SSH ── */
 function tsPcRow(label,id,val,ph,w){
   return '<label class="pc-form-lbl" for="'+id+'">'+label+'</label>'+
@@ -2122,6 +2101,7 @@ const TOPIC_LABEL={exam:'Exam', all:'Everything', sw:'Switching', iv:'Inter-VLAN
 const state={topic:'exam', diff:'easy', data:null, score:0, round:1, streak:0, done:false};
 function loadQ(){
   state.done=false;
+  TSCON.unpinAll();
   state.data=genRound(state.topic,state.diff);
   render();
   updateChips();

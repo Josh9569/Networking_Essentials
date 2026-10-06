@@ -2175,6 +2175,7 @@ function genPpp(diff){
 /* ─── Round control ──────────────────────────────────────────────── */
 function loadQ(){
   state.done=false; state.selectedId=null;
+  RLCON.unpinAll();
   const t=pickTopic();
   state.mode=t;
   if(t==='lpm') state.data=genLPM(state.diff);
@@ -2825,6 +2826,7 @@ function rlOnCableClick(e){
 
 /* ── Config panel ── */
 function rlOpenCfg(did){
+  if(RLCON.focusPinned(did)) return;
   rlSelected=did;
   rlRenderCanvas();
   rlRefreshCfg();
@@ -2872,14 +2874,11 @@ function rlRouteFormHtml(d){
   }
   return html;
 }
-function rlTermHtml(){
-  return `<div class="term"><div class="term-log" id="rl-term-log"></div>
-    <div class="term-inrow"><span class="term-prompt" id="rl-term-prompt"></span><input class="term-in" id="rl-term-in" autocomplete="off" spellcheck="false"></div></div>`;
-}
+function rlTermHtml(d){ return RLCON.mainHtml(d); }
 function rlRenderRouterCfg(d,panel){
   const helper=state.diff!=='hard';
   panel.innerHTML=`
-    <div class="cfg-hdr"><div class="cfg-name">${d.name}</div><button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="rlCloseCfgPanel()">Close</button></div>
+    <div class="cfg-hdr"><div class="cfg-name">${d.name}</div><span class="cfg-hdr-btns">${RLCON.pinBtnHtml(d)}<button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="rlCloseCfgPanel()">Close</button></span></div>
     <div class="cfg-grid stack">
       <div>
         <div class="cfg-sec-lbl">Interfaces</div>
@@ -2887,13 +2886,13 @@ function rlRenderRouterCfg(d,panel){
         <div class="cfg-sec-lbl" style="margin-top:14px">Static Routes</div>
         ${helper ? rlRouteFormHtml(d) : '<div class="cli-note">Hard mode — configure static routes via the CLI only (ip route).</div>'}
       </div>
-      <div><div class="cfg-sec-lbl">CLI</div>${rlTermHtml()}</div>
+      <div><div class="cfg-sec-lbl">CLI</div>${rlTermHtml(d)}</div>
     </div>`;
   rlRenderTerm();
 }
 function rlRenderPcCfg(d,panel){
   panel.innerHTML=`
-    <div class="cfg-hdr"><div class="cfg-name">${d.name}</div><button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="rlCloseCfgPanel()">Close</button></div>
+    <div class="cfg-hdr"><div class="cfg-name">${d.name}</div><span class="cfg-hdr-btns">${RLCON.pinBtnHtml(d)}<button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="rlCloseCfgPanel()">Close</button></span></div>
     <div class="pc-form"><span class="pc-form-lbl">IP Address</span>
       <input type="text" class="custom-ip-inp" value="${d.ip||''}" placeholder="e.g. 192.168.1.10" autocomplete="off" spellcheck="false" oninput="rlSetPcIp(${d.id},this.value)"><span class="pc-pfx">/${d.pfx}</span>
     </div>
@@ -2930,7 +2929,7 @@ function rlPingRun(){
 }
 function rlRenderSwitchCfg(d,panel){
   panel.innerHTML=`
-    <div class="cfg-hdr"><div class="cfg-name">${d.name}</div><button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="rlCloseCfgPanel()">Close</button></div>
+    <div class="cfg-hdr"><div class="cfg-name">${d.name}</div><span class="cfg-hdr-btns">${RLCON.pinBtnHtml(d)}<button class="btn btn-s" style="padding:4px 12px;font-size:12px" onclick="rlCloseCfgPanel()">Close</button></span></div>
     <div class="cli-note">This is an unmanaged Layer 2 switch — nothing to configure. It just passes traffic between everything cabled to it, which makes this a multi-access link rather than a point-to-point one.</div>`;
 }
 function rlSetIfIp(did,i,val){
@@ -2979,46 +2978,15 @@ function rlSetPcIp(did,val){
 /* ── CLI terminal render + input (ported from switching_lab's renderTerm /
    the Enter-key handler on #term-in — one delegated listener, since the
    input element gets rebuilt every time the config panel re-renders). ── */
-function rlRenderTerm(){
-  const d=rlById(rlSelected);
-  if(!d||d.type!=='router') return;
-  const log=document.getElementById('rl-term-log');
-  if(!log) return;
-  log.innerHTML=d.log.slice(-300).map(l=>`<div class="tl${l.startsWith('%')?' terr':''}">${rlEsc(l)}</div>`).join('');
-  log.scrollTop=log.scrollHeight;
-  const pr=document.getElementById('rl-term-prompt');
-  if(pr) pr.textContent=rlPromptFor(d);
-}
-document.addEventListener('keydown', e=>{
-  const input=document.getElementById('rl-term-in');
-  if(!input||document.activeElement!==input) return;
-  const d=rlById(rlSelected);
-  if(!d||d.type!=='router') return;
-  if(e.key==='Enter'){
-    const line=input.value; input.value='';
-    if(line.trim()){ d.hist.push(line); d.hi=d.hist.length; }
-    d.log.push(rlPromptFor(d)+' '+line);
-    const out=rlCli(d,line);
-    if(out) out.split('\n').forEach(l=>d.log.push(l));
-    rlRenderTerm(); rlRenderCanvas(); rlRefreshCfg();
-    /* rlRefreshCfg() just rebuilt the whole config panel from scratch —
-       including this very input element — so the DOM node that had focus
-       no longer exists and typing would go nowhere until the learner
-       clicked back in. Refocus the freshly-rendered one so the terminal
-       stays usable for as many commands in a row as they want. */
-    const freshInput=document.getElementById('rl-term-in');
-    if(freshInput) freshInput.focus();
-  } else if(e.key==='ArrowUp'){
-    e.preventDefault();
-    if(d.hi>0){ d.hi--; input.value=d.hist[d.hi]||''; }
-  } else if(e.key==='ArrowDown'){
-    e.preventDefault();
-    if(d.hi<d.hist.length-1){ d.hi++; input.value=d.hist[d.hi]||''; } else { d.hi=d.hist.length; input.value=''; }
-  } else if(e.key==='Tab'){
-    e.preventDefault();
-    input.value=LabShared.tabComplete(RL_KW, input.value, cands=>{ d.log.push(cands.join('   ')); rlRenderTerm(); });
-  }
+/* Consoles — the shared LabShared.createConsoles: the panel's own, and one
+   pinned beside the page for a second router. */
+const RLCON=LabShared.createConsoles({
+  id:'rl', mainIds:{input:'rl-term-in', log:'rl-term-log', prompt:'rl-term-prompt'},
+  device:id=>rlById(id), hasCli:d=>d.type==='router',
+  prompt:d=>rlPromptFor(d), run:(d,line)=>rlCli(d,line), keywords:()=>RL_KW, escape:s=>rlEsc(s), logLines:300,
+  after:()=>{ rlRenderCanvas(); rlRefreshCfg(); }, dockAfter:'rl-cfg'
 });
+function rlRenderTerm(){ RLCON.refresh(); }
 
 function rlRenderReqs(results){
   if(!state.data||!state.data.reqs) return;
