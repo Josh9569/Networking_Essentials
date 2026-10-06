@@ -21,31 +21,41 @@
      caret before any handler runs, so "switchport mode access 80" is an
      error rather than a silent "switchport mode access". Keep this list in
      step with cli() when adding a command. */
-  const GRAMMAR=window.LabShared.cliGrammar([
-    'enable', 'configure [terminal]', 'end', 'exit', 'cls', 'clear',
+  /* Grouped by the mode each command belongs to (see cliGrammar in
+     lab-shared.js): typed anywhere else it is refused, as on a real switch —
+     "show" needs "do" in configuration mode, "switchport" needs a switch port,
+     "ip address" needs an SVI (a 2960's physical ports are Layer 2). */
+  const GRAMMAR=window.LabShared.cliGrammar({
+    'any': ['cls', 'clear'],
+    'exec': ['enable', 'configure [terminal]',
     'clear port-security all|dynamic|sticky|configured [interface <if>]',
     'show vlan [brief]', 'show spanning-tree [vlan <n>]', 'show running-config', 'show ip interface [brief]',
     'show interfaces [status|trunk]', 'show interfaces [<if>] [switchport]',
-    'show etherchannel [summary|port-channel]', 'show port-security [address]', 'show port-security interface <if>',
-    'vlan <n>', 'no vlan <n>', 'name <word>',
-    'interface <if>', 'interface range <any>', 'no interface <if>',
-    'ip address <ip> <ip>', 'no ip address [<ip> <ip>]', 'ip default-gateway <ip>', 'no ip default-gateway [<ip>]',
-    'shutdown', 'no shutdown',
-    'switchport mode access|trunk', 'switchport mode dynamic auto|desirable',
+    'show etherchannel [summary|port-channel]', 'show port-security [address]', 'show port-security interface <if>'],
+    'cfg exec': ['exit'],
+    'cfg': ['end'],
+    'config': ['vlan <n>', 'no vlan <n>', 'interface <if>', 'interface range <any>', 'no interface <if>',
+    'ip default-gateway <ip>', 'no ip default-gateway [<ip>]',
+    'spanning-tree vlan <n> priority <n>', 'spanning-tree vlan <n> root primary|secondary'],
+    'vlan': ['name <word>'],
+    'svi': ['ip address <ip> <ip>', 'no ip address [<ip> <ip>]'],
+    'if': ['shutdown', 'no shutdown'],
+    'l2': ['switchport mode access|trunk', 'switchport mode dynamic auto|desirable',
     'no switchport mode [access|trunk]', 'no switchport mode dynamic [auto|desirable]',
     'switchport access vlan <n>', 'no switchport access vlan [<n>]',
     'switchport trunk native vlan <n>', 'no switchport trunk native vlan [<n>]',
     'switchport trunk allowed vlan <vlist>', 'switchport trunk allowed vlan add|remove|except <vlist>',
-    'switchport trunk allowed vlan all|none', 'no switchport trunk allowed vlan [<vlist>]',
-    'switchport port-security', 'switchport port-security maximum <n>',
+    'switchport trunk allowed vlan all|none', 'no switchport trunk allowed vlan [<vlist>]'],
+    /* port security and bundling go on the physical ports (or a range of
+       them), not on the port-channel they form */
+    'swport': ['switchport port-security', 'switchport port-security maximum <n>',
     'switchport port-security mac-address sticky [<mac>]', 'switchport port-security mac-address <mac>',
     'switchport port-security violation shutdown|restrict|protect',
     'no switchport port-security', 'no switchport port-security maximum [<n>]',
     'no switchport port-security mac-address sticky [<mac>]', 'no switchport port-security mac-address <mac>',
     'no switchport port-security violation [shutdown|restrict|protect]',
-    'channel-group <n> mode active|passive|desirable|auto|on', 'no channel-group [<n>]',
-    'spanning-tree vlan <n> priority <n>', 'spanning-tree vlan <n> root primary|secondary'
-  ]);
+    'channel-group <n> mode active|passive|desirable|auto|on', 'no channel-group [<n>]']
+  });
   function create(world){
     const byId=function(id){ return world.byId(id); };
     const portCable=function(d,i){ return world.portCable(d,i); };
@@ -207,7 +217,7 @@
       switchport:{mode:{access:{},trunk:{},dynamic:{auto:{}}}, access:{vlan:{}},
                   trunk:{native:{vlan:{}}, allowed:{vlan:{add:{},remove:{},except:{},all:{},none:{}}}},
                   'port-security':PS_KW},
-      'channel-group':{},   /* no root "shutdown": it would make "sh" ambiguous with show */
+      'channel-group':{}, shutdown:{},   /* Tab is filtered by mode, so "sh" is show at # and shutdown on a port */
       'spanning-tree':{vlan:{}},
       no:{vlan:{}, switchport:{access:{vlan:{}}, mode:{}, trunk:{native:{vlan:{}}, allowed:{vlan:{}}}, 'port-security':PS_KW},
           'channel-group':{}, ip:{address:{}, 'default-gateway':{}}, shutdown:{}, interface:{'port-channel':{}}},
@@ -255,6 +265,19 @@
       return m&&m[1].length>=minLen&&full.startsWith(m[1]) ? +m[2] : null;
     }
     function clearIf(d){ d.ci=null; d.cr=null; d.cpo=null; }
+    /* Where the console is, as the grammar's mode tags: the current mode,
+       then (config), which a sub-mode falls back to. A wrapper with commands
+       of its own (the trainer's ping, show cdp, copy) checks its combined
+       list against these and calls lift() on a fallback. */
+    const CONFIG=['cfg','config'];
+    function levels(d){
+      if(d.cm==='if') return [['cfg','if','l2',d.cpo!=null?'po':'swport'], CONFIG];
+      if(d.cm==='svi') return [['cfg','if','routed','svi'], CONFIG];
+      if(d.cm==='vlan') return [['cfg','vlan'], CONFIG];
+      if(d.cm==='conf') return [CONFIG];
+      return [['exec']];
+    }
+    function lift(d){ d.cm='conf'; clearIf(d); d.cv=null; }
     function ifPortIdx(d){ return d.cr ? d.cr : d.ci!=null ? [d.ci] : []; }
     /* What a switchport command edits: the selected ports, or a port-channel and
        every one of its members — configuring the bundle carries to them all. */
@@ -268,15 +291,17 @@
               allowed:from&&from.allowed?[...from.allowed]:null, shut:false};
     }
 
-    function cli(d,line){
+    function cli(d,line,lv){
       const t=line.trim().replace(/\s+/g,' ');
       if(!t) return '';
       const pp=window.LabShared.cliPipe(prompt_(d), line);
-      if(pp) return pp.err||window.LabShared.cliFilter(cli(d,pp.base),pp);
-      const bad=window.LabShared.cliCheck(GRAMMAR, prompt_(d), line);
-      if(bad) return bad;
-      /* "do" runs an exec command from any configuration mode */
-      if(/^do\s/i.test(t)) return cli(d,t.slice(3));
+      if(pp) return pp.err||window.LabShared.cliFilter(cli(d,pp.base,lv),pp);
+      /* world.hints:false is the trainer — pure IOS, no hint line */
+      const v=window.LabShared.cliCheck(GRAMMAR, prompt_(d), line, {levels:lv||levels(d), hint:world.hints!==false, device:'switch'});
+      if(typeof v==='string') return v;
+      if(v&&v.up) lift(d);
+      /* "do" runs an EXEC command from a configuration mode */
+      if(/^do\s/i.test(t)) return cli(d,t.slice(3),[['exec']]);
       const w=t.toLowerCase().split(' ');
       const M=(tok,cand)=>tok&&cand.startsWith(tok);
 
@@ -371,6 +396,7 @@
           return '';
         }
         if(d.cm!=='svi') return '% ip address is only valid on an SVI — enter "interface vlan <n>" first';
+        if(w[1]&&M(w[1],'address')&&w[2]&&isValidIP(w[2])&&!w[3]) return '% Incomplete command.';
         if(w[1]&&M(w[1],'address')&&w[2]&&isValidIP(w[2])){
           if(w[3]&&w[3]!=='255.255.255.0') return '% this lab uses /24 subnets — the mask is 255.255.255.0';
           d.ip=w[2]; d.ipVlan=d.cv;
@@ -1003,7 +1029,7 @@
     }
 
 
-    return {GRAMMAR:GRAMMAR, newPort:newPort, newSwitchState:newSwitchState, vlanOn:vlanOn,
+    return {GRAMMAR:GRAMMAR, levels:levels, lift:lift, newPort:newPort, newSwitchState:newSwitchState, vlanOn:vlanOn,
       psNew:psNew,
       portUp:portUp,
       portLinkUp:portLinkUp,

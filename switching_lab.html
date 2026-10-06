@@ -158,14 +158,7 @@
         <label class="pc-form-lbl">MAC Address</label>
         <span class="mono-inl" id="pc-mac"></span>
       </div>
-      <div class="cfg-sec-lbl" style="margin-top:14px">Ping</div>
-      <div class="pc-form">
-        <label class="pc-form-lbl">Target IP</label>
-        <input class="custom-ip-inp" id="ping-ip" placeholder="e.g. 192.168.10.12"
-               autocomplete="off" spellcheck="false" onkeydown="if(event.key==='Enter')pingRun()">
-        <button class="rand-btn" id="ping-btn" onclick="pingRun()">Ping</button>
-      </div>
-      <pre class="ping-out" id="ping-out"></pre>
+      <div id="pc-tool"></div>
     </div>
   </div>
 
@@ -279,7 +272,7 @@
 
     <div class="tool-block" id="t-cmdref">
       <div class="tool-block-title">Command Reference</div>
-      <p class="tool-note">The CLI accepts Cisco IOS syntax with standard abbreviations (e.g. <code>conf t</code>, <code>int fa0/1</code>, <code>sw mo ac</code>). Commands work at any prompt level for convenience. Press <strong>Tab</strong> to auto-complete keywords and use the <strong>&uarr; / &darr;</strong> arrow keys for command history.</p>
+      <p class="tool-note">The CLI accepts Cisco IOS syntax with standard abbreviations (e.g. <code>conf t</code>, <code>int fa0/1</code>, <code>sw mo ac</code>). As on a real switch, each command only works in its own mode: <code>show</code> at <code>#</code> (or <code>do show</code> in configuration mode), <code>switchport</code> on a switch port, <code>ip address</code> on an SVI. A wrong-mode command is refused with a hint saying where it belongs. Press <strong>Tab</strong> to auto-complete keywords and use the <strong>&uarr; / &darr;</strong> arrow keys for command history.</p>
       <table class="cmd-table">
         <tbody>
           <tr><td class="cmd">configure terminal</td><td>Enter config mode (<code>conf t</code>)</td></tr>
@@ -656,11 +649,7 @@ function buildPCForm(){
   const hint=document.getElementById('pc-ip-hint');
   if(d.ip&&d._ipConflict){ hint.textContent='\u26a0 Duplicate IP on the network \u2014 change it'; hint.className='pc-ip-hint bad'; }
   else { hint.textContent=''; hint.className='pc-ip-hint'; }
-  const po=document.getElementById('ping-out');
-  po.textContent=''; po.className='ping-out';
-  const pb=document.getElementById('ping-btn');
-  if(pb) pb.disabled=false;
-  pingGen++;
+  LabShared.pcToolStop('ping');
 }
 function uiSetPCIP(v){
   const d=byId(selected); if(!d||d.type!=='pc') return;
@@ -692,7 +681,7 @@ function uiSetSVI(){
     d.log.push('% management IP needs a VLAN number (1\u20134094) and a valid IPv4 address');
     renderTerm(); return;
   }
-  echoCli(d,['interface vlan '+v,'ip address '+ip,'exit']);
+  echoCli(d,['interface vlan '+v,'ip address '+ip+' 255.255.255.0','exit']);
   buildPortTable(); render();
 }
 /* ── ping ── */
@@ -741,17 +730,26 @@ function doPing(src,dst){
   src._arpKnown.add(dst);
   return {ok:true, firstTime};
 }
-let pingGen=0;
-function pingRun(){
-  const d=selected!=null?byId(selected):null;
-  if(!d||d.type!=='pc') return;
-  const myGen=++pingGen, pcId=d.id;
-  LabShared.runPing({
-    inputId:'ping-ip', btnId:'ping-btn', outId:'ping-out',
-    resolve: dst=>doPing(d,dst),
-    stillActive: ()=>myGen===pingGen && selected===pcId
-  });
-}
+/* The PC panel's Ping | Tracert (LabShared.pcTool). This lab's only router
+   is the router-on-a-stick, so a tracert is the destination on its own
+   (same subnet), or the PC's gateway — the .1 every scenario's router
+   answers on — then the destination. The gateway answers whenever the PC's
+   VLAN reaches the router; the tracert sends the same frames a ping does,
+   so it goes through doPing and port security sees them too. */
+LabShared.pcTool('ping', {
+  pc:()=>{ const d=selected!=null?byId(selected):null; return d&&d.type==='pc'?d:null; },
+  ping:(d,dst)=>doPing(d,dst),
+  trace:(d,dst)=>{
+    const r=doPing(d,dst);
+    if(r.msg) return r;
+    const res={ok:r.ok};
+    if(dst===d.ip||sameSubnet(d.ip,dst,24)) return {path:[], res, dst};
+    const att=routerAttach(), up=pcUplink(d);
+    const gwOk=!d._ipConflict&&!!att&&!!up&&pcPortOk(up,d)&&vlanToRouter(up.sw,up.port.vlan,att);
+    return {path:gwOk?[{ip:d.ip.replace(/\.\d+$/,'.1'), fwd:true}]:[], res, dst};
+  }
+});
+document.getElementById('pc-tool').innerHTML=LabShared.pcToolHtml('ping',{placeholder:'e.g. 192.168.10.12'});
 function refreshCfg(){
   const d=selected!=null?byId(selected):null;
   if(d&&d.type==='switch') buildPortTable();
@@ -827,8 +825,13 @@ function vmAdd(){
   buildVlanMgr(); buildPortTable();
 }
 
-function echoCli(d,cmds){
-  cmds.forEach(c=>{
+/* A form's commands, typed as a learner would have to: wrapped in configure
+   terminal / end so they are valid from whatever mode the console is in
+   (LabShared.cliConfigSeq). beforeEnd runs while still in the last mode. */
+function echoCli(d,cmds,beforeEnd){
+  const seq=LabShared.cliConfigSeq(d.cm==='exec',cmds);
+  seq.forEach((c,k)=>{
+    if(k===seq.length-1&&beforeEnd) beforeEnd();
     d.log.push(prompt_(d)+' '+c);
     const out=cli(d,c);
     if(out) out.split('\n').forEach(l=>d.log.push(l));
@@ -856,9 +859,10 @@ function uiSetVlan(i,v){
   const d=byId(selected);
   const n=Math.max(1,Math.min(4094,parseInt(v)||1));
   if(!d.vlans.has(n)){
-    echoCli(d,['interface '+d.ports[i].name.toLowerCase()]);
-    d.log.push(prompt_(d)+' switchport access vlan '+n);
-    d.log.push('% VLAN '+n+' does not exist — create it first: "vlan '+n+'" then "name <name>"');
+    echoCli(d,['interface '+d.ports[i].name.toLowerCase()],()=>{
+      d.log.push(prompt_(d)+' switchport access vlan '+n);
+      d.log.push('% VLAN '+n+' does not exist — create it first: "vlan '+n+'" then "name <name>"');
+    });
     renderTerm();
     buildPortTable();               /* reverts the input to the port's real VLAN */
     render();
@@ -881,6 +885,7 @@ const SWCON=LabShared.createConsoles({
   id:'sw', mainIds:{input:'term-in', log:'term-log', prompt:'term-prompt'},
   device:byId, hasCli:d=>d.type==='switch',
   prompt:d=>prompt_(d), run:(d,line)=>cli(d,line), keywords:()=>KW, logLines:300,
+  canStart:(d,l)=>LabShared.cliCanStart(SWE.GRAMMAR,l,SWE.levels(d)),
   after:()=>{ render(); const sd=selected!=null&&byId(selected); if(sd&&sd.type==='switch') buildPortTable(); },
   dockAfter:'cfg', btnClass:'rand-btn'
 });

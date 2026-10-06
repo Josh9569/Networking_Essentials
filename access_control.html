@@ -565,7 +565,10 @@ function acForward(start, srcKey, dstKey, count, pkt){
   const visited=new Set();
   const dstDisp=function(){ return acFmt(dstKey); };
   for(let hop=0; hop<12; hop++){
-    if(visited.has(cur.id)) return {ok:false, reason:'Routing loop at '+cur.name};
+    /* tracert's record of the walk (LabShared.traceHops): every router the
+       probe arrives at, and the address it arrived on */
+    if(pkt.path) pkt.path.push({dev:cur, ip:ingress&&ingress.ip?acFmt(acKey(ingress.ip)):null, src:srcKey, sport:sport});
+    if(visited.has(cur.id)) return {ok:false, loop:true, reason:'Routing loop at '+cur.name};
     visited.add(cur.id);
 
     if(ingress){
@@ -585,9 +588,11 @@ function acForward(start, srcKey, dstKey, count, pkt){
     if(self) return {ok:true, at:{router:cur, iface:null}, dst:dstKey, dport:dport, src:srcKey, sport:sport};
 
     const win=acBestMatch(dstKey, acRoutingTable(cur));
-    if(!win) return {ok:false, reason:cur.name+' has no route to '+dstDisp()};
+    if(!win) return {ok:false, noRoute:true, reason:cur.name+' has no route to '+dstDisp()};
     const out=win._if;
     if(!out) return {ok:false, reason:cur.name+"'s route to "+dstDisp()+' points at an interface that is not up'};
+    /* routed: this is where the TTL runs out, so it is a tracert hop */
+    if(pkt.path) pkt.path[pkt.path.length-1].fwd=true;
 
     /* inside → outside: the source is translated after routing and before
        the outbound ACL, which is the order IOS does it in. */
@@ -679,16 +684,17 @@ function acPing(srcIp, dstStr, count, pkt){
   if(!a) return {ok:false, reason:srcIp+' is not a host or interface on this network'};
   const id = pkt&&pkt.sport!=null ? pkt.sport : (count ? ++acIcmpId : 1);
   const proto=(pkt&&pkt.proto)||'icmp';
-  const req={proto:proto, sport:id, dport:pkt&&pkt.dport!=null?pkt.dport:id, scratch:count?null:[],
-             icmpType:proto==='icmp'?'echo':null};
+  const req={proto:proto, sport:id, dport:pkt&&pkt.dport!=null?pkt.dport:id,
+             scratch:pkt&&pkt.scratch?pkt.scratch:count?null:[],
+             icmpType:proto==='icmp'?'echo':null, path:pkt&&pkt.path};
   const there=acForward(a, acKey(srcIp), acKey(dstStr), count, req);
   if(!there.ok) return there;
   const dstPc=acPcWithIp(acFmt(there.dst));
-  if(dstPc){ const x=acPcProblem(dstPc); if(x) return {ok:false, reason:'The request arrived, but '+dstPc.name+' cannot reply: '+x}; }
+  if(dstPc){ const x=acPcProblem(dstPc); if(x) return {ok:false, arrived:true, reason:'The request arrived, but '+dstPc.name+' cannot reply: '+x}; }
   const rep={proto:req.proto, sport:there.dport, dport:there.sport, scratch:req.scratch,
              icmpType:proto==='icmp'?'echo-reply':null};
   const back=acForward(there.at, there.dst, there.src, count, rep);
-  if(!back.ok) return {ok:false, blocked:back.blocked,
+  if(!back.ok) return {ok:false, arrived:true, blocked:back.blocked,
     reason:'The request arrived, but the reply could not get back: '+back.reason};
   return {ok:true};
 }
@@ -751,14 +757,31 @@ const AC_KW={
 /* Every command acCli understands, by shape: this page's base plus the
    shared ACL, NAT and SSH lists. A line that fits none of them gets IOS's
    caret (see cliGrammar in lab-shared.js). */
-const AC_GRAMMAR=LabShared.cliGrammar([
-  'enable', 'configure [terminal]', 'end', 'exit', 'cls', 'clear',
-  'show running-config', 'show ip|ipv6 route', 'show ip|ipv6 interface [brief]', 'show ip|ipv6 interface <if>',
-  'show ip|ipv6 access-lists [<word>]', 'ping <addr> [source <if>]',
-  'interface <if>', 'line vty <n> [<n>]',
-  'shutdown', 'no shutdown', 'clock rate <n>', 'no clock rate [<n>]', 'ip address <ip> <ip>', 'no ip address [<ip> <ip>]',
-  'ip route <ip> <ip> <ip>|<if>', 'no ip route <ip> <ip> [<ip>|<if>]'
-]).concat(NetRouter.ACL_GRAMMAR, NetRouter.NAT_GRAMMAR, NetRouter.SSH_GRAMMAR);
+const AC_GRAMMAR=LabShared.cliGrammar({
+  'any': ['cls', 'clear'],
+  'exec': ['enable', 'configure [terminal]',
+    'show running-config', 'show ip|ipv6 route', 'show ip|ipv6 interface [brief]', 'show ip|ipv6 interface <if>',
+    'show ip|ipv6 access-lists [<word>]', 'ping <addr> [source <if>]'],
+  'cfg exec': ['exit'],
+  'cfg': ['end'],
+  'config': ['interface <if>', 'line vty <n> [<n>]',
+    'ip route <ip> <ip> <ip>|<if>', 'no ip route <ip> <ip> [<ip>|<if>]'],
+  'if': ['shutdown', 'no shutdown'],
+  'ser': ['clock rate <n>', 'no clock rate [<n>]'],
+  'routed': ['ip address <ip> <ip>', 'no ip address [<ip> <ip>]']
+}).concat(NetRouter.ACL_GRAMMAR, NetRouter.NAT_GRAMMAR, NetRouter.SSH_GRAMMAR);
+/* where the console is, as the grammar's mode tags: the current mode, then
+   (config), which a sub-mode falls back to */
+const AC_CONFIG=['cfg','config'];
+function acLevels(d){
+  if(d.cm==='if') return [['cfg','if','routed',NetRouter.ifKind(acIface(d,d.ci))], AC_CONFIG];
+  if(d.cm==='line') return [['cfg','line','vty'], AC_CONFIG];
+  if(d.cm==='nacl') return [['cfg','nacl-std'], AC_CONFIG];
+  if(d.cm==='xacl') return [['cfg','nacl-ext'], AC_CONFIG];
+  if(d.cm==='nacl6') return [['cfg','nacl6'], AC_CONFIG];
+  if(d.cm==='conf') return [AC_CONFIG];
+  return [['exec']];
+}
 function acPrompt(d){
   if(d.cm==='rsa') return 'How many bits in the modulus [512]:';
   return d.name+(d.cm==='conf'?'(config)#':d.cm==='if'?'(config-if)#':
@@ -767,7 +790,7 @@ function acPrompt(d){
 }
 /* Parses the tail of a permit/deny into an ACE, minus its sequence number.
    Accepts the three forms Lab 8A uses: "host X", "any", and "X wildcard". */
-function acCli(d, line){
+function acCli(d, line, lv){
   /* the modulus question crypto key generate rsa asks, answered on the next line */
   if(d.cm==='rsa'){
     const a=line.trim();
@@ -777,11 +800,14 @@ function acCli(d, line){
     return sshGenKeys(d,n);
   }
   const pp=LabShared.cliPipe(acPrompt(d), line);
-  if(pp) return pp.err||LabShared.cliFilter(acCli(d,pp.base),pp);
-  const bad=LabShared.cliCheck(AC_GRAMMAR, acPrompt(d), line);
-  if(bad) return bad;
-  /* "do" runs an exec command from any configuration mode */
-  if(/^do\s/i.test(line.trim())) return acCli(d, line.trim().slice(3));
+  if(pp) return pp.err||LabShared.cliFilter(acCli(d,pp.base,lv),pp);
+  /* refused unless it belongs in this mode; a global command typed in a
+     sub-mode drops back to (config) first, as IOS does */
+  const v=LabShared.cliCheck(AC_GRAMMAR, acPrompt(d), line, {levels:lv||acLevels(d), hint:true, device:'router'});
+  if(typeof v==='string') return v;
+  if(v&&v.up){ d.cm='conf'; d.ci=null; }
+  /* "do" runs an EXEC command from a configuration mode */
+  if(/^do\s/i.test(line.trim())) return acCli(d, line.trim().slice(3), [['exec']]);
   const t=line.trim().replace(/\s+/g,' ');
   if(!t) return '';
   const w=t.toLowerCase().split(' ');
@@ -885,8 +911,10 @@ function acCli(d, line){
 
   return '% Invalid input detected';
 }
+/* a form's (or a generator's) commands, typed as a learner would have to:
+   wrapped in configure terminal / end (LabShared.cliConfigSeq) */
 function acEcho(d, cmds){
-  cmds.forEach(function(c){
+  LabShared.cliConfigSeq(d.cm==='exec', cmds).forEach(function(c){
     d.log.push(acPrompt(d)+' '+c);
     const out=acCli(d,c);
     if(out) out.split('\n').forEach(function(l){ d.log.push(l); });
@@ -1805,11 +1833,7 @@ function natRenderPcCfg(d, panel){
     '<div class="pc-form"><span class="pc-form-lbl">Default Gateway</span>'+
     '<input type="text" class="custom-ip-inp" value="'+val(d.gw)+'" placeholder="e.g. 172.20.5.1" autocomplete="off" spellcheck="false" oninput="natSetPc('+d.id+',\'gw\',this.value)"></div>'+
     '<div class="cli-note" style="margin-top:6px">Pinging and SSHing create the translations — do them from here, then read <b>show ip nat translations</b> on Gateway.</div>'+
-    '<div class="cfg-sec-lbl" style="margin-top:14px">Ping</div>'+
-    '<div class="pc-form"><label class="pc-form-lbl">Target IP</label>'+
-    '<input class="custom-ip-inp" id="ac-ping-ip" placeholder="e.g. '+NAT_PLAN.lo+'" autocomplete="off" spellcheck="false" onkeydown="if(event.key===\'Enter\')acPingRun()">'+
-    '<button class="rand-btn" id="ac-ping-btn" onclick="acPingRun()">Ping</button></div>'+
-    '<pre class="ping-out" id="ac-ping-out"></pre>'+
+    LabShared.pcToolHtml('ac-ping', {placeholder:'e.g. '+NAT_PLAN.lo})+
     '<div class="cfg-sec-lbl" style="margin-top:14px">SSH</div>'+
     '<div class="pc-form"><label class="pc-form-lbl">Host</label>'+
     '<input class="custom-ip-inp" id="ac-ssh-ip" placeholder="e.g. '+NAT_PLAN.lo+'" autocomplete="off" spellcheck="false" onkeydown="if(event.key===\'Enter\')natSshRun()">'+
@@ -2438,11 +2462,7 @@ function acRenderPcCfg(d,panel){
     '<input type="text" class="custom-ip-inp" value="'+d.ip+'" autocomplete="off" spellcheck="false" oninput="acSetPcIp('+d.id+',this.value)">'+
     '<span class="pc-pfx">/'+d.pfx+'</span></div>'+
     (state.mode==='lab'?'<div class="cli-note" style="margin-top:6px">The Hard tier has you change this address to test the vty ACL from a permitted and a non-permitted host.</div>':'')+
-    '<div class="cfg-sec-lbl" style="margin-top:14px">Ping</div>'+
-    '<div class="pc-form"><label class="pc-form-lbl">Target IP</label>'+
-    '<input class="custom-ip-inp" id="ac-ping-ip" placeholder="e.g. '+acPlan().pcC+'" autocomplete="off" spellcheck="false" onkeydown="if(event.key===\'Enter\')acPingRun()">'+
-    '<button class="rand-btn" id="ac-ping-btn" onclick="acPingRun()">Ping</button></div>'+
-    '<pre class="ping-out" id="ac-ping-out"></pre>'+
+    LabShared.pcToolHtml('ac-ping', {placeholder:'e.g. '+acPlan().pcC})+
     '<div class="cfg-sec-lbl" style="margin-top:14px">SSH</div>'+
     '<div class="pc-form"><label class="pc-form-lbl">Router IP</label>'+
     '<input class="custom-ip-inp" id="ac-ssh-ip" placeholder="e.g. '+acPlan().r1_10+'" autocomplete="off" spellcheck="false" onkeydown="if(event.key===\'Enter\')acSshRun()">'+
@@ -2459,31 +2479,41 @@ function acSetPcIp(id,val){
   if(c!==null) d.ip=c;
   acRenderCanvas();
 }
-let acPingGen=0;
-function acPingRun(){
-  const d=acSelected!=null?acById(acSelected):null;
-  if(!d||d.type!=='pc') return;
-  const myGen=++acPingGen, pcId=d.id;
-  LabShared.runPing({
-    inputId:'ac-ping-ip', btnId:'ac-ping-btn', outId:'ac-ping-out',
-    resolve:function(dst){
-      if(!d.ip) return {msg:d.name+' has no IP address'};
-      if(!acValid(dst)) return {msg:'invalid target address'};
-      if(acKey(dst)===acKey(d.ip)) return {ok:true};
-      /* count:true — the real lab's match counters only appear because
-         somebody actually ran these pings, and a NAT translation only
-         exists because a packet crossed the router. */
-      const r=acPing(d.ip, dst, true);
-      acRenderCanvas();
-      if(!r.ok) return {ok:false};
-      d._arp=d._arp||new Set();
-      const firstTime=!d._arp.has(dst);
-      d._arp.add(dst);
-      return {ok:true, firstTime:firstTime};
-    },
-    stillActive:function(){ return myGen===acPingGen && acSelected===pcId; }
-  });
-}
+/* The PC panel's Ping | Tracert (LabShared.pcTool), for both labs' PCs. */
+LabShared.pcTool('ac-ping', {
+  pc:function(){ const d=acSelected!=null?acById(acSelected):null; return d&&d.type==='pc'?d:null; },
+  ping:function(d,dst){
+    if(!d.ip) return {msg:d.name+' has no IP address'};
+    if(!acValid(dst)) return {msg:'invalid target address'};
+    if(acKey(dst)===acKey(d.ip)) return {ok:true};
+    /* count:true — the real lab's match counters only appear because
+       somebody actually ran these pings, and a NAT translation only
+       exists because a packet crossed the router. */
+    const r=acPing(d.ip, dst, true);
+    acRenderCanvas();
+    if(!r.ok) return {ok:false};
+    d._arp=d._arp||new Set();
+    const firstTime=!d._arp.has(dst);
+    d._arp.add(dst);
+    return {ok:true, firstTime:firstTime};
+  },
+  /* The ping's own echo, walked once and recorded. It is real traffic, so
+     it counts like the ping does: ACL matches, NAT translations. Each hop's
+     Time Exceeded then has to find its own way home: a router past the NAT
+     boundary answers the translated address, and with no NAT that answer
+     dies at ISP — the hop times out, exactly as on real kit. */
+  trace:function(d,dst){
+    if(!d.ip) return {msg:d.name+' has no IP address'};
+    if(!acValid(dst)) return {msg:'invalid target address'};
+    const path=[];
+    const res=acKey(dst)===acKey(d.ip) ? {ok:true} : acPing(d.ip, dst, true, {path:path});
+    acRenderCanvas();
+    return {path:path, res:res, dst:acFmt(acKey(dst)), back:function(e,type){
+      return acForward({router:e.dev, iface:null}, acKey(e.ip), e.src, false,
+        {proto:'icmp', icmpType:type, sport:0, dport:e.sport, scratch:null}).ok;
+    }};
+  }
+});
 function acSshRun(){
   const d=acSelected!=null?acById(acSelected):null;
   if(!d||d.type!=='pc') return;
@@ -2515,6 +2545,7 @@ const ACCON=LabShared.createConsoles({
   id:'ac', mainIds:{input:'ac-term-in', log:'ac-term-log', prompt:'ac-term-prompt'},
   device:id=>acById(id), hasCli:d=>d.type==='router',
   prompt:d=>acPrompt(d), run:(d,line)=>acCli(d,line), keywords:()=>AC_KW, logLines:300,
+  canStart:(d,l)=>LabShared.cliCanStart(AC_GRAMMAR,l,acLevels(d)),
   after:()=>{ acRenderCanvas(); acRefreshCfg(); }, dockAfter:'ac-cfg'
 });
 function acRenderTerm(){ ACCON.refresh(); }
