@@ -1625,22 +1625,69 @@ fault({id:'sw-gw-missing', cat:'sw', lvl:1, keys:['s1-gw'], dev:'S1', run:['no i
 fault({id:'sw-vlan-name', cat:'sw', lvl:1, keys:['s2-names'], dev:'S2', run:['vlan 10',' name Sale'], tickets:['chk_names'],
   cause:'VLAN 10 on S2 is named "Sale" instead of "Sales".',
   show:'show vlan brief', fix:{dev:'S2', lines:['vlan 10',' name Sales']}});
-/* ── inter-VLAN routing ── */
-fault({id:'iv-shut', cat:'iv', lvl:1, keys:['r2-g01'], dev:'R2', run:['interface g0/1',' shutdown'], tickets:['gwA4','gwB4'],
+/* ── inter-VLAN routing ──
+   Grouped by kind, because inter-VLAN faults are drawn by kind (tsPickFaults):
+   Easy one fault of an Easy kind, Medium up to two of different kinds, Hard
+   one of every kind. Each kind has variations across the subinterfaces, so
+   the same kind is not always the same fault. */
+const IV_KINDS=['down','ip4','tag','native','ip6'];
+/* down — something is administratively shut */
+fault({id:'iv-shut', cat:'iv', kind:'down', lvl:1, keys:['r2-g01'], dev:'R2', run:['interface g0/1',' shutdown'],
+  tickets:['gwA4','gwB4','gwC4','A_net4','B_D4'],
   cause:'R2 G0/1, the physical interface under every subinterface, is shut down — so all of them are down.',
   show:'show ip interface brief', fix:{dev:'R2', lines:['interface g0/1',' no shutdown']}});
-fault({id:'iv-dot1q', cat:'iv', lvl:2, keys:['r2-sub20'], dev:'R2', run:['interface g0/1.20',' encapsulation dot1Q 30'], tickets:['gwB4','B_D4'],
-  cause:'R2 G0/1.20 is tagged for VLAN 30, so it never sees the VLAN 20 frames HR sends.',
-  show:'show interfaces g0/1.20', fix:{dev:'R2', lines:['interface g0/1.20',' encapsulation dot1Q 20']}});
-fault({id:'iv-ip', cat:'iv', lvl:2, keys:['r2-sub10'], dev:'R2', run:['interface g0/1.10',' ip address 172.16.10.254 255.255.255.0'], tickets:['gwA4','A_net4'],
+fault({id:'iv-shut10', cat:'iv', kind:'down', lvl:1, keys:['r2-sub10-shut'], dev:'R2', run:['interface g0/1.10',' shutdown'],
+  tickets:['gwA4','gwC4','A_net4','C_D4','A_D6','A_net6','ssh_R2'],
+  cause:"R2 G0/1.10, Sales' gateway subinterface, is administratively down. G0/1 itself is up, so HR and Management still work.",
+  show:'show ip interface brief', fix:{dev:'R2', lines:['interface g0/1.10',' no shutdown']}});
+fault({id:'iv-shut20', cat:'iv', kind:'down', lvl:1, keys:['r2-sub20-shut'], dev:'R2', run:['interface g0/1.20',' shutdown'],
+  tickets:['gwB4','B_D4','B_net4','D_B4','B_net6'],
+  cause:"R2 G0/1.20, HR's gateway subinterface, is administratively down. G0/1 itself is up, so Sales and Management still work.",
+  show:'show ip interface brief', fix:{dev:'R2', lines:['interface g0/1.20',' no shutdown']}});
+/* ip4 — a subinterface carries the wrong IPv4 address */
+fault({id:'iv-ip', cat:'iv', kind:'ip4', lvl:1, keys:['r2-sub10-ip'], dev:'R2', run:['interface g0/1.10',' ip address 172.16.10.254 255.255.255.0'],
+  tickets:['gwA4','gwC4','A_net4','C_D4','ssh_R2'],
   cause:'R2 G0/1.10 has 172.16.10.254, not 172.16.10.1 — the gateway the Sales PCs use.',
   show:'show ip interface brief', fix:{dev:'R2', lines:['interface g0/1.10',' ip address 172.16.10.1 255.255.255.0']}});
-fault({id:'iv-native', cat:'iv', lvl:3, keys:['r2-sub1000'], dev:'R2', run:['interface g0/1.1000',' encapsulation dot1Q 1000'], tickets:['chk_rnative'],
+fault({id:'iv-ip20', cat:'iv', kind:'ip4', lvl:1, keys:['r2-sub20-ip'], dev:'R2', run:['interface g0/1.20',' ip address 172.16.21.1 255.255.255.0'],
+  tickets:['gwB4','B_D4','B_net4','D_B4'],
+  cause:"R2 G0/1.20 has 172.16.21.1/24 instead of 172.16.20.1/24. PC-B's gateway no longer exists, and HR's subnet is gone from R2 — and from OSPF with it.",
+  show:'show ip interface brief', fix:{dev:'R2', lines:['interface g0/1.20',' ip address 172.16.20.1 255.255.255.0']}});
+fault({id:'iv-ip99', cat:'iv', kind:'ip4', lvl:1, keys:['r2-sub99-ip'], dev:'R2', run:['interface g0/1.99',' ip address 172.16.99.254 255.255.255.0'],
+  tickets:['A_S1','A_S2'],
+  cause:'R2 G0/1.99 has 172.16.99.254, but S1 and S2 use 172.16.99.1 as their default gateway, so the switches cannot answer anything outside the management VLAN.',
+  show:'show ip interface brief', fix:{dev:'R2', lines:['interface g0/1.99',' ip address 172.16.99.1 255.255.255.0']}});
+/* tag — a subinterface is tagged for the wrong VLAN */
+fault({id:'iv-dot1q', cat:'iv', kind:'tag', lvl:2, keys:['r2-sub20-tag'], dev:'R2', run:['interface g0/1.20',' encapsulation dot1Q 30'],
+  tickets:['gwB4','B_D4','B_net4','D_B4','B_net6'],
+  cause:'R2 G0/1.20 is tagged for VLAN 30, so it never sees the VLAN 20 frames HR sends.',
+  show:'show interfaces g0/1.20', fix:{dev:'R2', lines:['interface g0/1.20',' encapsulation dot1Q 20']}});
+fault({id:'iv-dot1q10', cat:'iv', kind:'tag', lvl:2, keys:['r2-sub10-tag'], dev:'R2', run:['interface g0/1.10',' encapsulation dot1Q 11'],
+  tickets:['gwA4','gwC4','A_net4','C_D4','A_D6','A_net6','ssh_R2'],
+  cause:'R2 G0/1.10 is tagged for VLAN 11, so it never sees the VLAN 10 frames Sales sends.',
+  show:'show interfaces g0/1.10', fix:{dev:'R2', lines:['interface g0/1.10',' encapsulation dot1Q 10']}});
+fault({id:'iv-dot1q99', cat:'iv', kind:'tag', lvl:2, keys:['r2-sub99-tag'], dev:'R2', run:['interface g0/1.99',' encapsulation dot1Q 9'],
+  tickets:['A_S1','A_S2'],
+  cause:"R2 G0/1.99 is tagged for VLAN 9, so the management VLAN has no gateway and S1 and S2 cannot answer anything outside it.",
+  show:'show vlans', fix:{dev:'R2', lines:['interface g0/1.99',' encapsulation dot1Q 99']}});
+/* native — the native VLAN subinterface is not set up for untagged frames */
+fault({id:'iv-native', cat:'iv', kind:'native', lvl:3, keys:['r2-sub1000'], dev:'R2', run:['interface g0/1.1000',' encapsulation dot1Q 1000'],
+  tickets:['chk_rnative'],
   cause:'R2 G0/1.1000 is missing the native keyword, so it expects VLAN 1000 tagged while S1 sends its native VLAN untagged.',
   show:'show vlans', fix:{dev:'R2', lines:['interface g0/1.1000',' encapsulation dot1Q 1000 native']}});
-fault({id:'iv-ip6', cat:'iv', lvl:2, keys:['r2-sub20-6'], dev:'R2', run:['interface g0/1.20',' no ipv6 address 2001:CAFE:ACAD:20::1/64',' ipv6 address 2001:CAFE:ACAD:21::1/64'], tickets:['B_net6'],
+fault({id:'iv-native-none', cat:'iv', kind:'native', lvl:3, keys:['r2-sub1000'], dev:'R2', run:['interface g0/1.1000',' no encapsulation dot1Q'],
+  tickets:['chk_rnative'],
+  cause:'R2 G0/1.1000 has no encapsulation at all. A subinterface with no dot1Q VLAN belongs to none, so the trunk\'s untagged native VLAN 1000 has nowhere to land.',
+  show:'show vlans', fix:{dev:'R2', lines:['interface g0/1.1000',' encapsulation dot1Q 1000 native']}});
+/* ip6 — a subinterface carries the wrong IPv6 prefix */
+fault({id:'iv-ip6', cat:'iv', kind:'ip6', lvl:2, keys:['r2-sub20-6'], dev:'R2', run:['interface g0/1.20',' no ipv6 address 2001:CAFE:ACAD:20::1/64',' ipv6 address 2001:CAFE:ACAD:21::1/64'],
+  tickets:['B_net6'],
   cause:"R2 G0/1.20 has 2001:CAFE:ACAD:21::1/64 instead of :20::1/64. PC-B still reaches its link-local gateway, but no router has a route back to HR's real prefix.",
   show:'show ipv6 interface brief', fix:{dev:'R2', lines:['interface g0/1.20',' no ipv6 address 2001:CAFE:ACAD:21::1/64',' ipv6 address 2001:CAFE:ACAD:20::1/64']}});
+fault({id:'iv-ip6-10', cat:'iv', kind:'ip6', lvl:2, keys:['r2-sub10-6'], dev:'R2', run:['interface g0/1.10',' no ipv6 address 2001:CAFE:ACAD:10::1/64',' ipv6 address 2001:CAFE:ACAD:11::1/64'],
+  tickets:['A_net6','A_D6','D_A6'],
+  cause:"R2 G0/1.10 has 2001:CAFE:ACAD:11::1/64 instead of :10::1/64. PC-A still reaches its link-local gateway, but no router has a route back to Sales' real prefix.",
+  show:'show ipv6 interface brief', fix:{dev:'R2', lines:['interface g0/1.10',' no ipv6 address 2001:CAFE:ACAD:11::1/64',' ipv6 address 2001:CAFE:ACAD:10::1/64']}});
 /* ── PPP ── */
 /* PPP faults are built per round, for whichever links are serial —
    see tsPppFaults below. */
@@ -1853,7 +1900,8 @@ function tsApplyFix(f){
   tsExec(tsDev(f.fix.dev),f.fix.lines);
 }
 
-/* Weighted toward faults at the chosen level, never two on one setting. */
+/* Weighted toward faults at the chosen level, never two on one setting.
+   Inter-VLAN faults go by kind instead (takeIv). */
 function tsPickFaults(topic,diff){
   const L={easy:1,medium:2,hard:3}[diff], used=new Set(), out=[];
   const take=function(pool){
@@ -1866,10 +1914,19 @@ function tsPickFaults(topic,diff){
   };
   const ppp=tsPppFaults();
   const pool=cat=>(cat==='ppp'?ppp:FAULTS.filter(f=>f.cat===cat)).filter(f=>f.lvl<=L);
+  /* Inter-VLAN is drawn by kind: Easy one fault of a kind it has at that
+     level, Medium n of different kinds, Hard one of every kind. */
+  const takeIv=n=>{
+    const kinds=shuffle(IV_KINDS.filter(k=>pool('iv').some(f=>f.kind===k)));
+    (diff==='hard'?kinds:kinds.slice(0,n)).forEach(k=>take(pool('iv').filter(f=>f.kind===k)));
+  };
+  /* the inter-VLAN share of an Exam or Everything round */
+  const share=c=>c!=='iv'?take(pool(c)):takeIv(diff==='medium'?ri(1,2):1);
   /* PPP on Hard: a fault on each serial link, then one more anywhere */
   if(topic==='ppp'&&diff==='hard'){ shuffle(['12','13']).forEach(id=>take(pool('ppp').filter(f=>f.link===id))); take(pool('ppp')); }
-  else if(topic==='all') CATS.forEach(c=>take(pool(c)));
-  else if(topic==='exam') shuffle(CATS.slice()).slice(0,{easy:3,medium:4,hard:5}[diff]).forEach(c=>take(pool(c)));
+  else if(topic==='iv') takeIv({easy:1,medium:2}[diff]);
+  else if(topic==='all') CATS.forEach(c=>share(c));
+  else if(topic==='exam') shuffle(CATS.slice()).slice(0,{easy:3,medium:4,hard:5}[diff]).forEach(c=>share(c));
   else for(let i=0;i<{easy:1,medium:2,hard:3}[diff];i++) take(pool(topic));
   return out;
 }
