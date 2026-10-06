@@ -223,6 +223,23 @@
     setTimeout(step, 300);
   }
 
+  /* ---------- a PC's MAC address ----------
+     One row of a PC panel's IP Configuration: the MAC in a box styled like
+     the address fields beside it (.custom-ip-inp), not an inline code
+     chip. Read-only, since it is burned into the NIC, but still selectable
+     so it can be copied into a port-security command.
+       pcMacHtml(mac, {id, style})  ->  a .pc-form row
+         id     the box's id (default 'pc-mac')
+         style  inline style for the row, e.g. the page's row spacing */
+  function pcMacHtml(mac, o) {
+    o = o || {};
+    var id = o.id || 'pc-mac', v = String(mac || '').toUpperCase().replace(/[^0-9A-F.:-]/g, '');
+    return '<div class="pc-form"' + (o.style ? ' style="' + o.style + '"' : '') + '>' +
+      '<label class="pc-form-lbl" for="' + id + '">MAC Address</label>' +
+      '<input class="custom-ip-inp" id="' + id + '" value="' + v + '" readonly spellcheck="false"' +
+      ' title="Burned into the PC\'s NIC: read-only"></div>';
+  }
+
   /* ---------- the PC's Ping | Tracert tool ----------
      Every lab PC panel has the same block: a Ping / Tracert pill where the
      "Ping" heading used to be, one target box, one button, one output. The
@@ -1615,6 +1632,7 @@
     runTrace: runTrace,
     traceHops: traceHops,
     pcTool: pcTool,
+    pcMacHtml: pcMacHtml,
     pcToolHtml: pcToolHtml,
     pcToolMode: pcToolMode,
     pcToolRun: pcToolRun,

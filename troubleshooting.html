@@ -2111,6 +2111,7 @@ function tsPcHtml(d){
     '<div class="pc-form" style="margin-top:6px">'+tsPcRow('Default Gateway','ts-pc-gw',d.gw,'e.g. 172.20.5.1')+'</div>'+
     '<div class="pc-form" style="margin-top:6px">'+tsPcRow('IPv6 Address','ts-pc-ip6',v6,'e.g. 2001:DB8:5::10/64',250)+'</div>'+
     '<div class="pc-form" style="margin-top:6px">'+tsPcRow('IPv6 Gateway','ts-pc-gw6',d.gw6?v6Up(d.gw6):'','e.g. FE80::1')+'</div>'+
+    LabShared.pcMacHtml(d.mac,{id:'ts-pc-mac', style:'margin-top:6px'})+
     '<div class="cli-note" id="ts-pc-msg" style="margin-top:8px;display:none"></div>'+
     LabShared.pcToolHtml('ts-ping', {label:'Target', placeholder:'IPv4 or IPv6', width:'250px'})+
     '<div class="cfg-sec-lbl" style="margin-top:14px">SSH</div>'+
