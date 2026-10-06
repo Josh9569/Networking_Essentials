@@ -2540,15 +2540,29 @@ function rpNoNetworkReq(router, major, required, why){
 }
 /* The consequence of the rule above, stated as an outcome rather than a
    command: if the ISP link really was left out, nobody downstream learned
-   a route to it. */
-function rpNoRouteReq(router, netInt, pfx, why){
+   a route to it. Negative, so it is gated like rpNoNetworkReq — an untouched
+   round has no specific route to the block either, because it has no routes
+   at all. Until this router runs RIP with its required networks and the
+   origin router has a default route it is originating, this reports not-met
+   naming the missing step; and even then it is only met once the block
+   really is reached by a RIP-learned default, not merely unreachable. */
+function rpNoRouteReq(router, netInt, pfx, required, origin, why){
   const r={desc:router.name+' has no route to '+rpMono(rpCidr(netInt,pfx))+(why?' — '+why:''),
     test:function(){
+      if(!router.rip.on) return {ok:false, reason:'Configure '+router.name+"'s RIP process first — then this is about which routes it ends up with"};
+      const missing=(required||[]).filter(function(m){ return router.rip.networks.indexOf(m)<0; });
+      if(missing.length) return {ok:false, reason:router.name+' still has to advertise '+missing.map(int2ip).join(' and ')+' before this one counts'};
+      if(!origin.staticDefault) return {ok:false, reason:origin.name+' has no default route yet — '+router.name+' has nothing to reach '+rpCidr(netInt,pfx)+' by'};
+      if(!origin.rip.on||!origin.rip.defaultOriginate)
+        return {ok:false, reason:origin.name+' is not originating its default into RIP yet — "default-information originate"'};
       const hit=(rpRip()[router.id]||[]).find(function(e){
         return netIntOf(netInt,e.prefix)===e.netInt && e.prefix>0;
       });
       if(hit) return {ok:false, reason:router.name+' has learned '+rpCidr(hit.netInt,hit.prefix)+
         ' — it is being advertised somewhere it should not be'};
+      const win=rpBestMatch((netInt+1)>>>0, rpRoutingTable(router));
+      if(!win||win.prefix!==0||win.code!=='R')
+        return {ok:false, reason:router.name+' has not learned '+origin.name+'’s default route yet, so it has no way to '+rpCidr(netInt,pfx)+' at all'};
       return {ok:true};
     }};
   r.group='Verify'; return r;
@@ -2775,7 +2789,7 @@ function genRipLabMedium(v2){
       rpGroup('Verify',
         rpLearnedDefaultReq(r1),
         rpLearnedDefaultReq(r3),
-        rpNoRouteReq(r1, isp.net, isp.pfx, 'the default route is how it gets there'),
+        rpNoRouteReq(r1, isp.net, isp.pfx, [lans[0],ten], r2, 'the default route is how it gets there'),
         rpCompleteTablesReq([r1,r2,r3]),
         rpPingReq(pc1,pc3))
     )
@@ -2852,7 +2866,7 @@ function genRipLabHardV2(){
         rpNoSummaryReq(t.r2,[{netInt:t.lan1,pfx:24},{netInt:t.lan3,pfx:24}], t.major, 16),
         rpLearnedReq(t.r1, t.lan3, 24, 2),
         rpLearnedDefaultReq(t.r1),
-        rpNoRouteReq(t.r1, t.isp.net, t.isp.pfx, 'the default route is how it gets there'),
+        rpNoRouteReq(t.r1, t.isp.net, t.isp.pfx, [t.major,t.ten], t.r2, 'the default route is how it gets there'),
         rpCompleteTablesReq([t.r1,t.r2,t.r3]),
         rpPingReq(t.pc1,t.pc3))
     )
@@ -2909,7 +2923,7 @@ function genRipLabHardV1(){
         rpLearnedReq(t.r2, t.major, 16, 1),
         rpLearnedReq(t.r1, newLan, 24, 2),
         rpLearnedDefaultReq(t.r1),
-        rpNoRouteReq(t.r1, t.isp.net, t.isp.pfx, 'the default route is how it gets there'),
+        rpNoRouteReq(t.r1, t.isp.net, t.isp.pfx, [t.major,t.ten], t.r2, 'the default route is how it gets there'),
         rpCompleteTablesReq([t.r1,t.r2,t.r3]),
         rpPingReq(t.pc1,t.pc3))
     )
