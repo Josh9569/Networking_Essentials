@@ -2109,11 +2109,6 @@ function pppBuild(){
   const lan1=netIntOf(niceRawInt(),24), lan2=netIntOf(niceRawInt(),24), wan=netIntOf(niceRawInt(),30);
   const ix=(r,n)=>r.ports.findIndex(p=>p.name===n);
   const s1=choice(['S0/0/0','S0/0/1']), s2=choice(['S0/0/0','S0/0/1']);
-  /* the port row is only a drawing: put the serial port in use on the inside
-     edge of each router so the WAN cable never crosses another port */
-  const sw=(r,a,b)=>{ const t=r.ports[a]; r.ports[a]=r.ports[b]; r.ports[b]=t; };
-  if(ix(r1,s1)!==r1.ports.length-1) sw(r1,ix(r1,s1),r1.ports.length-1);
-  if(ix(r2,s2)!==0) sw(r2,ix(r2,s2),0);
   const r1g=ix(r1,'Gi0/0'), r2g=ix(r2,'Gi0/0'), r1s=ix(r1,s1), r2s=ix(r2,s2);
   rlAddCable(pc1.id,0,r1.id,r1g); rlAddCable(pc2.id,0,r2.id,r2g);
   /* the DCE end is drawn at random, so "which end clocks" is a real question */
