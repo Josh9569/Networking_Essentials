@@ -429,10 +429,7 @@ function devSize(d){
   const label=d.ip?(d.ip+'/'+d.pfx):'no IP';
   return [Math.max(PC_W, Math.round(label.length*6.4)+24), PC_H];
 }
-function portPosSwitch(d,i){
-  const pad=20, span=SW_W-2*pad;
-  return [pad + i*(span/(PORTN-1)), swHeight(d)];
-}
+function portPosSwitch(d,i){ return LabShared.portRowPos(SW_W, swHeight(d), PORTN, i); }
 /* PCs and routers have a single port that slides around the box edge,
    pointing toward whatever it is cabled to. */
 function portPos(d,i){
@@ -522,6 +519,7 @@ function render(){
       s.style.left=(px-7)+'px'; s.style.top=(py-7)+'px';
       s.title=p.name+(d.type==='switch'?` — ${modeName(p.mode)}${p.mode!=='trunk'?' vlan '+p.vlan:''}${p.ch>0?' ch'+p.ch:''}${down?' — '+portStatus(d,i):''}`:'');
       s.dataset.did=d.id; s.dataset.pi=i;
+      if(d.type!=='pc') s.dataset.num=LabShared.portNum(p.name);
       el.appendChild(s);
     });
     layer.appendChild(el);

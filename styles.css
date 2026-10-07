@@ -955,7 +955,12 @@ body.pop-resizing, body.pop-resizing * { cursor: ew-resize !important; user-sele
 .port.p-chan    { box-shadow: 0 0 0 2.5px #7c3aed; }
 .port.p-pending { background: var(--warn-bg); border-color: var(--warn-text); transform: scale(1.35); }
 /* a serial port (routing_game's PPP routers): a square carrying its number, 0 = S0/0/0, 1 = S0/0/1 */
-.port.p-serial  { width: 16px; height: 16px; border-radius: 3px; font: 700 9px/12px var(--mono); text-align: center; color: var(--text); user-select: none; }
+.port.p-serial  { width: 16px; height: 16px; border-radius: 3px; user-select: none; }
+/* A port's number (LabShared.portNum → data-num): on hover for a circle,
+   which is too small to carry it all the time; always on a serial square. */
+.port[data-num]::after { content: attr(data-num); position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font: 700 8px/1 var(--mono); color: var(--text); opacity: 0; transition: opacity .1s; pointer-events: none; }
+.port[data-num]:hover::after, .port.p-serial[data-num]::after { opacity: 1; }
+.port.p-serial[data-num]::after { font-size: 9px; }
 /* A switch port that is shut, err-disabled or in a shut port-channel — the
    red link light Packet Tracer draws at that end of the cable. */
 .port.p-down    { background: var(--err-bg); border-color: var(--err-text); }

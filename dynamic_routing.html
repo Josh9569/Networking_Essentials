@@ -55,7 +55,12 @@
   </div>
 
   <div class="qcard" id="qcard">
-    <div class="qcard-hdr"><div class="qlbl" id="qlbl">OSPF</div></div>
+    <div class="qcard-hdr">
+      <div class="qlbl" id="qlbl">OSPF</div>
+      <button type="button" class="qcard-pop-btn" id="qcard-pop-btn" style="display:none" title="Pop out instructions to a floating panel" aria-label="Pop out instructions to a floating panel" onclick="LabShared.toggleQcardPopout('qcard','qcard-pop-btn')">
+        <svg viewBox="0 0 24 24"><path d="M11 4H4v16h7M15 8l-4 4 4 4"/></svg>
+      </button>
+    </div>
     <div class="q-prompt" id="qprompt">Loading&hellip;</div>
     <div class="ipdisp" id="qip" style="display:none"></div>
     <div id="qspec"></div>
@@ -2687,11 +2692,11 @@ function genRipLabEasy(v2){
 
   rpAddCable(pc1.id,0, r1.id,0);
   rpAddCable(r1.id,1, r2.id,1);
-  rpAddCable(r2.id,0, pc2.id,0);
+  rpAddCable(r2.id,2, pc2.id,0);
   rpSetPort(r1,0, rpHost(lans[0],1), 24);
   rpSetPort(r1,1, rpHost(wan,1), 30);
   rpSetPort(r2,1, rpHost(wan,2), 30);
-  rpSetPort(r2,0, rpHost(lans[1],1), 24);
+  rpSetPort(r2,2, rpHost(lans[1],1), 24);
   pc1.ip=rpHost(lans[0],10); pc2.ip=rpHost(lans[1],10);
   rpInvalidate();
 
@@ -2709,8 +2714,8 @@ function genRipLabEasy(v2){
       [r1.name,'Gi0/0',r1.ports[0].ip+'/24',pc1.name],
       [r1.name,'Gi0/1',r1.ports[1].ip+'/30',r2.name+' Gi0/1'],
       [r2.name,'Gi0/1',r2.ports[1].ip+'/30',r1.name+' Gi0/1'],
-      [r2.name,'Gi0/0',r2.ports[0].ip+'/24',pc2.name],
-      [pc2.name,'NIC',pc2.ip+'/24',r2.name+' Gi0/0']
+      [r2.name,'Gi0/2',r2.ports[2].ip+'/24',pc2.name],
+      [pc2.name,'NIC',pc2.ip+'/24',r2.name+' Gi0/2']
     ],
     reqs:[].concat(
       rpGroup('RIP',
@@ -2744,9 +2749,9 @@ function genRipLabMedium(v2){
   rpAddCable(pc1.id,0, r1.id,0);
   rpAddCable(r1.id,1, r2.id,1);
   rpAddCable(r2.id,2, r3.id,1);
-  rpAddCable(r3.id,0, pc3.id,0);
+  rpAddCable(r3.id,2, pc3.id,0);
   rpSetPort(r1,0, rpHost(lans[0],1), 24);
-  rpSetPort(r3,0, rpHost(lans[1],1), 24);
+  rpSetPort(r3,2, rpHost(lans[1],1), 24);
   pc1.ip=rpHost(lans[0],10); pc3.ip=rpHost(lans[1],10);
   /* R2's loopback stands in for the link to the ISP. It is addressed and up
      from the start, like real hardware — the whole question is what the
@@ -2769,8 +2774,8 @@ function genRipLabMedium(v2){
       [r2.name,'Gi0/2',rpCidr(wans[1],30)+' \u2014 first host',r3.name+' Gi0/1'],
       [r2.name,lb.name,lb.ip+'/'+lb.pfx,'ISP (simulated)'],
       [r3.name,'Gi0/1',rpCidr(wans[1],30)+' \u2014 second host',r2.name+' Gi0/2'],
-      [r3.name,'Gi0/0',r3.ports[0].ip+'/24',pc3.name],
-      [pc3.name,'NIC',pc3.ip+'/24',r3.name+' Gi0/0']
+      [r3.name,'Gi0/2',r3.ports[2].ip+'/24',pc3.name],
+      [pc3.name,'NIC',pc3.ip+'/24',r3.name+' Gi0/2']
     ],
     reqs:[].concat(
       rpGroup('Addressing',
@@ -2782,7 +2787,7 @@ function genRipLabMedium(v2){
         rpProcessReq(r1,ver,false), rpNetworkReq(r1,[lans[0],ten]),
         rpPassiveReq(r1,0,'no RIP neighbours on that LAN'),
         rpProcessReq(r3,ver,false), rpNetworkReq(r3,[lans[1],ten]),
-        rpPassiveReq(r3,0,'no RIP neighbours on that LAN'),
+        rpPassiveReq(r3,2,'no RIP neighbours on that LAN'),
         rpProcessReq(r2,ver,false), rpNetworkReq(r2,[ten]),
         rpNoNetworkReq(r2, isp.major, [ten], 'it belongs to the ISP, not to you'),
         rpDefaultRouteReq(r2, lb.name),
@@ -2807,9 +2812,9 @@ function rpHardTopo(){
 
   rpAddCable(pc1.id,0, r1.id,0);
   rpAddCable(r1.id,1, r2.id,1);
-  rpAddCable(r3.id,0, pc3.id,0);      /* the R2–R3 link is left to the learner */
+  rpAddCable(r3.id,2, pc3.id,0);      /* the R2–R3 link is left to the learner */
   rpSetPort(r1,0, rpHost(lan1,1), 24);
-  rpSetPort(r3,0, rpHost(lan3,1), 24);
+  rpSetPort(r3,2, rpHost(lan3,1), 24);
   pc1.ip=rpHost(lan1,10); pc3.ip=rpHost(lan3,10);
   const lb=rpAddLoopback(r2, isp.host, isp.pfx);
   rpInvalidate();
@@ -2825,8 +2830,8 @@ function rpHardAddrRows(t, lan3Label){
     [t.r2.name,'Gi0/2',rpCidr(t.wans[1],30)+' — first host',t.r3.name+' Gi0/1'],
     [t.r2.name,t.lb.name,t.lb.ip+'/'+t.lb.pfx,'ISP (simulated)'],
     [t.r3.name,'Gi0/1',rpCidr(t.wans[1],30)+' — second host',t.r2.name+' Gi0/2'],
-    [t.r3.name,'Gi0/0',lan3Label,t.pc3.name],
-    [t.pc3.name,'NIC',lan3Label,t.r3.name+' Gi0/0']
+    [t.r3.name,'Gi0/2',lan3Label,t.pc3.name],
+    [t.pc3.name,'NIC',lan3Label,t.r3.name+' Gi0/2']
   ];
 }
 
@@ -2845,7 +2850,7 @@ function genRipLabHardV2(){
     title:'A discontiguous 172.16.0.0',
     goal:'Both LANs are subnets of 172.16.0.0, but the link between them is 10.0.0.0 — a discontiguous major network. Finish the cabling and addressing, then configure RIP so '+t.r2.name+' can tell the two halves apart.',
     note:'Leave RIP at its defaults and every router summarises 172.16.x.0/24 back to 172.16.0.0/16 as it crosses into 10.0.0.0. '+t.r2.name+' then receives the same classful network from both sides, installs both, and load-balances half its traffic into the wrong half of the network. Hard mode is <b>CLI only</b> — configure everything through the terminal.',
-    addr:rpHardAddrRows(t, t.r3.ports[0].ip.replace(/\.1$/,'.x')+'/24'),
+    addr:rpHardAddrRows(t, t.r3.ports[2].ip.replace(/\.1$/,'.x')+'/24'),
     reqs:[].concat(
       rpGroup('Cabling',
         rpCableReq(t.r2,t.r2.name+' Gi0/2', t.r3,t.r3.name+' Gi0/1')),
@@ -2858,7 +2863,7 @@ function genRipLabHardV2(){
         rpProcessReq(t.r1,2,true), rpNetworkReq(t.r1,[t.major,t.ten]),
         rpPassiveReq(t.r1,0,'no RIP neighbours on that LAN'),
         rpProcessReq(t.r3,2,true), rpNetworkReq(t.r3,[t.major,t.ten]),
-        rpPassiveReq(t.r3,0,'no RIP neighbours on that LAN'),
+        rpPassiveReq(t.r3,2,'no RIP neighbours on that LAN'),
         rpProcessReq(t.r2,2,true), rpNetworkReq(t.r2,[t.ten]),
         rpNoNetworkReq(t.r2, t.isp.major, [t.ten], 'it belongs to the ISP'),
         rpDefaultRouteReq(t.r2, t.lb.name),
@@ -2905,13 +2910,13 @@ function genRipLabHardV1(){
         rpIfaceReq(t.r2,1,t.wans[0],30),
         rpIfaceReq(t.r2,2,t.wans[1],30),
         rpIfaceReq(t.r3,1,t.wans[1],30),
-        rpIfaceReq(t.r3,0,newLan,24),
+        rpIfaceReq(t.r3,2,newLan,24),
         rpPcIpReq(t.pc3,newLan,24)),
       rpGroup('RIP',
         rpProcessReq(t.r1,1,false), rpNetworkReq(t.r1,[t.major,t.ten]),
         rpPassiveReq(t.r1,0,'no RIP neighbours on that LAN'),
         rpProcessReq(t.r3,1,false), rpNetworkReq(t.r3,[newLan,t.ten]),
-        rpPassiveReq(t.r3,0,'no RIP neighbours on that LAN'),
+        rpPassiveReq(t.r3,2,'no RIP neighbours on that LAN'),
         rpProcessReq(t.r2,1,false), rpNetworkReq(t.r2,[t.ten]),
         rpNoNetworkReq(t.r2, t.isp.major, [t.ten], 'it belongs to the ISP'),
         rpDefaultRouteReq(t.r2, t.lb.name),
@@ -2947,29 +2952,12 @@ function rpDevSize(d){
   const label=d.ip?d.ip:d.ip6?op6Up(d.ip6):'no IP';
   return [Math.max(LabShared.PC_W, Math.round(label.length*6.4)+24), LabShared.PC_H];
 }
+/* Ports along the bottom edge in interface order (LabShared.portRowPos);
+   each round's generator puts a link on the port that faces its neighbour. */
 function rpFixedPortPos(d,i){
-  const k=d.slots?d.slots[i]:i;
-  if(d.type==='router'){ const pad=20, span=RP_W-2*pad; return [pad+k*(span/(RP_PORTN-1)), RP_H]; }
-  if(d.type==='switch'){ const pad=20, span=LabShared.SW_W-2*pad; return [pad+k*(span/(RP_SW_PORTN-1)), LabShared.SW_H]; }
+  if(d.type==='router') return LabShared.portRowPos(RP_W,RP_H,RP_PORTN,i);
+  if(d.type==='switch') return LabShared.portRowPos(LabShared.SW_W,LabShared.SW_H,RP_SW_PORTN,i);
   return null;
-}
-/* Draw each box's ports in the order their cables leave (LabShared.portSlots)
-   — Gi0/0 is still Gi0/0, it just sits on the side its PC is on. Run once per
-   round, when the round's own cables exist; devices are laid out in order, so
-   a later one sees the slots an earlier one settled on. */
-function rpLayoutSlots(){
-  rpDevices.forEach(function(d){ d.slots=null; });
-  rpDevices.forEach(function(d){
-    if(d.type!=='router'&&d.type!=='switch') return;
-    const sz=rpDevSize(d), row=d.y+sz[1];
-    const far=d.ports.map(function(_,i){
-      const c=rpPortCable(d.id,i); if(!c) return null;
-      const o=rpOtherEnd(c,d.id), od=rpById(o.d), os=rpDevSize(od), fp=rpFixedPortPos(od,o.i);
-      if(fp) return {x:od.x+fp[0], kind:'u'};
-      return {x:od.x+os[0]/2, kind:od.y+os[1]/2<row?'up':'down'};
-    });
-    d.slots=LabShared.portSlots(far, d.x+sz[0]/2);
-  });
 }
 function rpPortPos(d,i){
   const fixed=rpFixedPortPos(d,i);
@@ -3080,6 +3068,7 @@ function rpRenderCanvas(){
       pel.className=cls;
       pel.style.left=(d.x+pos[0]-7)+'px'; pel.style.top=(d.y+pos[1]-7)+'px';
       pel.dataset.did=d.id; pel.dataset.pi=i;
+      if(p) pel.dataset.num=LabShared.portNum(p.name);
       pel.title = p ? p.name+(p.ip?' '+p.ip+'/'+p.pfx:p.ip6?' '+op6Up(p.ip6)+'/'+p.pfx6:'')+(p.up?'':' (down)') : 'Eth0';
       layer.appendChild(pel);
     });
@@ -3424,7 +3413,6 @@ function renderRipLab(body,qip){
   });
   document.getElementById('rp-cable-svg').addEventListener('click', rpOnCableClick);
   setBtns('lab');
-  rpLayoutSlots();
   rpRenderCanvas();
   rpRenderReqs(null);
 }
@@ -3763,7 +3751,7 @@ const OP6_SITES=['acad','cafe','beef','f00d','c0de'];
 function opBuild(fam){
   rpResetTopo(); opInvalidate();
   const pc1=rpAddPC(40,55), r1=rpAddRouter(190,150), r2=rpAddRouter(375,150), r3=rpAddRouter(560,150), pc3=rpAddPC(fam===6?600:660,55);
-  rpAddCable(pc1.id,0, r1.id,0); rpAddCable(r1.id,1, r2.id,1); rpAddCable(r2.id,2, r3.id,1); rpAddCable(r3.id,0, pc3.id,0);
+  rpAddCable(pc1.id,0, r1.id,0); rpAddCable(r1.id,1, r2.id,1); rpAddCable(r2.id,2, r3.id,1); rpAddCable(r3.id,2, pc3.id,0);
   const t={fam:fam, pc1:pc1, pc3:pc3, r1:r1, r2:r2, r3:r3, rids:[ip2int('1.1.1.1'),ip2int('2.2.2.2'),ip2int('3.3.3.3')]};
   if(fam===6){
     const site=choice(OP6_SITES);
@@ -3771,7 +3759,7 @@ function opBuild(fam){
     const pre='2001:db8:'+site+':';
     t.n={lan1:pre+lanA+'::', lan3:pre+lanB+'::', w1:pre+w1+'::', w2:pre+w2+'::', isp:'2001:db8:face:'+ri(1,99)+'::'};
     const set=function(r,i,net,h){ const p=r.ports[i]; p.ip6=op6Fmt(op6Parse(net+h)); p.pfx6=64; p.up=true; };
-    set(r1,0,t.n.lan1,'1'); set(r1,1,t.n.w1,'1'); set(r2,1,t.n.w1,'2'); set(r2,2,t.n.w2,'1'); set(r3,1,t.n.w2,'2'); set(r3,0,t.n.lan3,'1');
+    set(r1,0,t.n.lan1,'1'); set(r1,1,t.n.w1,'1'); set(r2,1,t.n.w1,'2'); set(r2,2,t.n.w2,'1'); set(r3,1,t.n.w2,'2'); set(r3,2,t.n.lan3,'1');
     pc1.ip6=op6Fmt(op6Parse(t.n.lan1+'10')); pc3.ip6=op6Fmt(op6Parse(t.n.lan3+'10'));
     t.lb=rpAddLoopback(r2,null,null); t.lb.ip6=op6Fmt(op6Parse(t.n.isp+'1')); t.lb.pfx6=64;
     const k=function(s){ return op6Parse(s); };
@@ -3781,7 +3769,7 @@ function opBuild(fam){
     const lans=rpPickLans(2), wans=rpPickWans(2), isp=rpPickIsp();
     rpSetPort(r1,0,rpHost(lans[0],1),24); rpSetPort(r1,1,rpHost(wans[0],1),30);
     rpSetPort(r2,1,rpHost(wans[0],2),30); rpSetPort(r2,2,rpHost(wans[1],1),30);
-    rpSetPort(r3,1,rpHost(wans[1],2),30); rpSetPort(r3,0,rpHost(lans[1],1),24);
+    rpSetPort(r3,1,rpHost(wans[1],2),30); rpSetPort(r3,2,rpHost(lans[1],1),24);
     pc1.ip=rpHost(lans[0],10); pc3.ip=rpHost(lans[1],10);
     t.lb=rpAddLoopback(r2,isp.host,isp.pfx);
     t.k={lan1:lans[0], lan3:lans[1], w1:wans[0], w2:wans[1]}; t.pfx={lan:24, wan:30}; t.isp=isp;
@@ -3800,8 +3788,8 @@ function opAddr(t,areas){
     [t.r2.name,'Gi0/1',a(t.r2.ports[1]),t.r1.name+' Gi0/1'+A(1)],
     [t.r2.name,'Gi0/2',a(t.r2.ports[2]),t.r3.name+' Gi0/1'+A(2)],
     [t.r3.name,'Gi0/1',a(t.r3.ports[1]),t.r2.name+' Gi0/2'+A(2)],
-    [t.r3.name,'Gi0/0',a(t.r3.ports[0]),t.pc3.name+A(3)],
-    [t.pc3.name,'NIC',fam===6?op6Up(t.pc3.ip6)+'/64':t.pc3.ip+'/24',t.r3.name+' Gi0/0']];
+    [t.r3.name,'Gi0/2',a(t.r3.ports[2]),t.pc3.name+A(3)],
+    [t.pc3.name,'NIC',fam===6?op6Up(t.pc3.ip6)+'/64':t.pc3.ip+'/24',t.r3.name+' Gi0/2']];
   if(t.withIsp) rows.splice(5,0,[t.r2.name,t.lb.name,fam===6?op6Up(t.lb.ip6)+'/64':t.lb.ip+'/'+t.lb.pfx,'ISP (simulated)']);
   return rows;
 }
@@ -3821,7 +3809,7 @@ function genOspfLabEasy(fam){
     reqs:[].concat(
       opGroup(v, opRidReq(t.r1,fam,t.rids[0]), opAreaReq(t.r1,fam,[t.r1.ports[0],t.r1.ports[1]],0), opPassiveReq(t.r1,fam,t.r1.ports[0]),
         opRidReq(t.r2,fam,t.rids[1]), opAreaReq(t.r2,fam,[t.r2.ports[1],t.r2.ports[2]],0),
-        opRidReq(t.r3,fam,t.rids[2]), opAreaReq(t.r3,fam,[t.r3.ports[0],t.r3.ports[1]],0), opPassiveReq(t.r3,fam,t.r3.ports[0])),
+        opRidReq(t.r3,fam,t.rids[2]), opAreaReq(t.r3,fam,[t.r3.ports[1],t.r3.ports[2]],0), opPassiveReq(t.r3,fam,t.r3.ports[2])),
       opGroup('Verify', opNbrReq(t.r2,fam,[t.r1,t.r3]),
         opRouteReq(t.r1,fam,t.k.lan3,t.pfx.lan,'O',t.label('lan3')),
         opRouteReq(t.r3,fam,t.k.lan1,t.pfx.lan,'O',t.label('lan1')),
@@ -3836,7 +3824,7 @@ function opMediumReqs(t){
     opGroup(v, opRidReq(t.r1,fam,t.rids[0]), opAreaReq(t.r1,fam,[t.r1.ports[0],t.r1.ports[1]],1), opPassiveReq(t.r1,fam,t.r1.ports[0]),
       opRidReq(t.r2,fam,t.rids[1]), opAreaReq(t.r2,fam,[t.r2.ports[1]],1), opAreaReq(t.r2,fam,[t.r2.ports[2]],0),
       opNoIspReq(t.r2,fam,t.lb), opOrigReq(t.r2,fam,t.lb),
-      opRidReq(t.r3,fam,t.rids[2]), opAreaReq(t.r3,fam,[t.r3.ports[0],t.r3.ports[1]],0), opPassiveReq(t.r3,fam,t.r3.ports[0])),
+      opRidReq(t.r3,fam,t.rids[2]), opAreaReq(t.r3,fam,[t.r3.ports[1],t.r3.ports[2]],0), opPassiveReq(t.r3,fam,t.r3.ports[2])),
     opGroup('Verify', opNbrReq(t.r2,fam,[t.r1,t.r3]),
       opRouteReq(t.r1,fam,t.k.lan3,t.pfx.lan,'O IA',t.label('lan3')),
       opRouteReq(t.r3,fam,t.k.lan1,t.pfx.lan,'O IA',t.label('lan1')),
@@ -3863,16 +3851,16 @@ function opConfigure(t){
   if(fam===6){
     r.forEach(function(x,i){ rpEchoCli(x,['configure terminal','ipv6 unicast-routing','ipv6 router ospf 1','router-id '+int2ip(t.rids[i]),'exit']); });
     const ifa=function(x,i,a){ rpEchoCli(x,['interface Gi0/'+i,'ipv6 ospf 1 area '+a,'exit']); };
-    ifa(t.r1,0,1); ifa(t.r1,1,1); ifa(t.r2,1,1); ifa(t.r2,2,0); ifa(t.r3,1,0); ifa(t.r3,0,0);
+    ifa(t.r1,0,1); ifa(t.r1,1,1); ifa(t.r2,1,1); ifa(t.r2,2,0); ifa(t.r3,1,0); ifa(t.r3,2,0);
     rpEchoCli(t.r1,['ipv6 router ospf 1','passive-interface Gi0/0','end']);
-    rpEchoCli(t.r3,['ipv6 router ospf 1','passive-interface Gi0/0','end']);
+    rpEchoCli(t.r3,['ipv6 router ospf 1','passive-interface Gi0/2','end']);
     rpEchoCli(t.r2,['ipv6 route ::/0 '+t.lb.name,'ipv6 router ospf 1','default-information originate','end']);
   } else {
     const wc=function(p){ return int2ip((~maskInt(p))>>>0); };
     const net=function(x,i){ return int2ip(netIntOf(ip2int(x.ports[i].ip),x.ports[i].pfx))+' '+wc(x.ports[i].pfx); };
     rpEchoCli(t.r1,['configure terminal','router ospf 1','router-id 1.1.1.1','network '+net(t.r1,0)+' area 1','network '+net(t.r1,1)+' area 1','passive-interface Gi0/0','end']);
     rpEchoCli(t.r2,['configure terminal','ip route 0.0.0.0 0.0.0.0 '+t.lb.name,'router ospf 1','router-id 2.2.2.2','network '+net(t.r2,1)+' area 1','network '+net(t.r2,2)+' area 0','default-information originate','end']);
-    rpEchoCli(t.r3,['configure terminal','router ospf 1','router-id 3.3.3.3','network '+net(t.r3,1)+' area 0','network '+net(t.r3,0)+' area 0','passive-interface Gi0/0','end']);
+    rpEchoCli(t.r3,['configure terminal','router ospf 1','router-id 3.3.3.3','network '+net(t.r3,1)+' area 0','network '+net(t.r3,2)+' area 0','passive-interface Gi0/2','end']);
   }
   r.forEach(function(x){ x.log.length=0; x.cm='exec'; });
   opInvalidate(); rpInvalidate();
@@ -3890,9 +3878,9 @@ const OP_FAULTS={
   orig:function(t){ opProc(t.r2,t.fam).defOrig=false; },
   /* a LAN no longer in OSPF (v2: wrong wildcard; v3: interface command missing) */
   lan:function(t){
-    if(t.fam===6) t.r3.ports[0].area6=null;
-    else { const pr=t.r3.ospf, n=pr.networks.find(function(x){ return x.net===netIntOf(ip2int(t.r3.ports[0].ip),24); });
-      n.net=ip2int(t.r3.ports[0].ip.replace(/\d+$/,'0')); n.wc=0; } },
+    if(t.fam===6) t.r3.ports[2].area6=null;
+    else { const pr=t.r3.ospf, n=pr.networks.find(function(x){ return x.net===netIntOf(ip2int(t.r3.ports[2].ip),24); });
+      n.net=ip2int(t.r3.ports[2].ip.replace(/\d+$/,'0')); n.wc=0; } },
   /* v3 only: one router never had ipv6 unicast-routing */
   unicast:function(t){ t.r1.unicast6=false; }
 };
@@ -3959,6 +3947,11 @@ function updateChips(){
    Skip with the score wiped, so it is hidden there. Kept per topic rather
    than per page, because these pages mix both kinds. */
 const TOPIC_RESET={ospf:false, lsa:false, rip:false, riplab:true, ospflab:true};
+/* Which topics get the instructions pop-out: the two labs, whose goal,
+   addressing table and tasks scroll out of sight while you work the canvas
+   and CLI. The drills answer right under their own prompt. Per topic for
+   the same reason as TOPIC_RESET. */
+const TOPIC_POP={ospf:false, lsa:false, rip:false, riplab:true, ospflab:true};
 function setBtns(mode){
   const chk=document.getElementById('chkbtn'), rev=document.getElementById('revbtn'), nxt=document.getElementById('nxtbtn');
   nxt.style.display='none';
@@ -3972,6 +3965,10 @@ function render(){
   const body=document.getElementById('qbody');
   body.innerHTML='';
   document.getElementById('qspec').innerHTML='';
+  /* leaving a lab docks the panel, so it never floats over a drill */
+  const popBtn=document.getElementById('qcard-pop-btn');
+  if(TOPIC_POP[state.mode]){ if(popBtn) popBtn.style.display=''; }
+  else { LabShared.dockQcardPopout('qcard','qcard-pop-btn'); if(popBtn) popBtn.style.display='none'; }
   if(window.setPreferredTool) setPreferredTool(TOPIC_REF[state.mode]);
   document.getElementById('req-list').innerHTML='';
   TOPIC_FNS[state.mode].render(body,qip);
