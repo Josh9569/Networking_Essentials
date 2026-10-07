@@ -2384,17 +2384,22 @@ function grade(reveal){
   const d=state.data;
   OSPF.opInvalidate();
   const results=d.reqs.map(r=>r.test());
-  tsRenderReqs(results);
   const met=results.filter(r=>r.ok).length, total=results.length, all=met===total;
   const tk=d.tickets.length, tkMet=results.slice(0,tk).filter(r=>r.ok).length;
   const fb=document.getElementById('fb');
-  /* Submit is a check until every row passes: the round stays open and the
-     planted faults stay hidden — listing them would hand over the
-     diagnosis — so the learner keeps working from the ✗ rows. */
+  /* Submit is a check until every row passes, and on this page a check is
+     only ✓/✗: the reasons ("R3 has no route to …") and the planted faults
+     are the diagnosis the exam asks for, so both wait for Skip or a pass.
+     The learner keeps working from which rows still fail. */
   if(!reveal&&!all){
-    LabShared.labRecheck(fb, d, met, total, tkMet+'/'+tk+' tickets fixed, '+met+'/'+total+' rows met');
+    tsRenderReqs(results.map(r=>({ok:r.ok})));
+    LabShared.labRecheck(fb, d, met, total, {
+      summary: tkMet+'/'+tk+' tickets fixed, '+met+'/'+total+' rows met',
+      tail: ' — the ✗ rows still fail. Find the faults, fix them and Submit again.'
+    });
     return;
   }
+  tsRenderReqs(results);
   const pts=reveal?0:met+2;
   state.score+=pts;
   state.streak=reveal?0:state.streak+1;

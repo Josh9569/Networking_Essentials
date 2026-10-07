@@ -397,15 +397,18 @@
      same way. The check count lives on the round's own data object, so a
      new round starts again at 1 without the page resetting anything, and
      the banner re-plays its entry animation — otherwise a second Submit
-     with the same result looks like a click that did nothing. `summary`
+     with the same result looks like a click that did nothing. `o.summary`
      replaces the default "met/total requirements met" (the trainer counts
-     tickets too). */
-  function labRecheck(fb, data, met, total, summary) {
+     tickets too); `o.tail` replaces the closing instruction (the trainer's
+     checks show no reasons, so "each row says what is wrong" would be
+     false there). */
+  function labRecheck(fb, data, met, total, o) {
+    o = o || {};
     data.checks = (data.checks || 0) + 1;
     fb.className = 'fbanner ' + (met >= Math.ceil(total * 0.6) ? 'warn' : 'err');
-    fb.textContent = (summary || (met + '/' + total + ' requirements met')) +
+    fb.textContent = (o.summary || (met + '/' + total + ' requirements met')) +
       (data.checks > 1 ? ' (check ' + data.checks + ')' : '') +
-      ' — each ✗ row says what is wrong. Fix it and Submit again.';
+      (o.tail || ' — each ✗ row says what is wrong. Fix it and Submit again.');
     fb.style.display = 'block';
     fb.style.animation = 'none';
     void fb.offsetWidth;
