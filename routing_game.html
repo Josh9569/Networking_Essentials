@@ -1707,6 +1707,7 @@ function rlPromptFor(d){
    wrapped in configure terminal / end, valid from whatever mode the console
    is in (LabShared.cliConfigSeq) */
 function rlEchoCli(d,cmds){
+  LabShared.conRan(d);
   LabShared.cliConfigSeq(d.cm==='exec', cmds).forEach(c=>{
     d.log.push(rlPromptFor(d)+' '+c);
     const out=rlCli(d,c);

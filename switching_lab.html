@@ -676,7 +676,7 @@ function uiSetSVI(){
   const ip=document.getElementById('svi-ip').value.trim();
   if(isNaN(v)||v<1||v>4094||!isValidIP(ip)){
     d.log.push('% management IP needs a VLAN number (1\u20134094) and a valid IPv4 address');
-    renderTerm(); return;
+    LabShared.conRan(d); renderTerm(); return;
   }
   echoCli(d,['interface vlan '+v,'ip address '+ip+' 255.255.255.0','exit']);
   buildPortTable(); render();
@@ -718,7 +718,8 @@ function doPing(src,dst){
   else if(tsw) ok=swPingReach(src,tsw);
   else ok=false;
   render();
-  if(selected!=null){ const sd=byId(selected); if(sd&&sd.type==='switch'){ buildPortTable(); renderTerm(); } }
+  if(selected!=null){ const sd=byId(selected); if(sd&&sd.type==='switch') buildPortTable(); }
+  renderTerm();      /* a violation's syslog may be on a pinned switch's console */
   if(!ok) return {ok:false};
   /* first contact with a new destination: the initial echo times out
      while ARP resolves the MAC address, exactly like a real host. */
@@ -814,7 +815,7 @@ function vmAdd(){
   const n=parseInt(idEl.value);
   if(isNaN(n)||n<2||n>4094){
     d.log.push('% VLAN ID must be between 2 and 4094');
-    renderTerm(); return;
+    LabShared.conRan(d); renderTerm(); return;
   }
   const nm=nmEl.value.trim();
   echoCli(d, nm?['vlan '+n,'name '+nm,'exit']:['vlan '+n,'exit']);
@@ -826,6 +827,7 @@ function vmAdd(){
    terminal / end so they are valid from whatever mode the console is in
    (LabShared.cliConfigSeq). beforeEnd runs while still in the last mode. */
 function echoCli(d,cmds,beforeEnd){
+  LabShared.conRan(d);
   const seq=LabShared.cliConfigSeq(d.cm==='exec',cmds);
   seq.forEach((c,k)=>{
     if(k===seq.length-1&&beforeEnd) beforeEnd();
