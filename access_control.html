@@ -914,6 +914,7 @@ function acCli(d, line, lv){
 /* a form's (or a generator's) commands, typed as a learner would have to:
    wrapped in configure terminal / end (LabShared.cliConfigSeq) */
 function acEcho(d, cmds){
+  LabShared.conRan(d);
   LabShared.cliConfigSeq(d.cm==='exec', cmds).forEach(function(c){
     d.log.push(acPrompt(d)+' '+c);
     const out=acCli(d,c);

@@ -1161,6 +1161,17 @@
     return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; });
   }
   function conId(v) { return isNaN(+v) ? v : +v; }
+  /* Where each device's console log is scrolled, kept by device rather than
+     by element because pages rebuild their panels: {top, end}. A console
+     redrawn because something happened elsewhere stays where its reader left
+     it; one already at the bottom keeps following. Only a command run on the
+     device itself — typed into its console, or a page's form going through
+     conRan(d) — takes it back to the bottom. */
+  var conView = new WeakMap(), conJump = new WeakSet();
+  function conRan(d) { if (d) conJump.add(d); }
+  function conViewOf(log) {
+    return { top: log.scrollTop, end: log.scrollHeight - log.scrollTop - log.clientHeight <= 4 };
+  }
   /* which band of the screen window k (0-based) of n is: the bands are
      equal shares of the WINDOW's height — with two, the halfway line is the
      middle of the screen — less a gap between them, with the top one
@@ -1459,7 +1470,11 @@
       log.innerHTML = (d.log || []).slice(-(cfg.logLines || 400)).map(function (l) {
         return '<div class="tl' + (isErr(l) ? ' terr' : l.charAt(0) === '→' ? ' thint' : '') + '">' + esc(l) + '</div>';
       }).join('');
-      log.scrollTop = log.scrollHeight;
+      var v = conView.get(d);
+      log.scrollTop = conJump.has(d) || !v || v.end ? log.scrollHeight : v.top;
+      /* a hidden console has no height to scroll in: leave what it was */
+      if (log.clientHeight) { conJump.delete(d); conView.set(d, conViewOf(log)); }
+      log.onscroll = function () { if (log.clientHeight) conView.set(d, conViewOf(log)); };
       if (pr) pr.textContent = cfg.prompt(d);
     }
     /* Redraw every console this page has open. Pins whose device no longer
@@ -1489,6 +1504,7 @@
         if (line.trim()) d.hist.push(line);
         d.hi = d.hist.length;
         d.log.push(cfg.prompt(d) + ' ' + line);
+        conRan(d);
         var out = cfg.run(d, line);
         if (out) String(out).split('\n').forEach(function (l) { d.log.push(l); });
         if (cfg.after) cfg.after(d);
@@ -1505,7 +1521,7 @@
         else { d.hi = d.hist.length; inp.value = ''; }
       } else if (e.key === 'Tab') {
         e.preventDefault();
-        inp.value = tabComplete(cfg.keywords(d), inp.value, function (c) { d.log.push(c.join('   ')); refresh(); },
+        inp.value = tabComplete(cfg.keywords(d), inp.value, function (c) { d.log.push(c.join('   ')); conRan(d); refresh(); },
           cfg.canStart ? function (ws) { return cfg.canStart(d, ws.join(' ')); } : null);
       }
     }
@@ -1633,6 +1649,7 @@
     traceHops: traceHops,
     pcTool: pcTool,
     pcMacHtml: pcMacHtml,
+    conRan: conRan,
     pcToolHtml: pcToolHtml,
     pcToolMode: pcToolMode,
     pcToolRun: pcToolRun,

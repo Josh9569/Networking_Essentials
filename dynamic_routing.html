@@ -2296,6 +2296,7 @@ function rpPromptFor(d){
 /* a form's (or a generator's) commands, typed as a learner would have to:
    wrapped in configure terminal / end (LabShared.cliConfigSeq) */
 function rpEchoCli(d, cmds){
+  LabShared.conRan(d);
   LabShared.cliConfigSeq(d.cm==='exec', cmds).forEach(function(c){
     d.log.push(rpPromptFor(d)+' '+c);
     const out=rpCli(d,c);
