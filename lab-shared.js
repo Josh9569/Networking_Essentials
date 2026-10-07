@@ -1093,36 +1093,22 @@
       '<text x="0" y="0.5" text-anchor="middle" dominant-baseline="middle">DCE</text></g>';
   }
 
-  /* ---------- port slots ----------
-     Which slot along a box's bottom edge each port is drawn in. A port keeps
-     its name and number; only where its circle sits changes, so that every
-     cable leaves on the side it is heading for and the cables out of one box
-     don't cross each other. From each edge inwards: cables that climb the
-     corridor beside the box (a free end above), then routed cables to other
-     bottom ports — nearest far end at the edge, so cables to farther devices
-     nest round them — then straight cables down to a free end below. Uncabled
-     ports keep their own order in the slots left over in the middle.
-     A page computes this once, when the round's cables exist, and keeps it,
-     so ports never move while the learner is cabling.
-       far: per port, null (uncabled) or {x, kind}: x is the far end's x;
-            kind 'up' (free end above the port), 'u' (another bottom port)
-            or 'down' (free end below)
-       cx:  the box's own centre x            ->  slot index per port */
-  function portSlots(far, cx) {
-    var RANK = { up: 0, u: 1, down: 2 }, idx = far.map(function (_, i) { return i; });
-    function side(left) {
-      return idx.filter(function (i) { return far[i] && (far[i].x < cx) === left; })
-        .sort(function (p, q) {
-          var A = far[p], B = far[q], dA = Math.abs(A.x - cx), dB = Math.abs(B.x - cx);
-          if (A.kind !== B.kind) return RANK[A.kind] - RANK[B.kind];
-          return (A.kind === 'u' ? dA - dB : dB - dA) || p - q;
-        });
-    }
-    var order = side(true).concat(idx.filter(function (i) { return !far[i]; }), side(false).reverse());
-    var slot = [];
-    order.forEach(function (p, k) { slot[p] = k; });
-    return slot;
+  /* ---------- the port row ----------
+     Router and switch ports sit along the bottom edge of the box, spread
+     evenly with a 20px margin, in interface order: Gi0/0 leftmost, then
+     Gi0/1, Gi0/2… on every lab. A lab chooses which interface each link
+     uses so its port already faces the neighbour (a link to the left takes
+     a lower number) — ports are never redrawn out of order to tidy cables.
+       portRowPos(w, h, n, i) -> [x, y] of port i of n on a w×h box
+     A port shows its number (portNum: 2 for Gi0/2, 1 for S0/0/1, 4 for
+     Fa0/4) through a data-num attribute — on hover for a circle, which is
+     too small to carry it all the time, and always on a serial square
+     (styles.css, .port[data-num]). */
+  var PORT_PAD = 20;
+  function portRowPos(w, h, n, i) {
+    return [n > 1 ? PORT_PAD + i * ((w - 2 * PORT_PAD) / (n - 1)) : w / 2, h];
   }
+  function portNum(name) { var m = /(\d+)$/.exec(name || ''); return m ? m[1] : ''; }
 
   /* ---------- device consoles ----------
      Every lab CLI goes through one of these: a .term bound to a DEVICE
@@ -1668,7 +1654,8 @@
     cablePaths: cablePaths,
     pathPoints: pathPoints,
     dceTag: dceTag,
-    portSlots: portSlots,
+    portRowPos: portRowPos,
+    portNum: portNum,
     createConsoles: createConsoles,
     cliGrammar: cliGrammar,
     cliCheck: cliCheck,

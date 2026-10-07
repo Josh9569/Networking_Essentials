@@ -1342,7 +1342,7 @@ function rlById(id){ return rlDevices.find(d=>d.id===id); }
 /* opts.serial gives the router two serial ports beside two Gigabit ones
    (the PPP topic's routers); without it the router is the IP Routing lab's
    three-Gigabit box, unchanged. opts.serialLeft lists the serial ports
-   first; where each port is DRAWN is rlLayoutSlots' call, from the links. */
+   first, for a router whose serial link runs to its left. */
 function rlAddRouter(x,y,opts={}){
   rlRtCount++;
   const gi=n=>Array.from({length:n},(_,i)=>({name:'Gi0/'+i, ip:null, pfx:null, up:false}));
@@ -1896,10 +1896,7 @@ function rlPcIpReq(pc,netInt,pfx){
     }};
 }
 function rlCableReq(devA,labelA,devB,labelB){
-  /* link: the ports the brief names, so rlLayoutSlots can lay the boxes'
-     ports out for the cabling the learner is about to do */
-  const ix=(d,l)=>d.ports?d.ports.findIndex(p=>l.endsWith(' '+p.name)):0;
-  return {desc:`Cable ${labelA} to ${labelB}`, link:{a:devA, ia:ix(devA,labelA), b:devB, ib:ix(devB,labelB)},
+  return {desc:`Cable ${labelA} to ${labelB}`,
     test(){ return rlCableBetween(devA,devB) ? {ok:true} : {ok:false,reason:`${labelA} and ${labelB} are not cabled yet`}; }};
 }
 /* A real ping needs the echo REPLY to route back too, not just the request
@@ -1996,22 +1993,24 @@ function genRoute(diff){
     title='IP Routing — Static Routes Across Two Routers';
     goal=`Get <b>${pc1.name}</b> and <b>${pc2.name}</b> talking across the <b>${r1.name}–${r2.name}</b> WAN link.`;
     note=`Neither router knows the other's LAN yet — each needs a static (or default) route across the WAN, e.g. <span class="mono-inl">ip route ${int2ip(netB)} 255.255.255.0 ${wIp2}</span> on ${r1.name}.`;
+    /* every link on the port facing its neighbour: R1's LAN left, WAN
+       right; R2's WAN left (Gi0/0), LAN below (Gi0/1) */
     addr=[
       [r1.name, r1.ports[0].name, ipA+'/24', pc1.name],
-      [r1.name, r1.ports[1].name, wIp1+'/30', r2.name+' '+r2.ports[1].name+' (WAN)'],
-      [r2.name, r2.ports[0].name, ipB+'/24', pc2.name],
-      [r2.name, r2.ports[1].name, wIp2+'/30', r1.name+' '+r1.ports[1].name+' (WAN)'],
+      [r1.name, r1.ports[1].name, wIp1+'/30', r2.name+' '+r2.ports[0].name+' (WAN)'],
+      [r2.name, r2.ports[0].name, wIp2+'/30', r1.name+' '+r1.ports[1].name+' (WAN)'],
+      [r2.name, r2.ports[1].name, ipB+'/24', pc2.name],
       [pc1.name, 'NIC', anyHost(netA), r1.name+' '+r1.ports[0].name],
-      [pc2.name, 'NIC', anyHost(netB), r2.name+' '+r2.ports[0].name]
+      [pc2.name, 'NIC', anyHost(netB), r2.name+' '+r2.ports[1].name]
     ];
     reqs.push(
       ...rlGroup('Cabling',
         rlCableReq(pc1,pc1.name,r1,r1.name+' '+r1.ports[0].name),
-        rlCableReq(pc2,pc2.name,r2,r2.name+' '+r2.ports[0].name),
-        rlCableReq(r1,r1.name+' '+r1.ports[1].name,r2,r2.name+' '+r2.ports[1].name)),
+        rlCableReq(pc2,pc2.name,r2,r2.name+' '+r2.ports[1].name),
+        rlCableReq(r1,r1.name+' '+r1.ports[1].name,r2,r2.name+' '+r2.ports[0].name)),
       ...rlGroup('Addressing',
-        rlIfaceReq(r1,0,netA,24), rlIfaceReq(r2,0,netB,24),
-        rlIfaceReq(r1,1,netW,30), rlIfaceReq(r2,1,netW,30),
+        rlIfaceReq(r1,0,netA,24), rlIfaceReq(r2,1,netB,24),
+        rlIfaceReq(r1,1,netW,30), rlIfaceReq(r2,0,netW,30),
         rlPcIpReq(pc1,netA,24), rlPcIpReq(pc2,netB,24)),
       ...rlGroup('Routing',
         rlRouteReq(r1,netB,24,r2.name+"'s LAN"),
@@ -2027,30 +2026,30 @@ function genRoute(diff){
     const w1a=int2ip(netW1+1), w1b=int2ip(netW1+2), w2a=int2ip(netW2+1), w2b=int2ip(netW2+2);
     title='IP Routing — Multi-Hop Static Routing';
     goal=`Get <b>${pc1.name}</b> (behind ${r1.name}) talking to <b>${pc3.name}</b> (behind ${r3.name}), two hops away.`;
-    note=`${r2.name} has no LAN of its own — it only forwards. The ${r2.name}–${r3.name} link runs through ${sw1.name}, a multi-access segment rather than a point-to-point link, so an exit-interface-only route there is ambiguous: ${r3.name}'s route back must be fully specified, e.g. <span class="mono-inl">ip route ${int2ip(netA)} 255.255.255.0 ${r3.ports[1].name} ${w2a}</span>.`;
+    note=`${r2.name} has no LAN of its own — it only forwards. The ${r2.name}–${r3.name} link runs through ${sw1.name}, a multi-access segment rather than a point-to-point link, so an exit-interface-only route there is ambiguous: ${r3.name}'s route back must be fully specified, e.g. <span class="mono-inl">ip route ${int2ip(netA)} 255.255.255.0 ${r3.ports[0].name} ${w2a}</span>.`;
     addr=[
       [r1.name, r1.ports[0].name, ipA+'/24', pc1.name],
       [r1.name, r1.ports[1].name, w1a+'/30', r2.name+' '+r2.ports[0].name+' (WAN 1)'],
       [r2.name, r2.ports[0].name, w1b+'/30', r1.name+' '+r1.ports[1].name+' (WAN 1)'],
       [r2.name, r2.ports[1].name, w2a+'/30', sw1.name+' '+sw1.ports[0].name+' (WAN 2)'],
-      [r3.name, r3.ports[0].name, ipC+'/24', pc3.name],
-      [r3.name, r3.ports[1].name, w2b+'/30', sw1.name+' '+sw1.ports[1].name+' (WAN 2)'],
+      [r3.name, r3.ports[0].name, w2b+'/30', sw1.name+' '+sw1.ports[1].name+' (WAN 2)'],
+      [r3.name, r3.ports[1].name, ipC+'/24', pc3.name],
       [pc1.name, 'NIC', anyHost(netA), r1.name+' '+r1.ports[0].name],
-      [pc3.name, 'NIC', anyHost(netC), r3.name+' '+r3.ports[0].name],
+      [pc3.name, 'NIC', anyHost(netC), r3.name+' '+r3.ports[1].name],
       [sw1.name, sw1.ports[0].name+'–'+sw1.ports[1].name, '— unmanaged, no addressing',
-        r2.name+' '+r2.ports[1].name+', '+r3.name+' '+r3.ports[1].name]
+        r2.name+' '+r2.ports[1].name+', '+r3.name+' '+r3.ports[0].name]
     ];
     reqs.push(
       ...rlGroup('Cabling',
         rlCableReq(pc1,pc1.name,r1,r1.name+' '+r1.ports[0].name),
-        rlCableReq(pc3,pc3.name,r3,r3.name+' '+r3.ports[0].name),
+        rlCableReq(pc3,pc3.name,r3,r3.name+' '+r3.ports[1].name),
         rlCableReq(r1,r1.name+' '+r1.ports[1].name,r2,r2.name+' '+r2.ports[0].name),
         rlCableReq(r2,r2.name+' '+r2.ports[1].name,sw1,sw1.name+' '+sw1.ports[0].name),
-        rlCableReq(sw1,sw1.name+' '+sw1.ports[1].name,r3,r3.name+' '+r3.ports[1].name)),
+        rlCableReq(sw1,sw1.name+' '+sw1.ports[1].name,r3,r3.name+' '+r3.ports[0].name)),
       ...rlGroup('Addressing',
-        rlIfaceReq(r1,0,netA,24), rlIfaceReq(r3,0,netC,24),
+        rlIfaceReq(r1,0,netA,24), rlIfaceReq(r3,1,netC,24),
         rlIfaceReq(r1,1,netW1,30), rlIfaceReq(r2,0,netW1,30),
-        rlIfaceReq(r2,1,netW2,30), rlIfaceReq(r3,1,netW2,30),
+        rlIfaceReq(r2,1,netW2,30), rlIfaceReq(r3,0,netW2,30),
         rlPcIpReq(pc1,netA,24), rlPcIpReq(pc3,netC,24)),
       ...rlGroup('Routing',
         rlRouteReq(r1,netC,24,r3.name+"'s LAN, two hops away"),
@@ -2685,7 +2684,6 @@ function renderRoute(body,qip){
   });
   document.getElementById('rl-cable-svg').addEventListener('click', rlOnCableClick);
   setBtns();
-  rlLayoutSlots();
   rlRenderCanvas();
   rlRenderReqs(null);
 }
@@ -2698,44 +2696,12 @@ function rlDevSize(d){
   const label=d.ip?d.ip:'no IP';
   return [Math.max(LabShared.PC_W,Math.round(label.length*6.4)+24), LabShared.PC_H];
 }
-function rlPortPosRouter(d,i){
-  const pad=20, span=RT_W-2*pad;
-  return [pad+i*(span/(d.ports.length-1)), RT_H];
-}
-function rlPortPosSwitch(d,i){
-  const pad=20, span=LabShared.SW_W-2*pad;
-  return [pad+i*(span/(SW_PORTN-1)), LabShared.SW_H];
-}
+/* Ports along the bottom edge in interface order (LabShared.portRowPos);
+   each round's brief puts a link on the port that faces its neighbour. */
 function rlFixedPortPos(d,i){
-  const k=d.slots?d.slots[i]:i;
-  if(d.type==='router') return rlPortPosRouter(d,k);
-  if(d.type==='switch') return rlPortPosSwitch(d,k);
+  if(d.type==='router') return LabShared.portRowPos(RT_W,RT_H,d.ports.length,i);
+  if(d.type==='switch') return LabShared.portRowPos(LabShared.SW_W,LabShared.SW_H,SW_PORTN,i);
   return null;
-}
-/* Draw each box's ports in the order their cables leave (LabShared.portSlots)
-   — S0/0/1 is still S0/0/1, it just sits on the side its link runs to. Laid
-   out once per round from the round's cables plus the ones the brief asks
-   the learner to make (rlCableReq's link), so the cabling the round wants is
-   drawn clear before any of it exists, and nothing moves while it is made. */
-function rlLayoutSlots(){
-  const links=rlCables.map(c=>({a:rlById(c.a.d), ia:c.a.i, b:rlById(c.b.d), ib:c.b.i}));
-  ((state.data&&state.data.reqs)||[]).forEach(r=>{
-    const l=r.link; if(!l||l.ia<0||l.ib<0) return;
-    if(!links.some(k=>(k.a===l.a&&k.ia===l.ia)||(k.b===l.a&&k.ib===l.ia)||(k.a===l.b&&k.ia===l.ib)||(k.b===l.b&&k.ib===l.ib))) links.push(l);
-  });
-  rlDevices.forEach(d=>{ d.slots=null; });
-  rlDevices.forEach(d=>{
-    if(d.type!=='router'&&d.type!=='switch') return;
-    const [w,h]=rlDevSize(d), row=d.y+h;
-    const far=d.ports.map((_,i)=>{
-      const l=links.find(k=>(k.a===d&&k.ia===i)||(k.b===d&&k.ib===i)); if(!l) return null;
-      const od=l.a===d&&l.ia===i?l.b:l.a, oi=l.a===d&&l.ia===i?l.ib:l.ia;
-      const fp=rlFixedPortPos(od,oi), [ow,oh]=rlDevSize(od);
-      if(fp) return {x:od.x+fp[0], kind:'u'};
-      return {x:od.x+ow/2, kind:od.y+oh/2<row?'up':'down'};
-    });
-    d.slots=LabShared.portSlots(far, d.x+w/2);
-  });
 }
 /* PCs have one port that slides around the box edge toward whatever
    they're cabled to (same trick as switching_lab's portPos). */
@@ -2817,8 +2783,9 @@ function rlRenderCanvas(){
          1 for S0/0/1 — so on a PPP round they can't be mistaken for the
          Gigabit circles beside them. */
       const ser=p&&p.serial, r=ser?8:7;
-      if(ser){ cls+=' p-serial'; pel.textContent=p.name.split('/').pop(); }
+      if(ser) cls+=' p-serial';
       pel.className=cls;
+      if(p) pel.dataset.num=LabShared.portNum(p.name);
       pel.style.left=(d.x+px-r)+'px'; pel.style.top=(d.y+py-r)+'px';
       pel.dataset.did=d.id; pel.dataset.pi=i;
       pel.title = p ? p.name+(p.ip?' '+p.ip+'/'+p.pfx:'')+(p.up?'':' (down)')+(p.serial&&rlSerialRole(d,i)?' — '+rlSerialRole(d,i):'') : 'Eth0';
