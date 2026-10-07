@@ -2641,16 +2641,18 @@ function acLabGrade(reveal){
   acRenderReqs(results);
   const met=results.filter(function(r){ return r.ok; }).length, total=results.length;
   const all=met===total;
-  const pts=reveal?0:met+(all?2:0);
-  state.score+=pts;
-  state.streak=(!reveal&&all)?state.streak+1:0;
-  state.round++;
   const fb=document.getElementById('fb');
+  /* Submit is a check until everything passes — the round stays open so
+     the ✗ rows can be fixed and checked again; only a full pass or Skip
+     banks the round. */
+  if(!reveal&&!all){ LabShared.labRecheck(fb, d, met, total); return; }
+  const pts=reveal?0:met+2;
+  state.score+=pts;
+  state.streak=reveal?0:state.streak+1;
+  state.round++;
   fb.style.display='block';
   if(reveal){ fb.className='fbanner warn'; fb.textContent='Skipped — '+met+'/'+total+' requirements were met. +0 pts.'; }
-  else if(all){ fb.className='fbanner ok'; fb.textContent='Perfect! All '+total+' requirements met. +'+pts+' pts (+2 bonus). Streak: '+state.streak; }
-  else { fb.className='fbanner '+(met>=Math.ceil(total*0.6)?'warn':'err');
-    fb.textContent=met+'/'+total+' requirements met. +'+pts+' pt'+(pts!==1?'s':'')+'. Open each unmet task for the reason.'; }
+  else { fb.className='fbanner ok'; fb.textContent='Perfect! All '+total+' requirements met. +'+pts+' pts (+2 bonus). Streak: '+state.streak; }
   finishRound();
 }
 
