@@ -2185,7 +2185,7 @@ LabShared.pcTool('ts-ping', {
     if(!fam) return {msg:'invalid target address'};
     if(!(fam===4?d.ip:d.ip6)) return {msg:d.name+' has no '+(fam===6?'IPv6':'IPv4')+' address'};
     const r=tsPing(d,dst,true);
-    tsRenderCanvas();
+    tsRenderCanvas(); tsRenderTerm();      /* port-security syslog may land on a pinned switch's console */
     if(!r.ok) return {ok:false};
     d._arp=d._arp||new Set();
     const first=!d._arp.has(dst); d._arp.add(dst);
@@ -2202,7 +2202,7 @@ LabShared.pcTool('ts-ping', {
     if(!(fam===4?d.ip:d.ip6)) return {msg:d.name+' has no '+(fam===6?'IPv6':'IPv4')+' address'};
     const path=[], k=fKey(fam,dst);
     const res=tsPing(d,dst,true,{path:path});
-    tsRenderCanvas();
+    tsRenderCanvas(); tsRenderTerm();
     return {path:path, res:res, dst:fam===4?int2ip(k):op6Fmt(k), back:function(e,type){
       return e.key!=null && tsForward(fam,{router:e.dev, iface:null},e.key,e.src,false,
         {proto:'icmp', icmpType:type, sport:0, dport:e.sport, scratch:null}).ok;

@@ -718,7 +718,8 @@ function doPing(src,dst){
   else if(tsw) ok=swPingReach(src,tsw);
   else ok=false;
   render();
-  if(selected!=null){ const sd=byId(selected); if(sd&&sd.type==='switch'){ buildPortTable(); renderTerm(); } }
+  if(selected!=null){ const sd=byId(selected); if(sd&&sd.type==='switch') buildPortTable(); }
+  renderTerm();      /* a violation's syslog may be on a pinned switch's console */
   if(!ok) return {ok:false};
   /* first contact with a new destination: the initial echo times out
      while ARP resolves the MAC address, exactly like a real host. */
