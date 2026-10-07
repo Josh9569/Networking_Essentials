@@ -3041,19 +3041,20 @@ function checkAll(){
   }
 
   if(mode==='route'||mode==='ppp'){
+    /* A lab's Submit is a check until everything passes: the round stays
+       open so the ✗ rows can be fixed and checked again, and only a full
+       pass (or Skip) banks it. */
     const d=state.data;
     const results=d.reqs.map(r=>r.test());
     rlRenderReqs(results);
     const met=results.filter(r=>r.ok).length, total=results.length;
-    const bonus=met===total?2:0;
-    const pts=met+bonus;
+    if(met<total){ LabShared.labRecheck(fb, d, met, total); return; }
+    const pts=total+2;
     state.score+=pts;
-    state.streak = met===total ? state.streak+1 : 0;
+    state.streak++;
     state.round++;
-    fb.className='fbanner '+(met===total?'ok':met>=Math.ceil(total*.6)?'warn':'err');
-    fb.textContent = met===total
-      ? `Perfect! All ${total} requirements met. +${pts} pts (+2 bonus). Streak: ${state.streak}`
-      : `${met}/${total} requirements met. +${pts} pt${pts!==1?'s':''}.`;
+    fb.className='fbanner ok';
+    fb.textContent=`Perfect! All ${total} requirements met. +${pts} pts (+2 bonus). Streak: ${state.streak}`;
     finishRound();
     return;
   }

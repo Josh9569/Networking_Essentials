@@ -2387,16 +2387,21 @@ function grade(reveal){
   tsRenderReqs(results);
   const met=results.filter(r=>r.ok).length, total=results.length, all=met===total;
   const tk=d.tickets.length, tkMet=results.slice(0,tk).filter(r=>r.ok).length;
-  const pts=reveal?0:met+(all?2:0);
-  state.score+=pts;
-  state.streak=(!reveal&&all)?state.streak+1:0;
-  state.round++;
   const fb=document.getElementById('fb');
+  /* Submit is a check until every row passes: the round stays open and the
+     planted faults stay hidden — listing them would hand over the
+     diagnosis — so the learner keeps working from the ✗ rows. */
+  if(!reveal&&!all){
+    LabShared.labRecheck(fb, d, met, total, tkMet+'/'+tk+' tickets fixed, '+met+'/'+total+' rows met');
+    return;
+  }
+  const pts=reveal?0:met+2;
+  state.score+=pts;
+  state.streak=reveal?0:state.streak+1;
+  state.round++;
   fb.style.display='block';
   if(reveal){ fb.className='fbanner warn'; fb.textContent='Skipped — '+tkMet+'/'+tk+' tickets were fixed. The faults are listed below the network. +0 pts.'; }
-  else if(all){ fb.className='fbanner ok'; fb.textContent='All '+tk+' ticket'+(tk===1?'':'s')+' fixed and every design rule holds. +'+pts+' pts (+2 bonus). Streak: '+state.streak; }
-  else { fb.className='fbanner '+(met>=Math.ceil(total*0.6)?'warn':'err');
-    fb.textContent=tkMet+'/'+tk+' tickets fixed, '+met+'/'+total+' rows met. +'+pts+' pt'+(pts!==1?'s':'')+'. Each unmet row says why; the faults are listed below the network.'; }
+  else { fb.className='fbanner ok'; fb.textContent='All '+tk+' ticket'+(tk===1?'':'s')+' fixed and every design rule holds. +'+pts+' pts (+2 bonus). Streak: '+state.streak; }
   document.getElementById('ts-causes').innerHTML=tsCausesHtml(d.faults);
   finishRound();
 }

@@ -2198,8 +2198,7 @@ function checkAll(){
     finish();
   } else {
     /* not done — let them keep fixing */
-    showFb(`${met}/${total} requirements met — the \u2717 rows explain what to fix. Adjust and check again.`,
-      met>=Math.ceil(total*.6)?'warn':'err');
+    LabShared.labRecheck(document.getElementById('fb'), scenario, met, total);
   }
 }
 

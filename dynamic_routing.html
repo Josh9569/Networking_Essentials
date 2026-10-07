@@ -3418,9 +3418,11 @@ function renderRipLab(body,qip){
 }
 
 /* ── Grading ──
-   met + 2 if everything passed, out of results.length — the same shape the
-   IP Routing lab uses, so adding a requirement raises the ceiling by
-   itself and there is no per-tier score constant to keep in step. */
+   Submit is a check, not the end of the round: until every requirement
+   passes it marks the checklist and leaves the round open, so the learner
+   can fix what the ✗ rows name and Submit again. Only a full pass (or Skip)
+   banks anything — total + 2, the same shape the IP Routing lab uses, so
+   adding a requirement raises the ceiling by itself. */
 function rpGrade(reveal){
   rpInvalidate();
   const d=state.data;
@@ -3428,21 +3430,19 @@ function rpGrade(reveal){
   rpRenderReqs(results);
   const met=results.filter(function(r){ return r.ok; }).length, total=results.length;
   const all=met===total;
-  const pts=reveal?0:met+(all?2:0);
+  const fb=document.getElementById('fb');
+  if(!reveal&&!all){ LabShared.labRecheck(fb, d, met, total); return; }
+  const pts=reveal?0:met+2;
   state.score+=pts;
   state.streak = (!reveal&&all) ? state.streak+1 : 0;
   state.round++;
-  const fb=document.getElementById('fb');
   fb.style.display='block';
   if(reveal){
     fb.className='fbanner warn';
     fb.textContent='Skipped — '+met+'/'+total+' requirements were met. +0 pts.';
-  } else if(all){
+  } else {
     fb.className='fbanner ok';
     fb.textContent='Perfect! All '+total+' requirements met. +'+pts+' pts (+2 bonus). Streak: '+state.streak;
-  } else {
-    fb.className='fbanner '+(met>=Math.ceil(total*0.6)?'warn':'err');
-    fb.textContent=met+'/'+total+' requirements met. +'+pts+' pt'+(pts!==1?'s':'')+'. Open each unmet task for the reason.';
   }
   finishRound();
 }

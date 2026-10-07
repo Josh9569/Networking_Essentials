@@ -389,6 +389,29 @@
     });
   }
 
+  /* ---------- a lab Submit that hasn't passed yet ----------
+     Every lab treats Submit as a check until all its requirements pass: the
+     round stays open (no Next, no points, Skip still available) so the
+     learner can fix what the ✗ rows name and Submit again. This is the
+     banner for that in-between state, shared so the five labs say it the
+     same way. The check count lives on the round's own data object, so a
+     new round starts again at 1 without the page resetting anything, and
+     the banner re-plays its entry animation — otherwise a second Submit
+     with the same result looks like a click that did nothing. `summary`
+     replaces the default "met/total requirements met" (the trainer counts
+     tickets too). */
+  function labRecheck(fb, data, met, total, summary) {
+    data.checks = (data.checks || 0) + 1;
+    fb.className = 'fbanner ' + (met >= Math.ceil(total * 0.6) ? 'warn' : 'err');
+    fb.textContent = (summary || (met + '/' + total + ' requirements met')) +
+      (data.checks > 1 ? ' (check ' + data.checks + ')' : '') +
+      ' — each ✗ row says what is wrong. Fix it and Submit again.';
+    fb.style.display = 'block';
+    fb.style.animation = 'none';
+    void fb.offsetWidth;
+    fb.style.animation = 'slideIn .2s ease-out';
+  }
+
   /* ---------- CLI tab-completion ----------
      Walks a nested keyword tree (each page defines its own — VLAN/trunk
      commands vs. IP-routing commands are completely different grammars)
@@ -1679,6 +1702,7 @@
     pcToolStop: pcToolStop,
     tabComplete: tabComplete,
     renderReqList: renderReqList,
+    labRecheck: labRecheck,
     /* Shared device-box geometry so both labs' switches/PCs render (and
        therefore dock ports) at identical sizes. Router geometry stays
        page-local: switching_lab's router is a single-port "router-on-a-stick"
