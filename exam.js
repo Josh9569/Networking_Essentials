@@ -1718,16 +1718,44 @@ function dictFilter(q){
   $('dict-empty').style.display=shown?'none':'block';
 }
 const SMOOTH=()=>window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth';
+/* The flash waits for the jump's scroll to finish: started on the click, it
+   had mostly faded before the card arrived. "Finished" is the target on
+   screen and the page still for four frames, capped at 1.5s in case the
+   reader takes over the scroll. A second jump cancels a pending flash. */
+let dictWait=0;
+function afterScroll(el,fn){
+  const tok=++dictWait, t0=performance.now(); let y=NaN, still=0;
+  (function tick(){
+    if(tok!==dictWait) return;
+    const r=el.getBoundingClientRect(), ny=window.scrollY;
+    still=(ny===y)?still+1:0; y=ny;
+    if((still>=4&&r.top<innerHeight&&r.bottom>0)||performance.now()-t0>1500) fn();
+    else requestAnimationFrame(tick);
+  })();
+}
+/* "Back to the card" floats at the foot of the window while a jump has taken
+   the card off screen, so it is in view wherever the jump landed (it used to
+   sit in the dictionary's header, above the entry it had just scrolled to). */
+let dictTrail=false;
+function dictBackSync(){
+  const on=dictTrail&&document.querySelector('.qcard').getBoundingClientRect().bottom<60;
+  $('dict-back').classList.toggle('on',on);
+}
+let dictBackRaf=0;
+function dictBackQueue(){ if(!dictBackRaf) dictBackRaf=requestAnimationFrame(()=>{ dictBackRaf=0; dictBackSync(); }); }
+window.addEventListener('scroll',dictBackQueue,{passive:true});
+window.addEventListener('resize',dictBackQueue);
 function dictJump(id){
   const c=$('dict-'+id); if(!c) return;
   if(c.classList.contains('hidden')){ $('dict-q').value=''; dictFilter(''); }
+  document.querySelectorAll('#dict-body .ex-flash').forEach(x=>x.classList.remove('ex-flash'));
   c.scrollIntoView({behavior:SMOOTH(), block:'center'});
-  c.classList.remove('ex-flash'); void c.offsetWidth; c.classList.add('ex-flash');
-  show('dict-back',true);
+  afterScroll(c,()=>{ void c.offsetWidth; c.classList.add('ex-flash'); });
+  dictTrail=true; dictBackSync();
 }
 function dictBack(){
   document.querySelector('.qcard').scrollIntoView({behavior:SMOOTH(), block:'start'});
-  show('dict-back',false);
+  dictTrail=false; dictBackSync();
   const n=$('nxtbtn'); if(n.style.display!=='none') n.focus({preventScroll:true});
 }
 document.addEventListener('click',e=>{ const t=e.target.closest('.ex-term'); if(t){ e.preventDefault(); dictJump(t.dataset.t); } });
@@ -1820,6 +1848,7 @@ function show(id,on){ $(id).style.display=on?'':'none'; }
 
 function loadQ(){
   cur=pickNext(); phase='answer'; forced=null; hideBanner();
+  dictTrail=false; dictBackSync();
   show('self-row',false); show('rate-hard',false); show('rate-easy',false); show('rate-lbl',false);
   show('chkbtn',true); show('skipbtn',true);
   $('nxtbtn').style.display='none';
