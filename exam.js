@@ -1561,6 +1561,184 @@ card({id:'g6-subif', area:'vlan', tier:2, kind:'graded', src:'Q6', title:'Add a 
   };
 }});
 
+/* ═══ Dictionary ══════════════════════════════════════════════════════════
+   Terms used across the cards, shown at the bottom of the page in the OSI
+   trainer's reference style (.ref-search/.ref-grid/.ref-card/.rbadge from
+   styles.css). After a card is answered, terms in its model answer and
+   explanation become links (dictLink) that scroll to their entry; entries
+   link to each other the same way. Each entry: [id, name, area, aliases,
+   badges, description]. An alias that is all capitals (OSPF, AD, DR) only
+   matches in capitals; cs:true makes every alias of an entry match case
+   exactly (DORA's Discover/Offer/Request, which are ordinary words in
+   lower case). Aliases must be specific: a generic word ("cost", "pool",
+   "gateway") would link in the wrong place. */
+const DICT_AREAS=[...AREAS,{id:'general', name:'General'}];
+const DICT=[
+  ['static','Static route','routing',['static routes','static routing'],['AD 1'],"A route typed in by an administrator: ip route <network> <mask> <next hop | exit interface>. It never changes by itself and sends no updates. Good for small and stub networks, and as a backup (floating static route)."],
+  ['dynamic','Dynamic routing protocol','routing',['dynamic routing','routing protocol','routing protocols','dynamic routing protocols'],[],"Routers share routes automatically and recalculate when the topology changes (OSPF, EIGRP, RIP). Scales and adapts to failures, at the cost of CPU, memory and bandwidth."],
+  ['ad','Administrative distance','routing',['AD','administrative distances'],['0–255','lower wins'],"How trustworthy a route's source is. When different sources offer the same prefix, the lowest AD is installed. Connected 0, static 1, eBGP 20, EIGRP 90, OSPF 110, IS-IS 115, RIP 120, external EIGRP 170, iBGP 200; 255 means never install."],
+  ['metric','Metric','routing',['metrics'],['lower wins'],"How a routing protocol ranks its own routes. Each protocol measures differently (OSPF cost, RIP hop count, EIGRP bandwidth and delay), so metrics are never compared across protocols."],
+  ['floating','Floating static route','routing',['floating static routes','floating static'],[],"A backup static route with an administrative distance higher than the primary route's, so it stays out of the routing table until the primary disappears: ip route 10.1.1.0 255.255.255.0 10.2.2.2 130."],
+  ['default','Default route','routing',['default routes','0.0.0.0/0'],['S*'],"The route to 0.0.0.0/0, which matches every destination and is used only when nothing more specific does: ip route 0.0.0.0 0.0.0.0 <next hop>."],
+  ['glr','Gateway of last resort','routing',[],[],"The next hop of the default route, printed at the top of show ip route."],
+  ['lpm','Longest prefix match','routing',['longest match','longest prefix','most specific'],[],"How a router picks the route for a packet: of every route that contains the destination, the one with the longest prefix wins — before administrative distance or metric, because routes of different lengths are different routes."],
+  ['ecmp','Equal-cost load balancing','routing',['load balancing','load balanced','load-balance','ECMP','equal-cost multipath'],[],"Two routes to the same prefix with the same administrative distance and the same metric: both are installed and traffic is shared between them."],
+  ['nexthop','Next hop','routing',['next-hop','next hops'],[],"The address of the neighbouring router a packet is handed to on its way to the destination."],
+  ['stub','Stub network','routing',['stub networks'],[],"A network with only one way in and out; a default static route is usually all it needs."],
+  ['rtable','Routing table','routing',['routing tables','show ip route'],[],"The routes a router will forward with, one best route per prefix. Codes: C connected, L local, S static, S* static default, R RIP, O OSPF, O IA OSPF inter-area, D EIGRP, D EX external EIGRP, B BGP. [AD/metric] follows each learned route, e.g. [110/65]."],
+  ['connected','Connected route','routing',['connected routes','directly connected','connected network'],['C','AD 0'],"The network on one of the router's own up/up interfaces, added automatically. AD 0, so it always wins."],
+  ['local','Local route','routing',['local routes','local route'],['L','/32'],"A /32 route for the router's own interface address, added next to each connected network. A packet to that address is for the router itself."],
+  ['summary','Summary route','routing',['summary routes','supernet','supernets','summarise','summarize','summarisation','summarization','route summarisation'],[],"One route with a shorter prefix covering several contiguous networks — e.g. 210.84.0.0/14 covers 210.84.0.0 to 210.87.255.255. Smaller routing tables, fewer updates."],
+  ['rip','RIP','routing',['Routing Information Protocol','RIPv1','RIPv2'],['AD 120','hop count'],"A distance-vector routing protocol whose metric is hop count (15 at most; 16 means unreachable). Blind to bandwidth, slow to converge."],
+  ['eigrp','EIGRP','routing',['Enhanced Interior Gateway Routing Protocol','External EIGRP'],['AD 90','external 170'],"Cisco's advanced distance-vector protocol, with a metric from bandwidth and delay. Internal routes AD 90; external routes (D EX) AD 170."],
+  ['bgp','BGP','routing',['eBGP','iBGP','Border Gateway Protocol'],['eBGP 20','iBGP 200'],"The routing protocol between organisations on the Internet. Routes from another AS (eBGP) have AD 20; from your own AS (iBGP) AD 200."],
+  ['isis','IS-IS','routing',['ISIS'],['AD 115'],"A link-state interior routing protocol, like OSPF; mostly used by service providers."],
+  ['ospf','OSPF','ospf',['Open Shortest Path First','OSPFv2','OSPFv3'],['AD 110','link-state'],"A link-state routing protocol: every router in an area holds the same map (LSDB) and runs SPF to find lowest-cost paths. Metric is cost. Areas let it scale. OSPFv2 is IPv4, OSPFv3 IPv6."],
+  ['rid','Router ID','ospf',['router-id','RID','router IDs'],[],"A 32-bit value written like an IPv4 address that names a router in OSPF. Chosen when the process starts: the router-id command, else the highest loopback address, else the highest active physical interface address. A change needs clear ip ospf process or a reload."],
+  ['cost','OSPF cost','ospf',['interface cost','interface costs','ip ospf cost'],[],"OSPF's metric. Interface cost = reference bandwidth ÷ interface bandwidth, rounded down, minimum 1; a route's cost is the sum of the outgoing interface costs along the path. Set directly with ip ospf cost."],
+  ['refbw','Reference bandwidth','ospf',['auto-cost reference-bandwidth','auto-cost'],['100 Mbps default'],"What OSPF divides by an interface's bandwidth to get its cost. At the default 100 Mbps, every link of 100 Mbps or faster costs 1. Raise it with auto-cost reference-bandwidth <Mbps>, the same on every router."],
+  ['bw','Interface bandwidth','ospf',['bandwidth command'],['kbps'],"The bandwidth value a router uses in metric calculations — not necessarily the real speed. Serial interfaces default to 1544 kbps. Set with bandwidth <kbps> under the interface."],
+  ['spf','SPF','ospf',['Dijkstra','shortest path first'],[],"Dijkstra's shortest-path-first algorithm: each OSPF router runs it over its LSDB to find the lowest-cost path to every network, again whenever its area's topology changes."],
+  ['lsa','LSA','ospf',['LSAs','link-state advertisement','link-state advertisements'],[],"A piece of OSPF topology information. Types 1 (router) and 2 (network) stay in their area; type 3 (summary) carries routes between areas through ABRs; type 5 carries external routes."],
+  ['lsdb','LSDB','ospf',['link-state database','link state database','topology table'],[],"The LSAs a router holds — its map of the area. Every router in an area has an identical LSDB."],
+  ['area','OSPF area','ospf',['area 0','backbone','backbone area'],[],"A group of routers sharing one LSDB. Area 0 is the backbone and every other area connects to it. Both ends of a link must be in the same area."],
+  ['abr','ABR','ospf',['ABRs','area border router','area border routers'],[],"A router with interfaces in area 0 and another area. It keeps an LSDB per area and passes summarised routes (type 3 LSAs) between them."],
+  ['multiarea','Multi-area OSPF','ospf',['multi-area','single-area','single area','multiple areas'],[],"OSPF split into areas around area 0, so detailed LSAs and SPF runs stay inside each area: smaller LSDBs and routing tables, less flooding, faster convergence."],
+  ['hello','Hello interval','ospf',['hello timer','hello timers','hellos','hello packets','hello-interval'],['10 s default'],"How often OSPF sends hellos to find and keep neighbours: 10 s on Ethernet and point-to-point links, 30 s on NBMA. Must match on both neighbours: ip ospf hello-interval."],
+  ['dead','Dead interval','ospf',['dead timer','dead timers','dead-interval'],['4 × hello'],"How long without a hello before a neighbour is declared down: 4 × hello by default (40 s). Must match on both neighbours: ip ospf dead-interval."],
+  ['adj','Adjacency','ospf',['adjacencies','neighbour','neighbours','neighbor','neighbors'],['FULL'],"A working OSPF relationship between two routers, formed when hello and dead timers, area, subnet and mask, and authentication all match and neither interface is passive. FULL is the final state."],
+  ['drbdr','DR / BDR','ospf',['DR/BDR election','DR','BDR','designated router','backup designated router'],[],"On a multi-access network OSPF elects a designated router and a backup to cut down adjacencies: highest priority wins, then highest router ID; priority 0 never becomes DR."],
+  ['passive','Passive interface','ospf',['passive-interface'],[],"An interface OSPF still advertises but sends no hellos on, so no adjacency forms — for LANs with no other routers: passive-interface g0/0 under router ospf."],
+  ['convergence','Convergence','ospf',['converge','converges','reconverge','reconverges','converged'],[],"The point where every router has a consistent view of the network again after a change. Faster convergence means less time with lost or looping traffic."],
+  ['loopback','Loopback interface','ospf',['loopback','loopbacks','Lo0'],[],"A virtual interface that is always up unless shut down. A stable OSPF router ID, and a handy test address (the ISP's Lo0 in the exam)."],
+  ['flapping','Flapping','ospf',['flap','flaps'],[],"A link or neighbour going up and down repeatedly; every change triggers updates and recalculation."],
+  ['acl','ACL','acl',['ACLs','access control list','access list','access lists'],[],"An ordered list of permit and deny statements (ACEs). Packets are checked top to bottom, the first match decides, and anything unmatched hits the implicit deny. Applied to an interface in or out (ip access-group) or to vty lines (access-class)."],
+  ['ace','ACE','acl',['ACEs','access control entry'],[],"One line of an ACL: a permit or deny and what it matches."],
+  ['stdacl','Standard ACL','acl',['standard ACLs','standard access list'],['1–99','1300–1999'],"Matches only the source IPv4 address, so it goes as close to the destination as possible — near the source it would block that host from everything."],
+  ['extacl','Extended ACL','acl',['extended ACLs','extended access list'],['100–199','2000–2699'],"Matches protocol, source, destination and port, so it goes as close to the source as possible and drops unwanted traffic before it crosses the network."],
+  ['wildcard','Wildcard mask','acl',['wildcard','wildcards','wildcard masks'],[],"Which address bits must match: 0 = must match, 1 = ignore. Usually the inverse of the subnet mask (/24 → 0.0.0.255). First address = address AND NOT wildcard; last = address OR wildcard."],
+  ['implicit','Implicit deny','acl',['implicit deny any','deny any'],[],"The invisible last line of every ACL: anything not permitted earlier is denied. An ACL of only deny lines blocks everything."],
+  ['inout','Inbound / outbound','acl',['inbound','outbound'],['in','out'],"Which way an ACL filters on an interface: in = packets arriving on it, before routing; out = packets leaving through it, after routing. ip access-group 10 out."],
+  ['established','established','acl',[],['TCP'],"On an extended ACE, matches only TCP segments with ACK or RST set — replies in sessions already started — so return traffic for connections inside hosts initiated is let in, and new connections from outside are not."],
+  ['hostany','host / any','acl',[],[],"ACE shorthands: host 10.1.1.5 is 10.1.1.5 0.0.0.0 (one address); any is 0.0.0.0 255.255.255.255 (every address)."],
+  ['nat','NAT','nat',['Network Address Translation'],[],"Rewrites private inside addresses to public ones as packets leave, and back again on the replies, so many private hosts can share few public addresses. ip nat inside / ip nat outside mark the interfaces."],
+  ['il','Inside local','nat',['inside local address','inside locals'],[],"The inside host's own (usually private) address, as seen inside — e.g. 192.168.1.20."],
+  ['ig','Inside global','nat',['inside global address','inside globals'],[],"The public address an inside host appears as on the outside, after translation."],
+  ['ol','Outside local','nat',[],[],"An outside host's address as seen from the inside — the same as its outside global unless the outside is translated too."],
+  ['og','Outside global','nat',[],[],"An outside host's real address on the Internet."],
+  ['staticnat','Static NAT','nat',['static translation','static mapping','static mappings'],['one-to-one'],"A permanent mapping of one inside local to one inside global address, so the host — typically a server — is reachable from outside: ip nat inside source static 192.168.1.20 209.165.200.229."],
+  ['dynnat','Dynamic NAT','nat',['dynamic translation','dynamic binding','dynamic bindings'],[],"Inside hosts are given a public address from a pool when they send traffic — one host per address while the translation lasts: ip nat inside source list 1 pool NAME."],
+  ['pat','PAT','nat',['overload','NAT overload','Port Address Translation','dynamic NAT with overload'],['many-to-one'],"Many inside hosts share one public address (an interface's or a pool's), told apart by port number; a clashing source port is changed: ip nat inside source list 1 interface s0/0/1 overload."],
+  ['natpool','NAT pool','nat',['ip nat pool'],[],"The public addresses dynamic NAT hands out: ip nat pool NAME <first> <last> netmask <mask>."],
+  ['port','Port number','general',['port numbers','source port'],['TCP/UDP'],"16-bit numbers identifying each end of a TCP or UDP session (80 web, 22 SSH, 67/68 DHCP). PAT uses the source port to tell inside hosts apart."],
+  ['private','Private address','general',['private addresses','RFC 1918'],[],"10.0.0.0/8, 172.16.0.0/12 and 192.168.0.0/16 — not routed on the Internet, so they need NAT to get out."],
+  ['dhcp','DHCPv4','dhcp',['DHCP','DHCP server','Dynamic Host Configuration Protocol'],['UDP 67/68'],"Leases IPv4 settings to clients automatically: address, mask, default gateway and DNS server. Servers listen on UDP 67, clients on UDP 68."],
+  ['dora','DORA','dhcp',['DHCPDISCOVER','DHCPOFFER','DHCPREQUEST','DHCPACK','Discover','Offer','Request','Acknowledgement'],[],"The DHCPv4 exchange: Discover (client broadcast), Offer (server), Request (client, still a broadcast), Acknowledgement (server)."],
+  ['lease','Lease','dhcp',['leases','lease time'],[],"How long a client may use a DHCP address; it renews, normally at half the lease time, to keep it."],
+  ['relay','DHCP relay','dhcp',['relay agent','ip helper-address','helper address'],[],"A router that forwards clients' DHCP broadcasts to a server on another network as unicasts — ip helper-address <server> on the interface facing the clients."],
+  ['exclude','Excluded addresses','dhcp',['excluded address','excluded-address','ip dhcp excluded-address','exclusions'],[],"Addresses a DHCP server must never lease because devices use them statically (router, servers, printers): ip dhcp excluded-address <first> [<last>], in global configuration."],
+  ['dpool','DHCP pool','dhcp',['ip dhcp pool','address pool'],[],"What a DHCP server leases from: ip dhcp pool NAME, then network, default-router and dns-server. Pool names are case-sensitive."],
+  ['broadcast','Broadcast','general',['broadcasts','broadcast domain'],[],"Sent to every host on the local network. Routers don't forward broadcasts — which is why DHCP needs a relay across networks, and why each VLAN is its own broadcast domain."],
+  ['unicast','Unicast','general',['unicasts'],[],"Traffic sent to one specific host."],
+  ['gw','Default gateway','general',['default gateways'],[],"The router address a host sends traffic to when the destination is on another network. It has to be in the host's own subnet."],
+  ['vlan','VLAN','vlan',['VLANs','virtual LAN'],[],"A separate broadcast domain on a switch, assigned per port. Hosts in different VLANs need a router — inter-VLAN routing — to talk."],
+  ['accessport','Access port','vlan',['access ports','switchport access vlan','switchport mode access'],[],"A switch port in one VLAN, carrying untagged frames to an end device: switchport mode access, switchport access vlan 10. With no VLAN assigned it stays in VLAN 1."],
+  ['trunk','Trunk','vlan',['trunks','trunk link','trunk port','switchport mode trunk','trunked'],[],"A link carrying many VLANs, each frame tagged with its VLAN ID (802.1Q) — between switches, or to a router-on-a-stick: switchport mode trunk."],
+  ['dot1q','802.1Q','vlan',['dot1Q','encapsulation dot1q','VLAN tag'],[],"The trunking standard: a 4-byte tag with the VLAN ID is added to every frame on a trunk, except the native VLAN's. On a router subinterface: encapsulation dot1q 20."],
+  ['native','Native VLAN','vlan',[],[],"The VLAN whose frames cross a trunk untagged — VLAN 1 unless changed. It must match at both ends; on a router subinterface: encapsulation dot1q 99 native."],
+  ['vlan1','Default VLAN','vlan',['VLAN 1','default VLAN 1'],[],"VLAN 1: every switch port starts in it, and it is the native VLAN unless changed."],
+  ['roas','Router-on-a-stick','vlan',['router on a stick','inter-VLAN routing'],[],"Inter-VLAN routing over one router interface trunked to the switch, with a subinterface per VLAN acting as that VLAN's default gateway."],
+  ['subif','Subinterface','vlan',['subinterfaces','sub-interface'],[],"A logical interface on a physical one, such as G0/0.20. On a router-on-a-stick each carries one VLAN (encapsulation dot1q) and holds that VLAN's gateway address."],
+  ['shutdown','shutdown / no shutdown','general',['no shutdown','shut down'],[],"Disables / enables an interface. Router interfaces start shut down and need no shutdown; subinterfaces go down with their parent."],
+].map(r=>({id:r[0], name:r[1], area:r[2], aka:r[3], badges:r[4], desc:r[5], cs:r[0]==='dora'}));
+
+/* One regex over every name and alias, longest first; dictPick decides which
+   entry a match belongs to (and enforces capitals-only aliases). */
+let DICT_RE=null, DICT_FORMS=null;
+function dictIndex(){
+  DICT_FORMS={};
+  const forms=[];
+  DICT.forEach(d=>[d.name].concat(d.aka).forEach(f=>{
+    if(f===d.name&&/ \/ /.test(f)) return;   // "DR / BDR"-style names are reached through their aliases
+    forms.push(f); (DICT_FORMS[f.toLowerCase()]=DICT_FORMS[f.toLowerCase()]||[]).push({f,d});
+  }));
+  forms.sort((a,b)=>b.length-a.length);
+  DICT_RE=new RegExp('(?<![\\w-])('+forms.map(f=>f.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|')+')(?![\\w-])','gi');
+}
+function dictPick(text){
+  const c=(DICT_FORMS[text.toLowerCase()]||[]).find(x=>(x.d.cs||!/[a-z]/.test(x.f))?x.f===text:true);
+  return c?c.d:null;
+}
+/* Turn the first mention of each term inside root into a link. Code,
+   commands and existing links are left alone. */
+function dictLink(root,selfId){
+  if(!root) return;
+  if(!DICT_RE) dictIndex();
+  const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,{acceptNode:n=>
+    n.parentElement.closest('.mono-inl,code,.ex-term,.ex-cli,.qlbl,button')?NodeFilter.FILTER_REJECT:NodeFilter.FILTER_ACCEPT});
+  const nodes=[]; while(walker.nextNode()) nodes.push(walker.currentNode);
+  const done=new Set(selfId?[selfId]:[]);
+  nodes.forEach(node=>{
+    const t=node.nodeValue; let m, last=0, frag=null;
+    DICT_RE.lastIndex=0;
+    while((m=DICT_RE.exec(t))){
+      const d=dictPick(m[0]); if(!d||done.has(d.id)) continue;
+      done.add(d.id); frag=frag||document.createDocumentFragment();
+      frag.appendChild(document.createTextNode(t.slice(last,m.index)));
+      /* an inline span with button semantics: a real <button> is inline-block
+         and lets a line break fall between "(" and the term */
+      const a=document.createElement('span'); a.className='ex-term'; a.setAttribute('role','button'); a.tabIndex=0; a.dataset.t=d.id; a.textContent=m[0];
+      a.title='Look up “'+d.name+'” in the dictionary';
+      frag.appendChild(a); last=m.index+m[0].length;
+    }
+    if(frag){ frag.appendChild(document.createTextNode(t.slice(last))); node.parentNode.replaceChild(frag,node); }
+  });
+}
+function dictRender(){
+  if(!DICT_RE) dictIndex();
+  const body=$('dict-body');
+  body.innerHTML=DICT_AREAS.map(a=>{
+    const es=DICT.filter(d=>d.area===a.id).sort((x,y)=>x.name.localeCompare(y.name));
+    if(!es.length) return '';
+    return '<div class="ref-section-hdr">'+a.name+'</div><div class="ref-grid">'+es.map(d=>
+      '<div class="ref-card" id="dict-'+d.id+'" data-search="'+esc([d.name].concat(d.aka,d.badges,[d.desc]).join(' ').toLowerCase())+'">'+
+        '<div class="ref-card-top"><div class="ref-card-name">'+esc(d.name)+'</div><div class="ref-badges">'+
+          d.badges.map(b=>'<span class="rbadge rb-port">'+esc(b)+'</span>').join('')+'</div></div>'+
+        '<div class="ref-card-desc">'+esc(d.desc)+'</div></div>').join('')+'</div>';
+  }).join('')+'<div class="ref-empty" id="dict-empty" style="display:none">No terms found</div>';
+  body.querySelectorAll('.ref-card').forEach(c=>dictLink(c.querySelector('.ref-card-desc'),c.id.slice(5)));
+}
+function dictFilter(q){
+  const term=q.toLowerCase().trim(); let shown=0;
+  $('dict-body').querySelectorAll('.ref-card').forEach(c=>{ const ok=!term||c.dataset.search.indexOf(term)>=0; c.classList.toggle('hidden',!ok); if(ok) shown++; });
+  $('dict-body').querySelectorAll('.ref-grid').forEach(g=>{
+    const any=[...g.children].some(c=>!c.classList.contains('hidden'));
+    g.style.display=any?'':'none'; g.previousElementSibling.style.display=any?'':'none';
+  });
+  $('dict-empty').style.display=shown?'none':'block';
+}
+const SMOOTH=()=>window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth';
+function dictJump(id){
+  const c=$('dict-'+id); if(!c) return;
+  if(c.classList.contains('hidden')){ $('dict-q').value=''; dictFilter(''); }
+  c.scrollIntoView({behavior:SMOOTH(), block:'center'});
+  c.classList.remove('ex-flash'); void c.offsetWidth; c.classList.add('ex-flash');
+  show('dict-back',true);
+}
+function dictBack(){
+  document.querySelector('.qcard').scrollIntoView({behavior:SMOOTH(), block:'start'});
+  show('dict-back',false);
+  const n=$('nxtbtn'); if(n.style.display!=='none') n.focus({preventScroll:true});
+}
+document.addEventListener('click',e=>{ const t=e.target.closest('.ex-term'); if(t){ e.preventDefault(); dictJump(t.dataset.t); } });
+/* Enter / Space on a focused term looks it up. Capture phase, so it runs
+   before answer-keys.js's Enter-to-continue (which would otherwise rate the
+   card) and the page's own key handler. */
+document.addEventListener('keydown',e=>{
+  const t=e.target.closest&&e.target.closest('.ex-term');
+  if(t&&(e.key==='Enter'||e.key===' ')){ e.preventDefault(); e.stopPropagation(); dictJump(t.dataset.t); }
+},true);
+
 /* ═══ Scheduler and persistence ═══════════════════════════════════════════ */
 const KEY='ne-exam-v1', COMFORT=20;
 function freshState(){ return {step:0, diff:1, off:[], cards:{}, answered:0, correct:0, lastNew:null}; }
@@ -1686,6 +1864,7 @@ function checkAll(){
     $('flash-cmp').innerHTML='<div class="ex-cmp"><div class="ex-pane"><div class="qlbl">Your answer</div><div class="ex-yours">'+kw.html+'</div></div>'+
       '<div class="ex-pane ex-model ex-kw-'+cov+'"><div class="qlbl ex-kw-head">Model answer <span class="ex-kw-count">'+n+' of '+all+' key words</span></div>'+model.html+'</div></div>';
     $('flash-cmp').querySelectorAll('.ex-model .ex-kw').forEach(m=>m.classList.add(kw.found[+m.dataset.k]?'hit':'miss'));
+    dictLink($('flash-cmp').querySelector('.ex-model'));
     show('f-flash',false); ta.blur();
     phase='self'; show('chkbtn',false); show('skipbtn',false); show('self-row',true);
     banner({all:'ok',some:'warn',none:'err'}[cov],(cov==='all'?'You used every key word.':cov==='none'?'None of the key words were in your answer.':
@@ -1693,7 +1872,7 @@ function checkAll(){
     return;
   }
   const r=Q.grade();
-  if(r.why){ const w=$('q-why'); w.innerHTML=r.why; w.classList.add('open'); }
+  if(r.why){ const w=$('q-why'); w.innerHTML=r.why; w.classList.add('open'); dictLink(w); }
   finish(r.ok,'<b>'+r.verdict+'</b>');
 }
 
@@ -1860,5 +2039,6 @@ function resetProgress(){
 }
 
 syncControls();
+dictRender();
 loadQ();
 AnswerKeys.wire({answers:'#qbody .afield input, #qbody textarea.ex-flash', submit:'checkAll'});

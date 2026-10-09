@@ -137,10 +137,10 @@ mark.ex-kw.miss { color: var(--err-text); box-shadow: inset 0 -2px 0 var(--err-t
 .ex-r-easy:hover { background: var(--ok-bg); }
 
 /* ── Progress panel ───────────────────────────────────────────────────────── */
-.ex-prog-hdr   { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: .6rem; }
-.ex-prog-hdr .tool-block-title { margin-bottom: 0; }
-.ex-reset      { padding: 4px 12px; font-size: 12.5px; }
-.ex-reset.ex-armed { background: var(--err-bg); }
+.ex-block-hdr  { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: .6rem; }
+.ex-block-hdr .tool-block-title { margin-bottom: 0; }
+.ex-hdr-btn    { padding: 4px 12px; font-size: 12.5px; }
+.ex-hdr-btn.ex-armed { background: var(--err-bg); }
 .ex-prog td:nth-child(n+2):not(.ex-bar-cell), .ex-prog th:nth-child(n+2) { text-align: right; width: 1%; white-space: nowrap; }
 .ex-prog tr.ex-off td { opacity: .4; }
 .ex-bar-cell   { width: 40%; }
@@ -149,6 +149,18 @@ mark.ex-kw.miss { color: var(--err-text); box-shadow: inset 0 -2px 0 var(--err-t
 .ex-b-comf     { background: var(--ok-bdr); }
 .ex-b-learn    { background: var(--warn-bdr); }
 .ex-prog-note  { margin-top: .7rem; }
+
+/* ── Dictionary: the reference cards come from styles.css (.ref-*); this
+   adds the in-text links and the flash on the card a link lands on. ── */
+.ex-term, .ex-term-demo { font: inherit; color: inherit; background: none; border: none; padding: 0; margin: 0; text-decoration: underline dotted; text-decoration-color: var(--info-text); text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
+.ex-term       { cursor: help; }
+.ex-term:hover, .ex-term:focus-visible { color: var(--info-text); outline: none; }
+.ex-kw .ex-term { text-decoration: none; }          /* a key word keeps its own green/red underline */
+.ref-card-desc .ex-term { text-decoration-color: var(--text-t); }   /* cross-links inside the dictionary stay quiet */
+.ex-dict-note  { margin: -.25rem 0 .25rem; }
+.ref-card.ex-flash { animation: exFlash 1.8s ease-out; }
+@keyframes exFlash { 0%, 35% { border-color: var(--info-bdr); box-shadow: 0 0 0 3px var(--info-bg); } 100% { box-shadow: 0 0 0 0 transparent; } }
+@media (prefers-reduced-motion: reduce) { .ref-card.ex-flash { animation: none; border-color: var(--info-bdr); } }
 
 @media (max-width: 640px) {
   .ex-grid, .ex-cmp, .ex-q6 { grid-template-columns: 1fr; }
