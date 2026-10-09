@@ -1,0 +1,175 @@
+/* exam.css — styles only exam.html needs. Everything else comes from
+   styles.css (.qcard, .afield, .rt-table, .cli-block, .fbanner, .cbtn,
+   .tool-block …); this file only adds what the exam page invents, and uses
+   the shared colour tokens so Light/Dark/Sync/Custom all follow. */
+
+/* ── Controls row ─────────────────────────────────────────────────────────── */
+.ex-area    { position: relative; display: inline-flex; align-items: center; gap: 8px; margin-left: 10px; font-size: 13px; color: var(--text-s); white-space: nowrap; }
+/* The Areas dropdown: a button that looks like the old select, opening the
+   shared Options-menu panel (.opt-menu/.opt-row) of checkboxes. */
+.ex-dd-btn  { display: inline-flex; align-items: center; gap: 8px; }
+.ex-dd-btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; transition: transform .2s; }
+.ex-dd-btn.open svg { transform: rotate(180deg); }
+.opt-menu.ex-area-menu { left: 0; right: auto; width: 230px; white-space: normal; }
+.ex-area-row { justify-content: flex-start; gap: 10px; }
+.ex-area-row .opt-row-label { flex: 1; }
+.ex-area-n  { font-family: var(--mono); font-size: 11.5px; color: var(--text-t); }
+.ex-area-all { display: block; width: 100%; margin-top: 4px; padding: 7px 10px; border: none; border-top: 1px solid var(--border); border-radius: 0 0 calc(var(--rl) - 7px) calc(var(--rl) - 7px); background: transparent; font-family: var(--font); font-size: 12.5px; color: var(--info-text); text-align: left; cursor: pointer; }
+.ex-area-all:hover { background: var(--surface-s); }
+.ex-area-note { display: none; padding: 2px 10px 6px; font-size: 12px; color: var(--warn-text); }
+.ex-area-note.show { display: block; }
+.ex-select  { font-family: var(--font); font-size: 13px; color: var(--text); background: var(--surface); border: 1px solid var(--border-m); border-radius: var(--r); padding: 5px 10px; cursor: pointer; backdrop-filter: var(--custom-blur, none); -webkit-backdrop-filter: var(--custom-blur, none); }
+.ex-select:focus { outline: none; border-color: var(--info-bdr); }
+.ex-pool    { font-size: 12px; color: var(--text-t); margin-left: auto; }
+
+/* ── Card header: where it's from, and how comfortable you are with it ──── */
+.ex-pill       { font-size: 11px; letter-spacing: .05em; text-transform: uppercase; padding: 2px 9px; border-radius: 999px; border: 1px solid transparent; white-space: nowrap; }
+.ex-pill:empty { display: none; }
+.ex-pill.ex-new   { background: var(--info-bg); border-color: var(--info-bdr); color: var(--info-text); }
+.ex-pill.ex-learn { background: var(--warn-bg); border-color: var(--warn-bdr); color: var(--warn-text); }
+.ex-pill.ex-comf  { background: var(--ok-bg);   border-color: var(--ok-bdr);   color: var(--ok-text); }
+.qcard .q-prompt { margin-top: .5rem; }
+
+/* ── Card body ────────────────────────────────────────────────────────────── */
+#qbody > * + * { margin-top: 12px; }
+#qbody:not(:empty) { margin-top: 14px; }
+.ex-list       { padding-left: 1.2em; display: flex; flex-direction: column; gap: 5px; }
+.ex-list li    { line-height: 1.5; }
+.ex-list .mono-inl { white-space: nowrap; }
+.ex-table      { margin: 0; }
+.ex-scroll     { overflow-x: auto; border-radius: var(--r); }
+.ex-sub        { font-size: 11.5px; color: var(--text-s); }
+.ex-cli-lbl    { margin: 0 0 4px; text-transform: none; letter-spacing: 0; font-family: var(--mono); font-size: 11.5px; }
+.cli-block.ex-cli { white-space: pre; line-height: 1.6; font-size: 12.5px; }
+#qbody .ex-cli-lbl + .ex-cli { margin-top: 0; }
+.ex-grid       { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.ex-grid > *   { min-width: 0; }
+.expl-box.ex-why { margin-top: 14px; }
+.afield.ex-wide input { font-size: 13.5px; }
+
+/* Choice chips: once graded the right one goes green, a wrong pick red,
+   and the rest fade — overriding .cbtn:disabled's near-invisible .28. */
+.ex-chips      { display: flex; flex-wrap: wrap; gap: 8px; }
+.ex-chips .cbtn:disabled, .ex-chips .cbtn:disabled:hover { opacity: .5; cursor: default; }
+.ex-chips .cbtn.ex-ok, .ex-chips .cbtn.ex-ok:hover   { opacity: 1; background: var(--ok-bg);  border-color: var(--ok-bdr);  color: var(--ok-text); }
+.ex-chips .cbtn.ex-bad, .ex-chips .cbtn.ex-bad:hover { opacity: 1; background: var(--err-bg); border-color: var(--err-bdr); color: var(--err-text); }
+/* Ordering chips carry their position in a small badge. */
+.ex-ord-n:not(:empty) { display: inline-block; min-width: 17px; margin-right: 7px; padding: 0 4px; border-radius: 4px; background: var(--info-text); color: var(--surface); font-family: var(--mono); font-size: 11px; text-align: center; }
+.ex-ord.ex-ok .ex-ord-n  { background: var(--ok-text); }
+.ex-ord.ex-bad .ex-ord-n { background: var(--err-text); }
+
+/* Multi-line command boxes (ACLs, DHCP, VLAN fixes): Enter is a new line. */
+.afield textarea.ex-cmds { width: 100%; min-height: 70px; resize: vertical; font-family: var(--mono); font-size: 13.5px; line-height: 1.55; color: var(--text); background: transparent; border: none; outline: none; }
+.afield textarea.ex-cmds::placeholder { color: var(--text-t); }
+.afield.bad .ahint, .afield.show .ahint { white-space: normal; }
+
+/* Flashcards: the answer box, then yours beside the model answer. */
+.afield textarea.ex-flash { width: 100%; min-height: 110px; resize: vertical; font-family: var(--font); font-size: 14px; line-height: 1.5; color: var(--text); background: transparent; border: none; outline: none; }
+.afield textarea.ex-flash::placeholder { color: var(--text-t); }
+.ex-cmp        { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start; }
+.ex-pane       { border: 1px solid var(--border); border-radius: var(--r); padding: 10px 12px; min-width: 0; font-size: 13.5px; }
+.ex-yours      { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; color: var(--text-s); }
+.ex-model      { background: var(--surface-s); }
+
+/* Key words. In the model answer each one is underlined green if the answer
+   used it and red if it didn't; the words that matched are underlined in the
+   learner's answer too. The model box itself goes green / orange / red for
+   all / some / none of them. */
+mark.ex-kw     { background: none; color: inherit; font-weight: 600; border-radius: 2px; }
+mark.ex-kw.hit  { color: var(--ok-text);  box-shadow: inset 0 -2px 0 var(--ok-bdr); }
+mark.ex-kw.miss { color: var(--err-text); box-shadow: inset 0 -2px 0 var(--err-text); }
+.ex-yours mark.ex-kw.hit { font-weight: 500; }
+.ex-model.ex-kw-all  { background: var(--ok-bg);   border-color: var(--ok-bdr); }
+.ex-model.ex-kw-some { background: var(--warn-bg); border-color: var(--warn-bdr); }
+.ex-model.ex-kw-none { background: var(--err-bg);  border-color: var(--err-bdr); }
+.ex-kw-head    { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.ex-kw-count   { text-transform: none; letter-spacing: 0; font-size: 12px; font-weight: 500; }
+.ex-kw-all  .ex-kw-count { color: var(--ok-text); }
+.ex-kw-some .ex-kw-count { color: var(--warn-text); }
+.ex-kw-none .ex-kw-count { color: var(--err-text); }
+
+/* ── Diagrams: the ACL network (clickable interfaces) and the router-on-a-
+   stick figure. Inline SVG on the shared colour tokens; on a phone the wide
+   one scrolls rather than shrinking its text out of reach. */
+.ex-topo-wrap  { border: 1px solid var(--border); border-radius: var(--r); background: var(--surface-s); padding: 6px; overflow-x: auto; }
+.ex-topo       { display: block; width: 100%; height: auto; }
+.ex-topo-wide  { min-width: 600px; }
+.ex-topo-narrow { display: none; max-width: 400px; margin: 0 auto; }
+.ex-topo text  { font-family: var(--mono); font-size: 12px; fill: var(--text); }
+.ex-topo .t-sub { fill: var(--text-s); font-size: 11px; }
+.ex-topo .rt-name { font-family: var(--font); font-size: 14px; font-weight: 600; }
+.ex-topo .rt   { fill: var(--surface); stroke: var(--border-m); stroke-width: 1.5; }
+.ex-topo .ln   { fill: none; stroke: var(--text-s); stroke-width: 2; }
+.ex-topo .ser  { stroke: var(--err-text); stroke-dasharray: 7 4; }
+.ex-if rect    { fill: var(--surface); stroke: var(--border-m); }
+.ex-if text    { font-size: 11.5px; }
+.ex-topo.pickable .ex-if { cursor: pointer; }
+.ex-topo.pickable .ex-if:hover rect { fill: var(--info-bg); stroke: var(--info-bdr); }
+.ex-if.sel rect { fill: var(--info-bg); stroke: var(--info-text); stroke-width: 1.5; }
+.ex-if.sel text { fill: var(--info-text); font-weight: 600; }
+.ex-if.ok rect, .ex-topo.pickable .ex-if.ok:hover rect { fill: var(--ok-bg); stroke: var(--ok-text); stroke-width: 1.5; }
+.ex-if.ok text { fill: var(--ok-text); font-weight: 600; }
+.ex-if.bad rect, .ex-topo.pickable .ex-if.bad:hover rect { fill: var(--err-bg); stroke: var(--err-text); stroke-width: 1.5; }
+.ex-if.bad text { fill: var(--err-text); }
+.ex-apply      { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; }
+.ex-apply-lbl  { font-size: 13px; color: var(--text-s); }
+.ex-apply-if   { font-family: var(--mono); font-size: 13px; font-weight: 500; color: var(--text-t); margin-right: 8px; }
+.ex-apply-if.on { color: var(--info-text); }
+.ex-q6         { display: grid; grid-template-columns: 240px 1fr; gap: 12px; align-items: start; }
+.ex-q6 > *     { min-width: 0; }
+.ex-q6 .cli-block + .cli-block { margin-top: 8px; }
+
+/* A routing-table extract: one pickable row per route, headings between. */
+.ex-rtab td    { padding: 5px 12px; font-size: 12.5px; white-space: pre; }
+.ex-rtab td:first-child { width: 1%; font-weight: 600; }
+.ex-rtab .ex-rt-sub { padding-left: 34px; }
+.ex-rtab tr.ex-rt-hdr td { color: var(--text-s); background: var(--surface-s); }
+.ex-addr td, .ex-addr th { white-space: nowrap; }
+
+/* ── Buttons ──────────────────────────────────────────────────────────────── */
+.btn:disabled, .btn:disabled:hover { opacity: .4; cursor: not-allowed; }
+.ex-k kbd      { font-family: var(--mono); font-size: 10.5px; padding: 0 4px; margin-left: 4px; border: 1px solid currentColor; border-radius: 4px; opacity: .55; }
+.ex-self, .ex-rate { display: inline-flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.ex-rate-lbl   { font-size: 13px; color: var(--text-s); }
+.ex-r-hard     { border-color: var(--warn-bdr); color: var(--warn-text); }
+.ex-r-hard:hover { background: var(--warn-bg); }
+.ex-r-easy     { border-color: var(--ok-bdr); color: var(--ok-text); }
+.ex-r-easy:hover { background: var(--ok-bg); }
+
+/* ── Progress panel ───────────────────────────────────────────────────────── */
+.ex-block-hdr  { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: .6rem; }
+.ex-block-hdr .tool-block-title { margin-bottom: 0; }
+.ex-hdr-btn    { padding: 4px 12px; font-size: 12.5px; }
+.ex-hdr-btn.ex-armed { background: var(--err-bg); }
+.ex-prog td:nth-child(n+2):not(.ex-bar-cell), .ex-prog th:nth-child(n+2) { text-align: right; width: 1%; white-space: nowrap; }
+.ex-prog tr.ex-off td { opacity: .4; }
+.ex-bar-cell   { width: 40%; }
+.ex-bar        { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--surface-s); border: 1px solid var(--border); }
+.ex-bar span   { display: block; height: 100%; }
+.ex-b-comf     { background: var(--ok-bdr); }
+.ex-b-learn    { background: var(--warn-bdr); }
+.ex-prog-note  { margin-top: .7rem; }
+
+/* ── Dictionary: the reference cards come from styles.css (.ref-*); this
+   adds the in-text links and the flash on the card a link lands on. ── */
+.ex-term, .ex-term-demo { font: inherit; color: inherit; background: none; border: none; padding: 0; margin: 0; text-decoration: underline dotted; text-decoration-color: var(--info-text); text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
+.ex-term       { cursor: help; }
+.ex-term:hover, .ex-term:focus-visible { color: var(--info-text); outline: none; }
+.ex-kw .ex-term { text-decoration: none; }          /* a key word keeps its own green/red underline */
+.ref-card-desc .ex-term { text-decoration-color: var(--text-t); }   /* cross-links inside the dictionary stay quiet */
+.ex-dict-note  { margin: -.25rem 0 .25rem; }
+.ref-card.ex-flash { animation: exFlash 1.8s ease-out; }
+@keyframes exFlash { 0%, 35% { border-color: var(--info-bdr); box-shadow: 0 0 0 3px var(--info-bg); } 100% { box-shadow: 0 0 0 0 transparent; } }
+@media (prefers-reduced-motion: reduce) { .ref-card.ex-flash { animation: none; border-color: var(--info-bdr); } }
+
+@media (max-width: 640px) {
+  .ex-grid, .ex-cmp, .ex-q6 { grid-template-columns: 1fr; }
+  .ex-topo-wide { display: none; }
+  .ex-topo-narrow { display: block; }
+  .ex-q6fig { max-width: 240px; margin: 0 auto; }
+  .ex-pool { margin-left: 0; width: 100%; }
+  .ex-area { margin-left: 0; }
+  .ex-prog .ex-bar-cell, .ex-prog th:last-child { display: none; }
+  .ex-prog th, .ex-prog td { padding: 8px 9px; }
+  .ex-list .mono-inl { white-space: normal; overflow-wrap: anywhere; }
+}

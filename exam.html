@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- Temporary exam-prep page: deliberately not linked from index.html and
+     kept out of search engines. Everything it adds lives in exam.html,
+     exam.js and exam.css — delete those three files to remove it. -->
+<meta name="robots" content="noindex, nofollow">
+<title>Final Exam Practice</title>
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="exam.css">
+<script src="theme.js"></script>
+<script src="custom-theme.js"></script>
+<script src="answer-keys.js"></script>
+<script src="lab-shared.js"></script>
+<script src="net-router.js"></script>
+</head>
+<body>
+<div class="wrap">
+
+  <a href="index.html" class="home-link">&#8592; All Tools</a>
+
+  <div class="hdr">
+    <div>
+      <div class="hdr-title">Final Exam Practice</div>
+      <div class="hdr-sub">3001ICT &middot; rate how comfortable you are and the cards you find hard come back sooner</div>
+    </div>
+    <div class="hdr-right">
+      <div class="chips">
+        <div class="chip">Answered <b id="ch-ans">0</b></div>
+        <div class="chip">Correct <b id="ch-pct">&ndash;</b></div>
+        <div class="chip">Due <b id="ch-due">0</b></div>
+      </div>
+      <div id="theme-toggle-slot"></div>
+    </div>
+  </div>
+
+  <div class="cls-row ex-ctl" id="diff-row">
+    <span>Difficulty:</span>
+    <button class="cbtn" data-d="1" onclick="setDiff(1)">Easy</button>
+    <button class="cbtn" data-d="2" onclick="setDiff(2)">Medium</button>
+    <button class="cbtn" data-d="3" onclick="setDiff(3)">Hard</button>
+    <div class="ex-area" id="area-dd">
+      <span>Areas:</span>
+      <button type="button" class="ex-select ex-dd-btn" id="area-btn" onclick="toggleAreaMenu()" aria-haspopup="true" aria-expanded="false">
+        <span id="area-btn-txt">All areas</span>
+        <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <!-- Same panel and rows as every page's Options menu (.opt-menu/.opt-row),
+           with the lab checklist's checkbox (.req-checkbox). -->
+      <div class="opt-menu ex-area-menu" id="area-menu">
+        <div class="opt-section-label">Show cards from</div>
+        <div id="area-rows"></div>
+        <button type="button" class="ex-area-all" onclick="allAreas()">Select all</button>
+      </div>
+    </div>
+    <span class="ex-pool" id="pool-note"></span>
+  </div>
+
+  <div class="qcard">
+    <div class="qcard-hdr">
+      <div class="qlbl" id="q-tag">Loading&hellip;</div>
+      <span class="ex-pill" id="q-pill"></span>
+    </div>
+    <div class="q-prompt" id="q-prompt"></div>
+    <div id="qbody"></div>
+  </div>
+
+  <div class="fbanner" id="fb"></div>
+
+  <div class="actrow">
+    <button class="btn btn-p" id="chkbtn" onclick="checkAll()">Submit</button>
+    <button class="btn btn-s" id="skipbtn" onclick="skipQ()" title="Put this card back without rating it">Skip</button>
+
+    <!-- Flashcards only: after the model answer is shown, mark yourself. -->
+    <span class="ex-self" id="self-row" style="display:none">
+      <button class="btn btn-s ex-k" onclick="selfMark(true)">I got it right <kbd>Y</kbd></button>
+      <button class="btn btn-d ex-k" onclick="selfMark(false)">I got it wrong <kbd>N</kbd></button>
+    </span>
+
+    <!-- The comfort rating. #nxtbtn is "Good" (or "Next" after a wrong
+         answer, which always counts as Again) so answer-keys.js focuses it
+         once the round is graded and Enter takes the default. -->
+    <span class="ex-rate" id="rate-row">
+      <span class="ex-rate-lbl" id="rate-lbl">How comfortable?</span>
+      <button class="btn btn-s ex-k ex-r-hard" id="rate-hard" onclick="rate('hard')" style="display:none"></button>
+      <button class="btn btn-p ex-k" id="nxtbtn" onclick="nextQ()" style="display:none"></button>
+      <button class="btn btn-s ex-k ex-r-easy" id="rate-easy" onclick="rate('easy')" style="display:none"></button>
+    </span>
+  </div>
+
+  <div class="tool-block" id="prog">
+    <div class="ex-block-hdr">
+      <div class="tool-block-title">Progress</div>
+      <button class="btn btn-d ex-hdr-btn" id="reset-btn" onclick="resetProgress()">Reset progress</button>
+    </div>
+    <div id="prog-body"></div>
+    <p class="tool-note ex-prog-note">Counts cover the cards in the current difficulty. <b>Comfortable</b> means a card has been pushed back at least 20 cards; <b>Again</b> (any wrong answer) brings a card back after two others.</p>
+  </div>
+
+  <!-- The dictionary: the OSI trainer's Protocol Reference look (.ref-*),
+       filled by dictRender(). Terms in a model answer or explanation link
+       here once a card is answered. -->
+  <div class="tool-block" id="dict">
+    <div class="ex-block-hdr">
+      <div class="tool-block-title">Dictionary</div>
+      <button class="btn btn-s ex-hdr-btn" id="dict-back" onclick="dictBack()" style="display:none">&uarr; Back to the card</button>
+    </div>
+    <div class="ref-search-wrap">
+      <span class="ref-search-icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
+      <input class="ref-search" type="text" id="dict-q" placeholder="Search terms, protocols, commands&hellip;" oninput="dictFilter(this.value)" autocomplete="off" spellcheck="false">
+    </div>
+    <p class="tool-note ex-dict-note">After you answer, <span class="ex-term-demo">underlined terms</span> in the model answer and the explanation jump here.</p>
+    <div id="dict-body"></div>
+  </div>
+
+</div>
+
+<script src="exam.js"></script>
+</body>
+</html>
