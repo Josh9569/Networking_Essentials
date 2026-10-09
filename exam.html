@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<!-- Temporary exam-prep page: deliberately not linked from index.html and
+     kept out of search engines. Everything it adds lives in exam.html,
+     exam.js and exam.css — delete those three files to remove it. -->
+<meta name="robots" content="noindex, nofollow">
+<title>Final Exam Practice</title>
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="exam.css">
+<script src="theme.js"></script>
+<script src="custom-theme.js"></script>
+<script src="answer-keys.js"></script>
+</head>
+<body>
+<div class="wrap">
+
+  <a href="index.html" class="home-link">&#8592; All Tools</a>
+
+  <div class="hdr">
+    <div>
+      <div class="hdr-title">Final Exam Practice</div>
+      <div class="hdr-sub">3001ICT &middot; rate how comfortable you are and the cards you find hard come back sooner</div>
+    </div>
+    <div class="hdr-right">
+      <div class="chips">
+        <div class="chip">Answered <b id="ch-ans">0</b></div>
+        <div class="chip">Correct <b id="ch-pct">&ndash;</b></div>
+        <div class="chip">Due <b id="ch-due">0</b></div>
+      </div>
+      <div id="theme-toggle-slot"></div>
+    </div>
+  </div>
+
+  <div class="cls-row ex-ctl" id="diff-row">
+    <span>Difficulty:</span>
+    <button class="cbtn" data-d="1" onclick="setDiff(1)">Easy</button>
+    <button class="cbtn" data-d="2" onclick="setDiff(2)">Medium</button>
+    <button class="cbtn" data-d="3" onclick="setDiff(3)">Hard</button>
+    <label class="ex-area"><span>Area:</span>
+      <select class="ex-select" id="area-sel" onchange="setArea(this.value)"></select></label>
+    <span class="ex-pool" id="pool-note"></span>
+  </div>
+
+  <div class="qcard">
+    <div class="qcard-hdr">
+      <div class="qlbl" id="q-tag">Loading&hellip;</div>
+      <span class="ex-pill" id="q-pill"></span>
+    </div>
+    <div class="q-prompt" id="q-prompt"></div>
+    <div id="qbody"></div>
+  </div>
+
+  <div class="fbanner" id="fb"></div>
+
+  <div class="actrow">
+    <button class="btn btn-p" id="chkbtn" onclick="checkAll()">Submit</button>
+    <button class="btn btn-s" id="skipbtn" onclick="skipQ()" title="Put this card back without rating it">Skip</button>
+
+    <!-- Flashcards only: after the model answer is shown, mark yourself. -->
+    <span class="ex-self" id="self-row" style="display:none">
+      <button class="btn btn-s ex-k" onclick="selfMark(true)">I got it right <kbd>Y</kbd></button>
+      <button class="btn btn-d ex-k" onclick="selfMark(false)">I got it wrong <kbd>N</kbd></button>
+    </span>
+
+    <!-- The comfort rating. #nxtbtn is "Good" (or "Next" after a wrong
+         answer, which always counts as Again) so answer-keys.js focuses it
+         once the round is graded and Enter takes the default. -->
+    <span class="ex-rate" id="rate-row">
+      <span class="ex-rate-lbl" id="rate-lbl">How comfortable?</span>
+      <button class="btn btn-s ex-k ex-r-hard" id="rate-hard" onclick="rate('hard')" style="display:none"></button>
+      <button class="btn btn-p ex-k" id="nxtbtn" onclick="nextQ()" style="display:none"></button>
+      <button class="btn btn-s ex-k ex-r-easy" id="rate-easy" onclick="rate('easy')" style="display:none"></button>
+    </span>
+  </div>
+
+  <div class="tool-block" id="prog">
+    <div class="ex-prog-hdr">
+      <div class="tool-block-title">Progress</div>
+      <button class="btn btn-d ex-reset" id="reset-btn" onclick="resetProgress()">Reset progress</button>
+    </div>
+    <div id="prog-body"></div>
+    <p class="tool-note ex-prog-note">Counts cover the cards in the current difficulty. <b>Comfortable</b> means a card has been pushed back at least 20 cards; <b>Again</b> (any wrong answer) brings a card back after two others.</p>
+  </div>
+
+</div>
+
+<script src="exam.js"></script>
+</body>
+</html>
