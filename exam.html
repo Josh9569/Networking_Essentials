@@ -103,10 +103,7 @@
        filled by dictRender(). Terms in a model answer or explanation link
        here once a card is answered. -->
   <div class="tool-block" id="dict">
-    <div class="ex-block-hdr">
-      <div class="tool-block-title">Dictionary</div>
-      <button class="btn btn-s ex-hdr-btn" id="dict-back" onclick="dictBack()" style="display:none">&uarr; Back to the card</button>
-    </div>
+    <div class="tool-block-title">Dictionary</div>
     <div class="ref-search-wrap">
       <span class="ref-search-icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
       <input class="ref-search" type="text" id="dict-q" placeholder="Search terms, protocols, commands&hellip;" oninput="dictFilter(this.value)" autocomplete="off" spellcheck="false">
@@ -116,6 +113,11 @@
   </div>
 
 </div>
+
+<!-- Shown by exam.js while a dictionary jump has scrolled the card away.
+     A child of <body> on purpose: inside the blurred .tool-block a fixed
+     button would be placed against that block rather than the window. -->
+<button class="btn btn-p ex-back" id="dict-back" onclick="dictBack()">&uarr; Back to the card</button>
 
 <script src="exam.js"></script>
 </body>
