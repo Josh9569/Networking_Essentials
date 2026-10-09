@@ -39,8 +39,20 @@
     <button class="cbtn" data-d="1" onclick="setDiff(1)">Easy</button>
     <button class="cbtn" data-d="2" onclick="setDiff(2)">Medium</button>
     <button class="cbtn" data-d="3" onclick="setDiff(3)">Hard</button>
-    <label class="ex-area"><span>Area:</span>
-      <select class="ex-select" id="area-sel" onchange="setArea(this.value)"></select></label>
+    <div class="ex-area" id="area-dd">
+      <span>Areas:</span>
+      <button type="button" class="ex-select ex-dd-btn" id="area-btn" onclick="toggleAreaMenu()" aria-haspopup="true" aria-expanded="false">
+        <span id="area-btn-txt">All areas</span>
+        <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <!-- Same panel and rows as every page's Options menu (.opt-menu/.opt-row),
+           with the lab checklist's checkbox (.req-checkbox). -->
+      <div class="opt-menu ex-area-menu" id="area-menu">
+        <div class="opt-section-label">Show cards from</div>
+        <div id="area-rows"></div>
+        <button type="button" class="ex-area-all" onclick="allAreas()">Select all</button>
+      </div>
+    </div>
     <span class="ex-pool" id="pool-note"></span>
   </div>
 

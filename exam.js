@@ -82,6 +82,8 @@ function rMetric(p){
   if(p==='isis') return ri(10,80);
   return 0;
 }
+/* What a learner might type for each protocol, as key-word alternatives. */
+const KW_NAME={static:'static|static route', ebgp:'eBGP|BGP|external BGP', eigrp:'EIGRP', ospf:'OSPF', isis:'IS-IS|ISIS', rip:'RIP'};
 function adList(keys){ return keys.map(k=>PROTO[k].name+' '+PROTO[k].ad).join(', '); }
 
 /* ═══ Card bank plumbing ══════════════════════════════════════════════════ */
@@ -147,6 +149,69 @@ function cliHtml(text,title){
 }
 function pad(s,n){ s=String(s); return s+' '.repeat(Math.max(1,n-s.length)); }
 
+/* ═══ Key words (flashcards) ════════════════════════════════════════════════
+   A flashcard's points mark their key words inline as [[shown|alt|alt]]: the
+   first form is what the model answer shows, and any form counts when it
+   appears in the learner's answer. Matching is on word stems, so plurals and
+   word endings (fail / fails / failure needs listing, converge / convergence
+   doesn't), British and US spelling (summarise / summarize, neighbour /
+   neighbor), hyphens (router-id = router id) and case don't matter. A
+   multi-word form must appear as consecutive words. */
+const KW_RE=/\[\[([^\]]+)\]\]/g;
+function kwStem(w){
+  w=w.toLowerCase().replace(/our/g,'or').replace(/iz/g,'is');
+  if(w.length<=3||/^\d/.test(w)) return w;
+  if(/ies$/.test(w)) w=w.slice(0,-3)+'y';
+  else if(/sses$/.test(w)) w=w.slice(0,-2);
+  else if(/[^su]s$/.test(w)) w=w.slice(0,-1);
+  const m=/(ation|ion|ment|ence|ance|ing|edly|ed|ally|ly)$/.exec(w);
+  if(m&&w.length-m[0].length>=4) w=w.slice(0,-m[0].length);
+  if(/e$/.test(w)&&w.length>4) w=w.slice(0,-1);
+  return w;
+}
+/* Words of a text with their stems and where they sit in it. */
+function kwTokens(text){
+  const out=[], re=/[A-Za-z0-9]+/g; let m;
+  const plain=String(text).replace(/&[a-z]+;/g,t=>' '+t.slice(1,-1)+' ');
+  while((m=re.exec(plain))) out.push({stem:kwStem(m[0]), at:m.index, len:m[0].length});
+  return out;
+}
+/* Every place any form of key word k occurs in the learner's words. */
+function kwFind(words,k){
+  const hits=[];
+  k.forms.forEach(f=>{
+    const st=kwTokens(f).map(t=>t.stem); if(!st.length) return;
+    for(let i=0;i+st.length<=words.length;i++){
+      let ok=true; for(let j=0;j<st.length;j++) if(words[i+j].stem!==st[j]){ ok=false; break; }
+      if(ok) for(let j=0;j<st.length;j++) hits.push(i+j);
+    }
+  });
+  return hits;
+}
+/* The model answer as HTML with its key words wrapped, plus the key words. */
+function kwModel(points){
+  const keys=[];
+  const html=ul(points.map(pt=>pt.replace(KW_RE,(m,body)=>{
+    const forms=body.split('|'); keys.push({shown:forms[0], forms});
+    return '<mark class="ex-kw" data-k="'+(keys.length-1)+'">'+forms[0]+'</mark>';
+  })));
+  return {html, keys};
+}
+/* Check an answer: which key words it used, and the answer as HTML with the
+   words that matched highlighted. */
+function kwCheck(text,keys){
+  const words=kwTokens(text), used=new Set();
+  const found=keys.map(k=>{ const h=kwFind(words,k); h.forEach(i=>used.add(i)); return h.length>0; });
+  let html='', pos=0;
+  words.forEach((w,i)=>{
+    if(!used.has(i)) return;
+    html+=esc(text.slice(pos,w.at))+'<mark class="ex-kw hit">'+esc(text.slice(w.at,w.at+w.len))+'</mark>';
+    pos=w.at+w.len;
+  });
+  html+=esc(text.slice(pos));
+  return {found, html};
+}
+
 /* ═══ Q1 — static and dynamic routing, AD, metrics, floating statics ═════ */
 card({id:'q1a-dynamic', area:'routing', tier:1, kind:'flash', src:'Q1 a', title:'Static vs dynamic routing', gen(){
   return {
@@ -155,14 +220,15 @@ card({id:'q1a-dynamic', area:'routing', tier:1, kind:'flash', src:'Q1 a', title:
       'A company is growing from '+ri(2,3)+' routers to '+ri(20,40)+', with redundant links between its sites. Should it keep using static routes or move to a dynamic routing protocol? When would static routes still be the better choice?',
       'Give two advantages of a dynamic routing protocol over static routes, and two situations where static routes are the better choice.',
     ]),
-    model: ul([
-      '<b>Dynamic:</b> routers learn and share routes automatically, so a large or growing network needs far less manual configuration (and fewer typing errors).',
-      '<b>Dynamic:</b> it adapts to topology changes &mdash; when a link fails the routers reconverge onto an alternate path with no admin action.',
-      'The cost of dynamic routing: it uses router CPU, memory and link bandwidth, and is more complex to configure and secure.',
-      '<b>Static:</b> small networks with few routes that rarely change.',
-      '<b>Static:</b> a stub network with a single way out &mdash; e.g. a default route to the ISP.',
-      '<b>Static:</b> no routing updates are sent (more secure, no overhead) and the path is exactly what the admin chose; also used as a backup (floating static route).',
-    ]),
+    points: [
+
+      '<b>Dynamic:</b> routers learn and share routes [[automatically|automatic|auto]], so a large or growing network needs far less manual configuration &mdash; it [[scales|scale|scalable|scalability|large network|larger network|big network|growing|grows]].',
+      '<b>Dynamic:</b> it adapts to topology changes &mdash; when a [[link fails|fails|failure|failures|goes down|failover|fail over|redundant|redundancy|alternate path|alternative path|backup path|topology change|reconverge|converge]] the routers reconverge onto another path with no admin action.',
+      'The cost of dynamic routing: it uses router [[CPU|processing|memory|bandwidth|overhead|resources]], memory and link bandwidth, and is more complex to configure and secure.',
+      '<b>Static:</b> [[small networks|small network|small|few routes|few routers]] with few routes that rarely change.',
+      '<b>Static:</b> a [[stub network|stub|single exit|one exit|single path|one path|one way out|single link|one link|default route]] with a single way out &mdash; e.g. a default route to the ISP.',
+      '<b>Static:</b> no routing updates are sent &mdash; more [[secure|security|no updates|no routing updates]], no overhead &mdash; and the path is exactly what the admin chose; also used as a backup (floating static route).',
+    ],
   };
 }});
 
@@ -172,12 +238,12 @@ card({id:'q1b-adpair', area:'routing', tier:1, kind:'flash', src:'Q1 b', title:'
   const src=k=>k==='static'?'a static route':'the routing protocol '+PROTO[k].name;
   return {
     prompt:'If a router has a choice between two routes to a destination, one provided by '+src(a)+' and the other by '+src(b)+', which one will the router choose? Why?',
-    model: ul([
-      'The <b>'+PROTO[W].name+'</b> route, because it has the lower <b>administrative distance</b> ('+adList([W,L])+').',
-      'AD rates how trustworthy a route\'s source is. When two sources offer the same prefix, the lower AD is installed in the routing table.',
-      'The metrics can\'t decide it: '+METRIC_NAME[a]+' and '+METRIC_NAME[b]+' are measured in different units, so they aren\'t compared across sources.',
-      'The '+PROTO[L].name+' route is kept in reserve and installed only if the '+PROTO[W].name+' route disappears.',
-    ]),
+    points: [
+      'The <b>[['+KW_NAME[W]+']]</b> route, because it has the [[lower|lowest|smaller|smallest|less]] [[administrative distance|AD]] ('+adList([W,L])+').',
+      'AD rates how [[trustworthy|trust|trusted|reliable|reliability|believable|believability|preferred]] a route\'s source is. When two sources offer the same prefix, the lower AD is installed in the routing table.',
+      'The [[metrics|metric]] can\'t decide it: '+METRIC_NAME[a]+' and '+METRIC_NAME[b]+' are measured in different units, so they aren\'t compared across sources.',
+      'The '+PROTO[L].name+' route is kept in reserve and installed only if the '+PROTO[W].name+' route [[disappears|fails|failure|goes down|lost|removed|withdrawn|unavailable|backup]].',
+    ],
   };
 }});
 
@@ -187,12 +253,13 @@ card({id:'q1c-admetric', area:'routing', tier:1, kind:'flash', src:'Q1 c', title
       'Routing protocols use both metrics and administrative distance (AD). If there is a choice of routes to the same destination, which have different metrics and ADs, which route is chosen?',
       'R1 has two routes to the same network: one with a lower metric, the other with a lower administrative distance. Which does it install, and when does the metric matter at all?',
     ]),
-    model: ul([
-      '<b>AD first:</b> of the routes to the same prefix from different sources, the one with the lowest AD is installed, whatever its metric.',
-      '<b>Metric second:</b> the metric only chooses between routes from the <i>same</i> source (same AD) &mdash; e.g. two OSPF paths, lowest cost wins.',
-      'Same AD and same metric: both are installed and traffic is load-balanced (equal-cost multipath).',
-      'Different prefix lengths are different routes and can all be installed; when forwarding, the <b>longest prefix match</b> is used before AD is ever considered.',
-    ]),
+    points: [
+
+      '<b>AD first:</b> of the routes to the same prefix from different sources, the one with the [[lowest|lower|smallest|smaller]] [[administrative distance|AD]] is installed, whatever its metric.',
+      '<b>Metric second:</b> the [[metric]] only chooses between routes from the [[same protocol|same source|same routing protocol|same AD|same administrative distance|equal AD|equal administrative distance]] (same AD) &mdash; e.g. two OSPF paths, lowest cost wins.',
+      'Same AD and same metric: both are installed and traffic is [[load balanced|load balance|load balancing|load share|load sharing|ECMP|equal cost|both installed|both used]] (equal-cost multipath).',
+      'Different prefix lengths are different routes and can all be installed; when forwarding, the [[longest prefix match|longest prefix|longest match|most specific|more specific|prefix length]] is used before AD is ever considered.',
+    ],
   };
 }});
 
@@ -203,12 +270,13 @@ card({id:'q1d-floating', area:'routing', tier:1, kind:'flash', src:'Q1 d', title
       'What is the purpose of a floating static route? How do you ensure that a static route is treated as a floating static route?',
       'R1 learns the route to its head office through '+PROTO[p].name+'. You add a static route over a backup link that should be used only if the '+PROTO[p].name+' route is lost. What is this route called, and how do you stop it replacing the '+PROTO[p].name+' route?',
     ]),
-    model: ul([
-      'A <b>floating static route</b> is a backup: it stays out of the routing table while the primary route exists and is installed only if the primary fails.',
-      'Make it float by giving it an <b>administrative distance higher than the primary route\'s</b> &mdash; the AD goes at the end of the <span class="mono-inl">ip route</span> command.',
+    points: [
+
+      'A floating static route is a [[backup|back up|secondary|failover|fail over|standby]]: it stays out of the [[routing table|table]] while the primary route exists and is installed only if the primary [[fails|failure|goes down|lost|unavailable|disappears|removed]].',
+      'Make it float by giving it an [[administrative distance|AD]] [[higher|greater|larger|bigger|more than|above]] than the primary route\'s &mdash; the AD goes at the end of the <span class="mono-inl">ip route</span> command.',
       'e.g. primary learned by '+PROTO[p].name+' (AD '+PROTO[p].ad+'): '+mono('ip route 10.1.1.0 255.255.255.0 10.2.2.2 '+(PROTO[p].ad+10))+' &mdash; any AD from '+(PROTO[p].ad+1)+' to 254 works (255 means "never install").',
       'Without it the static route gets the default AD of 1 and would replace the primary instead of waiting behind it.',
-    ]),
+    ],
   };
 }});
 
@@ -377,13 +445,14 @@ card({id:'q2a-rid', area:'ospf', tier:1, kind:'flash', src:'Q2 a', title:'The OS
       'How does OSPF use the router ID? There are three ways that the value of the router ID can be determined. What decides which way is used?',
       'What is an OSPF router ID used for, and in what order does a Cisco router choose it?',
     ]),
-    model: ul([
-      'The router ID is a 32-bit value written like an IPv4 address that <b>uniquely identifies the router</b> in the OSPF domain: neighbours and the LSAs it originates are tracked by it, and it breaks ties in the DR/BDR election (highest priority, then highest router ID).',
-      '<b>1.</b> The '+mono('router-id')+' command under '+mono('router ospf')+'.',
-      '<b>2.</b> If there is none: the highest IPv4 address on any <b>loopback</b> interface.',
-      '<b>3.</b> If there are no loopbacks: the highest IPv4 address on an <b>active (up) physical</b> interface.',
-      'The first of those that exists <b>when the OSPF process starts</b> is used. It then stays put until the process restarts &mdash; '+mono('clear ip ospf process')+' or a reload.',
-    ]),
+    points: [
+
+      'The router ID is a 32-bit value written like an IPv4 address that [[uniquely identifies|unique|uniquely|identify|identifies|identifier|identification|identity]] the router in the OSPF domain: neighbours and the LSAs it originates are tracked by it, and it breaks ties in the [[DR/BDR election|DR|BDR|designated router|election]] (highest priority, then highest router ID).',
+      '<b>1.</b> The <span class="mono-inl">[[router-id|router id]]</span> command under <span class="mono-inl">router ospf</span>.',
+      '<b>2.</b> If there is none: the [[highest|largest|biggest]] IPv4 address on any [[loopback|loopbacks]] interface.',
+      '<b>3.</b> If there are no loopbacks: the highest IPv4 address on an [[active|up|physical|enabled|operational]] (up) physical interface.',
+      'The first of those that exists [[when the OSPF process starts|process starts|starts|start|startup|start up|boot|boots|reload|restart|clear ip ospf process]] is used. It then stays put until the process restarts &mdash; '+mono('clear ip ospf process')+' or a reload.',
+    ],
   };
 }});
 
@@ -486,13 +555,14 @@ card({id:'q2b-metric', area:'ospf', tier:1, kind:'flash', src:'Q2 b', title:'The
       'What does OSPF use as its metric? If you do not specify the metric for a link explicitly, how does a Cisco router assign it a metric value?',
       'How does a Cisco router work out the OSPF cost of a route, and why do a FastEthernet and a GigabitEthernet link end up with the same cost by default?',
     ]),
-    model: ul([
-      'OSPF\'s metric is <b>cost</b>. A route\'s cost is the <b>sum of the outgoing-interface costs</b> along the path; lowest total wins.',
-      'Default interface cost = <b>reference bandwidth &divide; interface bandwidth</b>. The reference is 100 Mbps, the result is rounded down, and the minimum is 1.',
+    points: [
+
+      'OSPF\'s metric is [[cost]]. A route\'s cost is the [[sum|total|add|added|adding|adds|cumulative|accumulated]] of the [[outgoing|outbound|exit|egress]] interface costs along the path; lowest total wins.',
+      'Default interface cost = [[reference bandwidth|reference]] &divide; interface [[bandwidth]]. The reference is [[100 Mbps|100|10^8|100000000]], the result is rounded down, and the minimum is 1.',
       'So 10 Mbps &rarr; 10, a T1 serial (1544 kbps) &rarr; 64, and FastEthernet, GigabitEthernet and faster all &rarr; 1 &mdash; they can\'t be told apart.',
       'Fix that with '+mono('auto-cost reference-bandwidth 1000')+' (or higher) under '+mono('router ospf')+', the same on every router.',
       'You can also set it per interface: '+mono('ip ospf cost N')+', or change the '+mono('bandwidth')+' value the calculation uses.',
-    ]),
+    ],
   };
 }});
 
@@ -596,13 +666,14 @@ card({id:'q2c-multiarea', area:'ospf', tier:1, kind:'flash', src:'Q2 c', title:'
       'How does multi-area OSPF overcome the problems with single area operation?',
       'A single-area OSPF network has grown to '+ri(60,150)+' routers and its routers are struggling. What problems does one big area cause, and how does splitting it into multiple areas help?',
     ]),
-    model: ul([
-      '<b>Single-area problems:</b> every router holds the whole topology, so the LSDB and routing table get large; every change floods to every router and makes all of them re-run SPF &mdash; heavy CPU, memory and bandwidth use.',
-      '<b>Multi-area</b> is hierarchical: a backbone <b>area 0</b> with other areas attached to it through <b>ABRs</b>.',
-      'Detailed topology LSAs (types 1 and 2) stay inside their own area, so a change floods and triggers SPF only <b>in the area where it happened</b>.',
-      'ABRs pass a summary of each area to the others (type 3 LSAs) and can <b>summarise</b> routes, giving smaller routing tables.',
+    points: [
+
+      '<b>Single-area problems:</b> every router holds the whole topology, so the [[LSDB|link state database|link-state database|database|topology table]] and routing table get large; every change [[floods|flood|flooding|LSA|LSAs|updates]] to every router and makes all of them re-run [[SPF|Dijkstra|recalculate|recalculation|recompute]] &mdash; heavy CPU, memory and bandwidth use.',
+      '<b>Multi-area</b> is hierarchical: a [[backbone|area 0|area zero]] (area 0) with other areas attached to it through [[ABRs|ABR|area border router|area border routers|border router]].',
+      'Detailed topology LSAs (types 1 and 2) stay inside their own area, so a change floods and triggers SPF only [[within the area|that area|its own area|one area|local area|contained|inside the area|in the area]] where it happened.',
+      'ABRs pass a summary of each area to the others (type 3 LSAs) and can [[summarise|summary|summarisation|summarization|summarize|aggregate]] routes, giving [[smaller routing tables|smaller tables|smaller|fewer routes|reduced]].',
       'Result: smaller LSDBs, fewer SPF runs, less flooding, faster convergence, and problems contained within one area.',
-    ]),
+    ],
   };
 }});
 
@@ -612,13 +683,14 @@ card({id:'q2d-timers', area:'ospf', tier:1, kind:'flash', src:'Q2 d', title:'Hel
       'Why would you modify the hello timer or the dead timer? What effects would the changes have?',
       'An admin lowers the OSPF hello interval on a link to 1 second. Why might they do that, what is the downside, and what must they make sure of on the neighbouring router?',
     ]),
-    model: ul([
+    points: [
+
       'Hellos discover neighbours and keep adjacencies alive. Defaults: hello 10 s and dead 40 s on Ethernet and point-to-point links (30/120 on NBMA). The dead interval is how long without a hello before the neighbour is declared down.',
-      '<b>Lower them</b> to detect a failed neighbour, and reconverge, faster.',
-      'The cost: more hello packets &mdash; more bandwidth and CPU &mdash; and a risk of neighbours flapping on a busy or lossy link.',
-      '<b>Raise them</b> to cut overhead on slow links, at the cost of slower failure detection.',
-      'Hello and dead intervals <b>must match on both neighbours</b> or the adjacency won\'t form. Set with '+mono('ip ospf hello-interval')+' / '+mono('ip ospf dead-interval')+' on the interface; if dead hasn\'t been set by hand, changing hello sets it to 4 &times; hello.',
-    ]),
+      '<b>Lower them</b> to detect a failed neighbour, and [[reconverge|converge|convergence|failover]], [[faster|quicker|quickly|sooner|speed|speeds]].',
+      'The cost: more hello packets &mdash; more [[bandwidth|overhead|traffic|more packets|processing]] and CPU &mdash; and a risk of neighbours [[flapping|flap|unstable|instability|false]] on a busy or lossy link.',
+      '<b>Raise them</b> to cut overhead on [[slow links|slow|low bandwidth]], at the cost of slower failure detection.',
+      'Hello and dead intervals <b>[[must match|match|same|identical|equal|mismatch|agree]]</b> on both neighbours or the adjacency won\'t form. Set with '+mono('ip ospf hello-interval')+' / '+mono('ip ospf dead-interval')+' on the interface; if dead hasn\'t been set by hand, changing hello sets it to [[4 &times; hello|4 times|four times|4x|x4|quadruple|4 x|times 4|times four]].',
+    ],
   };
 }});
 
@@ -687,9 +759,18 @@ card({id:'g2-adj', area:'ospf', tier:3, kind:'graded', src:'Q2 d', title:'Will t
 
 /* ═══ Scheduler and persistence ═══════════════════════════════════════════ */
 const KEY='ne-exam-v1', COMFORT=20;
-function freshState(){ return {step:0, diff:1, area:'all', cards:{}, answered:0, correct:0, lastNew:null}; }
+function freshState(){ return {step:0, diff:1, off:[], cards:{}, answered:0, correct:0, lastNew:null}; }
 function loadState(){
-  try{ const s=JSON.parse(localStorage.getItem(KEY)); if(s&&typeof s==='object'&&s.cards) return Object.assign(freshState(),s); }catch(e){}
+  try{
+    const s=JSON.parse(localStorage.getItem(KEY));
+    if(s&&typeof s==='object'&&s.cards){
+      /* Progress saved before the area checkboxes kept one area; carry it over
+         as "every other area unticked". */
+      if(s.area!=null&&!Array.isArray(s.off)) s.off=s.area==='all'?[]:AREAS.map(a=>a.id).filter(id=>id!==s.area);
+      delete s.area;
+      return Object.assign(freshState(),s);
+    }
+  }catch(e){}
   return freshState();
 }
 function saveState(){ try{ localStorage.setItem(KEY,JSON.stringify(S)); }catch(e){} }
@@ -719,8 +800,11 @@ function applyRating(id,r){
   S.step++; c.due=S.step+ivl;
 }
 function cardStatus(id){ const c=S.cards[id]; if(!c) return 'new'; return c.last!=='again'&&c.ivl>=COMFORT?'comf':'learn'; }
-function inPool(c,area){ return c.tier<=S.diff&&(!area||area==='all'||c.area===area); }
-function pool(){ return CARDS.filter(c=>inPool(c,S.area)); }
+/* Unticked areas are stored, not ticked ones, so an area added later (the
+   second pass) starts ticked. */
+function inTier(c){ return c.tier<=S.diff; }
+function inPool(c){ return inTier(c)&&S.off.indexOf(c.area)<0; }
+function pool(){ return CARDS.filter(inPool); }
 
 /* Most overdue first; then something new; then whatever is due soonest
    (studying ahead). Never the same card twice running unless it's alone.
@@ -791,11 +875,17 @@ function checkAll(){
   if(cur.kind==='flash'){
     const ta=$('in-flash'), text=ta.value.trim();
     if(!text){ banner('warn','Type your answer first &mdash; the model answer only appears once you\'ve put it in your own words.'); ta.focus(); return; }
-    $('flash-cmp').innerHTML='<div class="ex-cmp"><div class="ex-pane"><div class="qlbl">Your answer</div><div class="ex-yours">'+esc(text)+'</div></div>'+
-      '<div class="ex-pane ex-model"><div class="qlbl">Model answer</div>'+Q.model+'</div></div>';
+    const model=kwModel(Q.points), kw=kwCheck(text,model.keys);
+    const n=kw.found.filter(Boolean).length, all=model.keys.length;
+    const cov=n===all?'all':n?'some':'none';
+    const missing=model.keys.filter((k,i)=>!kw.found[i]).map(k=>k.shown.replace(/&[a-z]+;/g,c=>({'&times;':'\u00d7'}[c]||c)));
+    $('flash-cmp').innerHTML='<div class="ex-cmp"><div class="ex-pane"><div class="qlbl">Your answer</div><div class="ex-yours">'+kw.html+'</div></div>'+
+      '<div class="ex-pane ex-model ex-kw-'+cov+'"><div class="qlbl ex-kw-head">Model answer <span class="ex-kw-count">'+n+' of '+all+' key words</span></div>'+model.html+'</div></div>';
+    $('flash-cmp').querySelectorAll('.ex-model .ex-kw').forEach(m=>m.classList.add(kw.found[+m.dataset.k]?'hit':'miss'));
     show('f-flash',false); ta.blur();
     phase='self'; show('chkbtn',false); show('skipbtn',false); show('self-row',true);
-    banner('warn','Compare with the model answer. Did you cover the key points?');
+    banner({all:'ok',some:'warn',none:'err'}[cov],(cov==='all'?'You used every key word.':cov==='none'?'None of the key words were in your answer.':
+      'Missing: <b>'+missing.map(esc).join(', ')+'</b>.')+' Compare with the model answer, then mark yourself.');
     return;
   }
   const r=Q.grade();
@@ -860,6 +950,7 @@ $('qbody').addEventListener('click',e=>{
 /* Keys: Y/N to self-mark, 1/2/3 to rate, Enter to submit a pick-only card.
    Typed answers and the focused rating button are answer-keys.js's job. */
 document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'&&$('area-menu').classList.contains('open')){ toggleAreaMenu(false); $('area-btn').focus(); return; }
   if(e.ctrlKey||e.metaKey||e.altKey) return;
   const el=document.activeElement, t=el&&el.tagName;
   if(t==='INPUT'||t==='TEXTAREA'||t==='SELECT'||(el&&el.isContentEditable)) return;
@@ -879,15 +970,43 @@ document.addEventListener('keydown',e=>{
 
 /* ═══ Controls, chips and the progress panel ══════════════════════════════ */
 function setDiff(d){ S.diff=d; saveState(); syncControls(); loadQ(); }
-function setArea(a){ S.area=a; saveState(); syncControls(); loadQ(); }
+/* ── The Areas dropdown: one checkbox per area that has cards. At least one
+   stays ticked. Changing it keeps the card on screen if its area is still
+   ticked, so an answer in progress isn't thrown away. */
+function liveAreas(){ return AREAS.filter(a=>CARDS.some(c=>c.area===a.id)); }
+function areasChanged(){
+  saveState(); syncControls();
+  if(!cur||(phase==='answer'&&S.off.indexOf(cur.area)>=0)) loadQ(); else renderSide();
+}
+function toggleAreaMenu(force){
+  const m=$('area-menu'), b=$('area-btn'), open=force!=null?force:!m.classList.contains('open');
+  m.classList.toggle('open',open); b.classList.toggle('open',open); b.setAttribute('aria-expanded',open?'true':'false');
+}
+function allAreas(){ S.off=[]; areasChanged(); }
+$('area-rows').addEventListener('change',e=>{
+  const box=e.target.closest('input[data-a]'); if(!box) return;
+  const id=box.dataset.a, live=liveAreas().map(a=>a.id);
+  if(box.checked) S.off=S.off.filter(x=>x!==id);
+  else if(live.filter(x=>S.off.indexOf(x)<0&&x!==id).length===0){
+    box.checked=true; // the last ticked area: keep it, say why
+    const note=$('area-note'); if(note){ note.textContent='Keep at least one area ticked.'; note.classList.add('show'); }
+    return;
+  } else if(S.off.indexOf(id)<0) S.off.push(id);
+  areasChanged();
+});
+document.addEventListener('mousedown',e=>{ if(!e.target.closest('#area-dd')) toggleAreaMenu(false); });
 function syncControls(){
   document.querySelectorAll('#diff-row .cbtn').forEach(b=>b.classList.toggle('on',+b.dataset.d===S.diff));
-  const sel=$('area-sel');
-  const live=AREAS.filter(a=>CARDS.some(c=>c.area===a.id));
-  sel.innerHTML='<option value="all">All areas</option>'+live.map(a=>'<option value="'+a.id+'">'+a.name+'</option>').join('');
-  if(S.area!=='all'&&!live.some(a=>a.id===S.area)) S.area='all';
-  sel.value=S.area;
-  const n=pool().length, add=CARDS.filter(c=>c.tier===S.diff&&S.diff>1&&inPool(c,S.area)).length;
+  const live=liveAreas();
+  if(!live.some(a=>S.off.indexOf(a.id)<0)) S.off=[];
+  $('area-rows').innerHTML=live.map(a=>{
+    const n=CARDS.filter(c=>c.area===a.id&&inTier(c)).length;
+    return '<label class="opt-row ex-area-row"><input type="checkbox" class="req-checkbox" data-a="'+a.id+'"'+(S.off.indexOf(a.id)<0?' checked':'')+'>'+
+      '<span class="opt-row-label">'+a.name+'</span><span class="ex-area-n">'+n+'</span></label>';
+  }).join('')+'<div class="ex-area-note" id="area-note"></div>';
+  const on=live.filter(a=>S.off.indexOf(a.id)<0);
+  $('area-btn-txt').textContent=on.length===live.length?'All areas':on.length<=2?on.map(a=>a.name).join(', '):on.length+' areas';
+  const n=pool().length, add=CARDS.filter(c=>c.tier===S.diff&&S.diff>1&&inPool(c)).length;
   $('pool-note').textContent=n+' card'+(n===1?'':'s')+(add?' ('+add+' added by '+TIER_NAME[S.diff]+')':'');
 }
 function renderSide(){
@@ -895,12 +1014,12 @@ function renderSide(){
   $('ch-ans').textContent=S.answered;
   $('ch-pct').textContent=S.answered?Math.round(100*S.correct/S.answered)+'%':'–';
   $('ch-due').textContent=p.filter(c=>S.cards[c.id]&&S.cards[c.id].due<=S.step).length;
-  const areas=AREAS.filter(a=>CARDS.some(c=>c.area===a.id&&inPool(c,'all')));
+  const areas=AREAS.filter(a=>CARDS.some(c=>c.area===a.id&&inTier(c)));
   const rows=areas.map(a=>{
-    const cs=CARDS.filter(c=>c.area===a.id&&inPool(c,'all'));
+    const cs=CARDS.filter(c=>c.area===a.id&&inTier(c));
     const n={new:0,learn:0,comf:0}; cs.forEach(c=>n[cardStatus(c.id)]++);
     const pct=k=>(100*n[k]/cs.length)+'%';
-    return '<tr'+(S.area===a.id?' class="ex-cur"':'')+'><td>'+a.name+'</td><td>'+n.new+'</td><td>'+n.learn+'</td><td>'+n.comf+'</td>'+
+    return '<tr'+(S.off.indexOf(a.id)>=0?' class="ex-off" title="Not in the rotation (unticked under Areas)"':'')+'><td>'+a.name+'</td><td>'+n.new+'</td><td>'+n.learn+'</td><td>'+n.comf+'</td>'+
       '<td class="ex-bar-cell"><div class="ex-bar"><span class="ex-b-comf" style="width:'+pct('comf')+'"></span><span class="ex-b-learn" style="width:'+pct('learn')+'"></span></div></td></tr>';
   });
   $('prog-body').innerHTML='<table class="rt-table ex-prog"><thead><tr><th>Area</th><th>New</th><th>Learning</th><th>Comfortable</th><th></th></tr></thead><tbody>'+rows.join('')+'</tbody></table>';
@@ -915,7 +1034,7 @@ function resetProgress(){
     return;
   }
   clearTimeout(resetArmed); resetArmed=null; b.textContent='Reset progress'; b.classList.remove('ex-armed');
-  const keep={diff:S.diff, area:S.area};
+  const keep={diff:S.diff, off:S.off.slice()};
   Object.keys(S).forEach(k=>delete S[k]); Object.assign(S,freshState(),keep);
   saveState(); lastId=null; loadQ();
 }
