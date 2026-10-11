@@ -11,10 +11,11 @@
 <link rel="stylesheet" href="styles.css">
 <!-- ?v= is bumped whenever exam.js / exam.css change, so a browser holding
      the old copy fetches the new one (a removed card kept showing). -->
-<link rel="stylesheet" href="exam.css?v=62">
+<link rel="stylesheet" href="exam.css?v=63">
 <script src="theme.js"></script>
 <script src="custom-theme.js"></script>
 <script src="answer-keys.js"></script>
+<script src="qcard-back.js"></script>
 <script src="lab-shared.js"></script>
 <script src="net-router.js"></script>
 </head>
@@ -116,11 +117,6 @@
 
 </div>
 
-<!-- Shown by exam.js while a dictionary jump has scrolled the card away.
-     A child of <body> on purpose: inside the blurred .tool-block a fixed
-     button would be placed against that block rather than the window. -->
-<button class="btn btn-p ex-back" id="dict-back" onclick="dictBack()">&uarr; Back to the card</button>
-
-<script src="exam.js?v=62"></script>
+<script src="exam.js?v=63"></script>
 </body>
 </html>

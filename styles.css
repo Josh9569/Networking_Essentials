@@ -327,6 +327,17 @@ body.pop-resizing, body.pop-resizing * { cursor: ew-resize !important; user-sele
 .clsinfo        { font-size: 13px; color: var(--text-s); }
 .clsinfo strong { color: var(--text); font-weight: 500; }
 
+/* ── Back to the question (qcard-back.js) ──────────────────────────────────────
+   A pill fixed at the foot of the window, shown (.on) while the page's .qcard
+   is scrolled off the top. Faded and out of the tab order when hidden. It is
+   a .btn, so the CUSTOM THEME blur list already covers it; it only needs a
+   background there, because that theme's .btn-p is transparent. */
+.qback      { position: fixed; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 50; white-space: nowrap; box-shadow: 0 6px 20px rgba(0,0,0,.18); opacity: 0; visibility: hidden; pointer-events: none; transform: translate(-50%, 10px); transition: opacity .18s ease, transform .18s ease, visibility 0s linear .18s; }
+.qback.on   { opacity: 1; visibility: visible; pointer-events: auto; transform: translate(-50%, 0); transition: opacity .18s ease, transform .18s ease; }
+.qback.on:hover { opacity: .85; }
+:root[data-theme="custom"] .btn-p.qback { background: var(--surface); }
+@media (prefers-reduced-motion: reduce) { .qback, .qback.on { transition: none; } }
+
 /* ── Custom Inputs ──────────────────────────────────────────────────────────── */
 .cust-in       { background: transparent; border: none; outline: none; border-bottom: 2px dashed var(--border-m); color: var(--info-text); font-family: var(--mono); font-size: 26px; font-weight: 600; width: 220px; text-align: center; transition: border-color .2s; }
 .cust-in:focus { border-color: var(--info-text); }
