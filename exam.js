@@ -158,16 +158,31 @@ function pad(s,n){ s=String(s); return s+' '.repeat(Math.max(1,n-s.length)); }
    neighbor), hyphens (router-id = router id) and case don't matter. A
    multi-word form must appear as consecutive words. */
 const KW_RE=/\[\[([^\]]+)\]\]/g;
+/* Derivational endings, longest first, stripped up to three times while at
+   least four letters are left: acknowledgement / acknowledges, failure /
+   fail, summary / summarise, security / secure, translation / translate,
+   redundancy / redundant, scalability / scale all meet. Deliberately NOT
+   -er/-or (router is not route), -ive (passive is not pass) or a bare -y
+   (stubby is not stub). */
+const KW_SUF=['ibility','ability','isation','ically','worthy','ising','ating','ation','ated','ates','ally','ment','ness','ence','ance','ency','ancy','able','ible','ised','ises','ise','ate','ity','ful','ing','ion','ent','ant','edly','ary','ery','ed','ly'];
+const KW_REPL={ary:'ar', ery:'er', ically:'ic', ally:'al'};
+/* families no ending rule joins */
+const KW_IRREG={failur:'fail', denial:'deny', deni:'deny', permiss:'permit', transmiss:'transmit', decis:'decid', inclus:'includ', exclus:'exclud', respons:'respond', resolut:'resolv', reduct:'reduc'};
 function kwStem(w){
   w=w.toLowerCase().replace(/our/g,'or').replace(/iz/g,'is');
   if(w.length<=3||/^\d/.test(w)) return w;
   if(/ies$/.test(w)) w=w.slice(0,-3)+'y';
   else if(/sses$/.test(w)) w=w.slice(0,-2);
   else if(/[^su]s$/.test(w)) w=w.slice(0,-1);
-  const m=/(ation|ion|ment|ence|ance|ing|edly|ed|ally|ly)$/.exec(w);
-  if(m&&w.length-m[0].length>=4) w=w.slice(0,-m[0].length);
+  let cut=false;
+  for(let pass=0;pass<3;pass++){
+    const s=KW_SUF.find(x=>w.endsWith(x)&&w.length-x.length>=4);
+    if(!s) break;
+    w=w.slice(0,-s.length)+(KW_REPL[s]||''); cut=true;
+  }
   if(/e$/.test(w)&&w.length>4) w=w.slice(0,-1);
-  return w;
+  if(cut&&/([^lsfz])\1$/.test(w)&&w.length>4) w=w.slice(0,-1);   // permitted -> permit
+  return KW_IRREG[w]||w;
 }
 /* Words of a text with their stems and where they sit in it. */
 function kwTokens(text){
