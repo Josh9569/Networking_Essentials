@@ -1663,15 +1663,20 @@ function dictIndex(){
     forms.push(f); (DICT_FORMS[f.toLowerCase()]=DICT_FORMS[f.toLowerCase()]||[]).push({f,d});
   }));
   forms.sort((a,b)=>b.length-a.length);
-  DICT_RE=new RegExp('(?<![\\w-])('+forms.map(f=>f.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|')+')(?![\\w-])','gi');
+  /* group 1 is the form; a plural ending ("LSDBs", "routing tables") is
+     part of the link but not of the lookup */
+  DICT_RE=new RegExp('(?<![\\w-])('+forms.map(f=>f.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|')+')(?:e?s)?(?![\\w-])','gi');
 }
 function dictPick(text){
   const c=(DICT_FORMS[text.toLowerCase()]||[]).find(x=>(x.d.cs||!/[a-z]/.test(x.f))?x.f===text:true);
   return c?c.d:null;
 }
-/* Turn the first mention of each term inside root into a link. Code,
-   commands and existing links are left alone. */
-function dictLink(root,selfId){
+/* Turn the terms inside root into links: every mention in an answer or
+   explanation (owner's ask — a term repeated later is just as worth
+   looking up), only the first in a dictionary entry (`once`), where a
+   description full of links would be noise. Code, commands and existing
+   links are left alone. */
+function dictLink(root,selfId,once){
   if(!root) return;
   if(!DICT_RE) dictIndex();
   const walker=document.createTreeWalker(root,NodeFilter.SHOW_TEXT,{acceptNode:n=>
@@ -1682,8 +1687,9 @@ function dictLink(root,selfId){
     const t=node.nodeValue; let m, last=0, frag=null;
     DICT_RE.lastIndex=0;
     while((m=DICT_RE.exec(t))){
-      const d=dictPick(m[0]); if(!d||done.has(d.id)) continue;
-      done.add(d.id); frag=frag||document.createDocumentFragment();
+      const d=dictPick(m[1]); if(!d||done.has(d.id)) continue;
+      if(once) done.add(d.id);
+      frag=frag||document.createDocumentFragment();
       frag.appendChild(document.createTextNode(t.slice(last,m.index)));
       /* an inline span with button semantics: a real <button> is inline-block
          and lets a line break fall between "(" and the term */
@@ -1706,7 +1712,7 @@ function dictRender(){
           d.badges.map(b=>'<span class="rbadge rb-port">'+esc(b)+'</span>').join('')+'</div></div>'+
         '<div class="ref-card-desc">'+esc(d.desc)+'</div></div>').join('')+'</div>';
   }).join('')+'<div class="ref-empty" id="dict-empty" style="display:none">No terms found</div>';
-  body.querySelectorAll('.ref-card').forEach(c=>dictLink(c.querySelector('.ref-card-desc'),c.id.slice(5)));
+  body.querySelectorAll('.ref-card').forEach(c=>dictLink(c.querySelector('.ref-card-desc'),c.id.slice(5),true));
 }
 function dictFilter(q){
   const term=q.toLowerCase().trim(); let shown=0;
