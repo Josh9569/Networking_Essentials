@@ -2569,12 +2569,13 @@ function afterScroll(el,fn){
     else requestAnimationFrame(tick);
   })();
 }
-/* "Back to the card" floats at the foot of the window while a jump has taken
-   the card off screen, so it is in view wherever the jump landed (it used to
-   sit in the dictionary's header, above the entry it had just scrolled to). */
-let dictTrail=false;
+/* "Back to the card" floats at the foot of the window whenever the card has
+   scrolled off the top, whether a dictionary jump took it there or the reader
+   scrolled down by hand. While dictBack's own scroll is on its way up it stays
+   hidden (`dictReturning`), rather than lingering until the card arrives. */
+let dictReturning=false;
 function dictBackSync(){
-  const on=dictTrail&&document.querySelector('.qcard').getBoundingClientRect().bottom<60;
+  const on=!dictReturning&&document.querySelector('.qcard').getBoundingClientRect().bottom<60;
   $('dict-back').classList.toggle('on',on);
 }
 let dictBackRaf=0;
@@ -2587,11 +2588,13 @@ function dictJump(id){
   document.querySelectorAll('#dict-body .ex-flash').forEach(x=>x.classList.remove('ex-flash'));
   c.scrollIntoView({behavior:SMOOTH(), block:'center'});
   afterScroll(c,()=>{ void c.offsetWidth; c.classList.add('ex-flash'); });
-  dictTrail=true; dictBackSync();
+  dictReturning=false; dictBackSync();
 }
 function dictBack(){
-  document.querySelector('.qcard').scrollIntoView({behavior:SMOOTH(), block:'start'});
-  dictTrail=false; dictBackSync();
+  const q=document.querySelector('.qcard');
+  q.scrollIntoView({behavior:SMOOTH(), block:'start'});
+  dictReturning=true; dictBackSync();
+  afterScroll(q,()=>{ dictReturning=false; dictBackSync(); });
   const n=$('nxtbtn'); if(n.style.display!=='none') n.focus({preventScroll:true});
 }
 document.addEventListener('click',e=>{ const t=e.target.closest('.ex-term'); if(t){ e.preventDefault(); dictJump(t.dataset.t); } });
@@ -2684,7 +2687,7 @@ function show(id,on){ $(id).style.display=on?'':'none'; }
 
 function loadQ(){
   cur=pickNext(); phase='answer'; forced=null; hideBanner();
-  dictTrail=false; dictBackSync();
+  dictBackSync();
   show('self-row',false); show('rate-hard',false); show('rate-easy',false); show('rate-lbl',false);
   show('chkbtn',true); show('skipbtn',true);
   $('nxtbtn').style.display='none';
