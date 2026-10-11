@@ -96,6 +96,7 @@ mark.ex-kw.miss { color: var(--err-text); box-shadow: inset 0 -2px 0 var(--err-t
 .ex-topo-narrow { display: none; max-width: 400px; margin: 0 auto; }
 .ex-topo text  { font-family: var(--mono); font-size: 12px; fill: var(--text); }
 .ex-topo .t-sub { fill: var(--text-s); font-size: 11px; }
+.ex-topo .t-v6  { font-size: 10px; }
 .ex-topo .rt-name { font-family: var(--font); font-size: 14px; font-weight: 600; }
 .ex-topo .rt   { fill: var(--surface); stroke: var(--border-m); stroke-width: 1.5; }
 .ex-topo .ln   { fill: none; stroke: var(--text-s); stroke-width: 2; }
@@ -186,6 +187,7 @@ mark.ex-kw.miss { color: var(--err-text); box-shadow: inset 0 -2px 0 var(--err-t
   .ex-pool { margin-left: 0; width: 100%; }
   .ex-area { margin-left: 0; }
   .ex-prog .ex-bar-cell, .ex-prog th:last-child { display: none; }
-  .ex-prog th, .ex-prog td { padding: 8px 9px; }
+  .ex-prog th, .ex-prog td { padding: 8px 6px; }
+  .ex-prog td:first-child { overflow-wrap: anywhere; }      /* "Troubleshooting" is one long word */
   .ex-list .mono-inl { white-space: normal; overflow-wrap: anywhere; }
 }
