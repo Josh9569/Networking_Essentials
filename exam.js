@@ -1924,11 +1924,12 @@ function finish(ok,msg){
   if(ok){
     forced=null;
     banner('ok',msg+' How comfortable are you with it?');
-    $('rate-lbl').textContent='Shown again after:';
-    $('rate-hard').innerHTML='Hard &middot; '+nextIvl(c,'hard')+' cards <kbd>1</kbd>';
-    $('nxtbtn').innerHTML='Good &middot; '+nextIvl(c,'good')+' cards <kbd>2</kbd>';
-    $('rate-easy').innerHTML='Easy &middot; '+nextIvl(c,'easy')+' cards <kbd>3</kbd>';
-    show('rate-lbl',true); show('rate-hard',true); show('rate-easy',true);
+    /* just the rating: how many cards each one puts between you and the
+       card again is the scheduler's business, not the learner's (owner's ask) */
+    $('rate-hard').innerHTML='Hard <kbd>1</kbd>';
+    $('nxtbtn').innerHTML='Good <kbd>2</kbd>';
+    $('rate-easy').innerHTML='Easy <kbd>3</kbd>';
+    show('rate-hard',true); show('rate-easy',true);
   } else {
     forced='again';
     banner('err',msg+' Counts as <b>Again</b> &mdash; it comes back after 2 cards.');
