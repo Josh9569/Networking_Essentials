@@ -78,7 +78,6 @@
 mark.ex-kw     { background: none; color: inherit; font-weight: 600; border-radius: 2px; }
 mark.ex-kw.hit  { color: var(--ok-text);  box-shadow: inset 0 -2px 0 var(--ok-bdr); }
 mark.ex-kw.miss { color: var(--err-text); box-shadow: inset 0 -2px 0 var(--err-text); }
-.ex-yours mark.ex-kw.hit { font-weight: 500; }
 .ex-model.ex-kw-all  { background: var(--ok-bg);   border-color: var(--ok-bdr); }
 .ex-model.ex-kw-some { background: var(--warn-bg); border-color: var(--warn-bdr); }
 .ex-model.ex-kw-none { background: var(--err-bg);  border-color: var(--err-bdr); }
@@ -152,11 +151,21 @@ mark.ex-kw.miss { color: var(--err-text); box-shadow: inset 0 -2px 0 var(--err-t
 
 /* ── Dictionary: the reference cards come from styles.css (.ref-*); this
    adds the in-text links and the flash on the card a link lands on. ── */
-.ex-term, .ex-term-demo { font: inherit; color: inherit; background: none; border: none; padding: 0; margin: 0; text-decoration: underline dotted; text-decoration-color: var(--info-text); text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
-.ex-term       { cursor: help; }
+/* Dictionary terms are bold and clickable; key words are bold AND
+   underlined (green/red, mark.ex-kw above), so the underline alone says
+   "the marker looks for this". A term inside a key word keeps the key
+   word's colour and underline and is still clickable. */
+.ex-term, .ex-term-demo { font: inherit; font-weight: 600; color: inherit; background: none; border: none; padding: 0; margin: 0; }
+.ex-term       { cursor: help; border-radius: 2px; }
 .ex-term:hover, .ex-term:focus-visible { color: var(--info-text); outline: none; }
-.ex-kw .ex-term { text-decoration: none; }          /* a key word keeps its own green/red underline */
-.ref-card-desc .ex-term { text-decoration-color: var(--text-t); }   /* cross-links inside the dictionary stay quiet */
+.ex-term:focus-visible { box-shadow: 0 0 0 2px var(--info-bdr); }
+.ex-kw .ex-term:hover, .ex-kw .ex-term:focus-visible { color: inherit; text-decoration: underline dotted; text-underline-offset: 3px; }
+/* Bold now means "a dictionary term", so a model answer's or explanation's
+   own emphasis (lead-ins like "Static:", "AD first:", the winning route) is
+   set in italics instead of competing with it. */
+.ex-model b, .ex-model strong, #q-why b, #q-why strong { font-weight: inherit; font-style: italic; }
+/* cross-links inside the dictionary stay quiet: normal weight, a dotted underline */
+.ref-card-desc .ex-term { font-weight: inherit; text-decoration: underline dotted; text-decoration-color: var(--text-t); text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
 .ex-dict-note  { margin: -.25rem 0 .25rem; }
 .ref-card.ex-flash { animation: exFlash 2s ease-out; }
 @keyframes exFlash { 0%, 40% { border-color: var(--info-text); box-shadow: 0 0 0 4px var(--info-bg); } 100% { box-shadow: 0 0 0 0 transparent; } }
