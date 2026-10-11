@@ -94,6 +94,7 @@ const AREAS=[
   {id:'nat',     name:'NAT'},
   {id:'dhcp',    name:'DHCP'},
   {id:'vlan',    name:'VLANs'},
+  {id:'ts',      name:'Troubleshooting'},
 ];
 const TIER_NAME={1:'Easy',2:'Medium',3:'Hard'};
 const CARDS=[];
@@ -168,8 +169,18 @@ const KW_SUF=['ibility','ability','isation','ically','worthy','ising','ating','a
 const KW_REPL={ary:'ar', ery:'er', ically:'ic', ally:'al'};
 /* families no ending rule joins */
 const KW_IRREG={failur:'fail', denial:'deny', deni:'deny', permiss:'permit', transmiss:'transmit', decis:'decid', inclus:'includ', exclus:'exclud', respons:'respond', resolut:'resolv', reduct:'reduc'};
+/* Comparatives and superlatives meet their base word ("smaller networks"
+   answers "small networks"). A list, not an -er/-est rule: that rule would
+   make router = route and request = requ. */
+const KW_COMP={};
+('small big large fast slow quick low high long short few great simple easy cheap safe close near wide narrow strong weak hard soft late early').split(' ').forEach(a=>{
+  const stem=/e$/.test(a)?a.slice(0,-1):/y$/.test(a)?a.slice(0,-1)+'i':/^(big|wide|hot)$/.test(a)?a+a.slice(-1):a;
+  KW_COMP[(a==='big'?'bigg':stem)+'er']=a; KW_COMP[(a==='big'?'bigg':stem)+'est']=a;
+});
 function kwStem(w){
-  w=w.toLowerCase().replace(/our/g,'or').replace(/iz/g,'is');
+  w=w.toLowerCase();
+  if(KW_COMP[w]) w=KW_COMP[w];
+  w=w.replace(/our/g,'or').replace(/iz/g,'is');
   if(w.length<=3||/^\d/.test(w)) return w;
   if(/ies$/.test(w)) w=w.slice(0,-3)+'y';
   else if(/sses$/.test(w)) w=w.slice(0,-2);
@@ -453,6 +464,119 @@ card({id:'g1-float', area:'routing', tier:2, kind:'graded', src:'Q1 d', title:'W
   };
 }});
 
+/* ═══ Q1 — RIP (the exam brief lists it under Routing) ═══════════════════ */
+card({id:'q1e-ripv2', area:'routing', tier:1, kind:'flash', src:'Q1', title:'RIPv1 vs RIPv2', gen(){
+  return {
+    prompt: pick(['What are the differences between RIPv1 and RIPv2?',
+      'Why would you configure version 2 under router rip rather than leave RIP at version 1?']),
+    points: [
+      'RIPv1 is [[classful|classfull]]: its updates carry no subnet mask, so it can\'t handle VLSM or discontiguous networks.',
+      'RIPv2 is [[classless|subnet mask|subnet masks|carries the mask|VLSM|CIDR]]: every route is sent with its mask, so variable-length subnets work.',
+      'RIPv1 sends its updates as [[broadcasts|broadcast|255.255.255.255]]; RIPv2 [[multicasts|multicast|224.0.0.9]] them to 224.0.0.9, so hosts that don\'t run RIP aren\'t disturbed.',
+      'RIPv2 can [[authenticate|authentication|MD5]] its updates; v1 can\'t.',
+      'Both use [[hop count|hops|hop]] as the metric (15 at most), AD 120 and updates every 30 s, and both [[auto-summarise|auto-summary|auto summary|automatically summarise|summarise|summarises|summarisation]] at classful boundaries by default &mdash; v2 can turn that off with '+mono('no auto-summary')+'.',
+    ],
+  };
+}});
+card({id:'q1f-riploops', area:'routing', tier:1, kind:'flash', src:'Q1', title:'RIP hop limit and split horizon', gen(){
+  return {
+    prompt: pick(['Why is a RIP network limited to 15 hops? What is split horizon, and why does RIP use it?',
+      'A link fails in a RIP network. Explain how split horizon and the 16-hop limit stop the routers looping packets for ever.']),
+    points: [
+      'RIP is a distance-vector protocol: each router sends its routing table to its neighbours every [[30 seconds|30 s|30 sec|30secs|every 30]], and its metric is the [[hop count|hops|hop]].',
+      'The maximum is 15 hops; a metric of [[16 means unreachable|16|unreachable|infinity|infinite]], so a RIP network can be at most 15 hops across.',
+      'The limit stops [[counting to infinity|count to infinity|count-to-infinity]]: in a [[routing loop|loop|loops|looping]] a dead route\'s metric keeps rising until it reaches 16 and is dropped.',
+      '<b>[[Split horizon|split-horizon]]:</b> a router doesn\'t advertise a route back out the interface it [[learned|learnt|learn|received]] it on, so two neighbours can\'t keep feeding each other a route that has gone.',
+      'Route poisoning goes further: a failed route is advertised with metric 16 so neighbours remove it straight away.',
+    ],
+  };
+}});
+card({id:'q1g-autosum', area:'routing', tier:2, kind:'flash', src:'Q1', title:'RIP and discontiguous networks', gen(){
+  const b=ri(16,31), x=ri(1,120), y=x+ri(1,100);
+  return {
+    prompt:'R1\'s LAN is 172.'+b+'.'+x+'.0/24 and R3\'s LAN is 172.'+b+'.'+y+'.0/24. Between them, R2 connects to both over 10.0.0.0 links. All three run RIP with the default settings, and the two LANs can\'t reliably reach each other. Explain why, and what you would change.',
+    points: [
+      'RIP [[auto-summarises|auto-summary|auto summary|summarises|summarise|summarizes|summarisation|classful boundary]] at the classful boundary: crossing into 10.0.0.0, R1 and R3 each advertise only <b>172.'+b+'.0.0/16</b>.',
+      'R2 learns that same /16 from [[both sides|both|two directions|R1 and R3|both routers]] at the same hop count, so it [[load-balances|load balance|load balancing|half|both paths|either side]] between them and about half the traffic goes to the wrong LAN.',
+      'This is a <b>discontiguous network</b>, and RIPv1 can\'t fix it because its updates carry no masks.',
+      'Fix: configure [[version 2|v2|ripv2|RIPv2]] and [[no auto-summary|no auto summary|disable auto-summary|turn off auto-summary|disable summarisation|turn off summarisation]] under '+mono('router rip')+' on [[every router|all routers|all three|each router|all the routers]] so the /24s are advertised as they are.',
+    ],
+  };
+}});
+
+/* The classful network a RIP "network" statement stands for. */
+function classfulNet(ip){ const o=ip>>>24; const p=o<128?8:o<192?16:24; return {net:netOf(ip,p), pfx:p}; }
+card({id:'g1-rip', area:'routing', tier:2, kind:'graded', src:'Q1', title:'Configure RIPv2', gen(){
+  const lanA=ip2int('192.168.'+ri(0,254)+'.0'), two=chance(.6), lanB=ip2int('172.'+ri(16,31)+'.'+ri(0,255)+'.0');
+  const w1=rLink30(); let w2=null; if(chance(.5)) for(;;){ w2=ip2int('10.'+(w1>>>16&255)+'.'+ri(0,255)+'.'+(ri(0,63)*4)); if(w2!==w1) break; }
+  const ifs=[{name:'G0/0', n:'g0/0', ip:lanA+1, pfx:24, lan:true}];
+  if(two) ifs.push({name:'G0/1', n:'g0/1', ip:lanB+1, pfx:24, lan:true});
+  ifs.push({name:'S0/0/0', n:'s0/0/0', ip:w1+1, pfx:30, lan:false, to:'R2'});
+  if(w2!=null) ifs.push({name:'S0/0/1', n:'s0/0/1', ip:w2+1, pfx:30, lan:false, to:'R3'});
+  const majors=[...new Set(ifs.map(f=>classfulNet(f.ip).net))];
+  const lanIfs=ifs.filter(f=>f.lan).map(f=>f.n);
+  const model=['router rip',' version 2',' no auto-summary'].concat(majors.map(m=>' network '+int2ip(m))).concat(ifs.filter(f=>f.lan).map(f=>' passive-interface '+f.name));
+  return {
+    prompt:'Configure <b>RIPv2</b> on R1 so that it advertises all of its connected networks, turn <b>off automatic summarisation</b>, and stop RIP updates being sent out of the LAN interface'+(two?'s':'')+'.',
+    body:'<div class="ex-scroll"><table class="rt-table ex-table"><thead><tr><th>R1 interface</th><th>Address</th><th>Connects to</th></tr></thead><tbody>'+
+      ifs.map(f=>'<tr><td>'+f.name+'</td><td>'+int2ip(f.ip)+'/'+f.pfx+'</td><td style="font-family:var(--font)">'+(f.lan?'LAN (PCs only)':f.to)+'</td></tr>').join('')+'</tbody></table></div>'+
+      cmdsHtml('rip','Commands &mdash; one per line, Ctrl+Enter submits','e.g. router rip',6),
+    grade(){
+      let why=null, inRip=false, v2=false, noAuto=false, pasDef=false; const nets=new Set(), pas=new Set(), notPas=new Set();
+      for(const raw of cmdLines('rip')){
+        const l=iosNorm(raw); let m;
+        if(l==='router rip'){ inRip=true; continue; }
+        if(l==='exit'||l==='end') continue;
+        if(!inRip){ why='"'+raw+'" goes under router rip &mdash; start with that.'; break; }
+        if(l==='version 2'){ v2=true; continue; }
+        if(l==='version 1'){ why='The brief asks for RIPv2.'; break; }
+        if(l==='no auto-summary'){ noAuto=true; continue; }
+        if((m=/^network (\S+)$/.exec(l))){ const a=ip2int(m[1]); if(a==null){ why='"'+raw+'" has an invalid address.'; break; } nets.add(classfulNet(a).net); continue; }
+        if(l==='passive-interface default'){ pasDef=true; continue; }
+        if((m=/^(no )?passive-interface (.+)$/.exec(l))){ (m[1]?notPas:pas).add(NR.acIfNorm(m[2].replace(/\s+/g,''))); continue; }
+        why='"'+raw+'" isn\'t needed here.'; break;
+      }
+      if(!why&&!inRip) why='Start with router rip.';
+      if(!why&&!v2) why='RIP runs version 1 until you type version 2.';
+      if(!why&&!noAuto) why='Automatic summarisation is still on: add no auto-summary.';
+      if(!why){ const miss=majors.filter(m=>!nets.has(m)), extra=[...nets].filter(n=>majors.indexOf(n)<0);
+        if(miss.length) why='Nothing advertises '+miss.map(int2ip).join(', ')+'.';
+        else if(extra.length) why='R1 has no interface in '+extra.map(int2ip).join(', ')+'.'; }
+      if(!why){
+        const isPas=n=>pasDef?!notPas.has(n):pas.has(n);
+        const wanP=ifs.filter(f=>!f.lan&&isPas(f.n)), lanN=ifs.filter(f=>f.lan&&!isPas(f.n));
+        if(wanP.length) why=wanP[0].name+' is passive, so R1 would stop exchanging updates with '+wanP[0].to+'.';
+        else if(lanN.length) why=lanN[0].name+' still sends RIP updates onto the LAN &mdash; make it passive.';
+      }
+      markCmds('rip',!why,model.join('\n'),why);
+      return {ok:!why, verdict: !why?'Correct.':'Not quite.', why: ul([...(why?[why]:[]),'e.g.<br>'+model.map(l=>mono(l.trim())).join('<br>'),
+        'RIP '+mono('network')+' commands take the <b>classful</b> network'+(majors.length<ifs.length?' &mdash; one '+mono('network '+int2ip(classfulNet(w1+1).net))+' covers every interface in it':'')+'; a subnet address is turned into its classful network anyway.',
+        mono('passive-interface')+' stops updates on the LANs (no routers there) while the LAN networks are still advertised.'])};
+    },
+  };
+}});
+
+card({id:'g1-riphops', area:'routing', tier:2, kind:'graded', src:'Q1', title:'RIP hop count along a chain', gen(){
+  const net=rNet24(), unreach=chance(.45);
+  let m, k;
+  do{ m=ri(1,14); k=ri(1,5); }while((m+k>15)!==unreach);
+  const far='R'+(2+k), hop=m+k, link=int2ip(rLink30()+1);
+  const chain=['R1','R2'].concat(Array.from({length:k},(_,i)=>'R'+(3+i))).join(' &ndash; ');
+  return {
+    prompt:'The routers are chained '+chain+', all running RIPv2. R2 has learned <b>'+cidr(net,24)+'</b> from R1 as shown. The route is passed on down the chain to '+far+'. What hop count does <b>'+far+'</b> have for '+cidr(net,24)+', and is the route installed? (Type 16 if the network is unreachable.)',
+    body: cliHtml('R      '+cidr(net,24)+' [120/'+m+'] via '+link+', 00:00:1'+ri(0,9)+', Serial0/0/0','R2# show ip route rip')+fieldHtml('hop','Hop count at '+far,'e.g. 7')+
+      chipsHtml(['Installed in '+far+'\'s routing table','Not installed &mdash; unreachable']),
+    grade(){
+      const want=unreach?16:hop, okH=intOf(val('hop'))===want, okC=Q.choice===(unreach?1:0);
+      markField('hop',okH,String(want)); markChips(unreach?1:0);
+      return {ok:okH&&okC, verdict: okH&&okC?'Correct.':(unreach?'16 &mdash; unreachable.':hop+', installed.'), why: ul([
+        'In '+mono('[120/'+m+']')+', 120 is RIP\'s AD and '+m+' is R2\'s hop count. Each router further on adds 1: '+m+' + '+k+' = '+hop+'.',
+        unreach?'A metric of 16 is RIP\'s infinity: '+far+' treats '+cidr(net,24)+' as unreachable and doesn\'t install it &mdash; RIP networks can be at most 15 hops across.':
+          hop+' is within RIP\'s 15-hop limit, so '+far+' installs the route.'])};
+    },
+  };
+}});
+
 /* ═══ Q2 — OSPF: router ID, cost, multi-area, timers ══════════════════════ */
 card({id:'q2a-rid', area:'ospf', tier:1, kind:'flash', src:'Q2 a', title:'The OSPF router ID', gen(){
   return {
@@ -581,96 +705,84 @@ card({id:'q2b-metric', area:'ospf', tier:1, kind:'flash', src:'Q2 b', title:'The
   };
 }});
 
-/* OSPF cost: 10^8 / bw, floored, minimum 1. Bandwidths in kbps. */
-function ospfCost(bwK,refMbps){ return Math.min(65535,Math.max(1,Math.floor((refMbps||100)*1000/bwK))); }
-const BW_TYPES=[
-  {name:'Ethernet0/0', bw:10000, label:'10 Mbit/sec'},
-  {name:'FastEthernet0/1', bw:100000, label:'100 Mbit/sec'},
-  {name:'GigabitEthernet0/0', bw:1000000, label:'1 Gbit/sec'},
-  {name:'Serial0/0/0', bw:1544, label:'1544 Kbit/sec'},
-];
-card({id:'g2-cost-if', area:'ospf', tier:1, kind:'graded', src:'Q2 b', title:'Cost of one interface', gen(){
-  const t=pick(BW_TYPES.concat([{name:'Serial0/0/1', bw:pick([64,128,256,512,768,2048])}]));
-  const ip=int2ip(rLink30()+1), dly=t.bw>=1000000?10:t.bw>=100000?100:t.bw>=10000?1000:20000;
-  const out=t.name+' is up, line protocol is up\n  Internet address is '+ip+'/30\n  MTU 1500 bytes, BW '+t.bw+' Kbit/sec, DLY '+dly+' usec,';
-  const cost=ospfCost(t.bw);
-  return {
-    prompt:'R1 has no OSPF cost configured and uses the default reference bandwidth. What OSPF cost does it give this interface?',
-    body: cliHtml(out,'R1# show interfaces '+t.name)+fieldHtml('cost','OSPF cost','e.g. 12'),
-    grade(){
-      const ok=intOf(val('cost'))===cost; markField('cost',ok,String(cost));
-      return {ok, verdict: ok?'Correct.':'The cost is '+cost+'.',
-        why: ul(['Cost = 100,000 kbps &divide; '+t.bw+' kbps = '+(100000/t.bw).toFixed(2).replace(/\.?0+$/,'')+(cost===1&&100000/t.bw<1?', below the minimum of 1, so <b>1</b>.':' &rarr; rounded down to <b>'+cost+'</b>.')])};
-    },
-  };
-}});
-
-/* Interface media and the bandwidths they run at (kbps). A serial link's
-   two ends can carry different `bandwidth` settings; Ethernet runs at its
-   speed. */
-const MEDIA={
-  ser: {pfx:'S0/0/', nums:[0,1], bws:[1544,1544,512,2048,256,128]},
-  gig: {pfx:'G0/', nums:[0,1,2], bws:[1000000]},
-  fast:{pfx:'Fa0/', nums:[0,1], bws:[100000]},
-  eth: {pfx:'E0/', nums:[0,1], bws:[10000]},
+/* OSPF path cost. The exam gives every interface's cost — no bandwidth
+   arithmetic (no calculators) — so these cards list them and test what to
+   add up: the OUTGOING interface of each hop, the last router's LAN
+   interface included, never the incoming ones. */
+const COST_IF={
+  ser: {pfx:'S0/0/', nums:[0,1],   costs:[64,64,48,128,390,781]},
+  gig: {pfx:'G0/',   nums:[0,1,2], costs:[1,1,2,5,10]},
+  fast:{pfx:'Fa0/',  nums:[0,1],   costs:[1,10,15]},
+  eth: {pfx:'E0/',   nums:[0,1],   costs:[10]},
 };
-/* Round figures in Gbps/Mbps; anything else in kbps, as IOS shows it. */
-function bwTxt(b){ return b>=1000000&&b%1000000===0?(b/1000000)+' Gbps':b>=1000&&b%1000===0?(b/1000)+' Mbps':b+' kbps'; }
-card({id:'g2-cost-path', area:'ospf', tier:2, kind:'graded', src:'Q2 b', title:'Total cost of a path', gen(){
+function costCell(n,c,lan){ return n+'<div class="ex-sub">cost '+c+(lan?' &middot; LAN':'')+'</div>'; }
+card({id:'g2-cost-path', area:'ospf', tier:1, kind:'graded', src:'Q2 b', title:'Total cost of a path', gen(){
   const hops=ri(2,3), lan=rNet24(), routers=[];
   let inIf=null, inMed=null, prevOut=null;
   for(let i=0;i<=hops;i++){
     const r={name:'R'+(i+1)};
     if(inMed){
       r.inIf=inIf;
-      r.in=inMed==='ser'&&chance(.6)?pick(MEDIA.ser.bws.filter(b=>b!==prevOut)):prevOut;
+      // the far end of a link can carry a different cost; often it does, so adding everything up is wrong
+      r.inC=chance(.7)?pick(COST_IF[inMed].costs.filter(c=>c!==prevOut).concat([prevOut+ri(2,30)])):prevOut;
     }
     const med=i<hops?pick(['ser','ser','gig','fast']):pick(['gig','fast','eth']);
-    const names=MEDIA[med].nums.map(n=>MEDIA[med].pfx+n).filter(n=>n!==r.inIf);
-    r.outIf=pick(names); r.out=pick(MEDIA[med].bws);
+    r.outIf=pick(COST_IF[med].nums.map(n=>COST_IF[med].pfx+n).filter(n=>n!==r.inIf)); r.out=pick(COST_IF[med].costs);
     routers.push(r);
-    inMed=med; prevOut=r.out;
-    inIf=MEDIA[med].pfx+pick(MEDIA[med].nums);
+    inMed=med; prevOut=r.out; inIf=COST_IF[med].pfx+pick(COST_IF[med].nums);
   }
-  const total=routers.reduce((s,r)=>s+ospfCost(r.out),0);
-  const cell=(n,b,lan)=>n+'<div class="ex-sub">'+bwTxt(b)+(lan?' &middot; LAN':'')+'</div>';
-  const rows=routers.map((r,i)=>[r.name, i?cell(r.inIf,r.in):'&mdash;', cell(r.outIf,r.out,i===hops)]);
+  const total=routers.reduce((s,r)=>s+r.out,0);
+  const rows=routers.map((r,i)=>[r.name, i?costCell(r.inIf,r.inC):'&mdash;', costCell(r.outIf,r.out,i===hops)]);
   return {
-    prompt:'Traffic from R1 to the <b>'+cidr(lan,24)+'</b> LAN on R'+(hops+1)+' follows this path. Each interface\'s bandwidth is shown. What is R1\'s total OSPF cost to that LAN (default reference bandwidth)?',
+    prompt:'Traffic from R1 to the <b>'+cidr(lan,24)+'</b> LAN on R'+(hops+1)+' follows this path. Each interface\'s OSPF cost is shown. What is R1\'s total OSPF cost to that LAN?',
     body: '<div class="ex-scroll"><table class="rt-table ex-table"><thead><tr><th>Router</th><th>Interface in</th><th>Interface out</th></tr></thead><tbody>'+
       rows.map(r=>'<tr>'+r.map(c=>'<td>'+c+'</td>').join('')+'</tr>').join('')+'</tbody></table></div>'+fieldHtml('cost','Total cost','e.g. 75'),
     grade(){
       const ok=intOf(val('cost'))===total; markField('cost',ok,String(total));
       return {ok, verdict: ok?'Correct.':'The total cost is '+total+'.',
         why: ul(['OSPF adds up the cost of each <b>outgoing</b> interface, including the last router\'s interface onto the LAN: '+
-          routers.map(r=>r.name+' '+ospfCost(r.out)).join(' + ')+' = <b>'+total+'</b>.',
-          'The incoming interfaces don\'t count &mdash; their bandwidth is what the far router uses for traffic coming back.'])};
+          routers.map(r=>r.name+' '+r.out).join(' + ')+' = <b>'+total+'</b>.',
+          'The incoming interfaces don\'t count &mdash; their cost is what the far router uses for traffic coming back.'])};
     },
   };
 }});
 
-card({id:'g2-cost-ref', area:'ospf', tier:3, kind:'graded', src:'Q2 b', title:'Cost with reference bandwidth and overrides', gen(){
-  const t=pick(BW_TYPES), ip=int2ip(rLink30()+1);
-  const ref=chance(.75)?pick([1000,10000]):null;
-  const bwCmd=t.name.startsWith('Serial')&&chance(.5)?pick([128,256,512,2048]):null;
-  const ovr=chance(.3)?ri(5,90):null;
-  let ref2=ref; const bw=bwCmd||t.bw;
-  if(ref2&&ref2*1000/bw>65535) ref2=1000;
-  const cost=ovr!=null?ovr:ospfCost(bw,ref2||100);
-  let cfg='interface '+t.name+'\n ip address '+ip+' 255.255.255.252\n'+(bwCmd?' bandwidth '+bwCmd+'\n':'')+(ovr!=null?' ip ospf cost '+ovr+'\n':'')+'!\nrouter ospf 1\n'+(ref2?' auto-cost reference-bandwidth '+ref2+'\n':'')+' network '+int2ip(netOf(ip2int(ip),30))+' 0.0.0.3 area 0';
-  const why=[];
-  if(ovr!=null) why.push(mono('ip ospf cost '+ovr)+' sets the cost directly &mdash; bandwidth and reference bandwidth are ignored. Cost = <b>'+ovr+'</b>.');
-  else {
-    if(!bwCmd) why.push('A '+t.name.replace(/\d.*$/,'')+' interface defaults to '+t.label+' ('+t.bw+' kbps).');
-    else why.push(mono('bandwidth '+bwCmd)+' overrides the default, so the calculation uses '+bwCmd+' kbps.');
-    why.push('Reference bandwidth '+(ref2?ref2+' Mbps (from '+mono('auto-cost')+')':'100 Mbps (the default)')+': '+((ref2||100)*1000)+' &divide; '+bw+' = '+((ref2||100)*1000/bw).toFixed(2).replace(/\.?0+$/,'')+' &rarr; <b>'+cost+'</b> (rounded down, minimum 1).');
+/* Two ways to the same LAN: R1–R2–R4, or R1–R3–R5–R4. Whether the path
+   through fewer routers wins is decided up front at 50/50, so counting hops
+   (RIP thinking) is worth nothing; the cheapest first hop is checked too. */
+card({id:'g2-best-path', area:'ospf', tier:2, kind:'graded', src:'Q2 b', title:'Which way does OSPF go?', gen(){
+  const C=[1,2,5,10,15,20,48,64,100], lan=rNet24(), wantShortWins=chance(.5), wantFirstWins=chance(.5);
+  let c;
+  for(let t=0;t<500;t++){
+    c={a1:pick(C), a2:pick(C), b1:pick(C), b2:pick(C), b3:pick(C), L:pick([1,1,10])};
+    const A=c.a1+c.a2+c.L, B=c.b1+c.b2+c.b3+c.L;
+    if(A===B||c.a1===c.b1) continue;
+    if((A<B)!==wantShortWins) continue;
+    if(((A<B)===(c.a1<c.b1))!==wantFirstWins) continue;
+    break;
   }
+  const A=c.a1+c.a2+c.L, B=c.b1+c.b2+c.b3+c.L, viaR2=A<B;
+  const back=()=>pick(C);
+  const rows=[
+    ['R1','S0/0/0','R2',c.a1],['R1','G0/1','R3',c.b1],
+    ['R2','S0/0/0','R1',back()],['R2','S0/0/1','R4',c.a2],
+    ['R3','G0/0','R1',back()],['R3','G0/1','R5',c.b2],
+    ['R5','G0/0','R3',back()],['R5','G0/1','R4',c.b3],
+    ['R4','G0/2','LAN '+cidr(lan,24),c.L],
+  ];
+  const opts=['Through R2','Through R3'];
   return {
-    prompt:'What OSPF cost does R1 use for '+t.name+'?',
-    body: cliHtml(cfg,'R1# show running-config (extract)')+fieldHtml('cost','OSPF cost','e.g. 12'),
+    prompt:'R1 can reach the <b>'+cidr(lan,24)+'</b> LAN on R4 through R2 (R1&ndash;R2&ndash;R4) or through R3 (R1&ndash;R3&ndash;R5&ndash;R4). The OSPF cost of each interface is listed. Which way does R1 send the traffic, and what is its total cost to the LAN?',
+    body: '<div class="ex-scroll"><table class="rt-table ex-table"><thead><tr><th>Router</th><th>Interface</th><th>Connects to</th><th>OSPF cost</th></tr></thead><tbody>'+
+      rows.map(r=>'<tr><td>'+r[0]+'</td><td>'+r[1]+'</td><td style="font-family:var(--font)">'+r[2]+'</td><td>'+r[3]+'</td></tr>').join('')+'</tbody></table></div>'+
+      chipsHtml(opts)+fieldHtml('cost','Total cost','e.g. 75'),
     grade(){
-      const ok=intOf(val('cost'))===cost; markField('cost',ok,String(cost));
-      return {ok, verdict: ok?'Correct.':'The cost is '+cost+'.', why: ul(why)};
+      const ans=viaR2?0:1, okC=Q.choice===ans, okT=intOf(val('cost'))===Math.min(A,B);
+      markChips(ans); markField('cost',okT,String(Math.min(A,B)));
+      return {ok:okC&&okT, verdict: okC&&okT?'Correct.':opts[ans]+', cost '+Math.min(A,B)+'.', why: ul([
+        'Via R2: '+c.a1+' (R1 S0/0/0) + '+c.a2+' (R2 S0/0/1) + '+c.L+' (R4 G0/2) = <b>'+A+'</b>.',
+        'Via R3: '+c.b1+' (R1 G0/1) + '+c.b2+' (R3 G0/1) + '+c.b3+' (R5 G0/1) + '+c.L+' (R4 G0/2) = <b>'+B+'</b>.',
+        'OSPF takes the lowest total cost'+(viaR2===false?' &mdash; even though it passes through more routers':'')+'. Only outgoing interfaces count, so the rows facing back towards R1 are ignored.'])};
     },
   };
 }});
@@ -772,6 +884,133 @@ card({id:'g2-adj', area:'ospf', tier:3, kind:'graded', src:'Q2 d', title:'Will t
   };
 }});
 
+card({id:'q2e-roles', area:'ospf', tier:1, kind:'flash', src:'Q2 c', title:'OSPF router roles', gen(){
+  return {
+    prompt: pick([
+      'In multi-area OSPF, describe the roles of an internal router, a backbone router, an ABR and an ASBR.',
+      'R2 has one interface in area 0 and two in area 1, and R5 also redistributes a default route from the ISP. What OSPF roles do R2 and R5 have, and what does each role do?',
+    ]),
+    points: [
+      '<b>Internal router:</b> every interface in the [[same area|one area|single area|a single area]], so it holds one LSDB.',
+      '<b>Backbone router:</b> has at least one interface in the [[backbone|area 0|area zero]]. Every other area must connect to area 0.',
+      '<b>ABR</b> (Area Border Router): interfaces in [[two or more areas|more than one area|multiple areas|several areas|two areas|connects areas|between areas]], one of them area 0. It keeps a separate LSDB for each area and passes [[summaries|summary|summarise|summarises|type 3]] of each area to the others.',
+      '<b>ASBR</b> (Autonomous System Boundary Router): connects OSPF to an [[external|outside OSPF|another routing protocol|other routing protocols|another routing domain|the Internet|ISP]] network and [[redistributes|redistribute|redistribution|injects|default-information originate]] those routes into OSPF.',
+    ],
+  };
+}});
+
+card({id:'q2f-lsa', area:'ospf', tier:2, kind:'flash', src:'Q2 c', title:'OSPF LSA types', gen(){
+  return {
+    prompt: pick(['Describe the OSPF LSA types 1, 2, 3, 4 and 5: who sends each one, and how far does it flood?',
+      'Which LSAs stay inside an area in multi-area OSPF, and which carry routes between areas or from outside OSPF?']),
+    points: [
+      '<b>Type 1 [[Router LSA|Router LSAs|type 1 LSA]]:</b> every router describes its own links; [[flooded only within its area|within the area|inside the area|stays in the area|own area|that area]].',
+      '<b>Type 2 [[Network LSA|Network LSAs|type 2 LSA]]:</b> sent by the [[DR|designated router]] for a multi-access network; also stays in the area.',
+      '<b>Type 3 [[Summary LSA|Summary LSAs|type 3 LSA]]:</b> sent by an [[ABR|ABRs|area border router]] to advertise one area\'s networks into another; shown as '+mono('O IA')+' routes.',
+      '<b>Type 4 ASBR summary:</b> sent by an ABR so other areas can find the ASBR.',
+      '<b>Type 5 [[External LSA|External LSAs|type 5 LSA|AS external]]:</b> sent by the [[ASBR|ASBRs]] for routes from outside OSPF (e.g. a default route); flooded to every normal area; shown as '+mono('O*E2')+' / '+mono('O E2')+'.',
+    ],
+  };
+}});
+
+/* "network <address> <wildcard> area <n>" lines: what OSPF puts each
+   interface in. Returns {err} or {stmts:[{a,w,area,line}], pid}. */
+function parseOspfNets(lines){
+  const stmts=[]; let inOspf=false;
+  for(const raw of lines){
+    const l=iosNorm(raw); let m;
+    if(/^router ospf \d+$/.test(l)){ inOspf=true; continue; }
+    if(/^(exit|end|log-adjacency-changes|passive-interface .+|router-id \S+|auto-cost .+)$/.test(l)) continue;
+    if((m=/^network (\S+) (\S+) area (\S+)$/.exec(l))){
+      if(!inOspf) return {err:'Start with router ospf 1 — network commands go under it.'};
+      const a=ip2int(m[1]), w=ip2int(m[2]), ar=/^\d+$/.test(m[3])?+m[3]:ip2int(m[3]);
+      if(a==null) return {err:'"'+raw+'" has an invalid address.'};
+      if(w==null) return {err:'"'+raw+'" needs a wildcard mask after the address.'};
+      if(ar==null) return {err:'"'+raw+'" has an invalid area.'};
+      if((w>>>24)===255) return {err:'"'+raw+'": '+m[2]+' is a subnet mask — OSPF network commands take a wildcard (0.0.0.255 for a /24).'};
+      stmts.push({a,w,area:ar,line:raw}); continue;
+    }
+    return {err:'"'+raw+'" isn\'t needed here.'};
+  }
+  if(!inOspf) return {err:'Start with router ospf 1.'};
+  return {stmts};
+}
+function ospfAreaOf(stmts,ip){
+  const hit=stmts.filter(s=>((ip&~s.w)>>>0)===((s.a&~s.w)>>>0));
+  return {hit, areas:[...new Set(hit.map(s=>s.area))]};
+}
+function areaTxt(a){ return a>255?int2ip(a):String(a); }
+card({id:'g2-net', area:'ospf', tier:2, kind:'graded', src:'Q2', title:'Write the OSPF network commands', gen(){
+  const lanA=ip2int('192.168.'+ri(0,254)+'.0'), lanB=ip2int('172.'+ri(16,31)+'.'+ri(0,255)+'.0'), wan=rLink30(), isp=ip2int('209.165.'+ri(200,220)+'.'+(ri(1,62)*4));
+  const abr=chance(.5), la=abr?pick([1,2,10]):0;
+  const ifs=[
+    {name:'G0/0', ip:lanA+1, pfx:24, area:la},
+    {name:'G0/1', ip:lanB+1, pfx:pick([24,26]), area:la},
+    {name:'S0/0/0', ip:wan+1, pfx:30, area:0},
+    {name:'S0/0/1', ip:isp+2, pfx:30, area:null},
+  ];
+  ifs[1].ip=netOf(ifs[1].ip,ifs[1].pfx)+1;
+  const wc=p=>int2ip((~pfxMask(p))>>>0);
+  const model=['router ospf 1'].concat(ifs.filter(f=>f.area!=null).map(f=>' network '+int2ip(netOf(f.ip,f.pfx))+' '+wc(f.pfx)+' area '+f.area));
+  return {
+    prompt:'Configure <b>OSPF process 1</b> on R1 with <b>network</b> commands (wildcard masks) so each interface below runs OSPF in the area shown. The link to the ISP must <b>not</b> run OSPF.',
+    body:'<div class="ex-scroll"><table class="rt-table ex-table"><thead><tr><th>R1 interface</th><th>Address</th><th>OSPF area</th></tr></thead><tbody>'+
+      ifs.map(f=>'<tr><td>'+f.name+'</td><td>'+int2ip(f.ip)+'/'+f.pfx+'</td><td style="font-family:var(--font)">'+(f.area==null?'none &mdash; link to the ISP':'Area '+f.area)+'</td></tr>').join('')+'</tbody></table></div>'+
+      cmdsHtml('net','Commands &mdash; one per line, Ctrl+Enter submits','e.g. network 198.51.100.0 0.0.0.255 area 0',5),
+    grade(){
+      const p=parseOspfNets(cmdLines('net'));
+      let why=p.err||null;
+      if(!why) for(const f of ifs){
+        const r=ospfAreaOf(p.stmts,f.ip);
+        if(f.area==null){ if(r.hit.length){ why='"'+r.hit[0].line+'" also matches '+f.name+' ('+int2ip(f.ip)+'), so OSPF would run towards the ISP.'; break; } continue; }
+        if(!r.hit.length){ why=f.name+' ('+int2ip(f.ip)+') isn\'t matched by any network command.'; break; }
+        if(r.areas.length>1){ why=f.name+' is matched by network commands for different areas.'; break; }
+        if(r.areas[0]!==f.area){ why=f.name+' would be in area '+areaTxt(r.areas[0])+', not area '+f.area+'.'; break; }
+      }
+      markCmds('net',!why,model.join('\n'),why);
+      return {ok:!why, verdict: !why?'Correct.':'Not quite.', why: ul([...(why?[why]:[]),'e.g.<br>'+model.map(l=>mono(l.trim())).join('<br>'),
+        'The wildcard is the inverse of the mask: /24 &rarr; 0.0.0.255, /26 &rarr; 0.0.0.63, /30 &rarr; 0.0.0.3 (0.0.0.0 matches just the one interface address).',
+        abr?'With its LANs in area '+la+' and the link to R2 in area 0, R1 is an <b>ABR</b>.':'Every interface is in area 0, so this is single-area OSPF.'])};
+    },
+  };
+}});
+
+/* DR/BDR election on one multi-access segment: highest priority, then
+   highest router ID; priority 0 never stands. "Highest router ID wins" is
+   only right about half the time. */
+card({id:'g2-drbdr', area:'ospf', tier:2, kind:'graded', src:'Q2', title:'Who becomes DR and BDR?', gen(){
+  let rs, dr, bdr;
+  const ridWins=chance(.4);
+  for(let t=0;t<500;t++){
+    const n=ri(3,4), used=new Set();
+    rs=Array.from({length:n},(_,i)=>{ let id; do{ id=ip2int(pick([ri(1,9)+'.'+ri(1,9)+'.'+ri(1,9)+'.'+ri(1,9), '10.'+ri(0,9)+'.'+ri(0,9)+'.'+ri(1,9), '192.168.'+ri(1,99)+'.'+ri(1,9)])); }while(used.has(id)); used.add(id);
+      return {name:'R'+(i+1), pri:pick([1,1,1,0,10,50,100,255]), rid:id}; });
+    const el=rs.filter(r=>r.pri>0).sort((a,b)=>b.pri-a.pri||b.rid-a.rid);
+    if(el.length<2) continue;
+    const hiRid=rs.reduce((a,r)=>r.rid>a.rid?r:a);
+    dr=el[0]; bdr=el[1];
+    if((hiRid===dr)!==ridWins) continue;
+    break;
+  }
+  const isName=(v,r)=>v.replace(/\s+/g,'').toUpperCase()===r.name;
+  return {
+    prompt:'These routers share one Ethernet segment and start OSPF at the same time. Which router becomes the <b>DR</b>, and which the <b>BDR</b>?',
+    body:'<div class="ex-scroll"><table class="rt-table ex-table"><thead><tr><th>Router</th><th>Interface priority</th><th>Router ID</th></tr></thead><tbody>'+
+      rs.map(r=>'<tr><td>'+r.name+'</td><td>'+r.pri+'</td><td>'+int2ip(r.rid)+'</td></tr>').join('')+'</tbody></table></div>'+
+      '<div class="ex-grid">'+fieldHtml('dr','DR','e.g. R9')+fieldHtml('bdr','BDR','e.g. R9')+'</div>',
+    grade(){
+      const okD=isName(val('dr'),dr), okB=isName(val('bdr'),bdr);
+      markField('dr',okD,dr.name); markField('bdr',okB,bdr.name);
+      const zero=rs.filter(r=>r.pri===0);
+      return {ok:okD&&okB, verdict: okD&&okB?'Correct.':'DR '+dr.name+', BDR '+bdr.name+'.', why: ul([
+        'Highest <b>priority</b> wins; only if priorities tie does the highest <b>router ID</b> decide.',
+        ...(zero.length?[zero.map(r=>r.name).join(' and ')+' '+(zero.length>1?'have':'has')+' priority 0, so '+(zero.length>1?'they':'it')+' can never be DR or BDR.']:[]),
+        'DR: <b>'+dr.name+'</b> (priority '+dr.pri+', RID '+int2ip(dr.rid)+'). BDR: <b>'+bdr.name+'</b> (priority '+bdr.pri+', RID '+int2ip(bdr.rid)+').',
+        'The election isn\'t pre-emptive: a router that joins later with a higher priority doesn\'t take over until the DR fails or OSPF restarts.'])};
+    },
+  };
+}});
+
 /* ═══ Second pass: shared pieces ══════════════════════════════════════════
    The ACL cards grade with the labs' own ACL engine (net-router.js): the
    same parser (acParseAce/acxParseAce), first-match walk with the implicit
@@ -800,10 +1039,16 @@ function markCmds(id,ok,model,why){
    ip helper, ip dhcp ex, def, dns) are read as the full command. A word only
    expands when exactly one keyword starts with it. */
 const IOS_VOCAB=['interface','switchport','access','vlan','mode','trunk','no','shutdown','encapsulation','dot1q','ip','address',
-  'native','helper-address','dhcp','excluded-address','pool','network','default-router','dns-server'];
+  'native','helper-address','dhcp','excluded-address','pool','network','default-router','dns-server',
+  'router','rip','version','auto-summary','passive-interface','ospf','area','hello-interval','dead-interval',
+  'nat','inside','outside','source','overload','static','list','netmask',
+  'ipv6','traffic-filter','nd','other-config-flag','managed-config-flag','server','relay','destination','domain-name','prefix'];
+/* Words kept exactly as typed: "in"/"out" are directions (never "inside"),
+   "default" a keyword of its own (never "default-router"). */
+const IOS_KEEP=['in','out','default'];
 function iosNorm(line){
   return line.trim().split(/\s+/).map(t=>{
-    const l=t.toLowerCase(); if(IOS_VOCAB.indexOf(l)>=0) return l;
+    const l=t.toLowerCase(); if(IOS_VOCAB.indexOf(l)>=0||IOS_KEEP.indexOf(l)>=0) return l;
     const m=IOS_VOCAB.filter(w=>w.startsWith(l)); return l.length>=2&&m.length===1?m[0]:l;
   }).join(' ');
 }
@@ -814,6 +1059,8 @@ function iosScript(lines){
     const n=iosNorm(l);
     if(/^interface /.test(n)){ ifc=NR.acIfNorm(n.slice(10).replace(/\s+/g,'')); return; }
     if(n==='exit'||n==='end'){ ifc=''; return; }
+    // a global command typed in interface mode drops back to global configuration, as on IOS
+    if(/^(router |ip dhcp pool |ipv6 dhcp pool |ip access-list |ipv6 access-list |access-list |ip route |ip nat (inside source|outside source|pool) |ip dhcp excluded|hostname |ipv6 unicast-routing|line )/.test(n)) ifc='';
     out.push({ifc, cmd:n});
   });
   return out;
@@ -848,8 +1095,8 @@ function q3Plan(){
   while(lans.length<4){ const x=ri(1,250); if(used.has(x)) continue; used.add(x); lans.push(tenStyle?ip2int('10.'+sec+'.'+x+'.0'):ip2int('192.168.'+x+'.0')); }
   return {lans, wan:ip2int('172.16.'+ri(0,255)+'.'+(ri(0,63)*4))};
 }
-function q3Topo(P,pick){
-  const L=i=>cidr(P.lans[i],24);
+function q3Topo(P,pick,lab){
+  const L=i=>lab?lab.lans[i]:cidr(P.lans[i],24);
   let s='<svg class="ex-topo'+(pick?' pickable':'')+'" viewBox="0 100 800 164" role="img" aria-label="R1 and R2 with four LANs">';
   s+='<path class="ln" d="M250 132 H172 M172 110 V154"/><path class="ln" d="M295 154 V214 M262 214 H328"/>'+
      '<path class="ln ser" d="M340 132 H470"/><path class="ln" d="M560 132 H638 M638 110 V154"/><path class="ln" d="M515 154 V214 M482 214 H548"/>';
@@ -858,32 +1105,32 @@ function q3Topo(P,pick){
      '<text x="295" y="236" text-anchor="middle">'+L(1)+'</text><text class="t-sub" x="295" y="253" text-anchor="middle">LAN2</text>'+
      '<text x="648" y="128">'+L(2)+'</text><text class="t-sub" x="648" y="145">LAN3</text>'+
      '<text x="515" y="236" text-anchor="middle">'+L(3)+'</text><text class="t-sub" x="515" y="253" text-anchor="middle">LAN4</text>'+
-     '<text class="t-sub" x="405" y="156" text-anchor="middle">'+cidr(P.wan,30)+'</text>';
+     '<text class="t-sub" x="405" y="156" text-anchor="middle">'+(lab?lab.wan:cidr(P.wan,30))+'</text>';
   s+=ifPill('R1 G0/0','G0/0',211,132,pick)+ifPill('R1 G0/1','G0/1',326,184,pick)+ifPill('R1 S0/0/0','S0/0/0',374,132,pick)+
      ifPill('R2 S0/0/0','S0/0/0',436,132,pick)+ifPill('R2 G0/0','G0/0',599,132,pick)+ifPill('R2 G0/1','G0/1',546,184,pick);
-  return '<div class="ex-topo-wrap">'+s.replace('class="ex-topo','class="ex-topo ex-topo-wide')+'</svg>'+q3TopoNarrow(P,pick)+'</div>';
+  return '<div class="ex-topo-wrap">'+s.replace('class="ex-topo','class="ex-topo ex-topo-wide')+'</svg>'+q3TopoNarrow(P,pick,lab)+'</div>';
 }
 /* The same network stacked for a phone — R1 above R2, LANs either side — so
    every interface fits on screen at a readable size instead of scrolling.
    Both copies carry the same data-if, so picking and marking follow either. */
-function q3TopoNarrow(P,pick){
-  const L=i=>cidr(P.lans[i],24);
+function q3TopoNarrow(P,pick,lab){
+  const L=i=>lab?lab.lans[i]:cidr(P.lans[i],24), v6=lab?' class="t-v6"':'';   // IPv6 prefixes need the smaller type to fit
   let s='<svg class="ex-topo ex-topo-narrow'+(pick?' pickable':'')+'" viewBox="0 78 340 236" role="img" aria-label="R1 and R2 with four LANs">';
   s+='<path class="ln" d="M125 130 H70 M70 110 V150"/><path class="ln" d="M215 130 H270 M270 110 V150"/>'+
      '<path class="ln ser" d="M170 150 V230"/><path class="ln" d="M215 250 H270 M270 230 V270"/><path class="ln" d="M125 250 H70 M70 230 V270"/>';
   [['R1',110],['R2',230]].forEach(r=>{ s+='<rect class="rt" x="125" y="'+r[1]+'" width="90" height="40" rx="10"/><text class="rt-name" x="170" y="'+(r[1]+25)+'" text-anchor="middle">'+r[0]+'</text>'; });
-  s+='<text x="70" y="90" text-anchor="middle">'+L(0)+'</text><text class="t-sub" x="70" y="104" text-anchor="middle">LAN1</text>'+
-     '<text x="270" y="90" text-anchor="middle">'+L(1)+'</text><text class="t-sub" x="270" y="104" text-anchor="middle">LAN2</text>'+
-     '<text x="270" y="290" text-anchor="middle">'+L(2)+'</text><text class="t-sub" x="270" y="304" text-anchor="middle">LAN3</text>'+
-     '<text x="70" y="290" text-anchor="middle">'+L(3)+'</text><text class="t-sub" x="70" y="304" text-anchor="middle">LAN4</text>'+
-     '<text class="t-sub" x="210" y="194">'+cidr(P.wan,30)+'</text>';
+  s+='<text'+v6+' x="70" y="90" text-anchor="middle">'+L(0)+'</text><text class="t-sub" x="70" y="104" text-anchor="middle">LAN1</text>'+
+     '<text'+v6+' x="270" y="90" text-anchor="middle">'+L(1)+'</text><text class="t-sub" x="270" y="104" text-anchor="middle">LAN2</text>'+
+     '<text'+v6+' x="270" y="290" text-anchor="middle">'+L(2)+'</text><text class="t-sub" x="270" y="304" text-anchor="middle">LAN3</text>'+
+     '<text'+v6+' x="70" y="290" text-anchor="middle">'+L(3)+'</text><text class="t-sub" x="70" y="304" text-anchor="middle">LAN4</text>'+
+     '<text class="t-sub'+(lab?' t-v6':'')+'" x="210" y="194">'+(lab?lab.wan:cidr(P.wan,30))+'</text>';
   s+=ifPill('R1 G0/0','G0/0',97,130,pick)+ifPill('R1 G0/1','G0/1',243,130,pick)+ifPill('R1 S0/0/0','S0/0/0',170,168,pick)+
      ifPill('R2 S0/0/0','S0/0/0',170,212,pick)+ifPill('R2 G0/0','G0/0',243,250,pick)+ifPill('R2 G0/1','G0/1',97,250,pick);
   return s+'</svg>';
 }
-function applyHtml(){
+function applyHtml(noDir){
   return '<div class="ex-apply"><span class="ex-apply-lbl">Apply on:</span> <b id="if-pick" class="ex-apply-if">click an interface on the diagram</b>'+
-    '<span class="ex-apply-lbl">Direction:</span>'+chipsHtml(['In','Out'])+'</div>';
+    (noDir?'':'<span class="ex-apply-lbl">Direction:</span>'+chipsHtml(['In','Out']))+'</div>';
 }
 /* A typed numbered standard ACL, parsed by the labs' engine. */
 function parseStdAcl(lines){
@@ -1028,6 +1275,152 @@ card({id:'g3-place', area:'acl', tier:3, kind:'graded', src:'Q3 c', title:'Where
         ['An <b>extended</b> ACL names the destination too, so it goes near the <b>source</b>: '+ans+' <b>inbound</b>, on the interface facing LAN'+(a+1)+'.',
          'Outbound towards LAN'+(b+1)+' would still work, but the unwanted traffic would cross the network first.'];
       return {ok, verdict: ok?'Correct.':ans+' '+(dir?'outbound':'inbound')+'.', why: ul(why)};
+    },
+  };
+}});
+
+/* A typed extended ACL — numbered (100–199, 2000–2699) or named with
+   "ip access-list extended NAME" — parsed by the labs' engine. */
+function parseExtAcl(lines){
+  let num=null, name=null; const aces=[];
+  for(const l of lines){
+    const t=l.split(/\s+/), w0=t[0].toLowerCase(), w1=(t[1]||'').toLowerCase();
+    if(w0==='ip'&&w1.length>=8&&'access-list'.startsWith(w1)){
+      if(!/^ex/i.test(t[2]||'')) return {err:'A named extended list starts ip access-list extended <name>.'};
+      if(!t[3]) return {err:'Name the list: ip access-list extended <name>.'};
+      if(num!=null) return {err:'Use either a numbered list or a named one, not both.'};
+      name=t[3]; continue;
+    }
+    let act, rest;
+    if(w0.length>=8&&'access-list'.startsWith(w0)){
+      if(name) return {err:'Inside a named list the entries start with permit or deny ("'+l+'").'};
+      const n=+t[1];
+      if(!/^\d+$/.test(t[1]||'')||NR.aclNumKind(n)!=='ext') return {err:'An extended ACL is numbered 100–199 or 2000–2699 — '+(t[1]||'no number')+' isn\'t.'};
+      if(num!=null&&n!==num) return {err:'Every line must use the same ACL number.'};
+      num=n; act=w1==='remark'?'remark':(t[2]||'').toLowerCase(); rest=t.slice(3);
+    } else if(name){ const i=/^\d+$/.test(t[0])?1:0; act=(t[i]||'').toLowerCase(); rest=t.slice(i+1); }
+    else return {err:'Each line starts with access-list (or use ip access-list extended <name>) ("'+l+'").'};
+    if(act==='remark') continue;
+    if(act!=='permit'&&act!=='deny') return {err:'Expected permit or deny ("'+l+'").'};
+    const r=NR.acxParseAce(act,rest.map(x=>x.toLowerCase()));
+    if(r.err) return {err:r.err.replace(/^%\s*/,'')+' ("'+l+'").'+(/http/i.test(l)?' IOS calls port 80 www (or type 80).':'')};
+    aces.push(r.ace);
+  }
+  if(!aces.length) return {err:'There are no permit or deny lines.'};
+  const acl=NR.aclMake(String(num!=null?num:name),num!=null,4,true);
+  aces.forEach((a,i)=>{ a.seq=(i+1)*10; acl.aces.push(a); });
+  return {acl};
+}
+const ACL_PKTS=[
+  {proto:'tcp', sport:50001, dport:80, txt:'web (tcp 80)'},{proto:'tcp', sport:50002, dport:443, txt:'https (tcp 443)'},
+  {proto:'tcp', sport:50003, dport:22, txt:'SSH (tcp 22)'},{proto:'tcp', sport:50004, dport:23, txt:'Telnet (tcp 23)'},
+  {proto:'udp', sport:50005, dport:53, txt:'DNS (udp 53)'},{proto:'icmp', icmpType:'echo', txt:'a ping (ICMP echo)'},
+  {proto:'icmp', icmpType:'echo-reply', txt:'a ping reply (ICMP echo-reply)'},
+];
+card({id:'g3-ext', area:'acl', tier:3, kind:'graded', src:'Q3', title:'Write and place an extended ACL', gen(){
+  const P=q3Plan(), a=ri(0,3), b=pick([0,1,2,3].filter(i=>i!==a)), c=pick([0,1,2,3].filter(i=>i!==a&&i!==b));
+  const L=i=>P.lans[i], kind=pick(['web','ping','ssh']);
+  const srv=(L(b)+ri(10,250))>>>0, H=(L(a)+ri(10,250))>>>0;
+  const inA=ip=>inNet(ip,L(a),24), inB=ip=>inNet(ip,L(b),24);
+  let policy, deny, model;
+  if(kind==='web'){
+    policy='Hosts in <b>LAN'+(a+1)+'</b> must not reach the web server <b>'+int2ip(srv)+'</b> (LAN'+(b+1)+') over HTTP. All other traffic is allowed.';
+    deny=(s,d,p)=>inA(s)&&d===srv&&p.proto==='tcp'&&p.dport===80;
+    model=['access-list 110 deny tcp '+int2ip(L(a))+' 0.0.0.255 host '+int2ip(srv)+' eq www','access-list 110 permit ip any any'];
+  } else if(kind==='ping'){
+    policy='Hosts in <b>LAN'+(a+1)+'</b> must not be able to ping anything in <b>LAN'+(b+1)+'</b>. All other traffic &mdash; including LAN'+(b+1)+' pinging LAN'+(a+1)+' &mdash; is allowed.';
+    deny=(s,d,p)=>inA(s)&&inB(d)&&p.proto==='icmp'&&p.icmpType==='echo';
+    model=['access-list 120 deny icmp '+int2ip(L(a))+' 0.0.0.255 '+int2ip(L(b))+' 0.0.0.255 echo','access-list 120 permit ip any any'];
+  } else {
+    policy='Only host <b>'+int2ip(H)+'</b> in LAN'+(a+1)+' may SSH to the server <b>'+int2ip(srv)+'</b> (LAN'+(b+1)+'); no other LAN'+(a+1)+' host may. All other traffic is allowed.';
+    deny=(s,d,p)=>inA(s)&&s!==H&&d===srv&&p.proto==='tcp'&&p.dport===22;
+    model=['access-list 130 permit tcp host '+int2ip(H)+' host '+int2ip(srv)+' eq 22','access-list 130 deny tcp '+int2ip(L(a))+' 0.0.0.255 host '+int2ip(srv)+' eq 22','access-list 130 permit ip any any'];
+  }
+  // it sits inbound on LAN a's interface, so it only ever sees traffic from LAN a
+  const srcs=[2,9,100,129,254].map(o=>(L(a)+o)>>>0).concat(kind==='ssh'?[H,H-1,H+1].filter(x=>inA(x)):[]);
+  const dsts=[srv,(srv+1)>>>0,(L(b)+(srv-L(b)>100?3:200))>>>0,(L(c)+20)>>>0,ip2int('8.8.8.8')];
+  const tgt=Q3_IF[a];
+  return {
+    prompt:policy+' Write an <b>extended ACL</b> for this, then say which interface it goes on and in which direction.',
+    body: q3Topo(P,true)+cmdsHtml('acl','Extended ACL &mdash; one command per line, Ctrl+Enter submits','e.g. access-list 101 deny tcp 198.51.100.0 0.0.0.255 host 203.0.113.9 eq 23',3)+applyHtml(),
+    grade(){
+      const p=parseExtAcl(cmdLines('acl'));
+      let aclWhy=p.err||null;
+      if(!aclWhy) outer: for(const s of srcs) for(const d of dsts) for(const pk of ACL_PKTS){
+        const want=deny(s,d,pk)?'deny':'permit', got=NR.aclEvaluate(p.acl,s,false,d,pk).action;
+        if(got!==want){ aclWhy=(want==='permit'?'It blocks ':'It lets through ')+pk.txt+' from '+int2ip(s)+' to '+int2ip(d)+'.'; break outer; }
+      }
+      const okAcl=!aclWhy, okIf=Q.ifSel===tgt, okDir=Q.choice===0;
+      markCmds('acl',okAcl,model.join('\n'),aclWhy); markIfs(tgt); markChips(0);
+      const why=['e.g. '+model.map(mono).join('<br>')+(kind==='ssh'?' &mdash; the permit for '+int2ip(H)+' has to come <b>before</b> the deny, because the first match wins.':' &mdash; without the final '+mono('permit ip any any')+' the implicit deny would block everything else.'),
+        'An extended ACL names the destination too, so it goes as close to the <b>source</b> as possible: <b>'+tgt+' inbound</b>, so the unwanted traffic never crosses the network.'];
+      if(kind==='ping') why.push('The '+mono('echo')+' keyword matters: without it the entry would also drop LAN'+(a+1)+'\'s <i>replies</i> when LAN'+(b+1)+' pings it.');
+      return {ok:okAcl&&okIf&&okDir, verdict: okAcl&&okIf&&okDir?'Correct.':'Check '+[okAcl?null:'the ACL', okIf&&okDir?null:'where it goes'].filter(Boolean).join(' and ')+'.', why: ul(why)};
+    },
+  };
+}});
+
+card({id:'q3e-acl6', area:'acl', tier:1, kind:'flash', src:'Q3', title:'IPv6 ACLs', gen(){
+  return {
+    prompt: pick(['How do IPv6 ACLs differ from IPv4 ACLs?','What do you have to do differently when you write and apply an ACL for IPv6 traffic?']),
+    points: [
+      'IPv6 ACLs are always [[named|name]] &mdash; there are no numbered or standard IPv6 lists &mdash; and each entry works like an [[extended|extended ACL|source and destination]] entry: protocol, source and destination.',
+      'There are no wildcard masks: addresses are written with a [[prefix length|prefix-length|/64|prefix]] (2001:db8:acad:10::/64), or host / any.',
+      'A list is applied to an interface with '+mono('ipv6 traffic-filter <name> in|out')+' ([[traffic-filter|traffic filter]], not ip access-group), and to vty lines with ipv6 access-class.',
+      'Every IPv6 ACL ends with implicit permits for [[neighbour discovery|neighbor discovery|ND|NS|NA|nd-na|nd-ns]] (NS and NA) before the implicit deny ipv6 any any, so ND keeps working. An explicit deny ipv6 any any at the end would block ND too.',
+    ],
+  };
+}});
+
+/* The ACL network in IPv6: 2001:db8:acad:<n>::/64 per LAN. */
+function q3Plan6(){
+  const ns=shuffle([10,11,12,13,14,15,20,21,22,30,31,40,41,50,60,70,80,90]).slice(0,4).sort((x,y)=>x-y);
+  return {ns, lans:ns.map(n=>'2001:db8:acad:'+n+'::/64'), wan:'2001:db8:acad:1::/64'};
+}
+card({id:'g3-acl6', area:'acl', tier:2, kind:'graded', src:'Q3', title:'Write and apply an IPv6 ACL', gen(){
+  const P=q3Plan(), P6=q3Plan6(), a=ri(0,3), b=pick([0,1,2,3].filter(i=>i!==a)), c=pick([0,1,2,3].filter(i=>i!==a&&i!==b));
+  const name=pick(['BLOCK-LAN'+(a+1),'NO-LAN'+(b+1),'LAN'+(a+1)+'-FILTER','POLICY6']);
+  const K=s=>NR.ac6Parse(s), net=i=>K('2001:db8:acad:'+P6.ns[i]+'::'), inN=(k,i)=>k.slice(0,16)===net(i).slice(0,16);
+  const host=(i,h)=>K('2001:db8:acad:'+P6.ns[i]+':'+h);   // h is the 64-bit interface ID, all four groups
+  const srcs=['0:0:0:10','0:0:0:abc','1:2:3:4','ffff:ffff:ffff:fffe'].map(h=>host(a,h));
+  const dsts=['0:0:0:5','0:0:0:99','ffff:ffff:ffff:fffe'].map(h=>host(b,h)).concat([host(c,'0:0:0:20'),K('2001:db8:cafe::1')]);
+  const pkts=[ACL_PKTS[0],ACL_PKTS[4],ACL_PKTS[5]];
+  const model=['ipv6 access-list '+name,' deny ipv6 2001:db8:acad:'+P6.ns[a]+'::/64 2001:db8:acad:'+P6.ns[b]+'::/64',' permit ipv6 any any'];
+  const tgt=Q3_IF[a];
+  return {
+    prompt:'The network now runs IPv6. Hosts in <b>LAN'+(a+1)+'</b> must not reach anything in <b>LAN'+(b+1)+'</b>; all other IPv6 traffic is allowed. Write an IPv6 ACL named <b>'+name+'</b>, the command that applies it, and click the interface it goes on.',
+    body: q3Topo(P,true,{lans:P6.lans, wan:P6.wan})+cmdsHtml('acl','IPv6 ACL &mdash; one command per line, Ctrl+Enter submits','e.g. ipv6 access-list EXAMPLE',3)+
+      fieldHtml('apply','Command that applies it (interface configuration mode)','e.g. ipv6 traffic-filter EXAMPLE out',true)+applyHtml(true),
+    grade(){
+      const lines=cmdLines('acl'); let aclWhy=null; const acl=NR.aclMake(name,false,6,true);
+      const head=(lines[0]||'').split(/\s+/);
+      if(!/^ipv6$/i.test(head[0]||'')||!/^access-l/i.test(head[1]||'')) aclWhy='Start with ipv6 access-list '+name+'.';
+      else if(head[2]!==name) aclWhy=(head[2]||'').toLowerCase()===name.toLowerCase()?'ACL names are case-sensitive: '+name+', not '+head[2]+'.':'The list should be named '+name+'.';
+      else for(const l of lines.slice(1)){
+        const t=l.split(/\s+/), i=0, act=(t[0]||'').toLowerCase();
+        if(act==='remark') continue;
+        if(act!=='permit'&&act!=='deny'){ aclWhy='Expected permit or deny ("'+l+'").'; break; }
+        const r=NR.ac6ParseAce(act,t.slice(i+1));
+        if(r.err){ aclWhy=r.err.replace(/^%\s*/,'')+' ("'+l+'").'; break; }
+        r.ace.seq=(acl.aces.length+1)*10; acl.aces.push(r.ace);
+      }
+      if(!aclWhy&&!acl.aces.length) aclWhy='There are no permit or deny lines.';
+      if(!aclWhy) outer: for(const s of srcs) for(const d of dsts) for(const pk of pkts){
+        const want=inN(d,b)?'deny':'permit', got=NR.aclEvaluate(acl,s,false,d,pk).action;
+        if(got!==want){ aclWhy=(want==='permit'?'It blocks ':'It lets through ')+pk.txt+' from '+NR.ac6Fmt(s)+' to '+NR.ac6Fmt(d)+'.'; break outer; }
+      }
+      const raw=(cmdLines('apply')[0]||''), n=iosNorm(raw), m=/^ipv6 traffic-filter (\S+) (in|out|outside)$/.exec(n);
+      let applyWhy=null;
+      if(/^ip access-group/.test(n)) applyWhy='IPv6 lists are applied with ipv6 traffic-filter, not ip access-group.';
+      else if(!m) applyWhy='Expected ipv6 traffic-filter '+name+' in|out.';
+      else if(raw.split(/\s+/)[2]!==name) applyWhy='Apply the list by its name, '+name+'.';
+      else if(m[2]!=='in') applyWhy='Outbound on the interface facing LAN'+(a+1)+' it would only filter traffic going <i>into</i> LAN'+(a+1)+'.';
+      const okAcl=!aclWhy, okApply=!applyWhy, okIf=Q.ifSel===tgt;
+      markCmds('acl',okAcl,model.join('\n'),aclWhy); markField('apply',okApply,'ipv6 traffic-filter '+name+' in'); markIfs(tgt);
+      return {ok:okAcl&&okApply&&okIf, verdict: okAcl&&okApply&&okIf?'Correct.':'Check '+[okAcl?null:'the ACL', okApply?null:'the apply command', okIf?null:'the interface'].filter(Boolean).join(', ')+'.',
+        why: ul([...(applyWhy?[applyWhy]:[]),'e.g.<br>'+model.map(l=>mono(l.trim())).join('<br>')+'<br>'+mono('interface '+tgt.split(' ')[1].toLowerCase())+' '+mono('ipv6 traffic-filter '+name+' in')+' on '+tgt.split(' ')[0]+'.',
+          'IPv6 entries name the protocol, the source <b>and</b> the destination, with prefix lengths instead of wildcards.',
+          'Like an extended ACL it goes near the <b>source</b>: '+tgt+' inbound.'])};
     },
   };
 }});
@@ -1214,6 +1607,83 @@ card({id:'q4d-patport', area:'nat', tier:1, kind:'flash', src:'Q4 d', title:'Two
     ],
   };
 }});
+
+/* ═══ Q4 — writing the NAT configuration ═════════════════════════════════
+   Graded line by line: the ACL by behaviour (it must match exactly the
+   LAN), the inside/outside marks by interface, the rule by its words. Names
+   (pools) are compared as typed — IOS names are case-sensitive. */
+function natCfgCheck(P,kind,X,pool){
+  const lines=cmdLines('nat'), aclLines=lines.filter(l=>/^acc/i.test(l)), rest=lines.filter(l=>!/^acc/i.test(l));
+  const sc=iosScript(rest), any=re=>sc.map(o=>({o,m:re.exec(o.cmd)})).find(x=>x.m);
+  const rawOf=o=>rest.find(l=>iosNorm(l)===o.cmd)||o.cmd;
+  if(!hasCmd(sc,'g0/1','ip nat inside')) return 'G0/1 (the LAN side) needs ip nat inside.';
+  if(!hasCmd(sc,'s0/0/1','ip nat outside')) return 'S0/0/1 (towards the ISP) needs ip nat outside.';
+  if(hasCmd(sc,'g0/1','ip nat outside')||hasCmd(sc,'s0/0/1','ip nat inside')) return 'Each interface is either inside or outside, not both.';
+  if(kind==='static'){
+    const r=any(/^ip nat inside source static (\S+) (\S+)$/);
+    if(!r) return 'Map the server with ip nat inside source static <inside local> <inside global>.';
+    if(ip2int(r.m[1])!==P.pcs[0].ip||ip2int(r.m[2])!==X) return 'The mapping should be '+int2ip(P.pcs[0].ip)+' (inside local) to '+int2ip(X)+' (inside global), in that order.';
+    return null;
+  }
+  const p=parseStdAcl(aclLines);
+  if(p.err) return aclLines.length?p.err:'Add a standard ACL that matches the LAN.';
+  for(const o of [2,77,254]) if(NR.aclEvaluate(p.acl,P.lan+o,false).action!=='permit') return 'The ACL doesn\'t match '+int2ip(P.lan+o)+', so that host wouldn\'t be translated.';
+  for(const ip of [P.lan+256,P.lan-256,P.gwOut,ip2int('10.1.1.1')]) if(NR.aclEvaluate(p.acl,ip>>>0,false).action==='permit') return 'The ACL also matches '+int2ip(ip>>>0)+' &mdash; it should match only '+cidr(P.lan,24)+'.';
+  const num=p.acl.name;
+  if(kind==='pat'){
+    const r=any(/^ip nat inside source list (\S+) interface (\S+) overload$/);
+    if(!r) return any(/^ip nat inside source list \S+ interface \S+$/)?'Without overload only one host at a time could use the interface address.':'The rule is ip nat inside source list <acl> interface <outside interface> overload.';
+    if(r.m[1]!==num) return 'The rule names list '+r.m[1]+' but your ACL is '+num+'.';
+    if(NR.acIfNorm(r.m[2])!=='s0/0/1') return 'Overload onto S0/0/1, the interface facing the ISP.';
+    return null;
+  }
+  const pl=any(/^ip nat pool (\S+) (\S+) (\S+) (?:netmask (\S+)|prefix-length (\d+))$/);
+  if(!pl) return 'Define the pool: ip nat pool '+pool.name+' <first> <last> netmask <mask>.';
+  const pname=rawOf(pl.o).split(/\s+/)[3];
+  if(pname!==pool.name) return pname.toLowerCase()===pool.name.toLowerCase()?'Pool names are case-sensitive: '+pool.name+', not '+pname+'.':'The pool should be named '+pool.name+'.';
+  if(ip2int(pl.m[2])!==pool.first||ip2int(pl.m[3])!==pool.last) return 'The pool runs from '+int2ip(pool.first)+' to '+int2ip(pool.last)+'.';
+  if(pl.m[4]?pl.m[4]!=='255.255.255.224':+pl.m[5]!==27) return 'The public block is a /27: netmask 255.255.255.224 (or prefix-length 27).';
+  const r=any(/^ip nat inside source list (\S+) pool (\S+)( overload)?$/);
+  if(!r) return 'The rule is ip nat inside source list <acl> pool <name>.';
+  if(r.m[3]) return 'Overload would make it PAT; the brief asks for dynamic NAT, one public address per host.';
+  if(r.m[1]!==num) return 'The rule names list '+r.m[1]+' but your ACL is '+num+'.';
+  if(rawOf(r.o).split(/\s+/).pop()!==pool.name) return 'The rule must name the pool exactly: '+pool.name+'.';
+  return null;
+}
+function natCfgModel(P,kind,X,pool){
+  const m=[];
+  if(kind==='static') m.push('ip nat inside source static '+int2ip(P.pcs[0].ip)+' '+int2ip(X));
+  else {
+    m.push('access-list 1 permit '+int2ip(P.lan)+' 0.0.0.255');
+    if(kind==='pat') m.push('ip nat inside source list 1 interface s0/0/1 overload');
+    else m.push('ip nat pool '+pool.name+' '+int2ip(pool.first)+' '+int2ip(pool.last)+' netmask 255.255.255.224','ip nat inside source list 1 pool '+pool.name);
+  }
+  return m.concat(['interface g0/1',' ip nat inside','interface s0/0/1',' ip nat outside']);
+}
+function natCfgCard(id,tier,title,kinds){
+  card({id, area:'nat', tier, kind:'graded', src:'Q4', title, gen(){
+    const P=natPlan(), kind=pick(kinds), X=P.pub+ri(2,12), pool={name:pick(['PUBLIC','NAT-POOL','Pool1','INTERNET']), first:P.pub+ri(14,18), last:P.pub+30};
+    const task={
+      pat:'Configure <b>PAT</b> on the Gateway so every host on '+cidr(P.lan,24)+' shares the address of <b>S0/0/1</b>.',
+      pool:'Configure <b>dynamic NAT</b> (no overload) on the Gateway: hosts on '+cidr(P.lan,24)+' are translated to public addresses from a pool named <b>'+pool.name+'</b>, '+int2ip(pool.first)+' to '+int2ip(pool.last)+' (from the /27 public block).',
+      static:'PC-A ('+int2ip(P.pcs[0].ip)+') is a server that must be reachable from the Internet. Configure <b>static NAT</b> on the Gateway so it is always translated to <b>'+int2ip(X)+'</b>.',
+    }[kind];
+    const model=natCfgModel(P,kind,X,pool);
+    return {
+      prompt:task+' Include the interface commands.',
+      body: natTableHtml(P,false)+cmdsHtml('nat','Gateway configuration &mdash; one command per line, Ctrl+Enter submits','e.g. ip nat inside source static 198.51.100.5 203.0.113.5',6),
+      grade(){
+        const why=natCfgCheck(P,kind,X,pool);
+        markCmds('nat',!why,model.join('\n'),why);
+        return {ok:!why, verdict: !why?'Correct.':'Not quite.', why: ul([...(why?[why]:[]),'e.g.<br>'+model.map(l=>mono(l.trim())).join('<br>'),
+          'Every NAT needs '+mono('ip nat inside')+' on the LAN interface and '+mono('ip nat outside')+' on the interface towards the ISP &mdash; without them nothing is translated.',
+          kind==='static'?'A static mapping needs no ACL: it always applies to that one host.':'The ACL says <i>which</i> inside hosts get translated; it must be a standard ACL that matches the LAN.'])};
+      },
+    };
+  }});
+}
+natCfgCard('g4-natcfg',2,'Configure PAT',['pat']);
+natCfgCard('g4-natcfg-x',3,'Configure dynamic or static NAT',['pool','static']);
 
 /* ═══ Q4 e — reading a routing table ══════════════════════════════════════ */
 function rtPlan(){
@@ -1449,6 +1919,138 @@ card({id:'g5-pool', area:'dhcp', tier:3, kind:'graded', src:'Q5', title:'Build a
   };
 }});
 
+/* ═══ Q5 — DHCPv6 ═════════════════════════════════════════════════════════ */
+card({id:'q5d-v6', area:'dhcp', tier:1, kind:'flash', src:'Q5', title:'How an IPv6 host gets an address', gen(){
+  return {
+    prompt: pick(['Describe the three ways an IPv6 host can be given its address: SLAAC, stateless DHCPv6 and stateful DHCPv6. How does the host know which one to use?',
+      'Compare SLAAC, stateless DHCPv6 and stateful DHCPv6. Where does the host get its address, its DNS server and its default gateway in each?']),
+    points: [
+      '<b>[[SLAAC|stateless address autoconfiguration|autoconfiguration]]:</b> the host takes the [[prefix|/64 prefix|network prefix]] from the router\'s [[Router Advertisement|RA|RAs|router advertisements]] and makes its own interface ID ([[EUI-64|EUI64|random|randomly]]). Nothing keeps track of which addresses are used.',
+      '<b>[[Stateless DHCPv6|stateless DHCP]]:</b> the address still comes from SLAAC, but other information such as the [[DNS server|DNS|domain name]] comes from a DHCPv6 server, which keeps no record of addresses.',
+      '<b>[[Stateful DHCPv6|stateful DHCP]]:</b> a DHCPv6 server [[assigns the address|hands out the address|allocates|leases|gives the address]] (and the other information) and keeps track of it, like DHCPv4.',
+      'The RA\'s flags tell the host which: [[M flag|managed flag|managed-config-flag|managed address]] = 1 &rarr; stateful; [[O flag|other flag|other-config-flag|other configuration]] = 1 with M = 0 &rarr; stateless; both 0 &rarr; SLAAC only.',
+      'In every case the default gateway is the router\'s [[link-local|link local|fe80]] address, learned from the RA &mdash; DHCPv6 never hands out a gateway.',
+    ],
+  };
+}});
+
+const V6_METHOD=['SLAAC only','SLAAC + stateless DHCPv6','Stateful DHCPv6'];
+card({id:'g5-v6flags', area:'dhcp', tier:1, kind:'graded', src:'Q5', title:'Which IPv6 method do the hosts use?', gen(){
+  const n=ri(10,99), k=pick([0,1,1,2,2]), extra=k===2&&chance(.4);
+  const cfg=['interface GigabitEthernet0/1',' ipv6 address 2001:db8:acad:'+n+'::1/64',' ipv6 address fe80::1 link-local'];
+  if(k===1) cfg.push(' ipv6 nd other-config-flag',' ipv6 dhcp server LAN'+n);
+  if(k===2) cfg.push(' ipv6 nd managed-config-flag'+(extra?'\n ipv6 nd prefix default no-autoconfig':''),' ipv6 dhcp server LAN'+n);
+  const dns=['the DNS server isn\'t given by DHCPv6 &mdash; only the RA (or manual configuration)','the stateless DHCPv6 server','the stateful DHCPv6 server'];
+  return {
+    prompt:'The PCs on R1\'s G0/1 LAN are set to obtain their IPv6 settings automatically. How do they get their IPv6 address?',
+    body: cliHtml(cfg.join('\n'),'R1# show running-config interface g0/1')+chipsHtml(V6_METHOD),
+    grade(){
+      const ok=Q.choice===k; markChips(k);
+      const why=[
+        ['No '+mono('ipv6 nd')+' flags are set, so the RA has M = 0 and O = 0: the PCs build their own address from the /64 prefix (SLAAC) and get nothing from DHCPv6.'],
+        [mono('ipv6 nd other-config-flag')+' sets O = 1 (M = 0): the address comes from SLAAC, and the other information (DNS, domain) from '+dns[1]+'.'],
+        [mono('ipv6 nd managed-config-flag')+' sets M = 1: the PCs ask the DHCPv6 server for their address &mdash; stateful DHCPv6.'+(extra?' '+mono('no-autoconfig')+' also tells them not to build a SLAAC address of their own.':'')],
+      ][k];
+      why.push('The default gateway always comes from the RA: R1\'s link-local address, fe80::1.');
+      return {ok, verdict: ok?'Correct.':V6_METHOD[k]+'.', why: ul(why)};
+    },
+  };
+}});
+
+card({id:'g5-v6msgs', area:'dhcp', tier:2, kind:'graded', src:'Q5', title:'DHCPv6 messages in order', gen(){
+  const stateful=chance(.65);
+  const seq=stateful?['SOLICIT','ADVERTISE','REQUEST','REPLY']:['INFORMATION-REQUEST','REPLY'];
+  const dist=shuffle(['DHCPDISCOVER','DHCPOFFER','DHCPACK','ROUTER SOLICITATION'].concat(stateful?['INFORMATION-REQUEST']:['SOLICIT','ADVERTISE'])).slice(0,stateful?2:3);
+  const opts=shuffle(seq.concat(dist)), want=seq.map(m=>opts.indexOf(m));
+  return {
+    prompt:'A PC uses <b>'+(stateful?'stateful':'stateless')+' DHCPv6</b>. It has already received the router\'s RA. Click the DHCPv6 messages it exchanges with the server, in order &mdash; some of these aren\'t part of it. Click a chosen message again to undo it.',
+    body: ordHtml(opts),
+    grade(){
+      const ok=Q.order.length===seq.length&&Q.order.every((v,i)=>v===want[i]);
+      document.querySelectorAll('#qbody .ex-ord').forEach(b=>{
+        const i=+b.dataset.o, pos=want.indexOf(i), mine=Q.order.indexOf(i); b.disabled=true; b.classList.remove('on');
+        b.querySelector('.ex-ord-n').textContent=pos>=0?pos+1:'✕';
+        if(pos>=0&&mine===pos) b.classList.add('ex-ok'); else if(mine>=0||pos>=0) b.classList.add('ex-bad');
+      });
+      return {ok, verdict: ok?'Correct.':seq.join(', ')+'.', why: ul([
+        stateful?'Stateful DHCPv6 is four messages, like DORA: <b>SOLICIT</b> (client, to the all-DHCP-servers multicast ff02::1:2) &rarr; <b>ADVERTISE</b> &rarr; <b>REQUEST</b> &rarr; <b>REPLY</b>.':
+          'Stateless DHCPv6 is just <b>INFORMATION-REQUEST</b> &rarr; <b>REPLY</b>: the client already has its SLAAC address and only asks for the other information (DNS, domain).',
+        'DHCPDISCOVER, OFFER and ACK are DHCPv4; the Router Solicitation is ICMPv6, sent to the router before any of this.'])};
+    },
+  };
+}});
+
+card({id:'g5-v6relay', area:'dhcp', tier:2, kind:'graded', src:'Q5', title:'Configure a DHCPv6 relay', gen(){
+  const lanIf=pick(['G0/0','G0/1']), other=lanIf==='G0/0'?'G0/1':'G0/0', n=ri(10,59), sn=n+ri(1,40), srv='2001:db8:acad:'+sn+'::'+pick(['5','10','53','100','a']);
+  const ifs=['G0/0','G0/1','S0/0/0'];
+  const rows=[[lanIf,'2001:db8:acad:'+n+'::1/64','the PCs'],[other,'2001:db8:acad:'+(n+60)+'::1/64','printers (no DHCPv6 server)'],['S0/0/0','2001:db8:acad:1::1/64','R2, whose LAN 2001:db8:acad:'+sn+'::/64 holds the DHCPv6 server '+srv]]
+    .sort((a,b)=>a[0]<b[0]?-1:1);
+  return {
+    prompt:'The PCs on R1\'s <b>'+lanIf+'</b> LAN must get their IPv6 settings from the DHCPv6 server <b>'+srv+'</b>, on another network. Which R1 interface needs configuring, and what command goes on it?',
+    body:'<div class="ex-scroll"><table class="rt-table ex-table"><thead><tr><th>R1 interface</th><th>Address</th><th>Connects to</th></tr></thead><tbody>'+
+      rows.map(r=>'<tr><td>'+r[0]+'</td><td>'+r[1]+'</td><td style="font-family:var(--font)">'+r[2]+'</td></tr>').join('')+'</tbody></table></div>'+
+      '<div class="ex-apply"><span class="ex-apply-lbl">Interface:</span>'+chipsHtml(ifs)+'</div>'+fieldHtml('cmd','Command (interface configuration mode)','e.g. ipv6 dhcp relay destination 2001:db8:ffff::5',true),
+    grade(){
+      const okI=Q.choice===ifs.indexOf(lanIf); markChips(ifs.indexOf(lanIf));
+      const n2=iosNorm(cmdLines('cmd')[0]||''), m=/^ipv6 dhcp relay destination (\S+)( \S+)?$/.exec(n2);
+      const okC=!!m&&NR.ac6Parse(m[1])===NR.ac6Parse(srv);
+      markField('cmd',okC,'ipv6 dhcp relay destination '+srv);
+      return {ok:okI&&okC, verdict: okI&&okC?'Correct.':'ipv6 dhcp relay destination '+srv+' on '+lanIf+'.', why: ul([
+        /ip helper/.test(n2)?mono('ip helper-address')+' only relays DHCPv4. For DHCPv6 it is '+mono('ipv6 dhcp relay destination')+'.':'The relay goes on the interface that <b>hears the clients</b>: '+lanIf+'.',
+        mono('ipv6 dhcp relay destination '+srv)+' makes R1 forward the clients\' DHCPv6 multicasts (to ff02::1:2) to the server as unicasts.'])};
+    },
+  };
+}});
+
+/* Stateless or stateful DHCPv6 server on R1, graded by mode: pool lines
+   under "ipv6 dhcp pool", the rest under the LAN interface. */
+card({id:'g5-v6cfg', area:'dhcp', tier:3, kind:'graded', src:'Q5', title:'Configure a DHCPv6 server', gen(){
+  const stateful=chance(.5), n=ri(10,99), name=pick(['IPV6-STATELESS','IPV6-STATEFUL','LAN'+n,'R1-POOL']).replace('STATELESS',stateful?'STATEFUL':'STATELESS');
+  const dns='2001:db8:acad:'+pick([1,2,3,100])+'::'+pick(['53','5','254']), dom=pick(['ccna-lab.com','example.net','branch.local','netacad.com']);
+  const pfx='2001:db8:acad:'+n+'::';
+  const model=['ipv6 dhcp pool '+name].concat(stateful?[' address prefix '+pfx+'/64']:[]).concat([' dns-server '+dns,' domain-name '+dom,'interface g0/1',' ipv6 dhcp server '+name,' ipv6 nd '+(stateful?'managed':'other')+'-config-flag']);
+  return {
+    prompt:'Make R1 a <b>'+(stateful?'stateful':'stateless')+' DHCPv6</b> server for its G0/1 LAN ('+pfx+'/64). Create a pool named <b>'+name+'</b> that gives out the DNS server <b>'+dns+'</b> and the domain name <b>'+dom+'</b>'+
+      (stateful?', and leases addresses from the LAN\'s prefix':'')+'. Then enable it on G0/1 and set the RA flag the PCs need.',
+    body: cmdsHtml('v6','Commands &mdash; one per line, Ctrl+Enter submits','e.g. ipv6 dhcp pool EXAMPLE',7),
+    grade(){
+      let why=null, mode='', seen={pool:false,dns:false,dom:false,addr:false,srv:false,flag:false};
+      for(const raw of cmdLines('v6')){
+        const l=iosNorm(raw), t=raw.trim().split(/\s+/); let m;
+        if(l==='exit'||l==='end'){ mode=''; continue; }
+        if(l==='ipv6 unicast-routing'){ mode=''; continue; }
+        if(/^ipv6 dhcp pool \S+$/.test(l)){ if(t[3]!==name){ why=t[3].toLowerCase()===name.toLowerCase()?'Pool names are case-sensitive: '+name+', not '+t[3]+'.':'The pool should be named '+name+'.'; break; } mode='pool'; seen.pool=true; continue; }
+        if((m=/^interface (\S+)$/.exec(l))){ mode=NR.acIfNorm(m[1]); continue; }
+        if(mode==='pool'){
+          if((m=/^dns-server (\S+)$/.exec(l))){ if(NR.ac6Parse(m[1])!==NR.ac6Parse(dns)){ why='The DNS server should be '+dns+'.'; break; } seen.dns=true; continue; }
+          if((m=/^domain-name (\S+)$/.exec(l))){ if(m[1]!==dom){ why='The domain name should be '+dom+'.'; break; } seen.dom=true; continue; }
+          if((m=/^address prefix (\S+)\/(\d+)( .*)?$/.exec(l))){ if(!stateful){ why='A stateless pool hands out no addresses &mdash; leave out address prefix.'; break; }
+            if(NR.ac6Parse(m[1])!==NR.ac6Parse(pfx)||m[2]!=='64'){ why='The prefix should be '+pfx+'/64.'; break; } seen.addr=true; continue; }
+          why='"'+raw+'" isn\'t a pool command needed here.'; break;
+        }
+        if(mode==='g0/1'){
+          if((m=/^ipv6 dhcp server (\S+)( .*)?$/.exec(l))){ if(t[3]!==name){ why='ipv6 dhcp server must name the pool exactly: '+name+'.'; break; } seen.srv=true; continue; }
+          if(l==='ipv6 nd managed-config-flag'){ if(!stateful){ why='The M (managed) flag makes the PCs use stateful DHCPv6 &mdash; stateless needs the O flag, ipv6 nd other-config-flag.'; break; } seen.flag=true; continue; }
+          if(l==='ipv6 nd other-config-flag'){ if(stateful){ seen.o=true; continue; } seen.flag=true; continue; }
+          if(/^ipv6 nd prefix default no-autoconfig$/.test(l)||/^ipv6 address /.test(l)||l==='no shutdown') continue;
+          why='"'+raw+'" isn\'t needed on G0/1.'; break;
+        }
+        why=mode?'"'+raw+'" doesn\'t belong under interface '+mode+'.':'"'+raw+'": start the pool with ipv6 dhcp pool '+name+'.'; break;
+      }
+      if(!why&&!seen.pool) why='Create the pool: ipv6 dhcp pool '+name+'.';
+      if(!why&&!seen.dns) why='The pool has no dns-server.';
+      if(!why&&!seen.dom) why='The pool has no domain-name.';
+      if(!why&&stateful&&!seen.addr) why='A stateful pool needs address prefix '+pfx+'/64 to lease addresses from.';
+      if(!why&&!seen.srv) why='Enable the pool on G0/1 with ipv6 dhcp server '+name+'.';
+      if(!why&&!seen.flag) why=stateful?'Set the M flag on G0/1 (ipv6 nd managed-config-flag) or the PCs will never ask for an address.':'Set the O flag on G0/1 (ipv6 nd other-config-flag) or the PCs will never ask for the DNS server.';
+      markCmds('v6',!why,model.join('\n'),why);
+      return {ok:!why, verdict: !why?'Correct.':'Not quite.', why: ul([...(why?[why]:[]),'e.g.<br>'+model.map(l=>mono(l.trim())).join('<br>'),
+        stateful?'The M flag tells the PCs to get their address from DHCPv6; the pool\'s address prefix is where it comes from.':'Stateless: the PCs keep their SLAAC address, and the O flag tells them to ask DHCPv6 only for the other information.',
+        'There is no default-router in a DHCPv6 pool: the gateway always comes from the RA.'])};
+    },
+  };
+}});
+
 /* ═══ Q6 — Router-on-a-stick ══════════════════════════════════════════════ */
 function q6Plan(){ const v=pick([[10,20],[30,40],[15,25],[100,200],[50,60],[11,22]]); return {x:v[0], y:v[1], h1:ri(10,99), h2:ri(10,99)}; }
 const Q6_CAUSE={
@@ -1492,7 +2094,7 @@ function q6Body(P,cfg,hosts){
       '<tr><td>H2</td><td>'+P.y+'</td><td>192.168.'+P.y+'.'+P.h2+'/24</td><td>192.168.'+P.y+'.1</td></tr></tbody></table></div>':'');
 }
 
-card({id:'q6-roas', area:'vlan', tier:1, kind:'flash', src:'Q6', title:'Router-on-a-stick: what\'s wrong?', gen(){
+card({id:'q6-roas', area:'ts', tier:1, kind:'flash', src:'Q6', title:'Router-on-a-stick: what\'s wrong?', gen(){
   const P=chance(.6)?{x:10,y:20,h1:10,h2:10}:q6Plan();
   return {
     prompt:'In the figure, host H1 cannot communicate with host H2. Clearly identify, describe and explain the cause of the problem. What modifications do you need to make to fix it?',
@@ -1524,7 +2126,7 @@ function q6ModelText(P,fault){
   return q6Fix(P,fault).map(p=>'interface '+(name[p[0]]||p[0].replace(/^g/,'gi'))+'\n '+p[1]).join('\n');
 }
 function q6FaultCard(id,tier,title,faults){
-  card({id, area:'vlan', tier, kind:'graded', src:'Q6', title, gen(){
+  card({id, area:'ts', tier, kind:'graded', src:'Q6', title, gen(){
     const P=q6Plan(), fault=pick(faults), causes=Object.keys(Q6_CAUSE), ans=causes.indexOf(fault);
     return {
       prompt:'Host H1 cannot communicate with host H2. Pick the cause, then type the commands that fix it (interface lines included).',
@@ -1551,7 +2153,7 @@ function q6FaultCard(id,tier,title,faults){
 q6FaultCard('g6-fault',2,'Router-on-a-stick fault',['access','trunk','shut']);
 q6FaultCard('g6-fault-hard',3,'Router-on-a-stick: subtler faults',['tag','ip','swap']);
 
-card({id:'g6-subif', area:'vlan', tier:2, kind:'graded', src:'Q6', title:'Add a VLAN to the router', gen(){
+card({id:'g6-subif', area:'ts', tier:2, kind:'graded', src:'Q6', title:'Add a VLAN to the router', gen(){
   const v=pick([30,40,50,60,70,99,110,150]), native=chance(.3), gwo=pick([1,1,254]);
   const model=['interface gi0/0.'+v,' encapsulation dot1q '+v+(native?' native':''),' ip address 192.168.'+v+'.'+gwo+' 255.255.255.0'];
   return {
@@ -1573,6 +2175,208 @@ card({id:'g6-subif', area:'vlan', tier:2, kind:'graded', src:'Q6', title:'Add a 
         'The subinterface number doesn\'t have to match the VLAN, but matching it is the convention; the '+mono('encapsulation dot1q')+' line is what ties it to VLAN '+v+
         (native?', and <b>native</b> makes it send and receive that VLAN untagged':'')+'.'])};
     },
+  };
+}});
+
+/* ═══ Q6 — troubleshooting beyond router-on-a-stick ══════════════════════
+   The practice exam's Q6 shape: a symptom, the configuration, "identify the
+   cause and fix it". Each scenario builds one random network with one fault
+   and knows its cause, four plausible wrong causes, how to check a typed
+   fix, a model fix, and key-word points for the written (flashcard) form. */
+function tsPlan(){
+  const t=shuffle(Array.from({length:200},(_,i)=>i+10)).slice(0,3);
+  return {A:'192.168.'+t[0], B:'192.168.'+t[1], C:'192.168.'+t[2], wan:rLink30()};
+}
+function tsTable(P){
+  const w1=int2ip(P.wan+1), w2=int2ip(P.wan+2);
+  const r=(d,i,a,c)=>'<tr><td>'+d+'</td><td>'+i+'</td><td>'+a+'</td><td style="font-family:var(--font)">'+c+'</td></tr>';
+  return '<div class="ex-scroll"><table class="rt-table ex-table"><thead><tr><th>Device</th><th>Interface</th><th>Address</th><th>Connects to</th></tr></thead><tbody>'+
+    r('R1','G0/0',P.A+'.1/24','LAN-A (PCs)')+r('','G0/1',P.C+'.1/24','LAN-C')+r('','S0/0/0',w1+'/30','R2 S0/0/0')+
+    r('R2','G0/0',P.B+'.1/24','LAN-B (servers, incl. '+P.B+'.10)')+r('','S0/0/0',w2+'/30','R1 S0/0/0')+'</tbody></table></div>';
+}
+/* every "ip access-group N in|out" (and its "no" form) under one interface */
+function tsAclApplied(sc,ifc){
+  return sc.filter(o=>o.ifc===ifc).map(o=>/^(no )?ip access-g\S* (\S+)(?: (in|out))?$/.exec(o.cmd)).filter(Boolean).map(m=>({no:!!m[1], num:m[2], dir:m[3]||null}));
+}
+const TS_SCEN={
+  relay(){
+    const P=tsPlan(), srv=P.B+'.10', wrong=chance(.5)?pick([int2ip(P.wan+2),P.B+'.1',P.B+'.11']):null;
+    const r1='interface GigabitEthernet0/0\n ip address '+P.A+'.1 255.255.255.0'+(wrong?'\n ip helper-address '+wrong:'')+
+      '\ninterface Serial0/0/0\n ip address '+int2ip(P.wan+1)+' 255.255.255.252\n!\nip route '+P.B+'.0 255.255.255.0 '+int2ip(P.wan+2);
+    return {P, body:tsTable(P)+cliHtml(r1,'R1# show running-config (extract)'),
+      symptom:'The PCs on LAN-A are set to get their addresses by DHCP, but they all end up with 169.254.x.x addresses. The DHCP server '+srv+' on LAN-B has a pool for LAN-A, and a LAN-A host with a static address can ping it.',
+      cause:'R1 G0/0 doesn\'t relay the PCs\' DHCP requests to '+srv+' &mdash; its ip helper-address is '+(wrong?'wrong':'missing'),
+      others:['The DHCP server must be on LAN-A &mdash; DHCP can never cross a router','R1 has no route to LAN-B','The relay belongs on R2 G0/0, next to the server','The PCs need a default gateway set before DHCP can work'],
+      check(lines){ const sc=iosScript(lines);
+        const h=sc.filter(o=>o.ifc==='g0/0').map(o=>/^(no )?ip helper-address (\S+)$/.exec(o.cmd)).filter(Boolean);
+        if(!h.some(m=>!m[1]&&ip2int(m[2])===ip2int(srv))) return 'G0/0 needs ip helper-address '+srv+'.';
+        if(wrong&&!h.some(m=>m[1]&&ip2int(m[2])===ip2int(wrong))) return 'Remove the wrong relay too: no ip helper-address '+wrong+'.';
+        return null; },
+      model:['interface g0/0'].concat(wrong?[' no ip helper-address '+wrong]:[]).concat([' ip helper-address '+srv]),
+      points:['The PCs\' 169.254.x.x addresses mean DHCP failed. Their DHCPDISCOVER is a [[broadcast|broadcasts]], and R1 [[does not forward broadcasts|doesn\'t forward|not forwarded|drops|blocks|stops]] onto other networks, so it never reaches '+srv+'.',
+        'R1 G0/0 '+(wrong?'relays to the wrong address ('+wrong+')':'has no relay configured')+' &mdash; the [[ip helper-address|helper-address|helper address|relay|relay agent]] must name the DHCP server.',
+        'Fix: on R1 [[interface g0/0|g0/0|G0/0|GigabitEthernet0/0]] (the interface facing the clients) '+(wrong?'remove the wrong helper and ':'')+'add ip helper-address '+srv+'.']};
+  },
+  natin(){
+    const P=natPlan(), wrongOut=chance(.4);
+    const cfg='interface GigabitEthernet0/1\n ip address '+int2ip(P.gw)+' 255.255.255.0'+(wrongOut?'\n ip nat outside':'')+
+      '\ninterface Serial0/0/1\n ip address '+int2ip(P.gwOut)+' 255.255.255.252\n ip nat outside\n!\naccess-list 1 permit '+int2ip(P.lan)+' 0.0.0.255\nip nat inside source list 1 interface Serial0/0/1 overload\nip route 0.0.0.0 0.0.0.0 '+int2ip(P.isp);
+    return {P, body:natTableHtml(P,false)+cliHtml(cfg,'Gateway# show running-config (extract)'),
+      symptom:'The PCs can ping the Gateway\'s G0/1 and S0/0/1 addresses, but not the ISP\'s Lo0 ('+int2ip(P.lo)+'). '+mono('show ip nat translations')+' on the Gateway is empty.',
+      cause:'G0/1 isn\'t marked as the NAT inside interface',
+      others:['access-list 1 doesn\'t match the LAN','PAT needs a pool &mdash; it can\'t use the interface address','The Gateway has no route to the ISP','S0/0/1 should be ip nat inside'],
+      check(lines){ const sc=iosScript(lines);
+        if(!hasCmd(sc,'g0/1','ip nat inside')) return 'G0/1 needs ip nat inside.';
+        if(wrongOut&&!hasCmd(sc,'g0/1','no ip nat outside')) return 'G0/1 is also marked outside &mdash; remove it with no ip nat outside.';
+        return null; },
+      model:['interface g0/1'].concat(wrongOut?[' no ip nat outside']:[]).concat([' ip nat inside']),
+      points:['Nothing is translated (the translation table is empty), so the PCs\' pings leave with their [[private|private address|private addresses|192.168]] source addresses and the ISP can\'t reply.',
+        'NAT only translates traffic that arrives on an [[inside|ip nat inside|nat inside]] interface and leaves an outside one. G0/1 '+(wrongOut?'is marked outside instead':'isn\'t marked at all')+'.',
+        'Fix: [[interface g0/1|g0/1|G0/1|GigabitEthernet0/1]] '+(wrongOut?'no ip nat outside, then ':'')+'ip nat inside.']};
+  },
+  natacl(){
+    const P=natPlan(), k=pick(['mask','net']), x=(P.lan>>>8)&255;
+    const bad=k==='mask'?'access-list 1 permit '+int2ip(P.lan)+' 255.255.255.0':'access-list 1 permit 192.168.'+((x+1)&255)+'.0 0.0.0.255';
+    const cfg='interface GigabitEthernet0/1\n ip address '+int2ip(P.gw)+' 255.255.255.0\n ip nat inside\ninterface Serial0/0/1\n ip address '+int2ip(P.gwOut)+' 255.255.255.252\n ip nat outside\n!\n'+bad+'\nip nat inside source list 1 interface Serial0/0/1 overload\nip route 0.0.0.0 0.0.0.0 '+int2ip(P.isp);
+    return {P, body:natTableHtml(P,false)+cliHtml(cfg,'Gateway# show running-config (extract)'),
+      symptom:'The PCs can ping the Gateway\'s G0/1 and S0/0/1 addresses, but not the ISP\'s Lo0 ('+int2ip(P.lo)+'). '+mono('show ip nat translations')+' on the Gateway is empty.',
+      cause:'access-list 1 doesn\'t match the PCs\' addresses, so NAT never translates them',
+      others:['G0/1 isn\'t marked ip nat inside','The NAT rule is missing overload','The ISP has no route to the public address','NAT needs a pool &mdash; it can\'t use the interface address'],
+      check(lines){
+        const acc=lines.filter(l=>/^acc/i.test(l)), del=lines.some(l=>/^no acc\S* 1$/i.test(l.trim()));
+        const p=parseStdAcl((del?[]:[bad]).concat(acc));
+        if(p.err) return acc.length?p.err:'Add an access-list 1 line that matches '+cidr(P.lan,24)+'.';
+        for(const o of [2,77,254]) if(NR.aclEvaluate(p.acl,P.lan+o,false).action!=='permit') return 'access-list 1 still doesn\'t match '+int2ip(P.lan+o)+'.';
+        for(const ip of [P.lan+256,P.lan-256]) if(NR.aclEvaluate(p.acl,ip>>>0,false).action==='permit') return 'access-list 1 now also matches '+int2ip(ip>>>0)+'.';
+        return null; },
+      model:['no access-list 1','access-list 1 permit '+int2ip(P.lan)+' 0.0.0.255'],
+      points:['The translation table is empty: NAT only translates sources that the [[access list|access-list|ACL|access-list 1]] permits.',
+        k==='mask'?'access-list 1 uses '+mono('255.255.255.0')+' &mdash; a [[subnet mask|mask instead of a wildcard|not a wildcard|wrong wildcard]] &mdash; where a wildcard belongs, so it matches only addresses ending in .0.':
+          'access-list 1 names the [[wrong network|wrong subnet|192.168.'+((x+1)&255)+'.0]] (192.168.'+((x+1)&255)+'.0), not the PCs\' '+cidr(P.lan,24)+'.',
+        'Fix: replace it with access-list 1 permit '+int2ip(P.lan)+' [[0.0.0.255]].']};
+  },
+  staticnet(){
+    const P=tsPlan(), bOct=+P.B.split('.')[2], wrongNet='192.168.'+(bOct===254?bOct-1:bOct+1)+'.0';
+    const r1='interface Serial0/0/0\n ip address '+int2ip(P.wan+1)+' 255.255.255.252\n!\nip route '+wrongNet+' 255.255.255.0 '+int2ip(P.wan+2);
+    const r2='interface Serial0/0/0\n ip address '+int2ip(P.wan+2)+' 255.255.255.252\n!\nip route '+P.A+'.0 255.255.255.0 '+int2ip(P.wan+1)+'\nip route '+P.C+'.0 255.255.255.0 '+int2ip(P.wan+1);
+    return {P, body:tsTable(P)+cliHtml(r1,'R1 (extract)')+cliHtml(r2,'R2 (extract)'),
+      symptom:'PCs on LAN-A can ping R2\'s S0/0/0 ('+int2ip(P.wan+2)+') but not the servers on LAN-B. LAN-B hosts can ping R1\'s S0/0/0.',
+      cause:'R1\'s static route names the wrong network, so R1 has no route to LAN-B',
+      others:['R2 has no route back to LAN-A','R1 S0/0/0 needs a clock rate','The static route needs an administrative distance','R2 G0/0 is shut down'],
+      check(lines){
+        const ok=lines.map(iosNorm).some(l=>{ const m=/^ip ro\S* (\S+) (\S+) (\S+)(?: \d+)?$/.exec(l); return m&&ip2int(m[1])===ip2int(P.B+'.0')&&m[2]==='255.255.255.0'&&(ip2int(m[3])===P.wan+2||NR.acIfNorm(m[3])==='s0/0/0'); });
+        return ok?null:'R1 needs ip route '+P.B+'.0 255.255.255.0 '+int2ip(P.wan+2)+'.'; },
+      model:['no ip route '+wrongNet+' 255.255.255.0 '+int2ip(P.wan+2),'ip route '+P.B+'.0 255.255.255.0 '+int2ip(P.wan+2)],
+      points:['R1 can reach R2 (the serial link works) but has [[no route|no route to|missing route|not in the routing table]] to LAN-B, '+P.B+'.0/24, so it drops the PCs\' packets.',
+        'Its static route was typed for '+wrongNet+' &mdash; the [[wrong network|wrong destination|typo|incorrect network]].',
+        'R2\'s routes back to LAN-A and LAN-C are fine, which is why LAN-B can reach R1.',
+        'Fix: on R1 add [[ip route '+P.B+'.0 255.255.255.0|ip route]] '+int2ip(P.wan+2)+' (and remove the wrong route).']};
+  },
+  acldir(){
+    const P=tsPlan(), n=ri(1,99);
+    const r2='access-list '+n+' deny '+P.C+'.0 0.0.0.255\naccess-list '+n+' permit any\n!\ninterface GigabitEthernet0/0\n ip address '+P.B+'.1 255.255.255.0\n ip access-group '+n+' in';
+    return {P, body:tsTable(P)+cliHtml(r2,'R2# show running-config (extract)'),
+      symptom:'The policy is that hosts on <b>LAN-C</b> ('+P.C+'.0/24) must not reach <b>LAN-B</b>; everything else is allowed. ACL '+n+' was written for it, but LAN-C hosts can still reach the LAN-B servers.',
+      cause:'ACL '+n+' is applied inbound on R2 G0/0, so it only checks traffic leaving LAN-B',
+      others:['A standard ACL must go near the source, on R1 G0/1','The wildcard 0.0.0.255 matches the wrong hosts','permit any has to come before the deny','A standard ACL can\'t do this &mdash; it needs an extended ACL'],
+      check(lines){ const a=tsAclApplied(iosScript(lines),'g0/0');
+        if(!a.some(x=>!x.no&&x.num===String(n)&&x.dir==='out')) return 'Apply it outbound on G0/0: ip access-group '+n+' out.';
+        if(!a.some(x=>x.no&&x.num===String(n)&&x.dir!=='out')) return 'Remove the inbound one too: no ip access-group '+n+' in.';
+        return null; },
+      model:['interface g0/0',' no ip access-group '+n+' in',' ip access-group '+n+' out'],
+      points:['ACL '+n+' matches the [[source address|source addresses|only the source|source only]] LAN-C, but it sits [[inbound|incoming|ip access-group '+n+' in]] on R2 G0/0, where every packet comes from LAN-B &mdash; nothing from LAN-C ever passes through it in that direction.',
+        'A standard ACL goes near the [[destination|destinations]], on the interface facing LAN-B, but [[outbound|outgoing]] so it checks traffic going into LAN-B.',
+        'Fix: on R2 interface g0/0, no ip access-group '+n+' in, then ip access-group '+n+' out.']};
+  },
+  ospf(){
+    const P=tsPlan(), fault=pick(['timers','area']), h=pick([5,15,20,30]), ar=pick([1,2,5]);
+    const w=int2ip(P.wan);
+    const r1='interface Serial0/0/0\n ip address '+int2ip(P.wan+1)+' 255.255.255.252\n!\nrouter ospf 1\n network '+P.A+'.0 0.0.0.255 area 0\n network '+P.C+'.0 0.0.0.255 area 0\n network '+w+' 0.0.0.3 area 0';
+    const r2='interface Serial0/0/0\n ip address '+int2ip(P.wan+2)+' 255.255.255.252'+(fault==='timers'?'\n ip ospf hello-interval '+h:'')+'\n!\nrouter ospf 1\n network '+P.B+'.0 0.0.0.255 area 0\n network '+w+' 0.0.0.3 area '+(fault==='area'?ar:0);
+    return {P, body:tsTable(P)+cliHtml(r1,'R1 (extract)')+cliHtml(r2,'R2 (extract)'),
+      symptom:'R1 and R2 never become OSPF neighbours ('+mono('show ip ospf neighbor')+' is empty on both), so LAN-A can\'t reach LAN-B. Fix it <b>on R2</b>.',
+      cause: fault==='timers'?'The hello and dead intervals on the R1–R2 link don\'t match':'The R1–R2 link is in different areas on R1 and R2',
+      others:[fault==='timers'?'The R1–R2 link is in different areas on R1 and R2':'The hello and dead intervals on the R1–R2 link don\'t match','R2\'s network command has the wrong wildcard','R2 S0/0/0 is a passive interface','R1 and R2 have the same router ID'],
+      check(lines){
+        let mode='', hello=fault==='timers'?h:10, dead=null; const nets=[{a:P.wan,w:3,area:fault==='area'?ar:0},{a:ip2int(P.B+'.0'),w:255,area:0}];
+        for(const raw of lines){ const l=iosNorm(raw); let m;
+          if((m=/^interface (\S+)$/.exec(l))){ mode=NR.acIfNorm(m[1]); continue; }
+          if(/^router ospf \d+$/.test(l)){ mode='ospf'; continue; }
+          if(mode==='s0/0/0'){
+            if((m=/^ip ospf hello-interval (\d+)$/.exec(l))){ hello=+m[1]; continue; }
+            if(l==='no ip ospf hello-interval'||/^no ip ospf hello-interval \d+$/.test(l)){ hello=10; continue; }
+            if((m=/^ip ospf dead-interval (\d+)$/.exec(l))){ dead=+m[1]; continue; }
+            if(/^no ip ospf dead-interval/.test(l)){ dead=null; continue; }
+          }
+          if(mode==='ospf'&&(m=/^(no )?network (\S+) (\S+) area (\S+)$/.exec(l))){
+            const a=ip2int(m[2]), wc=ip2int(m[3]), A=/^\d+$/.test(m[4])?+m[4]:ip2int(m[4]); if(a==null||wc==null||A==null) return '"'+raw+'" has an invalid address, wildcard or area.';
+            if(m[1]){ const i=nets.findIndex(s=>((s.a&~s.w)>>>0)===((a&~wc)>>>0)&&s.w===wc&&s.area===A); if(i>=0) nets.splice(i,1); }
+            else nets.push({a,w:wc,area:A});
+          }
+        }
+        const d=dead!=null?dead:4*hello;
+        if(hello!==10||d!==40) return 'R2\'s link would still use hello '+hello+' / dead '+d+'; R1 uses 10 / 40.';
+        const r=ospfAreaOf(nets,P.wan+2);
+        if(!r.hit.length) return 'R2 S0/0/0 would no longer run OSPF at all.';
+        if(r.areas.length>1) return 'R2 still has network commands putting the link in two areas &mdash; remove the wrong one with no network.';
+        if(r.areas[0]!==0) return 'R2 would still put the link in area '+areaTxt(r.areas[0])+'; R1 has it in area 0.';
+        return null; },
+      model: fault==='timers'?['interface s0/0/0',' no ip ospf hello-interval']:['router ospf 1',' no network '+w+' 0.0.0.3 area '+ar,' network '+w+' 0.0.0.3 area 0'],
+      points: fault==='timers'?[
+        'R2 sets [[ip ospf hello-interval '+h+'|hello-interval|hello interval|hello timer|hello]] '+h+' on S0/0/0, which also makes its dead interval '+(4*h)+'; R1 uses the defaults, 10 and 40.',
+        'OSPF neighbours must have [[must match|matching|mismatch|mismatched|same on both|identical]] hello and dead intervals, so the adjacency never forms and no routes are exchanged.',
+        'Fix: on R2 [[interface s0/0/0|s0/0/0|S0/0/0|Serial0/0/0]], no ip ospf hello-interval (back to 10/40).']:[
+        'R2 puts the R1–R2 link in [[area '+ar+']] while R1 has it in area 0.',
+        'Both ends of a link must be in the [[same area|matching area|area mismatch|different areas]], or their hellos are rejected and no adjacency forms.',
+        'Fix: under [[router ospf 1|router ospf]] on R2, no network '+w+' 0.0.0.3 area '+ar+', then network '+w+' 0.0.0.3 area 0.'],
+    };
+  },
+  poolgw(){
+    const P=tsPlan(), name=pick(['LAN-A','POOL-A','PCS']), lo=ri(5,20), bad=pick([P.A+'.254',P.A+'.'+lo,P.B+'.1']);
+    const r1='ip dhcp excluded-address '+P.A+'.1 '+P.A+'.'+lo+'\n!\nip dhcp pool '+name+'\n network '+P.A+'.0 255.255.255.0\n default-router '+bad+'\n dns-server '+P.B+'.10\n!\ninterface GigabitEthernet0/0\n ip address '+P.A+'.1 255.255.255.0';
+    return {P, body:tsTable(P)+cliHtml(r1,'R1# show running-config (extract)'),
+      symptom:'The PCs on LAN-A get addresses from R1 (e.g. '+P.A+'.'+(lo+1)+') and can ping each other, but can\'t reach anything off LAN-A &mdash; not even R1\'s S0/0/0.',
+      cause:'R1\'s DHCP pool gives the PCs the wrong default gateway',
+      others:['R1 G0/0 needs ip helper-address','The excluded range overlaps the pool','The pool\'s network command is wrong','R1 G0/0 is shut down'],
+      check(lines){ let inPool=false, gw=null;
+        for(const raw of lines){ const l=iosNorm(raw), t=raw.trim().split(/\s+/); let m;
+          if(/^ip dhcp pool \S+$/.test(l)){ inPool=t[3]===name; if(!inPool) return t[3].toLowerCase()===name.toLowerCase()?'Pool names are case-sensitive: '+name+', not '+t[3]+'.':'The existing pool is '+name+'.'; continue; }
+          if(/^interface /.test(l)){ inPool=false; continue; }
+          if(inPool&&(m=/^default-router (\S+)$/.exec(l))) gw=m[1];
+        }
+        return gw!=null&&ip2int(gw)===ip2int(P.A+'.1')?null:'Under ip dhcp pool '+name+', set default-router '+P.A+'.1.'; },
+      model:['ip dhcp pool '+name,' default-router '+P.A+'.1'],
+      points:['The PCs get addresses, so DHCP itself works, but they are told their [[default gateway|gateway|default-router]] is '+bad+' &mdash; and R1\'s LAN interface is '+P.A+'.1.',
+        'Traffic for other networks is sent to a gateway that '+(bad===P.B+'.1'?'isn\'t even on LAN-A':'doesn\'t exist')+', so nothing leaves the LAN, while traffic inside LAN-A still works.',
+        'Fix: under [[ip dhcp pool '+name+'|ip dhcp pool|the pool]], default-router '+P.A+'.1; the PCs pick it up when they renew their lease.']};
+  },
+};
+function tsBuild(id){
+  const s=TS_SCEN[id](), opts=shuffle([s.cause].concat(s.others)); s.id=id; s.opts=opts; s.ans=opts.indexOf(s.cause); return s;
+}
+function tsCard(id,tier,title,scen){
+  card({id, area:'ts', tier, kind:'graded', src:'Q6', title, gen(){
+    const s=tsBuild(pick(scen));
+    return {
+      prompt:s.symptom+' Pick the cause, then type the commands that fix it (interface or mode lines included).',
+      body: s.body+chipsHtml(s.opts)+cmdsHtml('fix','Fix &mdash; one command per line, Ctrl+Enter submits','e.g. interface g0/9',4),
+      grade(){
+        const okC=Q.choice===s.ans; markChips(s.ans);
+        const err=s.check(cmdLines('fix')), okF=!err;
+        markCmds('fix',okF,s.model.join('\n'),err);
+        return {ok:okC&&okF, verdict: okC&&okF?'Correct.':s.cause.replace(/&mdash;.*/,'').trim()+'.',
+          why: ul(s.points.map(p=>p.replace(KW_RE,(m,b)=>b.split('|')[0])).concat(['Fix:<br>'+s.model.map(l=>mono(l.trim())).join('<br>')]))};
+      },
+    };
+  }});
+}
+tsCard('g6-ts',2,'Troubleshoot: DHCP, NAT, static routes',['relay','natin','staticnet']);
+tsCard('g6-ts-hard',3,'Troubleshoot: ACLs, OSPF, DHCP pools',['acldir','ospf','poolgw','natacl']);
+card({id:'q6-ts', area:'ts', tier:2, kind:'flash', src:'Q6', title:'Troubleshoot it in writing', gen(){
+  const s=tsBuild(pick(Object.keys(TS_SCEN)));
+  return {
+    prompt:s.symptom.replace(/ Fix it <b>on R2<\/b>\./,'')+' Clearly identify, describe and explain the cause of the problem. What modifications do you need to make to fix it?',
+    body:s.body, points:s.points,
   };
 }});
 
@@ -1604,7 +2408,11 @@ const DICT=[
   ['connected','Connected route','routing',['connected routes','directly connected','connected network'],['C','AD 0'],"The network on one of the router's own up/up interfaces, added automatically. AD 0, so it always wins."],
   ['local','Local route','routing',['local routes','local route'],['L','/32'],"A /32 route for the router's own interface address, added next to each connected network. A packet to that address is for the router itself."],
   ['summary','Summary route','routing',['summary routes','supernet','supernets','summarise','summarize','summarisation','summarization','route summarisation'],[],"One route with a shorter prefix covering several contiguous networks — e.g. 210.84.0.0/14 covers 210.84.0.0 to 210.87.255.255. Smaller routing tables, fewer updates."],
-  ['rip','RIP','routing',['Routing Information Protocol','RIPv1','RIPv2'],['AD 120','hop count'],"A distance-vector routing protocol whose metric is hop count (15 at most; 16 means unreachable). Blind to bandwidth, slow to converge."],
+  ['rip','RIP','routing',['Routing Information Protocol','RIPv1','RIPv2'],['AD 120','hop count'],"A distance-vector routing protocol whose metric is hop count (15 at most; 16 means unreachable). Updates every 30 s. RIPv1 is classful and broadcasts; RIPv2 is classless (carries masks), multicasts to 224.0.0.9 and can authenticate. Blind to bandwidth, slow to converge."],
+  ['hopcount','Hop count','routing',['hop count','hop counts','count to infinity','counting to infinity'],['RIP metric','max 15'],"RIP's metric: how many routers lie between here and the destination. 15 is the most; 16 means unreachable (infinity), which stops a routing loop counting up for ever."],
+  ['splithorizon','Split horizon','routing',['split-horizon','route poisoning','poison reverse'],[],"A distance-vector rule: never advertise a route back out of the interface it was learned on. With route poisoning (advertising a failed route at metric 16) it stops routing loops."],
+  ['autosum','Auto-summary','routing',['auto-summary','no auto-summary','discontiguous network','discontiguous networks'],[],"RIP summarises routes to their classful network when it advertises them across a major-network boundary. With a discontiguous network the same /16 then arrives from two directions; RIPv2's no auto-summary turns it off (RIPv1 can't)."],
+  ['classful','Classful','routing',['classful','classless','classful network','classful boundary','major network'],[],"Classful: a network's size follows its first octet — class A /8 (1–126), B /16 (128–191), C /24 (192–223). RIPv1 is classful (no masks in its updates); RIPv2 and OSPF are classless."],
   ['eigrp','EIGRP','routing',['Enhanced Interior Gateway Routing Protocol','External EIGRP'],['AD 90','external 170'],"Cisco's advanced distance-vector protocol, with a metric from bandwidth and delay. Internal routes AD 90; external routes (D EX) AD 170."],
   ['bgp','BGP','routing',['eBGP','iBGP','Border Gateway Protocol'],['eBGP 20','iBGP 200'],"The routing protocol between organisations on the Internet. Routes from another AS (eBGP) have AD 20; from your own AS (iBGP) AD 200."],
   ['isis','IS-IS','routing',['ISIS'],['AD 115'],"A link-state interior routing protocol, like OSPF; mostly used by service providers."],
@@ -1664,6 +2472,13 @@ const DICT=[
   ['vlan1','Default VLAN','vlan',['VLAN 1','default VLAN 1'],[],"VLAN 1: every switch port starts in it, and it is the native VLAN unless changed."],
   ['roas','Router-on-a-stick','vlan',['router on a stick','inter-VLAN routing'],[],"Inter-VLAN routing over one router interface trunked to the switch, with a subinterface per VLAN acting as that VLAN's default gateway."],
   ['subif','Subinterface','vlan',['subinterfaces','sub-interface'],[],"A logical interface on a physical one, such as G0/0.20. On a router-on-a-stick each carries one VLAN (encapsulation dot1q) and holds that VLAN's gateway address."],
+  ['asbr','ASBR','ospf',['ASBRs','autonomous system boundary router'],['type 5 LSA'],"Autonomous System Boundary Router: connects OSPF to routes from outside it (another protocol, a static default to the ISP) and redistributes them in as type 5 LSAs."],
+  ['acl6','IPv6 ACL','acl',['IPv6 ACLs','IPv6 ACL','ipv6 access-list','ipv6 traffic-filter','traffic-filter'],['named only'],"Always named; every entry names the protocol, source and destination, with prefix lengths instead of wildcards. Applied with ipv6 traffic-filter <name> in|out. Ends with implicit permits for neighbour discovery (NS/NA) before the implicit deny."],
+  ['natif','ip nat inside / outside','nat',['ip nat inside','ip nat outside','inside interface','outside interface'],[],"Marks which interfaces face the private network (inside) and the ISP (outside). NAT only translates traffic that crosses from an inside interface to an outside one, and back."],
+  ['slaac','SLAAC','dhcp',['SLAAC','stateless address autoconfiguration'],[],"An IPv6 host builds its own address from the /64 prefix in the router's RA plus an interface ID (EUI-64 or random). No server tracks it; the gateway is the router's link-local address."],
+  ['dhcpv6','DHCPv6','dhcp',['DHCPv6','stateless DHCPv6','stateful DHCPv6','ipv6 dhcp pool','ipv6 dhcp relay destination'],['UDP 546/547'],"Stateless: SLAAC address, other settings (DNS, domain) from the server — INFORMATION-REQUEST, REPLY. Stateful: the server assigns the address too — SOLICIT, ADVERTISE, REQUEST, REPLY. Never gives a default gateway. Relay: ipv6 dhcp relay destination <server>."],
+  ['ra','Router Advertisement','dhcp',['Router Advertisement','router advertisements','RA','RAs','M flag','O flag','managed-config-flag','other-config-flag'],['ICMPv6'],"Sent by an IPv6 router: the prefix, the gateway (its link-local address) and two flags. M = 1 → use stateful DHCPv6; O = 1 (M = 0) → SLAAC plus stateless DHCPv6; both 0 → SLAAC only."],
+  ['linklocal','Link-local address','general',['link-local','link-local address','link-local addresses'],['FE80::/10'],"An IPv6 address valid only on its own link, starting fe80. Every IPv6 interface has one; IPv6 hosts use the router's link-local address as their default gateway."],
   ['shutdown','shutdown / no shutdown','general',['no shutdown','shut down'],[],"Disables / enables an interface. Router interfaces start shut down and need no shutdown; subinterfaces go down with their parent."],
 ].map(r=>({id:r[0], name:r[1], area:r[2], aka:r[3], badges:r[4], desc:r[5], cs:r[0]==='dora'}));
 
