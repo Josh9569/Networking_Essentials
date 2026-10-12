@@ -11,7 +11,7 @@
 <link rel="stylesheet" href="styles.css">
 <!-- ?v= is bumped whenever exam.js / exam.css change, so a browser holding
      the old copy fetches the new one (a removed card kept showing). -->
-<link rel="stylesheet" href="exam.css?v=63">
+<link rel="stylesheet" href="exam.css?v=64">
 <script src="theme.js"></script>
 <script src="custom-theme.js"></script>
 <script src="answer-keys.js"></script>
@@ -56,6 +56,17 @@
         <div class="opt-section-label">Show cards from</div>
         <div id="area-rows"></div>
         <button type="button" class="ex-area-all" onclick="allAreas()">Select all</button>
+      </div>
+    </div>
+    <div class="ex-area" id="fam-dd">
+      <span>IP:</span>
+      <button type="button" class="ex-select ex-dd-btn" id="fam-btn" onclick="toggleFamMenu()" aria-haspopup="true" aria-expanded="false">
+        <span id="fam-btn-txt">IPv4 &amp; IPv6</span>
+        <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <div class="opt-menu ex-area-menu" id="fam-menu">
+        <div class="opt-section-label">Show cards for</div>
+        <div id="fam-rows"></div>
       </div>
     </div>
     <span class="ex-pool" id="pool-note"></span>
@@ -117,6 +128,6 @@
 
 </div>
 
-<script src="exam.js?v=63"></script>
+<script src="exam.js?v=64"></script>
 </body>
 </html>
