@@ -97,8 +97,18 @@ const AREAS=[
   {id:'ts',      name:'Troubleshooting'},
 ];
 const TIER_NAME={1:'Easy',2:'Medium',3:'Hard'};
+/* IP version, for the IPv4 / IPv6 filter. A card is IPv4 unless listed: the
+   IPv6 cards by id, and the concept cards that hold for both versions
+   (AD vs metric, OSPF's router ID, timers, roles, LSAs, ACL placement).
+   RIP, NAT and DHCPv4 are IPv4 here even where no address is shown. */
+const FAMS=[{id:'4', name:'IPv4'}, {id:'6', name:'IPv6'}];
+const FAM_V6=['q3e-acl6','g3-acl6','q5d-v6','g5-v6flags','g5-v6msgs','g5-v6relay','g5-v6cfg'];
+const FAM_BOTH=['q1a-dynamic','q1b-adpair','q1c-admetric','q2a-rid','q2b-metric','q2c-multiarea','q2d-timers','q2e-roles','q2f-lsa','q3c-place'];
 const CARDS=[];
-function card(def){ CARDS.push(def); }
+function card(def){
+  def.fam=FAM_V6.indexOf(def.id)>=0?['6']:FAM_BOTH.indexOf(def.id)>=0?['4','6']:['4'];
+  CARDS.push(def);
+}
 
 /* Typed answer box. Values are kept on a wrong answer: the hint says what
    was typed and what was wanted (access_control's convention). */
@@ -484,8 +494,8 @@ card({id:'q1f-riploops', area:'routing', tier:1, kind:'flash', src:'Q1', title:'
       'A link fails in a RIP network. Explain how split horizon and the 16-hop limit stop the routers looping packets for ever.']),
     points: [
       'RIP is a distance-vector protocol: each router sends its routing table to its neighbours every [[30 seconds|30 s|30 sec|30secs|every 30]], and its metric is the [[hop count|hops|hop]].',
-      'The maximum is 15 hops; a metric of [[16 means unreachable|16|unreachable|infinity|infinite]], so a RIP network can be at most 15 hops across.',
-      'The limit stops [[counting to infinity|count to infinity|count-to-infinity]]: in a [[routing loop|loop|loops|looping]] a dead route\'s metric keeps rising until it reaches 16 and is dropped.',
+      'The maximum is 15 hops; a metric of [[16 means unreachable|16|unreachable|infinity|infinite|forever]], so a RIP network can be at most 15 hops across.',
+      'The limit stops [[counting to infinity|count to infinity|count-to-infinity|count forever|count up forever]]: in a [[routing loop|loop|loops|looping]] a dead route\'s metric keeps rising until it reaches 16 and is dropped.',
       '<b>[[Split horizon|split-horizon]]:</b> a router doesn\'t advertise a route back out the interface it [[learned|learnt|learn|received]] it on, so two neighbours can\'t keep feeding each other a route that has gone.',
       'Route poisoning goes further: a failed route is advertised with metric 16 so neighbours remove it straight away.',
     ],
@@ -2451,7 +2461,7 @@ const DICT=[
   ['og','Outside global','nat',[],[],"An outside host's real address on the Internet."],
   ['staticnat','Static NAT','nat',['static translation','static mapping','static mappings'],['one-to-one'],"A permanent mapping of one inside local to one inside global address, so the host — typically a server — is reachable from outside: ip nat inside source static 192.168.1.20 209.165.200.229."],
   ['dynnat','Dynamic NAT','nat',['dynamic translation','dynamic binding','dynamic bindings'],[],"Inside hosts are given a public address from a pool when they send traffic — one host per address while the translation lasts: ip nat inside source list 1 pool NAME."],
-  ['pat','PAT','nat',['overload','NAT overload','Port Address Translation','dynamic NAT with overload'],['many-to-one'],"Many inside hosts share one public address (an interface's or a pool's), told apart by port number; a clashing source port is changed: ip nat inside source list 1 interface s0/0/1 overload."],
+  ['pat','PAT','nat',['overload','NAT overload','Port Address Translation','dynamic NAT with overload'],['many-to-one'],"Also called NAT overload. Many inside hosts share one public address (an interface's or a pool's), told apart by port number; a clashing source port is changed: ip nat inside source list 1 interface s0/0/1 overload."],
   ['natpool','NAT pool','nat',['ip nat pool'],[],"The public addresses dynamic NAT hands out: ip nat pool NAME <first> <last> netmask <mask>."],
   ['port','Port number','general',['port numbers','source port'],['TCP/UDP'],"16-bit numbers identifying each end of a TCP or UDP session (80 web, 22 SSH, 67/68 DHCP). PAT uses the source port to tell inside hosts apart."],
   ['private','Private address','general',['private addresses','RFC 1918'],[],"10.0.0.0/8, 172.16.0.0/12 and 192.168.0.0/16 — not routed on the Internet, so they need NAT to get out."],
@@ -2587,7 +2597,7 @@ document.addEventListener('keydown',e=>{
 
 /* ═══ Scheduler and persistence ═══════════════════════════════════════════ */
 const KEY='ne-exam-v1', COMFORT=20;
-function freshState(){ return {step:0, diff:1, off:[], cards:{}, answered:0, correct:0, lastNew:null}; }
+function freshState(){ return {step:0, diff:1, off:[], foff:[], cards:{}, answered:0, correct:0, lastNew:null}; }
 function loadState(){
   try{
     const s=JSON.parse(localStorage.getItem(KEY));
@@ -2631,7 +2641,8 @@ function cardStatus(id){ const c=S.cards[id]; if(!c) return 'new'; return c.last
 /* Unticked areas are stored, not ticked ones, so an area added later (the
    second pass) starts ticked. */
 function inTier(c){ return c.tier<=S.diff; }
-function inPool(c){ return inTier(c)&&S.off.indexOf(c.area)<0; }
+function famOn(c){ return c.fam.some(f=>S.foff.indexOf(f)<0); }
+function inPool(c){ return inTier(c)&&S.off.indexOf(c.area)<0&&famOn(c); }
 function pool(){ return CARDS.filter(inPool); }
 
 /* Most overdue first; then something new; then whatever is due soonest
@@ -2671,7 +2682,7 @@ function loadQ(){
   $('nxtbtn').style.display='none';
   if(!cur){
     Q=null; $('q-tag').textContent='No cards'; $('q-pill').textContent=''; $('q-pill').className='ex-pill';
-    $('q-prompt').innerHTML='There are no cards for this area at this difficulty yet.'; $('qbody').innerHTML='';
+    $('q-prompt').innerHTML='There are no cards for these areas'+(S.foff.length?' in '+FAMS.filter(f=>S.foff.indexOf(f.id)<0).map(f=>f.name).join(' and '):'')+' at this difficulty yet.'; $('qbody').innerHTML='';
     show('chkbtn',false); show('skipbtn',false); renderSide(); return;
   }
   lastId=cur.id;
@@ -2794,6 +2805,7 @@ $('qbody').addEventListener('click',e=>{
    Typed answers and the focused rating button are answer-keys.js's job. */
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape'&&$('area-menu').classList.contains('open')){ toggleAreaMenu(false); $('area-btn').focus(); return; }
+  if(e.key==='Escape'&&$('fam-menu').classList.contains('open')){ toggleFamMenu(false); $('fam-btn').focus(); return; }
   /* Ctrl+Enter submits from anywhere, including the multi-line command boxes
      where a plain Enter starts a new line. */
   if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)&&phase==='answer'){ e.preventDefault(); checkAll(); return; }
@@ -2841,6 +2853,29 @@ $('area-rows').addEventListener('change',e=>{
   areasChanged();
 });
 document.addEventListener('mousedown',e=>{ if(!e.target.closest('#area-dd')) toggleAreaMenu(false); });
+/* ── The IP dropdown: IPv4 / IPv6, the same panel and rules as Areas. The
+   unticked versions are stored (S.foff); one stays ticked; a card that
+   holds for both versions shows whichever is ticked. */
+function famChanged(){
+  saveState(); syncControls();
+  if(!cur||(phase==='answer'&&!famOn(cur))) loadQ(); else renderSide();
+}
+function toggleFamMenu(force){
+  const m=$('fam-menu'), b=$('fam-btn'), open=force!=null?force:!m.classList.contains('open');
+  m.classList.toggle('open',open); b.classList.toggle('open',open); b.setAttribute('aria-expanded',open?'true':'false');
+}
+$('fam-rows').addEventListener('change',e=>{
+  const box=e.target.closest('input[data-f]'); if(!box) return;
+  const id=box.dataset.f;
+  if(box.checked) S.foff=S.foff.filter(x=>x!==id);
+  else if(FAMS.filter(f=>S.foff.indexOf(f.id)<0&&f.id!==id).length===0){
+    box.checked=true;
+    const note=$('fam-note'); if(note){ note.textContent='Keep at least one ticked.'; note.classList.add('show'); }
+    return;
+  } else if(S.foff.indexOf(id)<0) S.foff.push(id);
+  famChanged();
+});
+document.addEventListener('mousedown',e=>{ if(!e.target.closest('#fam-dd')) toggleFamMenu(false); });
 function syncControls(){
   document.querySelectorAll('#diff-row .cbtn').forEach(b=>b.classList.toggle('on',+b.dataset.d===S.diff));
   const live=liveAreas();
@@ -2850,6 +2885,14 @@ function syncControls(){
     return '<label class="opt-row ex-area-row"><input type="checkbox" class="req-checkbox" data-a="'+a.id+'"'+(S.off.indexOf(a.id)<0?' checked':'')+'>'+
       '<span class="opt-row-label">'+a.name+'</span><span class="ex-area-n">'+n+'</span></label>';
   }).join('')+'<div class="ex-area-note" id="area-note"></div>';
+  if(!Array.isArray(S.foff)||S.foff.length>=FAMS.length) S.foff=[];
+  $('fam-rows').innerHTML=FAMS.map(f=>{
+    const n=CARDS.filter(c=>c.fam.indexOf(f.id)>=0&&inTier(c)&&S.off.indexOf(c.area)<0).length;
+    return '<label class="opt-row ex-area-row"><input type="checkbox" class="req-checkbox" data-f="'+f.id+'"'+(S.foff.indexOf(f.id)<0?' checked':'')+'>'+
+      '<span class="opt-row-label">'+f.name+'</span><span class="ex-area-n">'+n+'</span></label>';
+  }).join('')+'<div class="ex-area-note" id="fam-note"></div>';
+  const fon=FAMS.filter(f=>S.foff.indexOf(f.id)<0);
+  $('fam-btn-txt').textContent=fon.length===FAMS.length?'IPv4 & IPv6':fon[0].name+' only';
   const on=live.filter(a=>S.off.indexOf(a.id)<0);
   $('area-btn-txt').textContent=on.length===live.length?'All areas':on.length<=2?on.map(a=>a.name).join(', '):on.length+' areas';
   const n=pool().length, add=CARDS.filter(c=>c.tier===S.diff&&S.diff>1&&inPool(c)).length;
@@ -2880,7 +2923,7 @@ function resetProgress(){
     return;
   }
   clearTimeout(resetArmed); resetArmed=null; b.textContent='Reset progress'; b.classList.remove('ex-armed');
-  const keep={diff:S.diff, off:S.off.slice()};
+  const keep={diff:S.diff, off:S.off.slice(), foff:S.foff.slice()};
   Object.keys(S).forEach(k=>delete S[k]); Object.assign(S,freshState(),keep);
   saveState(); lastId=null; loadQ();
 }

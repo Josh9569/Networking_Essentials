@@ -12,14 +12,17 @@
        (scrolled by hand, a dictionary jump on the exam page, a long lab).
        Not shown while the card is hidden (vlsm_game's custom setup), and
        never for a popped-out card, which is fixed in view by definition.
+     · Hidden while it would sit on the round's own buttons (the row
+       holding Next), so a tap meant for Next or Reset reaches them.
      · Hidden while you type in a field on screen, so it never covers a CLI
        line or an answer box near the bottom of the window — or, on a
        phone, sits on top of the keyboard.
      · Clicked, it hides at once rather than lingering for the whole scroll
        up, and comes back only once that scroll has landed.
      · Focus goes to Next when the round is graded, so Enter carries on as
-       answer-keys.js expects; otherwise the pill gives focus up, since a
-       focused hidden button would swallow the next Enter.
+       answer-keys.js expects. A mouse press never takes focus, so an
+       answer box keeps its caret; reached by keyboard, the pill gives focus
+       up, since a focused hidden button would swallow the next Enter.
      · Labelled for what the card holds: "instructions" on a lab topic
        (the card shows the instructions pop-out button), "question"
        everywhere else.
@@ -62,11 +65,31 @@
     return pop && pop.style.display !== 'none' ? 'instructions' : 'question';
   }
 
+  /* The round's own buttons (the row holding #nxtbtn) are under the pill.
+     On a phone the keyboard flow often leaves Submit / Next / Reset in the
+     bottom band of the window; the pill must not take the tap meant for
+     them. The pill's box is measured where it rests, plus the 10px it
+     slides up by when it appears. */
+  function coversRound() {
+    var next = document.getElementById('nxtbtn');
+    var row = next && next.parentElement;
+    if (!row) return false;
+    var p = btn.getBoundingClientRect();
+    if (!p.width) return false;
+    var bs = row.querySelectorAll('button');
+    for (var i = 0; i < bs.length; i++) {
+      if (!bs[i].getClientRects().length) continue;
+      var r = bs[i].getBoundingClientRect();
+      if (r.right > p.left && r.left < p.right && r.bottom > p.top - 10 && r.top < p.bottom) return true;
+    }
+    return false;
+  }
+
   function sync() {
     raf = 0;
     if (!btn || !card) return;
     var r = card.getBoundingClientRect();
-    var on = !returning && !typing() && (r.width > 0 || r.height > 0) && r.bottom < OFF;
+    var on = !returning && !typing() && (r.width > 0 || r.height > 0) && r.bottom < OFF && !coversRound();
     if (on) {
       var text = '↑ Back to the ' + label();
       if (btn.textContent !== text) btn.textContent = text;
@@ -111,6 +134,9 @@
     btn.className = 'btn btn-p qback';
     btn.textContent = '↑ Back to the question';
     btn.addEventListener('click', back);
+    /* Never take focus on a press: an answer box keeps its caret, so an
+       unanswered round can be typed into as soon as the scroll lands. */
+    btn.addEventListener('mousedown', function (e) { e.preventDefault(); });
     /* Kept display:none until styles.css proves it knows .qback. A stale
        cached stylesheet would otherwise leave a bare button at the foot of
        the page. */
