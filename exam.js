@@ -212,14 +212,30 @@ function kwTokens(text){
   while((m=re.exec(plain))) out.push({stem:kwStem(m[0]), at:m.index, len:m[0].length});
   return out;
 }
-/* Every place any form of key word k occurs in the learner's words. */
+/* Every place any form of key word k occurs in the learner's words.
+   A multi-word form tolerates the small words people put in or leave out:
+   up to two articles or "IP"s may sit between its words in the answer
+   ("assigns an IP address" for "assigns the address"), and an article in
+   the form may be missing from the answer — but only when the form keeps
+   two other words, so "the pool" still needs its "the" and never shrinks
+   to a generic "pool". */
+const KW_ART=new Set(['a','an','the','its','their'].map(kwStem));
+const KW_SKIP=new Set(['a','an','the','its','their','ip','ipv4','ipv6'].map(kwStem));
 function kwFind(words,k){
   const hits=[];
   k.forms.forEach(f=>{
     const st=kwTokens(f).map(t=>t.stem); if(!st.length) return;
-    for(let i=0;i+st.length<=words.length;i++){
-      let ok=true; for(let j=0;j<st.length;j++) if(words[i+j].stem!==st[j]){ ok=false; break; }
-      if(ok) for(let j=0;j<st.length;j++) hits.push(i+j);
+    const optArt=st.filter(x=>!KW_ART.has(x)).length>=2;
+    for(let i=0;i<words.length;i++){
+      if(words[i].stem!==st[0]&&!(optArt&&KW_ART.has(st[0]))) continue;
+      let a=i, j=0, skips=0; const got=[];
+      while(j<st.length&&a<=words.length){
+        if(a<words.length&&words[a].stem===st[j]){ got.push(a); a++; j++; }
+        else if(optArt&&KW_ART.has(st[j])) j++;
+        else if(got.length&&a<words.length&&KW_SKIP.has(words[a].stem)&&skips<2){ a++; skips++; }
+        else break;
+      }
+      if(j===st.length&&got.length){ for(let x=got[0];x<=got[got.length-1];x++) hits.push(x); }
     }
   });
   return hits;
@@ -914,11 +930,11 @@ card({id:'q2f-lsa', area:'ospf', tier:2, kind:'flash', src:'Q2 c', title:'OSPF L
     prompt: pick(['Describe the OSPF LSA types 1, 2, 3, 4 and 5: who sends each one, and how far does it flood?',
       'Which LSAs stay inside an area in multi-area OSPF, and which carry routes between areas or from outside OSPF?']),
     points: [
-      '<b>Type 1 [[Router LSA|Router LSAs|type 1 LSA]]:</b> every router describes its own links; [[flooded only within its area|within the area|inside the area|stays in the area|own area|that area]].',
-      '<b>Type 2 [[Network LSA|Network LSAs|type 2 LSA]]:</b> sent by the [[DR|designated router]] for a multi-access network; also stays in the area.',
-      '<b>Type 3 [[Summary LSA|Summary LSAs|type 3 LSA]]:</b> sent by an [[ABR|ABRs|area border router]] to advertise one area\'s networks into another; shown as '+mono('O IA')+' routes.',
+      '<b>Type 1 [[Router LSA|Router LSAs|type 1 LSA|type 1|LSA 1]]:</b> every router describes its own links; [[flooded only within its area|within the area|inside the area|stays in the area|own area|that area]].',
+      '<b>Type 2 [[Network LSA|Network LSAs|type 2 LSA|type 2|LSA 2]]:</b> sent by the [[DR|designated router]] for a multi-access network; also stays in the area.',
+      '<b>Type 3 [[Summary LSA|Summary LSAs|type 3 LSA|type 3|LSA 3]]:</b> sent by an [[ABR|ABRs|area border router]] to advertise one area\'s networks into another; shown as '+mono('O IA')+' routes.',
       '<b>Type 4 ASBR summary:</b> sent by an ABR so other areas can find the ASBR.',
-      '<b>Type 5 [[External LSA|External LSAs|type 5 LSA|AS external]]:</b> sent by the [[ASBR|ASBRs]] for routes from outside OSPF (e.g. a default route); flooded to every normal area; shown as '+mono('O*E2')+' / '+mono('O E2')+'.',
+      '<b>Type 5 [[External LSA|External LSAs|type 5 LSA|type 5|LSA 5|AS external]]:</b> sent by the [[ASBR|ASBRs]] for routes from outside OSPF (e.g. a default route); flooded to every normal area; shown as '+mono('O*E2')+' / '+mono('O E2')+'.',
     ],
   };
 }});
@@ -1936,9 +1952,9 @@ card({id:'q5d-v6', area:'dhcp', tier:1, kind:'flash', src:'Q5', title:'How an IP
       'Compare SLAAC, stateless DHCPv6 and stateful DHCPv6. Where does the host get its address, its DNS server and its default gateway in each?']),
     points: [
       '<b>[[SLAAC|stateless address autoconfiguration|autoconfiguration]]:</b> the host takes the [[prefix|/64 prefix|network prefix]] from the router\'s [[Router Advertisement|RA|RAs|router advertisements]] and makes its own interface ID ([[EUI-64|EUI64|random|randomly]]). Nothing keeps track of which addresses are used.',
-      '<b>[[Stateless DHCPv6|stateless DHCP]]:</b> the address still comes from SLAAC, but other information such as the [[DNS server|DNS|domain name]] comes from a DHCPv6 server, which keeps no record of addresses.',
-      '<b>[[Stateful DHCPv6|stateful DHCP]]:</b> a DHCPv6 server [[assigns the address|hands out the address|allocates|leases|gives the address]] (and the other information) and keeps track of it, like DHCPv4.',
-      'The RA\'s flags tell the host which: [[M flag|managed flag|managed-config-flag|managed address]] = 1 &rarr; stateful; [[O flag|other flag|other-config-flag|other configuration]] = 1 with M = 0 &rarr; stateless; both 0 &rarr; SLAAC only.',
+      '<b>[[Stateless DHCPv6|stateless DHCP|stateless]]:</b> the address still comes from SLAAC, but other information such as the [[DNS server|DNS|domain name]] comes from a DHCPv6 server, which keeps no record of addresses.',
+      '<b>[[Stateful DHCPv6|stateful DHCP|stateful]]:</b> a DHCPv6 server [[assigns the address|assigns addresses|hands out the address|hands out addresses|gives out the address|gives out addresses|gives the address|provides the address|allocates|leases]] (and the other information) and keeps track of it, like DHCPv4.',
+      'The RA\'s flags tell the host which: [[M flag|M bit|managed flag|managed-config-flag|managed address|managed]] = 1 &rarr; stateful; [[O flag|O bit|other flag|other-config-flag|other configuration|other config]] = 1 with M = 0 &rarr; stateless; both 0 &rarr; SLAAC only.',
       'In every case the default gateway is the router\'s [[link-local|link local|fe80]] address, learned from the RA &mdash; DHCPv6 never hands out a gateway.',
     ],
   };
