@@ -229,6 +229,14 @@ function kwTokens(text){
    to a generic "pool". */
 const KW_ART=new Set(['a','an','the','its','their'].map(kwStem));
 const KW_SKIP=new Set(['a','an','the','its','their','ip','ipv4','ipv6'].map(kwStem));
+/* "IP" is how people write "IP address": "assigns an IP" means "assigns the
+   address". So inside a multi-word form, after its first word, an answer's
+   IP / IPs stands for "address" — unless it is followed by "address"
+   itself. A one-word "address" key word is never satisfied this way. */
+const KW_ADDR=kwStem('address');
+function kwIpAddr(words,a,st,j){
+  return j>0&&st[j]===KW_ADDR&&(words[a].stem==='ip'||words[a].stem==='ips')&&!(words[a+1]&&words[a+1].stem===KW_ADDR);
+}
 /* One form's words at word i, tolerating small words as above: the indexes
    of the words that matched, or null. */
 function kwSeqAt(words,st,i){
@@ -236,7 +244,7 @@ function kwSeqAt(words,st,i){
   if(words[i].stem!==st[0]&&!(optArt&&KW_ART.has(st[0]))) return null;
   let a=i, j=0, skips=0; const got=[];
   while(j<st.length&&a<=words.length){
-    if(a<words.length&&words[a].stem===st[j]){ got.push(a); a++; j++; }
+    if(a<words.length&&(words[a].stem===st[j]||kwIpAddr(words,a,st,j))){ got.push(a); a++; j++; }
     else if(optArt&&KW_ART.has(st[j])) j++;
     else if(got.length&&a<words.length&&KW_SKIP.has(words[a].stem)&&skips<2){ a++; skips++; }
     else break;
