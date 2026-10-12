@@ -212,14 +212,30 @@ function kwTokens(text){
   while((m=re.exec(plain))) out.push({stem:kwStem(m[0]), at:m.index, len:m[0].length});
   return out;
 }
-/* Every place any form of key word k occurs in the learner's words. */
+/* Every place any form of key word k occurs in the learner's words.
+   A multi-word form tolerates the small words people put in or leave out:
+   up to two articles or "IP"s may sit between its words in the answer
+   ("assigns an IP address" for "assigns the address"), and an article in
+   the form may be missing from the answer — but only when the form keeps
+   two other words, so "the pool" still needs its "the" and never shrinks
+   to a generic "pool". */
+const KW_ART=new Set(['a','an','the','its','their'].map(kwStem));
+const KW_SKIP=new Set(['a','an','the','its','their','ip','ipv4','ipv6'].map(kwStem));
 function kwFind(words,k){
   const hits=[];
   k.forms.forEach(f=>{
     const st=kwTokens(f).map(t=>t.stem); if(!st.length) return;
-    for(let i=0;i+st.length<=words.length;i++){
-      let ok=true; for(let j=0;j<st.length;j++) if(words[i+j].stem!==st[j]){ ok=false; break; }
-      if(ok) for(let j=0;j<st.length;j++) hits.push(i+j);
+    const optArt=st.filter(x=>!KW_ART.has(x)).length>=2;
+    for(let i=0;i<words.length;i++){
+      if(words[i].stem!==st[0]&&!(optArt&&KW_ART.has(st[0]))) continue;
+      let a=i, j=0, skips=0; const got=[];
+      while(j<st.length&&a<=words.length){
+        if(a<words.length&&words[a].stem===st[j]){ got.push(a); a++; j++; }
+        else if(optArt&&KW_ART.has(st[j])) j++;
+        else if(got.length&&a<words.length&&KW_SKIP.has(words[a].stem)&&skips<2){ a++; skips++; }
+        else break;
+      }
+      if(j===st.length&&got.length){ for(let x=got[0];x<=got[got.length-1];x++) hits.push(x); }
     }
   });
   return hits;
@@ -236,12 +252,14 @@ function kwModel(points){
 /* Check an answer: which key words it used, and the answer as HTML with the
    words that matched highlighted. */
 function kwCheck(text,keys){
-  const words=kwTokens(text), used=new Set();
-  const found=keys.map(k=>{ const h=kwFind(words,k); h.forEach(i=>used.add(i)); return h.length>0; });
+  const words=kwTokens(text), by=new Map();
+  const found=keys.map(k=>{ const h=kwFind(words,k); h.forEach(i=>{ if(!by.has(i)) by.set(i,[]); if(by.get(i).indexOf(k.shown)<0) by.get(i).push(k.shown); }); return h.length>0; });
+  /* Each matched word says which key word it counted for — "infinity" counts
+     for "16 means unreachable", which is not obvious from the colour. */
   let html='', pos=0;
   words.forEach((w,i)=>{
-    if(!used.has(i)) return;
-    html+=esc(text.slice(pos,w.at))+'<mark class="ex-kw hit">'+esc(text.slice(w.at,w.at+w.len))+'</mark>';
+    if(!by.has(i)) return;
+    html+=esc(text.slice(pos,w.at))+'<mark class="ex-kw hit" title="'+esc('Counts for: '+by.get(i).join(', '))+'">'+esc(text.slice(w.at,w.at+w.len))+'</mark>';
     pos=w.at+w.len;
   });
   html+=esc(text.slice(pos));
@@ -914,11 +932,11 @@ card({id:'q2f-lsa', area:'ospf', tier:2, kind:'flash', src:'Q2 c', title:'OSPF L
     prompt: pick(['Describe the OSPF LSA types 1, 2, 3, 4 and 5: who sends each one, and how far does it flood?',
       'Which LSAs stay inside an area in multi-area OSPF, and which carry routes between areas or from outside OSPF?']),
     points: [
-      '<b>Type 1 [[Router LSA|Router LSAs|type 1 LSA]]:</b> every router describes its own links; [[flooded only within its area|within the area|inside the area|stays in the area|own area|that area]].',
-      '<b>Type 2 [[Network LSA|Network LSAs|type 2 LSA]]:</b> sent by the [[DR|designated router]] for a multi-access network; also stays in the area.',
-      '<b>Type 3 [[Summary LSA|Summary LSAs|type 3 LSA]]:</b> sent by an [[ABR|ABRs|area border router]] to advertise one area\'s networks into another; shown as '+mono('O IA')+' routes.',
+      '<b>Type 1 [[Router LSA|Router LSAs|type 1 LSA|type 1|LSA 1]]:</b> every router describes its own links; [[flooded only within its area|within the area|inside the area|stays in the area|own area|that area]].',
+      '<b>Type 2 [[Network LSA|Network LSAs|type 2 LSA|type 2|LSA 2]]:</b> sent by the [[DR|designated router]] for a multi-access network; also stays in the area.',
+      '<b>Type 3 [[Summary LSA|Summary LSAs|type 3 LSA|type 3|LSA 3]]:</b> sent by an [[ABR|ABRs|area border router]] to advertise one area\'s networks into another; shown as '+mono('O IA')+' routes.',
       '<b>Type 4 ASBR summary:</b> sent by an ABR so other areas can find the ASBR.',
-      '<b>Type 5 [[External LSA|External LSAs|type 5 LSA|AS external]]:</b> sent by the [[ASBR|ASBRs]] for routes from outside OSPF (e.g. a default route); flooded to every normal area; shown as '+mono('O*E2')+' / '+mono('O E2')+'.',
+      '<b>Type 5 [[External LSA|External LSAs|type 5 LSA|type 5|LSA 5|AS external]]:</b> sent by the [[ASBR|ASBRs]] for routes from outside OSPF (e.g. a default route); flooded to every normal area; shown as '+mono('O*E2')+' / '+mono('O E2')+'.',
     ],
   };
 }});
@@ -1936,9 +1954,9 @@ card({id:'q5d-v6', area:'dhcp', tier:1, kind:'flash', src:'Q5', title:'How an IP
       'Compare SLAAC, stateless DHCPv6 and stateful DHCPv6. Where does the host get its address, its DNS server and its default gateway in each?']),
     points: [
       '<b>[[SLAAC|stateless address autoconfiguration|autoconfiguration]]:</b> the host takes the [[prefix|/64 prefix|network prefix]] from the router\'s [[Router Advertisement|RA|RAs|router advertisements]] and makes its own interface ID ([[EUI-64|EUI64|random|randomly]]). Nothing keeps track of which addresses are used.',
-      '<b>[[Stateless DHCPv6|stateless DHCP]]:</b> the address still comes from SLAAC, but other information such as the [[DNS server|DNS|domain name]] comes from a DHCPv6 server, which keeps no record of addresses.',
-      '<b>[[Stateful DHCPv6|stateful DHCP]]:</b> a DHCPv6 server [[assigns the address|hands out the address|allocates|leases|gives the address]] (and the other information) and keeps track of it, like DHCPv4.',
-      'The RA\'s flags tell the host which: [[M flag|managed flag|managed-config-flag|managed address]] = 1 &rarr; stateful; [[O flag|other flag|other-config-flag|other configuration]] = 1 with M = 0 &rarr; stateless; both 0 &rarr; SLAAC only.',
+      '<b>[[Stateless DHCPv6|stateless DHCP|stateless]]:</b> the address still comes from SLAAC, but other information such as the [[DNS server|DNS|domain name]] comes from a DHCPv6 server, which keeps no record of addresses.',
+      '<b>[[Stateful DHCPv6|stateful DHCP|stateful]]:</b> a DHCPv6 server [[assigns the address|assigns addresses|hands out the address|hands out addresses|gives out the address|gives out addresses|gives the address|provides the address|allocates|leases]] (and the other information) and keeps track of it, like DHCPv4.',
+      'The RA\'s flags tell the host which: [[M flag|M bit|managed flag|managed-config-flag|managed address|managed]] = 1 &rarr; stateful; [[O flag|O bit|other flag|other-config-flag|other configuration|other config]] = 1 with M = 0 &rarr; stateless; both 0 &rarr; SLAAC only.',
       'In every case the default gateway is the router\'s [[link-local|link local|fe80]] address, learned from the RA &mdash; DHCPv6 never hands out a gateway.',
     ],
   };
@@ -2419,7 +2437,8 @@ const DICT=[
   ['local','Local route','routing',['local routes','local route'],['L','/32'],"A /32 route for the router's own interface address, added next to each connected network. A packet to that address is for the router itself."],
   ['summary','Summary route','routing',['summary routes','supernet','supernets','summarise','summarize','summarisation','summarization','route summarisation'],[],"One route with a shorter prefix covering several contiguous networks — e.g. 210.84.0.0/14 covers 210.84.0.0 to 210.87.255.255. Smaller routing tables, fewer updates."],
   ['rip','RIP','routing',['Routing Information Protocol','RIPv1','RIPv2'],['AD 120','hop count'],"A distance-vector routing protocol whose metric is hop count (15 at most; 16 means unreachable). Updates every 30 s. RIPv1 is classful and broadcasts; RIPv2 is classless (carries masks), multicasts to 224.0.0.9 and can authenticate. Blind to bandwidth, slow to converge."],
-  ['hopcount','Hop count','routing',['hop count','hop counts','count to infinity','counting to infinity'],['RIP metric','max 15'],"RIP's metric: how many routers lie between here and the destination. 15 is the most; 16 means unreachable (infinity), which stops a routing loop counting up for ever."],
+  ['hopcount','Hop count','routing',['hop count','hop counts'],['RIP metric','max 15'],"RIP's metric: how many routers lie between here and the destination. 15 is the most; 16 means unreachable (infinity), which stops a routing loop counting up for ever."],
+  ['cti','Counting to infinity','routing',['count to infinity','counting to infinity','count-to-infinity'],['routing loop','RIP'],"What a routing loop does to a distance-vector route that has died: each router believes the other still reaches it, so they keep advertising it to each other with the metric going up by one each time. RIP caps it by calling 16 infinity (unreachable), and split horizon and route poisoning stop it starting."],
   ['splithorizon','Split horizon','routing',['split-horizon','route poisoning','poison reverse'],[],"A distance-vector rule: never advertise a route back out of the interface it was learned on. With route poisoning (advertising a failed route at metric 16) it stops routing loops."],
   ['autosum','Auto-summary','routing',['auto-summary','no auto-summary','discontiguous network','discontiguous networks'],[],"RIP summarises routes to their classful network when it advertises them across a major-network boundary. With a discontiguous network the same /16 then arrives from two directions; RIPv2's no auto-summary turns it off (RIPv1 can't)."],
   ['classful','Classful','routing',['classful','classless','classful network','classful boundary','major network'],[],"Classful: a network's size follows its first octet — class A /8 (1–126), B /16 (128–191), C /24 (192–223). RIPv1 is classful (no masks in its updates); RIPv2 and OSPF are classless."],
@@ -2534,7 +2553,8 @@ function dictLink(root,selfId,once){
       /* an inline span with button semantics: a real <button> is inline-block
          and lets a line break fall between "(" and the term */
       const a=document.createElement('span'); a.className='ex-term'; a.setAttribute('role','button'); a.tabIndex=0; a.dataset.t=d.id; a.textContent=m[0];
-      a.title='Look up “'+d.name+'” in the dictionary';
+      /* name the entry, and the word linked when it is another name for it */
+      a.title=m[1].toLowerCase()===d.name.toLowerCase()?'Look up “'+d.name+'” in the dictionary':'Look up “'+m[0]+'” — in the dictionary under “'+d.name+'”';
       frag.appendChild(a); last=m.index+m[0].length;
     }
     if(frag){ frag.appendChild(document.createTextNode(t.slice(last))); node.parentNode.replaceChild(frag,node); }
