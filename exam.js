@@ -252,12 +252,14 @@ function kwModel(points){
 /* Check an answer: which key words it used, and the answer as HTML with the
    words that matched highlighted. */
 function kwCheck(text,keys){
-  const words=kwTokens(text), used=new Set();
-  const found=keys.map(k=>{ const h=kwFind(words,k); h.forEach(i=>used.add(i)); return h.length>0; });
+  const words=kwTokens(text), by=new Map();
+  const found=keys.map(k=>{ const h=kwFind(words,k); h.forEach(i=>{ if(!by.has(i)) by.set(i,[]); if(by.get(i).indexOf(k.shown)<0) by.get(i).push(k.shown); }); return h.length>0; });
+  /* Each matched word says which key word it counted for — "infinity" counts
+     for "16 means unreachable", which is not obvious from the colour. */
   let html='', pos=0;
   words.forEach((w,i)=>{
-    if(!used.has(i)) return;
-    html+=esc(text.slice(pos,w.at))+'<mark class="ex-kw hit">'+esc(text.slice(w.at,w.at+w.len))+'</mark>';
+    if(!by.has(i)) return;
+    html+=esc(text.slice(pos,w.at))+'<mark class="ex-kw hit" title="'+esc('Counts for: '+by.get(i).join(', '))+'">'+esc(text.slice(w.at,w.at+w.len))+'</mark>';
     pos=w.at+w.len;
   });
   html+=esc(text.slice(pos));
@@ -2435,7 +2437,8 @@ const DICT=[
   ['local','Local route','routing',['local routes','local route'],['L','/32'],"A /32 route for the router's own interface address, added next to each connected network. A packet to that address is for the router itself."],
   ['summary','Summary route','routing',['summary routes','supernet','supernets','summarise','summarize','summarisation','summarization','route summarisation'],[],"One route with a shorter prefix covering several contiguous networks — e.g. 210.84.0.0/14 covers 210.84.0.0 to 210.87.255.255. Smaller routing tables, fewer updates."],
   ['rip','RIP','routing',['Routing Information Protocol','RIPv1','RIPv2'],['AD 120','hop count'],"A distance-vector routing protocol whose metric is hop count (15 at most; 16 means unreachable). Updates every 30 s. RIPv1 is classful and broadcasts; RIPv2 is classless (carries masks), multicasts to 224.0.0.9 and can authenticate. Blind to bandwidth, slow to converge."],
-  ['hopcount','Hop count','routing',['hop count','hop counts','count to infinity','counting to infinity'],['RIP metric','max 15'],"RIP's metric: how many routers lie between here and the destination. 15 is the most; 16 means unreachable (infinity), which stops a routing loop counting up for ever."],
+  ['hopcount','Hop count','routing',['hop count','hop counts'],['RIP metric','max 15'],"RIP's metric: how many routers lie between here and the destination. 15 is the most; 16 means unreachable (infinity), which stops a routing loop counting up for ever."],
+  ['cti','Counting to infinity','routing',['count to infinity','counting to infinity','count-to-infinity'],['routing loop','RIP'],"What a routing loop does to a distance-vector route that has died: each router believes the other still reaches it, so they keep advertising it to each other with the metric going up by one each time. RIP caps it by calling 16 infinity (unreachable), and split horizon and route poisoning stop it starting."],
   ['splithorizon','Split horizon','routing',['split-horizon','route poisoning','poison reverse'],[],"A distance-vector rule: never advertise a route back out of the interface it was learned on. With route poisoning (advertising a failed route at metric 16) it stops routing loops."],
   ['autosum','Auto-summary','routing',['auto-summary','no auto-summary','discontiguous network','discontiguous networks'],[],"RIP summarises routes to their classful network when it advertises them across a major-network boundary. With a discontiguous network the same /16 then arrives from two directions; RIPv2's no auto-summary turns it off (RIPv1 can't)."],
   ['classful','Classful','routing',['classful','classless','classful network','classful boundary','major network'],[],"Classful: a network's size follows its first octet — class A /8 (1–126), B /16 (128–191), C /24 (192–223). RIPv1 is classful (no masks in its updates); RIPv2 and OSPF are classless."],
@@ -2550,7 +2553,8 @@ function dictLink(root,selfId,once){
       /* an inline span with button semantics: a real <button> is inline-block
          and lets a line break fall between "(" and the term */
       const a=document.createElement('span'); a.className='ex-term'; a.setAttribute('role','button'); a.tabIndex=0; a.dataset.t=d.id; a.textContent=m[0];
-      a.title='Look up “'+d.name+'” in the dictionary';
+      /* name the entry, and the word linked when it is another name for it */
+      a.title=m[1].toLowerCase()===d.name.toLowerCase()?'Look up “'+d.name+'” in the dictionary':'Look up “'+m[0]+'” — in the dictionary under “'+d.name+'”';
       frag.appendChild(a); last=m.index+m[0].length;
     }
     if(frag){ frag.appendChild(document.createTextNode(t.slice(last))); node.parentNode.replaceChild(frag,node); }
