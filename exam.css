@@ -57,6 +57,10 @@
 .ex-ord-n:not(:empty) { display: inline-block; min-width: 17px; margin-right: 7px; padding: 0 4px; border-radius: 4px; background: var(--info-text); color: var(--surface); font-family: var(--mono); font-size: 11px; text-align: center; }
 .ex-ord.ex-ok .ex-ord-n  { background: var(--ok-text); }
 .ex-ord.ex-bad .ex-ord-n { background: var(--err-text); }
+/* Custom theme: --surface is translucent there, so a chip lettered in it
+   loses its number. Letter it in --bg instead, the theme's base colour,
+   which custom-theme.js always sets opaque. */
+:root[data-theme="custom"] .ex-ord-n:not(:empty) { color: var(--bg); font-weight: 700; }
 
 /* Multi-line command boxes (ACLs, DHCP, VLAN fixes): Enter is a new line. */
 .afield textarea.ex-cmds { width: 100%; min-height: 70px; resize: vertical; font-family: var(--mono); font-size: 13.5px; line-height: 1.55; color: var(--text); background: transparent; border: none; outline: none; }
@@ -144,10 +148,20 @@ mark.ex-kw.miss { color: var(--err-text); box-shadow: inset 0 -2px 0 var(--err-t
 .ex-prog td:nth-child(n+2):not(.ex-bar-cell), .ex-prog th:nth-child(n+2) { text-align: right; width: 1%; white-space: nowrap; }
 .ex-prog tr.ex-off td { opacity: .4; }
 .ex-bar-cell   { width: 40%; }
-.ex-bar        { display: flex; height: 8px; border-radius: 4px; overflow: hidden; background: var(--surface-s); border: 1px solid var(--border); }
-.ex-bar span   { display: block; height: 100%; }
-.ex-b-comf     { background: var(--ok-bdr); }
+.ex-bar        { display: flex; height: 8px; border-radius: 4px; background: var(--surface-s); border: 1px solid var(--border); }
+/* each segment fills to its new width rather than jumping (renderSide
+   updates the bar in place); comfortable glows green */
+.ex-bar span   { display: block; height: 100%; border-radius: 3px; transition: width .8s cubic-bezier(.2,.7,.2,1); }
+.ex-b-comf     { background: var(--ok-bdr); position: relative; z-index: 1; }
 .ex-b-learn    { background: var(--warn-bdr); }
+.ex-bar.ex-has .ex-b-comf { box-shadow: 0 0 6px 0 var(--ok-bdr); }
+/* the whole bar comfortable: it breathes; reaching it flares first, once
+   the fill has landed (.8s), then settles into the breathing */
+.ex-bar.ex-full  .ex-b-comf { animation: exBreathe 3.2s ease-in-out infinite; }
+.ex-bar.ex-flare .ex-b-comf { animation: exFlare 1.4s ease-out .8s 1 both, exBreathe 3.2s ease-in-out 2.2s infinite; }
+@keyframes exBreathe { 0%, 100% { box-shadow: 0 0 5px 0 var(--ok-bdr); } 50% { box-shadow: 0 0 13px 2px var(--ok-bdr); } }
+@keyframes exFlare   { 0% { box-shadow: 0 0 6px 0 var(--ok-bdr); filter: brightness(1); } 35% { box-shadow: 0 0 24px 6px var(--ok-bdr); filter: brightness(1.6); } 100% { box-shadow: 0 0 5px 0 var(--ok-bdr); filter: brightness(1); } }
+@media (prefers-reduced-motion: reduce) { .ex-bar span { transition: none; } .ex-bar.ex-full .ex-b-comf, .ex-bar.ex-flare .ex-b-comf { animation: none; box-shadow: 0 0 8px 1px var(--ok-bdr); } }
 .ex-prog-note  { margin-top: .7rem; }
 
 /* ── Dictionary: the reference cards come from styles.css (.ref-*); this
