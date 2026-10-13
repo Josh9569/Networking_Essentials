@@ -205,11 +205,19 @@ function kwStem(w){
   if(cut&&/([^lsfz])\1$/.test(w)&&w.length>4) w=w.slice(0,-1);   // permitted -> permit
   return KW_IRREG[w]||w;
 }
-/* Words of a text with their stems and where they sit in it. */
+/* Words of a text with their stems and where they sit in it. Each word also
+   keeps the text before it (`gap`) and its sentence number (`sent`): a
+   full stop, ; ! ? followed by a space, or a line break, starts a new one
+   — "192.168.1.1" does not. */
 function kwTokens(text){
-  const out=[], re=/[A-Za-z0-9]+/g; let m;
+  const out=[], re=/[A-Za-z0-9]+/g; let m, last=0, sent=0;
   const plain=String(text).replace(/&[a-z]+;/g,t=>' '+t.slice(1,-1)+' ');
-  while((m=re.exec(plain))) out.push({stem:kwStem(m[0]), at:m.index, len:m[0].length});
+  while((m=re.exec(plain))){
+    const gap=plain.slice(last,m.index);
+    if(out.length&&(/[.;!?](\s|$)/.test(gap)||/\n/.test(gap))) sent++;
+    out.push({stem:kwStem(m[0]), at:m.index, len:m[0].length, w:m[0], gap, sent});
+    last=m.index+m[0].length;
+  }
   return out;
 }
 /* Every place any form of key word k occurs in the learner's words.
@@ -221,21 +229,77 @@ function kwTokens(text){
    to a generic "pool". */
 const KW_ART=new Set(['a','an','the','its','their'].map(kwStem));
 const KW_SKIP=new Set(['a','an','the','its','their','ip','ipv4','ipv6'].map(kwStem));
-function kwFind(words,k){
+/* "IP" is how people write "IP address": "assigns an IP" means "assigns the
+   address". So inside a multi-word form, after its first word, an answer's
+   IP / IPs stands for "address" — unless it is followed by "address"
+   itself. A one-word "address" key word is never satisfied this way. */
+const KW_ADDR=kwStem('address');
+function kwIpAddr(words,a,st,j){
+  return j>0&&st[j]===KW_ADDR&&(words[a].stem==='ip'||words[a].stem==='ips')&&!(words[a+1]&&words[a+1].stem===KW_ADDR);
+}
+/* One form's words at word i, tolerating small words as above: the indexes
+   of the words that matched, or null. */
+function kwSeqAt(words,st,i){
+  const optArt=st.filter(x=>!KW_ART.has(x)).length>=2;
+  if(words[i].stem!==st[0]&&!(optArt&&KW_ART.has(st[0]))) return null;
+  let a=i, j=0, skips=0; const got=[];
+  while(j<st.length&&a<=words.length){
+    if(a<words.length&&(words[a].stem===st[j]||kwIpAddr(words,a,st,j))){ got.push(a); a++; j++; }
+    else if(optArt&&KW_ART.has(st[j])) j++;
+    else if(got.length&&a<words.length&&KW_SKIP.has(words[a].stem)&&skips<2){ a++; skips++; }
+    else break;
+  }
+  return j===st.length&&got.length?got:null;
+}
+/* "Subject~term" forms grade WHICH thing the answer says something about:
+   [[R2 is an ABR|R2~ABR|R2~area border router]] counts only when the ABR
+   in the answer belongs to R2, so "R2 is an ASBR and R5 is an ABR" scores
+   nothing for it. The subjects are every left-hand side on the card, and a
+   term belongs to one of them in its own sentence:
+     1. the nearest subject BEFORE it, if only linking words sit between
+        ("R2 is an ABR", "R2 is also the ABR");
+     2. else the nearest subject AFTER it, if only linking words sit
+        between ("the ABR is R2", "ABR: R2");
+     3. else the nearest subject before it ("R2 has interfaces in two areas
+        so it's an ABR"), or failing that the one after. */
+const KW_LINK=/^(?:[\s:=()\-–—]|\b(?:is|are|was|be|being|would|will|also|both|the|a|an|as|its|it's|it|router|routers|role|one|acts?|acting|serves?|works?|then)\b)*$/i;
+function kwSubjects(keys){
+  const seen={}, out=[];
+  keys.forEach(k=>k.forms.forEach(f=>{
+    const i=f.indexOf('~'); if(i<0) return;
+    const st=kwTokens(f.slice(0,i)).map(t=>t.stem), id=st.join(' ');
+    if(st.length&&!seen[id]){ seen[id]=1; out.push({id,st}); }
+  }));
+  return out;
+}
+function kwBetween(words,a,b){   // the raw text from the end of word a to the start of word b
+  let t=''; for(let x=a+1;x<=b;x++) t+=words[x].gap+(x<b?words[x].w:''); return t;
+}
+function kwFind(words,k,subjects){
   const hits=[];
+  subjects=subjects||kwSubjects([k]);
+  let occ=null;   // every subject mention: {id, s, e} (first and last word)
   k.forms.forEach(f=>{
-    const st=kwTokens(f).map(t=>t.stem); if(!st.length) return;
-    const optArt=st.filter(x=>!KW_ART.has(x)).length>=2;
+    const tilde=f.indexOf('~');
+    if(tilde<0){
+      const st=kwTokens(f).map(t=>t.stem); if(!st.length) return;
+      for(let i=0;i<words.length;i++){ const got=kwSeqAt(words,st,i); if(got) for(let x=got[0];x<=got[got.length-1];x++) hits.push(x); }
+      return;
+    }
+    const subj=kwTokens(f.slice(0,tilde)).map(t=>t.stem).join(' ');
+    const st=kwTokens(f.slice(tilde+1)).map(t=>t.stem); if(!st.length) return;
+    if(!occ){ occ=[]; subjects.forEach(sb=>{ for(let i=0;i<words.length;i++){ const g=kwSeqAt(words,sb.st,i); if(g) occ.push({id:sb.id, s:g[0], e:g[g.length-1]}); } }); }
     for(let i=0;i<words.length;i++){
-      if(words[i].stem!==st[0]&&!(optArt&&KW_ART.has(st[0]))) continue;
-      let a=i, j=0, skips=0; const got=[];
-      while(j<st.length&&a<=words.length){
-        if(a<words.length&&words[a].stem===st[j]){ got.push(a); a++; j++; }
-        else if(optArt&&KW_ART.has(st[j])) j++;
-        else if(got.length&&a<words.length&&KW_SKIP.has(words[a].stem)&&skips<2){ a++; skips++; }
-        else break;
-      }
-      if(j===st.length&&got.length){ for(let x=got[0];x<=got[got.length-1];x++) hits.push(x); }
+      const got=kwSeqAt(words,st,i); if(!got) continue;
+      const ts=got[0], te=got[got.length-1], sent=words[ts].sent;
+      const same=occ.filter(o=>words[o.s].sent===sent&&(o.e<ts||o.s>te));
+      const before=same.filter(o=>o.e<ts).sort((x,y)=>y.e-x.e)[0];
+      const after=same.filter(o=>o.s>te).sort((x,y)=>x.s-y.s)[0];
+      let own=null;
+      if(before&&KW_LINK.test(kwBetween(words,before.e,ts))) own=before;
+      else if(after&&KW_LINK.test(kwBetween(words,te,after.s))) own=after;
+      else own=before||after;
+      if(own&&own.id===subj){ for(let x=ts;x<=te;x++) hits.push(x); for(let x=own.s;x<=own.e;x++) hits.push(x); }
     }
   });
   return hits;
@@ -244,16 +308,16 @@ function kwFind(words,k){
 function kwModel(points){
   const keys=[];
   const html=ul(points.map(pt=>pt.replace(KW_RE,(m,body)=>{
-    const forms=body.split('|'); keys.push({shown:forms[0], forms});
-    return '<mark class="ex-kw" data-k="'+(keys.length-1)+'">'+forms[0]+'</mark>';
+    const forms=body.split('|'); keys.push({shown:forms[0].replace(/~/g,' '), forms});
+    return '<mark class="ex-kw" data-k="'+(keys.length-1)+'">'+forms[0].replace(/~/g,' ')+'</mark>';
   })));
   return {html, keys};
 }
 /* Check an answer: which key words it used, and the answer as HTML with the
    words that matched highlighted. */
 function kwCheck(text,keys){
-  const words=kwTokens(text), by=new Map();
-  const found=keys.map(k=>{ const h=kwFind(words,k); h.forEach(i=>{ if(!by.has(i)) by.set(i,[]); if(by.get(i).indexOf(k.shown)<0) by.get(i).push(k.shown); }); return h.length>0; });
+  const words=kwTokens(text), by=new Map(), subjects=kwSubjects(keys);
+  const found=keys.map(k=>{ const h=kwFind(words,k,subjects); h.forEach(i=>{ if(!by.has(i)) by.set(i,[]); if(by.get(i).indexOf(k.shown)<0) by.get(i).push(k.shown); }); return h.length>0; });
   /* Each matched word says which key word it counted for — "infinity" counts
      for "16 means unreachable", which is not obvious from the colour. */
   let html='', pos=0;
