@@ -2555,15 +2555,15 @@ card({id:'q5d-v6', area:'dhcp', tier:1, kind:'flash', src:'Q5', title:'How an IP
      to the wrong method ("O flag 1 means stateful") vetoes its key word.
      Key words: exam-keys.js. */
   const OWN='[[SLAAC~builds its own address]]', SLESS='[[stateless~takes its address from SLAAC]]',
-        ASSIGN='[[stateful~DHCPv6 server assigns the address]]', TRACK='[[stateful~server keeps track of every client]]',
+        ASSIGN='[[stateful~DHCPv6 server assigns the address]]',
         DNS='[[DNS server from the DHCPv6 server]]', GW='[[gateway from the RA]]', M='[[M flag set to 1]]', O='[[O flag set to 1]]';
   const FLAGS='The RA\'s flags tell the host which: '+M+' (M = 1) &rarr; stateful; '+O+' (O = 1 with M = 0) &rarr; stateless; both 0 &rarr; SLAAC only.';
   if(chance(.5)) return {
-    prompt:'Describe the three ways an IPv6 host can be given its address &mdash; SLAAC, stateless DHCPv6 and stateful DHCPv6. For each one, explain where the address comes from, what the DHCPv6 server provides (if there is one) and whether anything keeps track of the addresses. Then explain how the host knows which method to use: which two flags in the router\'s RA, and what value each has for each method.',
+    prompt:'Describe the three ways an IPv6 host can be given its address &mdash; SLAAC, stateless DHCPv6 and stateful DHCPv6. Then explain how the host knows which method to use: which two flags in the router\'s RA, and what value each has for each method.',
     points:[
       '<b>SLAAC:</b> no server is involved &mdash; '+OWN+' from the /64 prefix in the router\'s Router Advertisement (RA), using EUI-64 or a random interface ID. Nothing keeps track of which addresses are used.',
-      '<b>Stateless DHCPv6:</b> the address is made exactly as above &mdash; '+SLESS+' &mdash; but a DHCPv6 server also provides other information; the host gets the '+DNS+'. The server keeps no record of addresses.',
-      '<b>Stateful DHCPv6:</b> the address comes from a server: the '+ASSIGN+' (and the other information, like DNS), the same job as DHCPv4. The '+TRACK+', so it knows which addresses are in use.',
+      '<b>Stateless DHCPv6:</b> the address is made exactly as above &mdash; '+SLESS+' &mdash; but a DHCPv6 server also provides other information; the host gets the DNS server from the DHCPv6 server. The server keeps no record of addresses.',
+      '<b>Stateful DHCPv6:</b> the address comes from a server: the '+ASSIGN+' (and the other information, like DNS), the same job as DHCPv4. The server keeps track of every client, so it knows which addresses are in use.',
       FLAGS,
     ],
   };

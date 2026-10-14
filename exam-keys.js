@@ -1753,10 +1753,6 @@ const EXAM_KEYS={
       "from the DHCPv6 server", "from DHCPv6", "from the server", "from a DHCPv6 server",
       "by the DHCPv6 server", "by the server", "DHCPv6 server"
     ],
-    "TRK": [
-      "track", "tracks", "record", "records", "log", "logs", "DUID", "database", "binding", "bindings",
-      "table", "remembers", "remember", "keeps a list"
-    ],
     "DX3": ["DNS", "DNS server", "DNS information"],
     "DVF": [
       "from", "comes from", "is from", "provided by", "is provided by", "supplied by", "is supplied by",
@@ -1803,7 +1799,6 @@ const EXAM_KEYS={
   "SLAAC~builds its own address": ["SLAAC~{OWNT}"],
   "stateless~takes its address from SLAAC": ["stateless~{SLT}"],
   "stateful~DHCPv6 server assigns the address": ["stateful~{AST}"],
-  "stateful~server keeps track of every client": ["@stateful~{TRK}"],
   "DNS server from the DHCPv6 server": [
     "{DX3} {DVF} {DS}", "DNS and other information from DHCP", "DNS and other information from DHCPv6",
     "DNS DHCP", "DNS DHCPv6", "DNS server DHCP", "DNS server DHCPv6", "{SS} {VS} {XS}",
