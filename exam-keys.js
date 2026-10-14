@@ -1503,7 +1503,12 @@ const EXAM_KEYS={
   ],
 },
 "q5a-dora": {
-  "Discover": ["DHCPDISCOVER"],
+  "Discover": [
+    "DHCPDISCOVER", "find the DHCP server", "find a DHCP server", "find DHCP server", "find the server",
+    "find a server", "finds the DHCP server", "finds a DHCP server", "to find the DHCP", "to find a DHCP",
+    "looking for a DHCP server", "looking for the DHCP server", "looks for a DHCP server",
+    "search for a DHCP server", "searches for a DHCP server", "locate a DHCP server", "locate the DHCP server"
+  ],
   "broadcasts": [
     "broadcast", "broadcasted", "255.255.255.255", "all-ones address", "sent to everyone",
     "to every device on the LAN", "to all devices on the LAN", "to all hosts"
@@ -1518,7 +1523,7 @@ const EXAM_KEYS={
   ],
   "Discover, Offer, Request, Acknowledgement": [
     "DORA",
-    "<discover/dhcpdiscover..offer/dhcpoffer..request/dhcprequest..acknowledgement/acknowledgment/acknowledge/acknowledges/ack/dhcpack"
+    "<discover/dhcpdiscover/find/locate/look/search..offer/dhcpoffer..request/dhcprequest..acknowledgement/acknowledgment/acknowledge/acknowledges/ack/dhcpack"
   ],
 },
 "q5b-relay": {
