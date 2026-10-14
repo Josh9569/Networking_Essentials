@@ -332,7 +332,9 @@ function kwBetween(words,a,b){   // the raw text from the end of word a to the s
      "^"  the form must open its sentence (articles and "answer" aside) and
           be followed by a comma, the end of the sentence, or because/since/as
           — so "OSPF." and "OSPF, because ..." count but "OSPF (110) vs RIP"
-          does not. */
+          does not.
+     "<"  "<discover..offer..request..ack": every part appears, in that order,
+          anywhere in the answer; "/" gives a part alternatives. */
 const KW_NEG=/^(?:not|no|never|neither|nor|nothing|none|nobody|cannot|cant|dont|doesnt|isnt|arent|wasnt|werent|wont|wouldnt|didnt|shouldnt|without)$/i;
 const KW_PRON=/^(?:it|its|this|their|they)$/i;
 const KW_ENDS=new Set(['because','since','as','cause'].map(kwStem));
@@ -378,8 +380,19 @@ function kwFind(words,k,subjects){
   const mine=new Set(subjects.filter(sb=>k.forms.some(f=>kwTokens(f.slice(0,Math.max(f.indexOf('~'),0))).map(t=>t.stem).join(' ')===sb.id&&f.indexOf('~')>0)).map(sb=>sb.id));   // this key word's own names
   let vetoed=false;   // a "!subject~term" form that matched: the answer says the opposite, so the key word fails
   k.forms.forEach(f=>{
-    let aware=false, carry=false, anchor=false, veto=false;
-    for(;;){ if(f[0]==='@'){ aware=true; carry=true; } else if(f[0]==='>') carry=true; else if(f[0]==='^') anchor=true; else if(f[0]==='!') veto=true; else break; f=f.slice(1); }
+    let aware=false, carry=false, anchor=false, veto=false, ordered=false;
+    for(;;){ if(f[0]==='@'){ aware=true; carry=true; } else if(f[0]==='>') carry=true; else if(f[0]==='^') anchor=true; else if(f[0]==='!') veto=true; else if(f[0]==='<') ordered=true; else break; f=f.slice(1); }
+    if(ordered){   // "<discover..offer/dhcpoffer..request": the parts in this order, anywhere in the answer; "/" separates alternatives for a part
+      let from=0; const got=[];
+      for(const part of f.split('..')){
+        let found=null;
+        part.split('/').forEach(alt=>{ const st=kwTokens(alt).map(t=>t.stem); if(!st.length) return;
+          for(let i=from;i<words.length;i++){ const g=kwSeqAt(words,st,i); if(g){ if(!found||g[0]<found[0]) found=g; break; } } });
+        if(!found) return;
+        got.push(...found); from=found[found.length-1]+1;
+      }
+      got.forEach(x=>hits.push(x)); return;
+    }
     const tilde=f.indexOf('~');
     if(f.charAt(0)==='#'){   // "#150": that number standing alone, never an octet of a dotted address
       const n=f.slice(1);
@@ -835,7 +848,7 @@ card({id:'q1e-ripv2', area:'routing', tier:1, kind:'flash', src:'Q1', title:'RIP
     ],
   };
   return {
-    prompt: 'Why would you configure '+mono('version 2')+' under '+mono('router rip')+' rather than leave RIP at version 1? Give three advantages of RIPv2 &mdash; how it handles subnet masks compared with v1, how it sends its updates, and what it adds for security &mdash; and say which default behaviour you would turn off once it is running.',
+    prompt: 'What are the differences between RIPv1 and RIPv2 that make it worth configuring '+mono('version 2')+' under '+mono('router rip')+'? For each difference, say what v1 does and what v2 does instead: how each handles subnet masks, how each sends its updates, and what each offers for security. Then say which default behaviour you would turn off once v2 is running.',
     points: [
       '<b>Masks:</b> RIPv2 is [[classless]]: every route is sent with its mask (v1, being classful, sends none), so VLSM and discontiguous networks work.',
       '<b>Updates:</b> RIPv2 [[multicasts]] them to 224.0.0.9 instead of broadcasting, so hosts that don\'t run RIP aren\'t disturbed.',
@@ -2361,6 +2374,7 @@ card({id:'q5a-dora', area:'dhcp', tier:1, kind:'flash', src:'Q5 a', title:'How a
       '<b>2. [[Offer]]</b> &mdash; a server offers an address (plus mask, gateway, DNS) and a lease time.',
       '<b>3. [[Request]]</b> &mdash; the client asks for that offer, still by broadcast, so any other servers know theirs was declined.',
       '<b>4. [[Acknowledgement]]</b> &mdash; the server confirms; the client uses the address for the [[lease]] time and renews it before it runs out.',
+      '<b>In order:</b> [[Discover, Offer, Request, Acknowledgement]] &mdash; DORA. Naming all four is not enough on its own; they have to be in this order.',
     ],
   };
 }});

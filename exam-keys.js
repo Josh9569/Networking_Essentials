@@ -170,6 +170,12 @@ const EXAM_KEYS={
       "if there are several links", "if there are alternate paths", "if there are alternative paths"
     ],
     "ISPW": ["ISP", "internet"],
+    "STA_CLAIM": [
+      "scale", "scales", "scale well", "scales well", "scalable", "is scalable", "adapt", "adapts",
+      "reroute", "reroutes", "reconverge", "reconverges", "handle failures", "handles failures",
+      "handle link failures", "handles link failures", "cope with failures", "copes with failures",
+      "fail over", "fails over"
+    ],
   },
   "scales": [
     "scale", "scalable", "scalability", "automatically", "automatic", "auto", "less admin",
@@ -178,7 +184,7 @@ const EXAM_KEYS={
     "manually configuring", "manually add", "manually adding", "manually enter", "manually entering",
     "manually update", "manually updating", "manual updates", "manual work", "manual effort",
     "no manual", "without manual", "less manual", "typing routes", "type the routes", "enter routes",
-    "entering routes"
+    "entering routes", "@!{STA}~{STA_CLAIM}"
   ],
   "link fails": [
     "link failure", "link failures", "fails", "fail", "failure", "failures", "failover", "fail over",
@@ -187,7 +193,7 @@ const EXAM_KEYS={
     "alternate path", "alternative path", "alternate route", "alternative route", "another path",
     "other path", "different path", "another route", "backup path", "backup route", "new path",
     "new route", "find another", "finds another", "use the redundant", "use the other link",
-    "use the backup", "use the other path", "switch to the other", "fall back"
+    "use the backup", "use the other path", "switch to the other", "fall back", "@!{STA}~{STA_CLAIM}"
   ],
   "stub network#any": [
     "stub networks", "stub", "single exit", "one exit", "only one exit", "single way out",
@@ -726,7 +732,7 @@ const EXAM_KEYS={
     "{maj} {mask}", "/{pfx} summary", "/{pfx} route", "/{pfx} network", "classful summary",
     "classful network", "major network"
   ],
-  "{M} learns that one route from both {A} and {B}": ["{M}~{T}", "middle~{T}", "{A}~to {M}", "{B}~to {M}"],
+  "{M} learns that one route from both {A} and {B}": ["{M}~{T}", "middle~{T}", "{A}~", "{B}~"],
   "no auto-summary": [
     "no auto-summary", "without auto-summary", "turn auto-summary off", "switch auto-summary off",
     "turning auto-summary off", "stop auto-summary", "stopping auto-summary", "disable auto-summary",
@@ -1349,6 +1355,18 @@ const EXAM_KEYS={
   ],
 },
 "q4b-static": {
+  _lists: {
+    "SF": [
+      "sends first", "sends traffic first", "sends traffic out first", "sends out first",
+      "goes out first", "traffic goes out first", "starts traffic", "starts conversation",
+      "starts connection", "starts first", "initiates", "initiated", "initiate", "outbound traffic",
+      "outbound connection", "originates", "first contact"
+    ],
+    "OUTS": [
+      "outside", "outside host", "outside hosts", "outside users", "outside user", "outside devices",
+      "external hosts", "external users", "internet hosts", "the internet", "the outside"
+    ],
+  },
   "one-to-one": [
     "one to one", "1 to 1", "1:1", "permanent mapping", "permanently maps", "permanently map",
     "permanently mapped", "static mapping", "fixed mapping", "one fixed", "one public address",
@@ -1365,7 +1383,7 @@ const EXAM_KEYS={
     "sends traffic first", "sends traffic out first", "sends out first", "goes out first",
     "traffic goes out first", "starts traffic", "starts conversation", "starts connection",
     "starts first", "initiates", "initiated", "initiate", "outbound traffic", "outbound connection",
-    "originates", "first contact"
+    "originates", "first contact", "@!{OUTS}~{SF}"
   ],
   "fixed public address": [
     "permanent public address", "permanent address", "static address", "same public address",
@@ -1487,6 +1505,10 @@ const EXAM_KEYS={
     "leases", "leased", "lease period", "lease time", "lease expires", "address expires",
     "renew the lease", "renews the lease", "renew its lease", "renews its lease", "lease renewal",
     "for a set time", "for a limited time", "limited time", "for a set period"
+  ],
+  "Discover, Offer, Request, Acknowledgement": [
+    "DORA",
+    "<discover/dhcpdiscover..offer/dhcpoffer..request/dhcprequest..acknowledgement/acknowledgment/acknowledge/acknowledges/ack/dhcpack"
   ],
 },
 "q5b-relay": {
@@ -1700,7 +1722,7 @@ const EXAM_KEYS={
   "Type 5 External LSAs come from the ASBR": ["{S5}~{ASBR}", "ASBR {SV} {TA5}"],
   "Type 5 floods to every area": ["{S5}~{EVERY_AREA}"],
   "Types 1 and 2 stay inside their own area": ["{S12}~{IN_AREA}"],
-  "Type 3 carries networks into other areas": ["{S34}~{BETWEEN}"],
+  "Type 3 carries networks into other areas": ["{S4}~", "{S3}~{BETWEEN}"],
   "Type 4 tells other areas where the ASBR is": ["{S4}~{ASBR_REACH}"],
   "Type 5 brings in routes from outside OSPF": ["{S5}~{OUTSIDE}"],
 },
