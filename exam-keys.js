@@ -991,7 +991,12 @@ const EXAM_KEYS={
   ],
   "when the OSPF process starts": [
     "process starts", "process start", "ospf starts", "ospf start", "startup", "start up", "boot",
-    "boots", "reload", "restart", "clear ip ospf process", "first configured", "process is started"
+    "boots", "reload", "restart", "clear ip ospf process", "first configured", "process is started",
+    "ospf first starts", "ospf first start", "first starts", "first started", "process first starts",
+    "ospf is started", "ospf is first started", "ospf starts up", "ospf is enabled", "ospf is first enabled",
+    "ospf is turned on", "ospf is first turned on", "ospf begins", "process begins", "ospf is first configured",
+    "ospf is configured", "router ospf is configured", "router ospf is entered", "process initialises",
+    "ospf initialises", "on startup", "at startup", "at start up"
   ],
 },
 "q2b-metric": {
@@ -1796,9 +1801,9 @@ const EXAM_KEYS={
     ],
     "BADO": ["stateful", "SLAAC"],
   },
-  "SLAAC~builds its own address": ["SLAAC~{OWNT}"],
-  "stateless~takes its address from SLAAC": ["stateless~{SLT}"],
-  "stateful~DHCPv6 server assigns the address": ["stateful~{AST}"],
+  "SLAAC~builds its own address": ["SLAAC~{OWNT}", "@SLAAC~{OWNT}"],
+  "stateless~has the device generate its own address": ["stateless~{SLT}", "@stateless~{SLT}"],
+  "DHCP server assigns the address": ["stateful~{AST}", "@stateful~{AST}"],
   "DNS server from the DHCPv6 server": [
     "{DX3} {DVF} {DS}", "DNS and other information from DHCP", "DNS and other information from DHCPv6",
     "DNS DHCP", "DNS DHCPv6", "DNS server DHCP", "DNS server DHCPv6", "{SS} {VS} {XS}",

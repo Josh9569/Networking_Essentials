@@ -2554,23 +2554,23 @@ card({id:'q5d-v6', area:'dhcp', tier:1, kind:'flash', src:'Q5', title:'How an IP
      and the flags are graded by value (M = 1 / O = 1 / both 0); a flag tied
      to the wrong method ("O flag 1 means stateful") vetoes its key word.
      Key words: exam-keys.js. */
-  const OWN='[[SLAAC~builds its own address]]', SLESS='[[stateless~takes its address from SLAAC]]',
-        ASSIGN='[[stateful~DHCPv6 server assigns the address]]',
+  const OWN='[[SLAAC~builds its own address]]', SLESS='[[stateless~has the device generate its own address]]',
+        ASSIGN='[[DHCP server assigns the address]]',
         DNS='[[DNS server from the DHCPv6 server]]', GW='[[gateway from the RA]]', M='[[M flag set to 1]]', O='[[O flag set to 1]]';
   const FLAGS='The RA\'s flags tell the host which: '+M+' (M = 1) &rarr; stateful; '+O+' (O = 1 with M = 0) &rarr; stateless; both 0 &rarr; SLAAC only.';
   if(chance(.5)) return {
     prompt:'Describe the three ways an IPv6 host can be given its address &mdash; SLAAC, stateless DHCPv6 and stateful DHCPv6. Then explain how the host knows which method to use: which two flags in the router\'s RA, and what value each has for each method.',
     points:[
       '<b>SLAAC:</b> no server is involved &mdash; '+OWN+' from the /64 prefix in the router\'s Router Advertisement (RA), using EUI-64 or a random interface ID. Nothing keeps track of which addresses are used.',
-      '<b>Stateless DHCPv6:</b> the address is made exactly as above &mdash; '+SLESS+' &mdash; but a DHCPv6 server also provides other information; the host gets the DNS server from the DHCPv6 server. The server keeps no record of addresses.',
-      '<b>Stateful DHCPv6:</b> the address comes from a server: the '+ASSIGN+' (and the other information, like DNS), the same job as DHCPv4. The server keeps track of every client, so it knows which addresses are in use.',
+      '<b>Stateless DHCPv6:</b> just like SLAAC, '+SLESS+' from the RA\'s prefix &mdash; but a DHCPv6 server also provides other information; the host gets the DNS server from the DHCPv6 server. The server keeps no record of addresses.',
+      '<b>Stateful DHCPv6:</b> the '+ASSIGN+' (and the other information, like DNS), the same job as DHCPv4. The server keeps track of every client, so it knows which addresses are in use.',
       FLAGS,
     ],
   };
   return {
     prompt:'Compare SLAAC, stateless DHCPv6 and stateful DHCPv6. For each one, explain where the host gets its address, its DNS server and its default gateway. Then say which two flags in the router\'s RA tell the host which method to use, and what value each has for each method.',
     points:[
-      '<b>Address:</b> '+OWN+' from the /64 prefix in the router\'s RA (EUI-64 or a random interface ID); '+SLESS+' in the same way; and the '+ASSIGN+' and keeps track of it, like DHCPv4.',
+      '<b>Address:</b> '+OWN+' from the /64 prefix in the router\'s RA (EUI-64 or a random interface ID); '+SLESS+' in the same way; and with stateful, the '+ASSIGN+' and keeps track of it, like DHCPv4.',
       '<b>DNS server:</b> SLAAC alone gets none from DHCPv6 (only from the RA, if the router includes it); in stateless and stateful DHCPv6 the host gets the '+DNS+'.',
       '<b>Default gateway:</b> the same in all three &mdash; the host takes the '+GW+', which is the router\'s link-local address (e.g. fe80::1). DHCPv6 never hands out a gateway.',
       FLAGS,
