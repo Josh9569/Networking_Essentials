@@ -991,7 +991,12 @@ const EXAM_KEYS={
   ],
   "when the OSPF process starts": [
     "process starts", "process start", "ospf starts", "ospf start", "startup", "start up", "boot",
-    "boots", "reload", "restart", "clear ip ospf process", "first configured", "process is started"
+    "boots", "reload", "restart", "clear ip ospf process", "first configured", "process is started",
+    "ospf first starts", "ospf first start", "first starts", "first started", "process first starts",
+    "ospf is started", "ospf is first started", "ospf starts up", "ospf is enabled", "ospf is first enabled",
+    "ospf is turned on", "ospf is first turned on", "ospf begins", "process begins", "ospf is first configured",
+    "ospf is configured", "router ospf is configured", "router ospf is entered", "process initialises",
+    "ospf initialises", "on startup", "at startup", "at start up"
   ],
 },
 "q2b-metric": {
@@ -1472,24 +1477,29 @@ const EXAM_KEYS={
   ],
   "keeps its port": [
     "first keeps", "first one keeps", "first user keeps", "first host keeps", "first connection keeps",
-    "first session keeps", "keeps the port", "keeps its original port", "keeps its source port"
+    "first session keeps", "keeps the port", "keeps its original port", "keeps its source port",
+    "gets the port", "gets its port", "gets to keep"
   ],
   "assigns a different port": [
     "different port", "new port", "another port", "next available port", "unique port",
-    "changes the port", "translates the port", "other port", "free port", "port is changed",
+    "changes the port", "translates the port to", "translates the source port to", "other port", "free port", "port is changed",
     "port translation"
   ],
   "translates them back": [
     "translate back", "translated back", "translates the reply back", "translates replies back",
     "translates it back", "maps back", "maps it back", "changes it back", "reverse translation",
-    "back to the original port", "back to its original port"
+    "back to the original port", "back to its original port",
+    "translates the port back", "translates the source port back", "translates the ports back",
+    "translates the address back", "port back to"
   ],
   "{F} keeps port {n}": ["{FS}~{KEEP}"],
   "{L} gets a different port": ["{LS}~{MOVE}"],
   "translates it back": [
     "translate back", "translated back", "translates the reply back", "translates replies back",
     "translates them back", "maps back", "maps it back", "changes it back", "reverse translation",
-    "back to port {n}", "back to the original port", "back to its original port"
+    "back to port {n}", "back to the original port", "back to its original port",
+    "translates the port back", "translates the source port back", "translates the ports back",
+    "translates the address back", "port back to"
   ],
 },
 "q5a-dora": {
@@ -1748,10 +1758,6 @@ const EXAM_KEYS={
       "from the DHCPv6 server", "from DHCPv6", "from the server", "from a DHCPv6 server",
       "by the DHCPv6 server", "by the server", "DHCPv6 server"
     ],
-    "TRK": [
-      "track", "tracks", "record", "records", "log", "logs", "DUID", "database", "binding", "bindings",
-      "table", "remembers", "remember", "keeps a list"
-    ],
     "DX3": ["DNS", "DNS server", "DNS information"],
     "DVF": [
       "from", "comes from", "is from", "provided by", "is provided by", "supplied by", "is supplied by",
@@ -1795,10 +1801,9 @@ const EXAM_KEYS={
     ],
     "BADO": ["stateful", "SLAAC"],
   },
-  "SLAAC~builds its own address": ["SLAAC~{OWNT}"],
-  "stateless~takes its address from SLAAC": ["stateless~{SLT}"],
-  "stateful~DHCPv6 server assigns the address": ["stateful~{AST}"],
-  "stateful~server keeps track of every client": ["@stateful~{TRK}"],
+  "SLAAC~builds its own address": ["SLAAC~{OWNT}", "@SLAAC~{OWNT}"],
+  "stateless~has the device generate its own address": ["stateless~{SLT}", "@stateless~{SLT}"],
+  "DHCP server assigns the address": ["stateful~{AST}", "@stateful~{AST}"],
   "DNS server from the DHCPv6 server": [
     "{DX3} {DVF} {DS}", "DNS and other information from DHCP", "DNS and other information from DHCPv6",
     "DNS DHCP", "DNS DHCPv6", "DNS server DHCP", "DNS server DHCPv6", "{SS} {VS} {XS}",
