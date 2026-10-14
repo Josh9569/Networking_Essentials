@@ -2399,7 +2399,7 @@ card({id:'q5b-relay', area:'dhcp', tier:1, kind:'flash', src:'Q5 b', title:'Wher
   return {
     prompt: 'PCs on '+gw+'\'s '+ifc+' LAN ('+lan+') got their addresses from a DHCP server on that LAN. The server is moved to a data-centre network two routers away, at '+srv+', and the PCs stop getting addresses. Explain why. Then give the command that fixes it, saying which router and interface it goes on, what role that router then plays, and how it sends the PCs\' DHCP messages on to the server.',
     points: [
-      '<b>Here:</b> the server is no longer on the PCs\' subnet. Fix it on the PCs\' gateway, [[{gw} {ifc}]], with [[ip helper-address {srv}]].',
+      '<b>Here:</b> the server is no longer on the PCs\' subnet. Fix it on the PCs\' gateway, [[{gw} {ifc}]], with [[ip helper-address]] '+srv+'.',
       'Why: the PCs have no address yet, so their Discover is a '+bcast+', and '+noFwd+' &mdash; it never leaves '+lan+' to reach '+srv+'.',
       'With the helper address, '+gw+' acts as a '+relay+': it picks up the PCs\' DHCP broadcasts on '+ifc+' and forwards them to '+srv+' as '+ucast+', then passes the server\'s replies back onto the LAN.',
     ],

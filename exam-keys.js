@@ -1533,10 +1533,6 @@ const EXAM_KEYS={
       "interface facing the PCs", "PC-facing interface", "client-facing interface",
       "interface facing the clients"
     ],
-    "HELP": [
-      "helper-address", "helper address", "ip helper", "helper-address pointing to",
-      "helper-address set to", "helper-address of"
-    ],
   },
   "broadcast": ["broadcasts", "broadcasted", "broadcasting"],
   "routers do not forward broadcasts": [
@@ -1560,7 +1556,6 @@ const EXAM_KEYS={
   ],
   "ip helper-address": ["helper-address", "helper address", "ip helper", "helper"],
   "{gw} {ifc}": ["{gw}~{IFF}", "{OTHERS}~"],
-  "ip helper-address {srv}": ["{HELP} {srv}"],
 },
 "q5c-exclude": {
   "static": [
