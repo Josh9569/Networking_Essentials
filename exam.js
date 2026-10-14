@@ -366,7 +366,7 @@ function kwFind(words,k,subjects){
       const after=same.filter(o=>o.s>te).sort((x,y)=>x.s-y.s)[0];
       let own=null, linked=true;
       if(before&&KW_LINK.test(kwBetween(words,before.e,ts))) own=before;
-      else if(after&&(KW_LINK.test(kwBetween(words,te,after.s))||(carry&&/^\s*(?:for|from)\s*$/i.test(kwBetween(words,te,after.s))))) own=after;
+      else if(after&&(KW_LINK.test(kwBetween(words,te,after.s))||(carry&&/^\s*(?:for|from|of)(?:\s+(?:the|a|an))?\s*$/i.test(kwBetween(words,te,after.s))))) own=after;
       else {
         linked=false;
         if(carry&&!before){   // "Its AD is 110": the sentence has no subject of its own, so it is the last sentence's
@@ -383,16 +383,19 @@ function kwFind(words,k,subjects){
           own=lead||before||after;
         }
       }
-      if(veto){ if(linked&&own&&own.id===subj) vetoed=true; continue; }   // a veto needs the term right next to its subject
       /* A sentence with no subject in it ("OSPF. Lower AD.") belongs to the last subject named just before it. */
-      if(!own) own=list.filter(o=>words[o.s].sent===sent-1).sort((x,y)=>y.e-x.e)[0]||null;
+      if(!own&&!veto) own=list.filter(o=>words[o.s].sent===sent-1).sort((x,y)=>y.e-x.e)[0]||null;
       if(aware&&own&&own.s>=0){
         if(own.e<ts&&kwNegIn(words,own.e+1,ts-1)) continue;
         if(own.s>te&&kwNegIn(words,te+1,own.s-1)) continue;
         if(kwNegBefore(words,ts)) continue;
         const sp=own.s-1;   // "not OSPF": the name itself is negated
         if(sp>=0&&words[sp].sent===words[own.s].sent&&kwIsNeg(words[sp])) continue;
+        /* "instead of OSPF", "unlike OSPF", "rather than OSPF": the name is the one turned down */
+        const w1=sp>=0&&words[sp].sent===words[own.s].sent?words[sp].w.toLowerCase():'', w0=sp>=1&&words[sp-1].sent===words[own.s].sent?words[sp-1].w.toLowerCase():'';
+        if(w1==='unlike'||(w1==='of'&&w0==='instead')||(w1==='than'&&w0==='rather')) continue;
       }
+      if(veto){ if(linked&&own&&own.id===subj) vetoed=true; continue; }   // a veto needs the term right next to its subject
       if(own&&(own.id===subj||(own.not&&!mine.has(own.not)))){ for(let x=ts;x<=te;x++) hits.push(x); if(own.s>=0&&words[own.s].sent===sent) for(let x=own.s;x<=own.e;x++) hits.push(x); }
     }
   });
@@ -561,15 +564,21 @@ card({id:'q1b-adpair', area:'routing', tier:1, kind:'flash', src:'Q1 b', title:'
   const used=k=>each(k,s=>['is used','will be used','would be used','gets used','is the one used'].map(v=>'@'+s+' '+v).join('|'));
   const wins=k=>each(k,s=>['wins','win','would win','will win','should win'].map(v=>'@'+s+' '+v).join('|'));
   const bare=k=>each(k,s=>'^'+s+'|^'+s+' route|^'+s+' routes');
+  /* The loser named as the choice vetoes the key word, whatever else the
+     answer says: "RIP is chosen. OSPF would be used as a backup" is the
+     wrong way round even though "OSPF would be used" is in it. "@" keeps
+     "RIP is not chosen" from vetoing. */
+  const lower=['lower AD','lowest AD','lower administrative distance','lowest administrative distance','lower admin distance','smaller AD','better AD','more trusted','more trustworthy','trusted more'];
+  const veto=k=>names(k).map(s=>chosen.concat(lower,['wins','win','is used','will be used','gets used']).map(t=>'@!'+s+'~'+t).join('|')).join('|');
   const adOf=k=>'[['+PROTO[k].name+' '+PROTO[k].ad+'|'+said(k,[PROTO[k].ad],'>')+']]';
   const met=[a,b].filter(k=>k!=='static').map(k=>METRIC_NAME[k]);
-  const units='[[different units|different metric|different scale|different type|different kind|different way|different method|different measure|different calculation|different formula|measured differently|calculated differently|worked out differently|them differently|it differently|metric differently|own metric|own way|not comparable|incomparable|aren\'t comparable|isn\'t comparable|metrics are different|metric is different|t be compared|cannot be compared|cant be compared|can\'t compare|cannot compare|can not compare|cant compare|couldn\'t compare|unable to compare|no way to compare|never compared|apples|same protocol|same routing protocol|same source'
+  const units='[[different units|different metric|different scale|different type|different kind|different way|different method|different measure|different calculation|different formula|measured differently|calculated differently|worked out differently|them differently|it differently|metric differently|own metric|own way|not comparable|incomparable|aren\'t comparable|isn\'t comparable|metrics are different|metric is different|t be compared|cannot be compared|cant be compared|can\'t compare|cannot compare|can not compare|cant compare|couldn\'t compare|unable to compare|no way to compare|never compared|apples|same protocol|same routing protocol|same source|not the same unit|not the same units|metrics are not the same|metric is not the same|metrics aren\'t the same|mean different things|different for each protocol|different for every protocol|different between protocols|different in each protocol|metrics are different|different metrics'
     +(W==='static'||L==='static'?'|no metric|metric of 0|metric 0|metric is 0|metric of zero|zero metric|t have a metric':'')+']]';
   return {
     prompt:'If a router has a choice between two routes to a destination, one provided by '+src(a)+' and the other by '+src(b)+', which one will the router choose? Explain why: name the value the router compares, give it for both sources, and say what that value represents. Do the two routes\' metrics play any part? Why or why not?',
     points: [
-      '<b>Here:</b> [[the '+nm(W)+' route is chosen|'+said(W,chosen)+'|'+takes(W)+'|'+wins(W)+'|'+used(W)+'|'+bare(W)+']]. The router compares the [[administrative distance|AD|admin distance]] of the two sources and the lower one wins: '+adOf(W)+' against '+adOf(L)+'.',
-      'AD represents how [[trustworthy|trust|trustworthiness|reliable|believable|credible|confidence|priority|rank]] the source of a route is &mdash; the lower the number, the more it is trusted. When two sources offer the same prefix, only the one with the lowest AD is installed in the routing table.',
+      '<b>Here:</b> [[the '+nm(W)+' route is chosen|'+said(W,chosen.concat(lower))+'|'+takes(W)+'|'+wins(W)+'|'+used(W)+'|'+bare(W)+'|'+veto(L)+']]. The router compares the [[administrative distance|AD|admin distance]] of the two sources and the lower one wins: '+adOf(W)+' against '+adOf(L)+'.',
+      'AD represents how [[trustworthy|trust|trusts|trusted|trustworthiness|reliable|reliability|believable|credible|credibility]] the source of a route is &mdash; the lower the number, the more it is trusted. When two sources offer the same prefix, only the one with the lowest AD is installed in the routing table.',
       met.length===2
         ? 'The metrics play no part: '+met[0]+' and '+met[1]+' are measured in '+units+', so they can\'t be compared across sources. A metric only chooses between routes from the same source.'
         : 'The metrics play no part: a static route has no metric (0) to set against '+met[0]+', and metrics from different sources are in '+units+' anyway, so they are never compared.',
@@ -638,12 +647,15 @@ card({id:'q1c-admetric', area:'routing', tier:1, kind:'flash', src:'Q1 c', title
 card({id:'q1d-floating', area:'routing', tier:1, kind:'flash', src:'Q1 d', title:'Floating static routes', gen(){
   const p=pick(['ospf','eigrp','rip']), N=PROTO[p].name, ad=PROTO[p].ad, eg=ad+10;
   const cmd=mono('ip route 10.1.1.0 255.255.255.0 10.2.2.2 '+eg);
-  const lowest='[[lowest|lower|prefer|prefers|preferred|more trusted|most trusted|more believable|most believable|trustworthy]]';
+  /* The rule, not the word: the stemmer folds "lower" into "lowest", and
+     "give the static a lower AD" is the mistake this card is about. */
+  const lowest='[[lowest AD wins|lowest wins|lowest one wins|lowest AD is installed|lowest is installed|lowest AD is preferred|lowest is preferred|lowest AD is chosen|installs the lowest|install the lowest|installs the one with the lowest|installs the route with the lowest|install the route with the lowest|prefers the lowest|prefer the lowest|chooses the lowest|picks the lowest|uses the lowest|smallest AD wins|prefer|prefers|preferred|more trusted|most trusted|more believable|most believable|trustworthy]]';
+  const higher='[[higher AD|higher administrative distance|higher admin distance|higher distance|AD higher|AD is higher|AD that is higher|AD greater|greater AD|larger AD|bigger AD|AD above|AD more than|higher than the primary|higher than the original|higher than the dynamic|higher number|worse AD|less trusted|less trustworthy|AD of 254|higher value]]';
   if(chance(.5)) return {
     prompt:'What is the purpose of a floating static route, and when does it get used? How do you make a static route a floating static route, and why does that work?',
     points: [
       'A floating static route is a [[backup|backup route|secondary|failover|fail over|standby]]: it stays out of the routing table while the primary route exists and is installed only if the primary [[fails|failure|goes down|lost|unavailable|disappears|removed]].',
-      'Make it float by giving it an [[administrative distance|AD|admin distance|distance]] [[higher|greater|larger|bigger|more than|above]] than the primary route\'s &mdash; the AD goes at the end of the <span class="mono-inl">ip route</span> command.',
+      'Make it float by giving it a '+higher+' than the primary route\'s &mdash; the AD goes at the end of the <span class="mono-inl">ip route</span> command.',
       '<b>Why it works:</b> of two routes to the same network the router installs the one with the '+lowest+' AD, so the primary wins while it exists; without the higher AD the static route gets the default AD of 1 and would replace the primary.',
       'e.g. primary learned by '+N+' (AD '+ad+'): '+cmd+' &mdash; any AD from '+(ad+1)+' to 254 works (255 means "never install").',
     ],
@@ -652,13 +664,18 @@ card({id:'q1d-floating', area:'routing', tier:1, kind:'flash', src:'Q1 d', title
      any AD from ad+1 to 254. "#N" matches that number standing on its own,
      so a typed command's trailing AD or "set it to 150" counts but an
      octet of an address in the same answer never does. */
-  const vals=['an AD of '+eg];
-  for(let v=ad+1;v<255;v++) vals.push('#'+v);
+  /* Each number is paired with the route it belongs to, so "OSPF is 150
+     and the static route is 110" scores neither. */
+  const ST=['static','static route','floating static','floating static route','floating route','backup','backup route','backup link','floating'];
+  const PR=[N,N+' route','primary','primary route','dynamic route'];
+  const vals=[];
+  for(let v=ad+1;v<255;v++) ST.forEach(t=>vals.push('>'+t+'~'+v));
+  const adN=PR.map(t=>'>'+t+'~'+ad).join('|');
   const site=pick(['head office','data centre','main site']), r='R'+ri(1,3);
   return {
     prompt: r+' learns the route to its '+site+' through '+N+'. You add a static route over a backup link that should be used only if the '+N+' route is lost. What is this kind of route called? State the AD of the '+N+' route and an AD you would give the static route, and explain why that stops the static route replacing the '+N+' route.',
     points: [
-      '<b>Here:</b> it is a [[floating static route|floating static|floating route|floating]]. '+N+'\'s [[administrative distance|AD|admin distance|distance]] is [['+ad+']], so give the static route a higher one: [['+vals.join('|')+']] or anything from '+(ad+1)+' to 254, e.g. '+cmd+'.',
+      '<b>Here:</b> it is a [[floating static route|floating static|floating route|floating]]. the '+N+' route has an [['+N+' AD of '+ad+'|'+adN+']], so give the static route a higher one: a [[static AD of '+eg+'|'+vals.join('|')+']] or anything from '+(ad+1)+' to 254, e.g. '+cmd+'.',
       '<b>Why:</b> of two routes to the same network the router installs the one with the '+lowest+' AD. '+N+'\'s '+ad+' beats the static route while the '+N+' route exists, so the static stays out of the routing table and is installed only if that route is lost &mdash; that is what makes it "float".',
       'Left at a static route\'s default AD of 1 it would beat '+N+'\'s '+ad+' and replace the '+N+' route at once. 255 means "never install", so it is no use here.',
     ],
@@ -1156,7 +1173,7 @@ card({id:'q2b-metric', area:'ospf', tier:1, kind:'flash', src:'Q2 b', title:'The
   const mb=n=>n>=10000?'10,000':String(n);
   const calc=(L,lead)=>L.name+' ('+mb(L.mbps)+' Mbps)'+lead+' 100 &divide; '+mb(L.mbps)+(L.mbps===100?' = 1':' = '+(100/L.mbps)+', raised to 1');
   const ref=B.mbps>=10000?10000:1000, after=L=>Math.max(1,Math.floor(ref/L.mbps));
-  const GEN=['both','each','they','same','equal','identical','all'];
+  const GEN=['both','each','they'];
   /* One key for the pair. A value is paired with a name ("Gigabit: 1",
      "1 for Gig") or with "both / each / they / same". It is the FASTER
      link's pairing that counts: the slower one is exactly 1 anyway, and the
@@ -1170,6 +1187,11 @@ card({id:'q2b-metric', area:'ospf', tier:1, kind:'flash', src:'Q2 b', title:'The
      ITS name is not handed to the faster link ("Fa is 1 but Gig is 0.1").
      The term can never be said, so these forms never match. */
   A.al.forEach(s=>{ f.push(s+'~no value of its own'); });
+  /* Any other cost written against either link vetoes the key word:
+     "FastEthernet costs 10 and Gig costs 1" and "100 for the Fa link" are
+     wrong whichever link the 1 went to. */
+  const NOT=['0','0.1','0.01','0.001','0.5','2','5','10','64','100','1000','10000'];
+  A.al.concat(B.al).forEach(s=>NOT.forEach(n=>['','costs ','cost ','gets ','cost of ','has a cost of ','a cost of '].forEach(v=>f.push('>!'+s+'~'+v+n))));
   const one=f.join('|');
   return {
     prompt:'How does a Cisco router work out the OSPF cost of a route? Give the formula for one interface, and say which interfaces along the path count and how their costs combine. By default, what cost does a '+A.name+' link get, and a '+B.name+' link? Explain why they end up the same, including the default reference bandwidth and the lowest cost an interface can have.',
@@ -1781,6 +1803,14 @@ card({id:'q3c-place', area:'acl', tier:1, kind:'flash', src:'Q3 c', title:'Where
 }});
 
 card({id:'q3d-established', area:'acl', tier:1, kind:'flash', src:'Q3 d', title:'The established keyword', gen(){
+  /* The direction is the point, so an answer that has it backwards vetoes
+     the two traffic key words: letting NEW connections in, or blocking the
+     RETURN traffic. "@" keeps "does not allow new connections" from vetoing. */
+  const LET=['allows','allow','allowed','lets in','let in','permits','permit','permitted','accepts','accept'];
+  const STOP=['blocks','block','blocked','denies','deny','denied','drops','drop','dropped','stops','stop','rejects','reject'];
+  const veto=(verbs,terms)=>verbs.map(v=>terms.map(t=>'@!'+v+'~'+t).join('|')).join('|');
+  const RET=['return traffic','replies','reply','responses','response','return packets','returning traffic'];
+  const NEW=['new connections','new sessions','new connection','new session','connections initiated by outside','connections started by outside','connections from outside','connections from the outside','sessions from outside'];
   return {
     prompt: pick([
       'What is the purpose of adding the keyword established at the end of an ACL command line? Say which protocol it matches and which flag bits it checks, which returning traffic it lets in and who must have started that connection, what it still keeps out, and give one limitation.',
@@ -1788,9 +1818,9 @@ card({id:'q3d-established', area:'acl', tier:1, kind:'flash', src:'Q3 d', title:
     ]),
     points: [
       '<b>Matches:</b> only [[TCP]] segments that belong to a session already set up &mdash; those with the [[ACK or RST|ACK|RST|acknowledgement|ACK bit|ACK flag]] bit set.',
-      '<b>Lets in:</b> on an inbound ACL from outside, the [[return traffic|replies|reply|returning|responses|response|return packets|back in|come back in|comes back in|coming back in|let back in|allowed back in|traffic back]] &hellip;',
-      '&hellip; for connections that were [[started by inside hosts|initiated from inside|started from inside|opened from inside|inside hosts initiated|began inside|begun inside|began from inside|that began inside|inside hosts started|inside hosts opened|initiated by inside|started by inside|opened by inside|initiated by the inside|started by the inside|inside initiated|inside-initiated|internal hosts initiated|started by internal|initiated by internal|initiated by a host inside|started by a host inside|initiated by hosts inside|started by hosts inside|initiated by an inside|started by an inside|started internally|internally started|initiated internally|internally initiated|started on the inside|initiated on the inside|started within|initiated within|started from within|initiated from within|we started|we initiated|started by us|initiated by us|you started|you initiated|already started|already initiated|previously started|previously initiated|started by the internal|initiated by the internal|started from the inside|initiated from the inside|started by the user|initiated by the user|user started|user initiated|started by the host|initiated by the host|inside started|internal started|started by the local|initiated by the local|started locally|initiated locally]].',
-      '<b>Still blocks:</b> [[new connections|new sessions|new TCP|new connection|new session|start the connection|start a connection|starts the connection|starts a connection|starting connections|starting a connection|starting the connection|start connections|starts connections|start new connections|starting new connections|connection attempts|connection requests|incoming connections|started from outside|started by outside|initiated from outside|initiated by outside|started from the outside|initiated from the outside|started by an outside|initiated by an outside|started by the outside|initiated by the outside|outside-initiated|outside initiated|SYN]] from the outside (a SYN with no ACK does not match).',
+      '<b>Lets in:</b> on an inbound ACL from outside, the [[return traffic|replies|reply|returning|responses|response|return packets|back in|respond|responds|responding|can only respond|come back in|comes back in|coming back in|let back in|allowed back in|traffic back|'+veto(STOP,RET)+']] &hellip;',
+      '&hellip; for connections that were [[started by inside hosts|initiated from inside|started from inside|opened from inside|inside hosts initiated|began inside|begun inside|began from inside|that began inside|inside hosts started|inside hosts opened|initiated by inside|started by inside|opened by inside|initiated by the inside|started by the inside|inside initiated|inside-initiated|internal hosts initiated|started by internal|initiated by internal|initiated by a host inside|started by a host inside|initiated by hosts inside|started by hosts inside|initiated by an inside|started by an inside|started internally|internally started|initiated internally|internally initiated|started on the inside|initiated on the inside|started within|initiated within|started from within|initiated from within|we started|we initiated|started by us|initiated by us|you started|you initiated|already started|already initiated|previously started|previously initiated|started by the internal|initiated by the internal|started from the inside|initiated from the inside|started by the user|initiated by the user|user started|user initiated|started by the host|initiated by the host|inside started|internal started|started by the local|initiated by the local|started locally|initiated locally|started inside|initiated inside|started on the inside network|started from the inside network|started internally|started by internal devices|initiated by internal devices|started by the internal devices]].',
+      '<b>Still blocks:</b> [[new connections|new sessions|new TCP|new connection|new session|start the connection|start a connection|starts the connection|starts a connection|starting connections|starting a connection|starting the connection|start connections|starts connections|start new connections|starting new connections|connection attempts|connection requests|incoming connections|started from outside|started by outside|initiated from outside|initiated by outside|started from the outside|initiated from the outside|started by an outside|initiated by an outside|started by the outside|initiated by the outside|outside-initiated|outside initiated|SYN|'+veto(LET,NEW)+']] from the outside (a SYN with no ACK does not match).',
       '<b>Limitation:</b> it only checks the TCP flags &mdash; it is [[not stateful|stateless|not a stateful|no state|does not track|doesn\'t track|not track|not a firewall|faked|forged ACK|spoofed ACK|faked ACK|fake ACK|crafted ACK]], so a forged ACK would get through.',
     ],
   };
@@ -2199,7 +2229,7 @@ card({id:'g4-count', area:'nat', tier:2, kind:'graded', src:'Q4 c', title:'How m
 
 card({id:'q4b-static', area:'nat', tier:1, kind:'flash', src:'Q4 b', title:'Why static NAT', gen(){
   if(Math.random()<0.5) return {
-    prompt:'Why would you use the static NAT option? Say what kind of mapping it creates, what kind of inside device needs it, and why dynamic NAT or PAT would not work for that device.',
+    prompt:'Explain what static NAT does and why you would use it: what kind of address mapping it creates, what kind of inside device needs it, and why dynamic NAT or PAT would not work for that device.',
     points: [
       'Static NAT is a permanent [[one-to-one|one to one|1 to 1|1:1|permanent mapping|permanently maps|permanently map|permanently mapped|static mapping|fixed mapping|one fixed|one public address|one for one]] mapping between one inside local and one inside global address.',
       'It is for inside devices that must be [[reachable from outside|reachable from outside|reachable from the internet|accessible from outside|accessible from the internet|from the internet|from outside|connect to|people outside|outside users|outside hosts|external users|inbound|can reach|reach it|access it]] &mdash; typically a [[server|servers|web server|mail server]].',
