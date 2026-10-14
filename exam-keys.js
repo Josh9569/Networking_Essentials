@@ -1274,7 +1274,11 @@ const EXAM_KEYS={
     "wastes bandwidth", "wasting bandwidth", "waste bandwidth", "wasted bandwidth", "saves bandwidth",
     "save bandwidth", "saving bandwidth", "before it crosses the network", "before it crosses",
     "before it travels", "before it reaches the rest of the network", "before it uses",
-    "unnecessary traffic", "unwanted traffic is dropped early", "dropped before it"
+    "unnecessary traffic", "unwanted traffic is dropped early", "dropped before it",
+    "reduces network traffic", "reduce network traffic", "reducing network traffic", "less network traffic",
+    "reduces traffic", "reduce traffic", "reducing traffic", "less traffic", "lowers traffic",
+    "cuts down traffic", "cuts down on traffic", "saves traffic", "reduces the load", "reduces load",
+    "reduces congestion", "less congestion", "bandwidth"
   ],
 },
 "q3d-established": {
@@ -1609,8 +1613,17 @@ const EXAM_KEYS={
     "PS2": [
       "Fa0/2", "F0/2", "Fa 0/2", "FastEthernet0/2", "FastEthernet 0/2", "H2", "port 2"
     ],
+    "AP": [
+      "access vlan", "access vlans", "assign vlan", "assign vlans", "assigned vlan", "assigned vlans",
+      "assign them to vlan", "assign them to vlans", "assigned to vlan", "assigned to vlans", "put in vlan",
+      "put in vlans", "put them in vlan", "put them in vlans", "ports in vlan", "ports in vlans",
+      "hosts in vlan", "hosts in vlans", "ports to vlan", "ports to vlans", "interfaces in vlan",
+      "interfaces to vlan"
+    ],
+    "AV": ["VLAN ", ""],
   },
   "Fa0/1 in VLAN {x}": [
+    "{AP} {x} and {AV}{y}",
     "{PS1} {LINK} VLAN {x}", "{PS1} {LINK} vlan{x}", "{PS1} switchport access vlan {x}",
     "{PS1} vlan {x}", "VLAN {x} on {PS1}", "VLAN {x} for {PS1}", "VLAN {x} to {PS1}",
     "switchport access vlan {x} on {PS1}", "!{PS1} {VLINK} VLAN {y}", "!VLAN {y} on {PS1}",
@@ -1618,6 +1631,7 @@ const EXAM_KEYS={
     "!{PS1} switchport access vlan {y}"
   ],
   "Fa0/2 in VLAN {y}": [
+    "{AP} {x} and {AV}{y}",
     "{PS2} {LINK} VLAN {y}", "{PS2} {LINK} vlan{y}", "{PS2} switchport access vlan {y}",
     "{PS2} vlan {y}", "VLAN {y} on {PS2}", "VLAN {y} for {PS2}", "VLAN {y} to {PS2}",
     "switchport access vlan {y} on {PS2}", "!{PS2} {VLINK} VLAN {x}", "!VLAN {x} on {PS2}",
