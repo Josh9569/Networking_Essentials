@@ -702,6 +702,22 @@ const EXAM_KEYS={
     "sixteen~forever", "sixteen~dead", "sixteen~removed", "sixteen~infinite"
   ],
   "hop count": ["hop counts", "hops", "number of routers"],
+  "sends its routing table to its neighbours": [
+    "sends its routing table", "send its routing table", "sends their routing table", "send their routing tables",
+    "sends routing tables", "shares its routing table", "share their routing tables", "whole routing table",
+    "full routing table", "entire routing table", "routing table to its neighbours", "routing updates",
+    "periodic updates", "sends updates", "send updates", "advertises its routes", "advertise their routes",
+    "advertise routes", "advertises routes", "advertise the route", "advertises the route",
+    "learns from its neighbours", "learn from its neighbours", "learn from neighbours",
+    "what its neighbours tell it", "routing by rumour", "distance vector", "distance-vector"
+  ],
+  "30 seconds": ["30 s", "30 sec", "30 secs", "30secs", "every 30"],
+  "marked invalid after 180 seconds": [
+    "180 seconds", "180 s", "180 sec", "#180", "invalid timer", "marked invalid", "marked as invalid",
+    "marks it invalid", "marks it as invalid", "timer runs out", "timer expires", "times out", "timed out",
+    "stops hearing", "no longer hears", "not heard", "stops receiving updates", "holddown", "hold-down",
+    "hold down timer", "flush timer", "flushed", "240 seconds", "#240"
+  ],
   "adds one hop": [
     "add one hop", "adds a hop", "add a hop", "adds one", "add one", "plus one", "increases by one",
     "increase by one", "increments", "incremented", "goes up by one", "going up by one",
