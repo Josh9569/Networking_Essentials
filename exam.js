@@ -210,11 +210,11 @@ function kwStem(w){
    full stop, ; ! ? followed by a space, or a line break, starts a new one
    — "192.168.1.1" does not. */
 function kwTokens(text){
-  const out=[], re=/[A-Za-z0-9]+/g; let m, last=0, sent=0;
+  const out=[], re=/(?<![0-9.])0\.[0-9]+(?![0-9.])|[A-Za-z0-9]+/g;/* a bare decimal (0.1) is one token, not 0 and 1 */  let m, last=0, sent=0;
   const plain=String(text).replace(/&[a-z]+;/g,t=>' '+t.slice(1,-1)+' ');
   while((m=re.exec(plain))){
     const gap=plain.slice(last,m.index);
-    if(out.length&&(/[.;!?](\s|$)/.test(gap)||/\n/.test(gap))) sent++;
+    if(out.length&&(/[.;!?]\s/.test(gap)||/\n/.test(gap))) sent++;
     out.push({stem:kwStem(m[0]), at:m.index, len:m[0].length, w:m[0], gap, sent});
     last=m.index+m[0].length;
   }
@@ -275,34 +275,128 @@ function kwSubjects(keys){
 function kwBetween(words,a,b){   // the raw text from the end of word a to the start of word b
   let t=''; for(let x=a+1;x<=b;x++) t+=words[x].gap+(x<b?words[x].w:''); return t;
 }
+/* Opt-in extras for a form, written as a prefix so every existing key word
+   behaves exactly as before:
+     ">"  a pairing reads the way a person writes numbers: "110 for OSPF" and
+          "AD is 110 for RIP and 120 for OSPF" belong to the name after "for";
+          and a pairing whose sentence has no subject of its own but opens with
+          a pronoun ("Its AD is 110") belongs to the first subject of the
+          sentence before.
+     "@"  everything ">" does, and the form is refused when it is negated
+          ("OSPF is not chosen", "does not choose OSPF", "wouldn't pick OSPF",
+          "not OSPF, RIP is chosen"). "so it is chosen" means the sentence's own
+          first subject, not the one named last.
+     "^"  the form must open its sentence (articles and "answer" aside) and
+          be followed by a comma, the end of the sentence, or because/since/as
+          — so "OSPF." and "OSPF, because ..." count but "OSPF (110) vs RIP"
+          does not. */
+const KW_NEG=/^(?:not|no|never|neither|nor|cannot|cant|dont|doesnt|isnt|arent|wasnt|werent|wont|wouldnt|didnt|shouldnt|without)$/i;
+const KW_PRON=/^(?:it|its|this|their|they)$/i;
+const KW_ENDS=new Set(['because','since','as','cause'].map(kwStem));
+const KW_VS=new Set(['than','over','against','versus','vs','instead','compared','unlike'].map(kwStem));
+function kwIsNeg(w){ return KW_NEG.test(w.w)||(w.w==='t'&&/['’]$/.test(w.gap)); }
+function kwNegIn(words,a,b){ for(let x=Math.max(a,0);x<=b&&x<words.length;x++) if(kwIsNeg(words[x])) return true; return false; }
+function kwNegBefore(words,i){   // a negator in the same clause, up to two words before word i
+  for(let x=i-1;x>=Math.max(i-2,0);x--){
+    if(words[x].sent!==words[i].sent||/,/.test(words[x+1].gap)) return false;
+    if(kwIsNeg(words[x])) return true;
+  }
+  return false;
+}
+function kwAnchored(words,got){
+  const s=got[0], e=got[got.length-1];
+  for(let x=s-1;x>=0&&words[x].sent===words[s].sent;x--) if(!KW_ART.has(words[x].stem)&&!/^(?:answer|ans)$/i.test(words[x].w)) return false;
+  const n=words[e+1];
+  return !n||n.sent!==words[e].sent||(/,/.test(n.gap)&&!/[:\-–—(]/.test(n.gap))||(!/[:\-–—(,]/.test(n.gap)&&KW_ENDS.has(n.stem));
+}
+/* "110 against 120" / "AD 110 vs 120": two numbers set against each other go
+   to the names in the order they were mentioned, in this sentence or else the
+   one before. Returns the mention that owns the number at ts..te, or null. */
+const KW_VSW=new Set(['vs','versus','against'].map(kwStem));
+function kwOrdered(words,list,ts,te){
+  const sent=words[ts].sent, dig=w=>w&&w.sent===sent&&/^\d+$/.test(w.w);
+  const n=words[te+1], m=words[te+2], n3=words[te+3], p1=words[ts-1], p2=words[ts-2], p3=words[ts-3];
+  let idx=-1;
+  if(n&&n.sent===sent&&((KW_VSW.has(n.stem)&&dig(m))||(/^compared$/i.test(n.w)&&m&&/^(?:to|with)$/i.test(m.w)&&dig(n3)))) idx=0;
+  else if(p1&&p1.sent===sent&&((KW_VSW.has(p1.stem)&&dig(p2))||(/^(?:to|with)$/i.test(p1.w)&&p2&&/^compared$/i.test(p2.w)&&dig(p3)))) idx=1;
+  if(idx<0) return null;
+  let ms=list.filter(o=>words[o.s].sent===sent&&o.e<ts);
+  if(!ms.length) ms=list.filter(o=>words[o.s].sent===sent-1);
+  ms=ms.filter(o=>!ms.some(q=>q!==o&&q.s<=o.s&&q.e>=o.e&&(q.s<o.s||q.e>o.e)));   // "static" inside "static route"
+  const seen={}, order=[];
+  ms.sort((x,y)=>x.s-y.s).forEach(o=>{ if(!seen[o.id]){ seen[o.id]=1; order.push(o); } });
+  /* only the first name is known: the second number is the other one's */
+  return order[idx]||(idx===1&&order.length===1?{id:null, not:order[0].id, s:-1, e:-2}:null);
+}
 function kwFind(words,k,subjects){
   const hits=[];
   subjects=subjects||kwSubjects([k]);
   let occ=null;   // every subject mention: {id, s, e} (first and last word)
+  const mine=new Set(subjects.filter(sb=>k.forms.some(f=>kwTokens(f.slice(0,Math.max(f.indexOf('~'),0))).map(t=>t.stem).join(' ')===sb.id&&f.indexOf('~')>0)).map(sb=>sb.id));   // this key word's own names
+  let vetoed=false;   // a "!subject~term" form that matched: the answer says the opposite, so the key word fails
   k.forms.forEach(f=>{
+    let aware=false, carry=false, anchor=false, veto=false;
+    for(;;){ if(f[0]==='@'){ aware=true; carry=true; } else if(f[0]==='>') carry=true; else if(f[0]==='^') anchor=true; else if(f[0]==='!') veto=true; else break; f=f.slice(1); }
     const tilde=f.indexOf('~');
+    if(f.charAt(0)==='#'){   // "#150": that number standing alone, never an octet of a dotted address
+      const n=f.slice(1);
+      words.forEach((w,i)=>{ if(w.w===n&&w.gap!=='.'&&!(words[i+1]&&words[i+1].gap==='.')) hits.push(i); });
+      return;
+    }
     if(tilde<0){
       const st=kwTokens(f).map(t=>t.stem); if(!st.length) return;
-      for(let i=0;i<words.length;i++){ const got=kwSeqAt(words,st,i); if(got) for(let x=got[0];x<=got[got.length-1];x++) hits.push(x); }
+      for(let i=0;i<words.length;i++){
+        const got=kwSeqAt(words,st,i); if(!got) continue;
+        if(aware&&kwNegBefore(words,got[0])) continue;
+        if(anchor&&!kwAnchored(words,got)) continue;
+        for(let x=got[0];x<=got[got.length-1];x++) hits.push(x);
+      }
       return;
     }
     const subj=kwTokens(f.slice(0,tilde)).map(t=>t.stem).join(' ');
     const st=kwTokens(f.slice(tilde+1)).map(t=>t.stem); if(!st.length) return;
     if(!occ){ occ=[]; subjects.forEach(sb=>{ for(let i=0;i<words.length;i++){ const g=kwSeqAt(words,sb.st,i); if(g) occ.push({id:sb.id, s:g[0], e:g[g.length-1]}); } }); }
+    const list=occ;
     for(let i=0;i<words.length;i++){
       const got=kwSeqAt(words,st,i); if(!got) continue;
       const ts=got[0], te=got[got.length-1], sent=words[ts].sent;
-      const same=occ.filter(o=>words[o.s].sent===sent&&(o.e<ts||o.s>te));
+      if(words[te+1]&&/^(?:[kmgt]?(?:bps|bit|bits)|[kmgt]b)$/i.test(words[te+1].w)) continue;   // "1 Gbps" is a speed, not a count
+      const same=list.filter(o=>words[o.s].sent===sent&&(o.e<ts||o.s>te));
       const before=same.filter(o=>o.e<ts).sort((x,y)=>y.e-x.e)[0];
       const after=same.filter(o=>o.s>te).sort((x,y)=>x.s-y.s)[0];
-      let own=null;
+      let own=null, linked=true;
       if(before&&KW_LINK.test(kwBetween(words,before.e,ts))) own=before;
-      else if(after&&KW_LINK.test(kwBetween(words,te,after.s))) own=after;
-      else own=before||after;
-      if(own&&own.id===subj){ for(let x=ts;x<=te;x++) hits.push(x); for(let x=own.s;x<=own.e;x++) hits.push(x); }
+      else if(after&&(KW_LINK.test(kwBetween(words,te,after.s))||(carry&&/^\s*(?:for|from)\s*$/i.test(kwBetween(words,te,after.s))))) own=after;
+      else {
+        linked=false;
+        if(carry&&!before){   // "Its AD is 110": the sentence has no subject of its own, so it is the last sentence's
+          let a=ts; while(a>0&&words[a-1].sent===sent) a--;
+          let pron=false; for(let x=a;x<ts;x++) if(KW_PRON.test(words[x].w)) pron=true;
+          if(pron) own=list.filter(o=>words[o.s].sent===sent-1).sort((x,y)=>x.s-y.s)[0]||null;
+        }
+        if(!own&&carry) own=kwOrdered(words,list,ts,te);
+        if(!own){
+          /* "it" just before the term ("... than RIP, so it is chosen") means
+             the sentence's own subject, not the one named last. */
+          let it=false; for(let x=ts-1;x>=Math.max(ts-3,0)&&aware;x--) if(words[x].sent===sent&&/^(?:it|its)$/i.test(words[x].w)) it=true;
+          const lead=it&&same.filter(o=>!(words[o.s-1]&&words[o.s-1].sent===sent&&KW_VS.has(words[o.s-1].stem))).sort((x,y)=>x.s-y.s)[0];
+          own=lead||before||after;
+        }
+      }
+      if(veto){ if(linked&&own&&own.id===subj) vetoed=true; continue; }   // a veto needs the term right next to its subject
+      /* A sentence with no subject in it ("OSPF. Lower AD.") belongs to the last subject named just before it. */
+      if(!own) own=list.filter(o=>words[o.s].sent===sent-1).sort((x,y)=>y.e-x.e)[0]||null;
+      if(aware&&own&&own.s>=0){
+        if(own.e<ts&&kwNegIn(words,own.e+1,ts-1)) continue;
+        if(own.s>te&&kwNegIn(words,te+1,own.s-1)) continue;
+        if(kwNegBefore(words,ts)) continue;
+        const sp=own.s-1;   // "not OSPF": the name itself is negated
+        if(sp>=0&&words[sp].sent===words[own.s].sent&&kwIsNeg(words[sp])) continue;
+      }
+      if(own&&(own.id===subj||(own.not&&!mine.has(own.not)))){ for(let x=ts;x<=te;x++) hits.push(x); if(own.s>=0&&words[own.s].sent===sent) for(let x=own.s;x<=own.e;x++) hits.push(x); }
     }
   });
-  return hits;
+  return vetoed?[]:hits;
 }
 /* The model answer as HTML with its key words wrapped, plus the key words. */
 function kwModel(points){
@@ -331,21 +425,116 @@ function kwCheck(text,keys){
 }
 
 /* ═══ Q1 — static and dynamic routing, AD, metrics, floating statics ═════ */
+/* q1a: the two scenario prompts have opposite answers (a company outgrowing
+   static routes; a small hub-and-spoke that should keep them), so the first
+   key word is the VERDICT and is graded as a choice, not as vocabulary. It
+   uses "subject~term" pairing (see kwFind): the option named in the answer
+   (D = dynamic, S = static) has to own a choosing, praising or dismissing
+   word. The prompts say "rely on static routes or on a dynamic routing
+   protocol" and none of the verdict words are in them, so copying the
+   question scores nothing; nor does restating the network's facts, because
+   no reasoning key word is a word the scenario prompt uses.
+   - D~verb is "move to / switch to / adopt ... dynamic"; a negator before
+     it ("no need to", "don't", "rather than") owns the verb instead, which
+     is what Q1A_NEG is for: subjects with nothing after the ~, registered
+     only so they win ownership.
+   - D~praise ("dynamic is better") and S~criticism ("static won't scale")
+     both mean "go dynamic"; S~praise, D~dismissal ("OSPF is overkill") and
+     "no need to move to dynamic" mean "keep static".
+   - "Use OSPF", "Dynamic: it learns routes automatically ..." are terse
+     verdicts, covered by protocol~use and D~learn/adapt/scale. A bare
+     "Dynamic." or the question's own option names score nothing: they cannot
+     be told apart from copying the prompt. */
+const Q1A_DYN=['dynamic routing protocol','dynamic routing','dynamic protocol','routing protocol','dynamic','OSPF','EIGRP','RIP'];
+const Q1A_PROTO=['OSPF','EIGRP','RIP'];
+const Q1A_STA=['static routes','static routing','static'];
+/* the tails of "dynamic routing protocol": "use dynamic" is owned by what follows it */
+const Q1A_TAIL=['routing protocol','routing','protocol'];
+const Q1A_NEG=['no need to','no need for','no reason to','no point in','not worth','not need to','t need to','t need','not','t','never','rather than','instead of','without','unless'];
+const Q1A_MOVE=['move to','moving to','move over to','switch to','switching to','change to','changing to','migrate to','migrating to','convert to','upgrade to','transition to','go with','going with','go for','opt for','adopt','adopting','implement','implementing','deploy','deploying','choose','choosing','pick','select','start using','prefer','recommend','suggest','introduce','introducing','definitely','certainly','clearly','obviously','absolutely','probably','preferably','ideally','surely','need a','needs a','need an','needs an','will need','would need','should have','must have'];
+const Q1A_USE=['use','using','run','running','configure','enable'];
+const Q1A_D_GOOD=['better','best','preferable','preferred','suitable','ideal','appropriate','recommended','is needed','are needed','be needed','necessary','is required','are required','be required','essential','easier','easier to manage','more efficient','efficient','manageable','right choice','right call','correct choice','way to go','the answer','the solution','worth it','worthwhile','should be used','should be implemented','should be adopted','should be deployed'];
+const Q1A_D_DOES=['learn','adapt','reroute','reconverge','automatically','automatic','scale','scalable','scalability','share routes','self healing'];
+const Q1A_S_BAD=['impractical','not practical','unmanageable','not manageable','hard to manage','difficult to manage','too much work','too much effort','too much admin','too much configuration','too many','too hard','too difficult','too complex','too complicated',"won't scale",'will not scale',"doesn't scale",'does not scale',"don't scale",'do not scale',"can't scale",'cannot scale','not scalable','unscalable','not viable','not feasible','infeasible','not sustainable','unsustainable','not suitable','unsuitable','not appropriate','inappropriate',"won't work",'will not work','a nightmare','not enough','inadequate','outgrown','not good enough','a bad idea','error prone','time consuming','tedious','no longer'];
+const Q1A_S_LEAVE=['move away from','moving away from','stop using','replace','replacing','get rid of','drop','abandon','phase out','outgrow','outgrown','no longer use','no longer need'];
+const Q1A_S_KEEP=['keep','keeping','keep using','stay with','staying with','stay on','stick with','stick to','sticking with','continue using','continue with','continue to use','remain with','retain','carry on with','carry on using','go with','going with','opt for','choose','choosing','pick','select','use','using','prefer','recommend','suggest','stay','remain','definitely','certainly','clearly','obviously','absolutely','probably','preferably','ideally','surely'];
+const Q1A_S_GOOD=['better','best','preferable','preferred','suitable','sufficient','enough','fine','adequate','appropriate','ideal','recommended','right choice','right call','correct choice','all it needs','all they need','will do','would do','works fine','work fine','perfectly fine','the answer','way to go','should be used','should be kept','should stay','should remain','definitely','certainly','clearly','obviously','absolutely','probably','preferably','ideally','surely'];
+const Q1A_D_BAD=['overkill','unnecessary','not necessary','not needed','unneeded','not required','pointless','a waste','wasteful','no benefit','no advantage','nothing to gain','too complex','too complicated','more complex than needed','excessive','not justified','unjustified','useless','not worth it','not worth the effort','more than needed','more than necessary','not warranted','over the top'];
+const Q1A_D_NO=q1aNot(Q1A_MOVE.concat(Q1A_USE,['bother with'])).concat(['no need for','no need to move to','no need to switch to','no need to use','no need to run','no need to implement','no need to deploy','no need to adopt','no need to change to','no reason to use','no reason to move to','no reason to switch to','no point in using','no point in moving to','not worth moving to','not worth using','not need','t need','t require','not require','no use for','rather than','instead of','without','avoid']);
+/* stub variant, "dynamic would be better once ...": paired with D so that
+   "the network will not grow" (owned by the static option) cannot score it */
+const Q1A_GROWS=['grow','grows','growing','growth','expand','expands','expanding','expansion','large','larger','big','bigger','many routers','more routers','lots of routers','many sites','more sites','new sites','additional sites','extra sites','many branches','more branches','new branches','additional branches','extra branches','new routers'];
+const Q1A_REDUND=['redundant','redundancy','multiple paths','more than one path','several paths','alternate path','alternative path','backup link','backup path','multiple links','more than one link','several links','extra links','additional links','mesh','failover','fail over','link fails','link failure','fails','failure','reroute','reconverge','convergence','adapts'];
+function q1aNot(verbs){ const out=[]; ['t','not','never','no need to','no reason to'].forEach(n=>verbs.forEach(v=>out.push(n+' '+v))); return out; }
+function q1aPair(subs,terms){ const out=[]; subs.forEach(s=>terms.forEach(t=>out.push(s+'~'+t))); return out; }
+/* grow: choose dynamic */
+const Q1A_TO_DYN=[].concat(
+  q1aPair(Q1A_DYN,Q1A_MOVE), q1aPair(Q1A_PROTO,Q1A_USE),
+  q1aPair(Q1A_DYN,Q1A_D_GOOD), q1aPair(Q1A_DYN,Q1A_D_DOES), q1aPair(Q1A_STA,Q1A_S_BAD), q1aPair(Q1A_STA,Q1A_S_LEAVE),
+  Q1A_NEG.map(n=>n+'~'),
+  /* last: the tails would otherwise tie with "static routes" for the word "routes" */
+  q1aPair(Q1A_TAIL,['use dynamic','using dynamic'])).join('|');
+/* stub: keep static. S and D are both registered so each owns its own words. */
+const Q1A_TO_STA=[].concat(
+  q1aPair(Q1A_STA,Q1A_S_KEEP), q1aPair(Q1A_STA,Q1A_S_GOOD), q1aPair(Q1A_DYN,Q1A_D_BAD), q1aPair(Q1A_DYN,Q1A_D_NO),
+  Q1A_NEG.map(n=>n+'~'),
+  ['stay static','remain static','leave it as it is','leave it as is','keep it as it is','keep it as is','no need to change','t need to change','not need to change','nothing needs to change','nothing to change','no changes needed','no change needed']).join('|');
 card({id:'q1a-dynamic', area:'routing', tier:1, kind:'flash', src:'Q1 a', title:'Static vs dynamic routing', gen(){
-  return {
-    prompt: pick([
-      'Why would you use a dynamic routing protocol rather than static routes? When would it be preferable to use static routes?',
-      'A company is growing from '+ri(2,3)+' routers to '+ri(20,40)+', with redundant links between its sites. Should it keep using static routes or move to a dynamic routing protocol? When would static routes still be the better choice?',
-      'Give two advantages of a dynamic routing protocol over static routes, and two situations where static routes are the better choice.',
+  /* Key-word forms. None of them is a word a prompt uses ("growing",
+     "redundant", "ISP" ...), and none is a bare "default route", "every
+     router" or "manual": those are what an answer about anything says. */
+  const kScale='scales|scale|scalable|scalability|automatically|automatic|auto|less admin|less configuration|less config|less work|less effort|large network|larger network|big network|bigger network|lots of routers|many routers|more routers|manual configuration|manually configure|manually configuring|manually add|manually adding|manually enter|manually entering|manually update|manually updating|manual updates|manual work|manual effort|by hand|no manual|without manual|less manual|typing routes|type the routes|enter routes|entering routes';
+  const kFail='link fails|link failure|link failures|fails|fail|failure|failures|failover|fail over|goes down|go down|went down|link down|reroute|re-route|reconverge|converge|convergence|topology change|topology changes|adapts|adapt|self-healing|alternate path|alternative path|alternate route|alternative route|another path|other path|different path|another route|backup path|backup route|new path|new route|find another|finds another|use the redundant|use the other link|use the backup|use the other path|switch to the other|fall back';
+  /* the ISP forms are owned by the static option ("static only for the ISP
+     link"), so describing the network's own ISP link scores nothing */
+  const kStub='stub network|stub networks|stub|single exit|one exit|only one exit|single way out|one way out|only one way out|only way out|only one path|single path|only one route|single route|only one link|one link out|single link|single connection|only one connection|no other path|'+q1aPair(Q1A_STA,['ISP','internet']).join('|');
+  const kSmall="small network|small networks|small|few routers|few routes|few networks|handful|simple network|simple topology|tiny|rarely change|rarely changes|seldom change|does not change|doesn't change|not change|never change|won't change|will not change|stable";
+  const dynWhy=[
+    '<b>Dynamic:</b> routers learn and share routes automatically, so adding a network doesn\'t mean typing a route into every router &mdash; it [['+kScale+']] to large and growing networks.',
+    '<b>Dynamic:</b> it adapts when a [['+kFail+']] &mdash; the routers reconverge onto another path with no admin action, where a static route stays pointed at the dead link.',
+  ];
+  const ask=' Decide whether it should rely on static routes or on a dynamic routing protocol. Give two reasons for your choice, using the details of this network, and describe two situations where the other option would be the better choice.';
+  const v=pick(['why','two','grow','stub']);
+  if(v==='why') return {
+    prompt:'Why would you use a dynamic routing protocol rather than static routes? Give two reasons. When would it be preferable to use static routes? Describe two kinds of network where they are the better choice.',
+    points: dynWhy.concat([
+      '<b>Static:</b> a [['+kSmall+']] with few routes that rarely change.',
+      '<b>Static:</b> a [['+kStub+']] with a single way out &mdash; e.g. a default route to the ISP.',
+      'Static routes also send no routing updates (more secure, no CPU, memory or bandwidth spent) and can back up a dynamic route (a floating static route). Dynamic routing costs those resources and is more complex to configure and secure.',
     ]),
-    points: [
-
-      '<b>Dynamic:</b> routers learn and share routes [[automatically|automatic|auto]], so a large or growing network needs far less manual configuration &mdash; it [[scales|scale|scalable|scalability|large network|larger network|big network|growing|grows]].',
-      '<b>Dynamic:</b> it adapts to topology changes &mdash; when a [[link fails|fails|failure|failures|goes down|failover|fail over|redundant|redundancy|alternate path|alternative path|backup path|topology change|reconverge|converge]] the routers reconverge onto another path with no admin action.',
-      'The cost of dynamic routing: it uses router [[CPU|processing|memory|bandwidth|overhead|resources]], memory and link bandwidth, and is more complex to configure and secure.',
-      '<b>Static:</b> [[small networks|small network|small|few routes|few routers]] with few routes that rarely change.',
-      '<b>Static:</b> a [[stub network|stub|single exit|one exit|single path|one path|one way out|single link|one link|default route]] with a single way out &mdash; e.g. a default route to the ISP.',
-      '<b>Static:</b> no routing updates are sent &mdash; more [[secure|security|no updates|no routing updates]], no overhead &mdash; and the path is exactly what the admin chose; also used as a backup (floating static route).',
+  };
+  if(v==='two') return {
+    prompt:'Give two advantages of a dynamic routing protocol over static routes, and two advantages of static routes over a dynamic routing protocol.',
+    points: dynWhy.concat([
+      '<b>Static:</b> more [[secure|more secure|security|no updates|no routing updates|not advertised|never advertised|nothing advertised|no advertisements|safer]] &mdash; no routing updates are sent, so there is nothing to intercept or spoof.',
+      '<b>Static:</b> [[no overhead|overhead|CPU|processing|processor|memory|RAM|bandwidth|resources|resource|less load|lightweight]] &mdash; no CPU, memory or link bandwidth is spent running a protocol.',
+      'Also: a static route always takes exactly the path the admin chose.',
+    ]),
+  };
+  if(v==='grow'){
+    const n0=ri(2,3), n1=ri(20,40);
+    return {
+      prompt:'A company is growing from '+n0+' routers to '+n1+', with redundant links between its sites.'+ask,
+      points:[
+        '<b>Here:</b> the company [[should move to a dynamic routing protocol|'+Q1A_TO_DYN+']] such as OSPF &mdash; '+n1+' routers with redundant links between sites is more than static routes can handle.',
+        '<b>Why:</b> with static routes, every new network means a route typed into each of the '+n1+' routers; a protocol learns and shares routes automatically, so it [['+kScale+']].',
+        '<b>Why:</b> the redundant links only help if traffic moves onto them when a [['+kFail+']] &mdash; a static route stays pointed at the dead link, while a protocol reconverges onto another path with no admin action.',
+        '<b>Static is still better:</b> for a [['+kStub+']] with a single way out &mdash; e.g. the edge router\'s default route to the ISP.',
+        '<b>Static is still better:</b> in a [['+kSmall+']] with few routes that rarely change.',
+      ],
+    };
+  }
+  const n=ri(3,4);
+  const q1aG=['once it grows','once the company grows','once the network expands','once it expands','once the company expands','if the network grows','if it grows','if the company grows','if the network expands','if it expands','if the company expands','when the network grows','when it grows','when the company grows','when the network expands','when it expands','as the network grows','as it grows','as the company grows','as it expands','grows larger','grows bigger','grows to','grows into','expands to','gets bigger','gets larger','if more sites are added','once more sites are added','when more sites are added','if new sites are added','once new sites are added','when new sites are added','if sites are added','if more routers are added','once more routers are added','when more routers are added','if routers are added','if the company adds','once the company adds','when the company adds'].concat(q1aPair(Q1A_DYN,Q1A_GROWS)).join('|');
+  const q1aR=['once there are redundant links','if there are redundant links','when there are redundant links','if there were redundant links','if it had redundant links','if it has redundant links','if the company has redundant links','once there is redundancy','if there is redundancy','if redundant links are added','once redundant links are added','when redundant links are added','if backup links are added','if there are backup links','if there were backup links','if there are multiple paths','if there were multiple paths','once there are multiple paths','when there are multiple paths','if there is more than one path','once there is more than one path','if links are added','if more links are added','once more links are added','if extra links are added','if there are multiple links','if there are several links','if there are alternate paths','if there are alternative paths'].concat(q1aPair(Q1A_DYN,Q1A_REDUND)).join('|');
+  return {
+    prompt:'A company has '+n+' routers: one at its head office and one at each of its '+(n-1)+' branches. Every branch router is cabled to the head office and to nothing else, and the head office is cabled to its ISP. The company has no plans to add any more sites.'+ask,
+    points:[
+      '<b>Here:</b> the company [[should keep its static routes|'+Q1A_TO_STA+']] &mdash; '+n+' routers, and every branch has only one way out, so a routing protocol would have nothing to choose between.',
+      '<b>Why:</b> each branch is a [[stub network|stub|single exit|one exit|one way out|only one way out|single way out|only one path|single path|only one route|only route|only one link|one link|single link|single connection|no other path|no other route|nowhere else|hub and spoke|hub-and-spoke]]: one static default route pointing at the head office covers everything, and the head office needs just a default route to the ISP plus one route per branch LAN.',
+      '<b>Why:</b> it is a [[small network|small|few routers|few routes|few networks|handful|simple network|simple topology|tiny|stays the same|stay the same|stable|not change|never change|won\'t change|doesn\'t change|not grow|won\'t grow|isn\'t growing|not growing|no growth|not expand|won\'t expand|not expanding|isn\'t expanding|no expansion|stay small|remain small]] that won\'t change &mdash; no sites are being added, so the routes are typed once and left alone.',
+      '<b>Dynamic would be better:</b> [[once the network grows|'+q1aG+']] to many routers &mdash; a protocol learns and shares routes automatically instead of each one being typed into every router.',
+      '<b>Dynamic would be better:</b> [[once there are redundant links|'+q1aR+']] &mdash; when one fails a protocol reconverges onto another path, where a static route stays pointed at the dead link.',
     ],
   };
 }});
@@ -354,46 +543,124 @@ card({id:'q1b-adpair', area:'routing', tier:1, kind:'flash', src:'Q1 b', title:'
   const pair=chance(.45)?['ospf','rip']:pick([['eigrp','ospf'],['eigrp','rip'],['ospf','isis'],['ebgp','ospf'],['static','ospf']]);
   const [a,b]=shuffle(pair), W=PROTO[a].ad<PROTO[b].ad?a:b, L=W===a?b:a;
   const src=k=>k==='static'?'a static route':'the routing protocol '+PROTO[k].name;
+  const nm=k=>k==='static'?'static':PROTO[k].name;
+  /* Which source the answer picks, and which AD belongs to which source, are
+     graded by pairing (subject~term): "RIP is chosen over OSPF" or "OSPF 120,
+     RIP 110" score nothing for OSPF. Every name a learner might use (KW_NAME)
+     is a subject, the loser's included, which is what lets a sentence naming
+     both be read the right way round. The "@" forms ignore a negated choice
+     ("OSPF is not chosen, RIP is preferred") and follow "Its AD is 110" back
+     to the sentence before; "^" takes a bare "OSPF." / "OSPF, because ...". */
+  const names=k=>KW_NAME[k].split('|');
+  const said=(k,terms,fl)=>names(k).map(s=>terms.map(t=>(fl||'@')+s+'~'+t).join('|')).join('|');
+  const each=(k,fn)=>names(k).map(fn).join('|');
+  /* An active verb in front of the name ("uses the OSPF route") is the router
+     choosing; "OSPF uses cost" is not, so use/take/go with are never paired. */
+  const chosen=['chosen','choose','chooses','chose','choice','prefer','preferred','preferable','pick','picked','select','selected','install','installed','best','better','winner','beats','beat','outranks','outrank','overrides','override','overrule','overrules'];
+  const takes=k=>each(k,s=>['use','using','take','taking','go with','goes with','going with','went with','opt for','opts for'].map(v=>'@'+v+' '+s).join('|'));
+  const used=k=>each(k,s=>['is used','will be used','would be used','gets used','is the one used'].map(v=>'@'+s+' '+v).join('|'));
+  const wins=k=>each(k,s=>['wins','win','would win','will win','should win'].map(v=>'@'+s+' '+v).join('|'));
+  const bare=k=>each(k,s=>'^'+s+'|^'+s+' route|^'+s+' routes');
+  const adOf=k=>'[['+PROTO[k].name+' '+PROTO[k].ad+'|'+said(k,[PROTO[k].ad],'>')+']]';
+  const met=[a,b].filter(k=>k!=='static').map(k=>METRIC_NAME[k]);
+  const units='[[different units|different metric|different scale|different type|different kind|different way|different method|different measure|different calculation|different formula|measured differently|calculated differently|worked out differently|them differently|it differently|metric differently|own metric|own way|not comparable|incomparable|aren\'t comparable|isn\'t comparable|metrics are different|metric is different|t be compared|cannot be compared|cant be compared|can\'t compare|cannot compare|can not compare|cant compare|couldn\'t compare|unable to compare|no way to compare|never compared|apples|same protocol|same routing protocol|same source'
+    +(W==='static'||L==='static'?'|no metric|metric of 0|metric 0|metric is 0|metric of zero|zero metric|t have a metric':'')+']]';
   return {
-    prompt:'If a router has a choice between two routes to a destination, one provided by '+src(a)+' and the other by '+src(b)+', which one will the router choose? Why?',
+    prompt:'If a router has a choice between two routes to a destination, one provided by '+src(a)+' and the other by '+src(b)+', which one will the router choose? Explain why: name the value the router compares, give it for both sources, and say what that value represents. Do the two routes\' metrics play any part? Why or why not?',
     points: [
-      'The <b>[['+KW_NAME[W]+']]</b> route, because it has the [[lower|lowest|smaller|smallest|less]] [[administrative distance|AD]] ('+adList([W,L])+').',
-      'AD rates how [[trustworthy|trust|trusted|reliable|reliability|believable|believability|preferred]] a route\'s source is. When two sources offer the same prefix, the lower AD is installed in the routing table.',
-      'The [[metrics|metric]] can\'t decide it: '+METRIC_NAME[a]+' and '+METRIC_NAME[b]+' are measured in different units, so they aren\'t compared across sources.',
-      'The '+PROTO[L].name+' route is kept in reserve and installed only if the '+PROTO[W].name+' route [[disappears|fails|failure|goes down|lost|removed|withdrawn|unavailable|backup]].',
+      '<b>Here:</b> [[the '+nm(W)+' route is chosen|'+said(W,chosen)+'|'+takes(W)+'|'+wins(W)+'|'+used(W)+'|'+bare(W)+']]. The router compares the [[administrative distance|AD|admin distance]] of the two sources and the lower one wins: '+adOf(W)+' against '+adOf(L)+'.',
+      'AD represents how [[trustworthy|trust|trustworthiness|reliable|believable|credible|confidence|priority|rank]] the source of a route is &mdash; the lower the number, the more it is trusted. When two sources offer the same prefix, only the one with the lowest AD is installed in the routing table.',
+      met.length===2
+        ? 'The metrics play no part: '+met[0]+' and '+met[1]+' are measured in '+units+', so they can\'t be compared across sources. A metric only chooses between routes from the same source.'
+        : 'The metrics play no part: a static route has no metric (0) to set against '+met[0]+', and metrics from different sources are in '+units+' anyway, so they are never compared.',
+      'The '+nm(L)+' route is kept in reserve and installed only if the '+nm(W)+' route disappears.',
     ],
   };
 }});
 
 card({id:'q1c-admetric', area:'routing', tier:1, kind:'flash', src:'Q1 c', title:'Metric vs administrative distance', gen(){
-  return {
-    prompt: pick([
-      'Routing protocols use both metrics and administrative distance (AD). If there is a choice of routes to the same destination, which have different metrics and ADs, which route is chosen?',
-      'R1 has two routes to the same network: one with a lower metric, the other with a lower administrative distance. Which does it install, and when does the metric matter at all?',
-    ]),
+  /* Shared key-word forms. "Lowest AD wins" is the verdict on the paper's
+     general question and the reason on R1's; the metric only decides within
+     one source. "tie" alone is left out: the general prompt also asks what a
+     tie on both values does. */
+  const lowerAd='lower administrative distance|lowest administrative distance|lower AD|lowest AD|smaller AD|smallest AD|best AD|lower admin distance|lowest admin distance|low AD|AD is lower|AD is lowest|AD is smaller|AD is smallest|AD is better|AD first|AD is compared first|AD is checked first|AD is looked at first|AD comes first|AD goes first|AD is considered first|AD is used first|AD is looked at before|AD is checked before|AD is compared before|AD is considered before|AD is used before|AD is more important|AD matters more|AD takes priority|AD takes precedence|AD before|AD over the metric|AD over metric|AD wins|AD decides';
+  const sameSrc='same routing protocol|same protocol|same source|same AD|same administrative distance|equal AD|equal administrative distance|same admin distance|same ADs|equal ADs|ADs are equal|ADs are the same|AD is the same|AD is equal|AD is tied|ADs are tied|ADs tie|one protocol|single protocol|same dynamic protocol|same dynamic routing protocol|same routing source|same routing protocols|same protocols|same type of route|within a protocol|within one protocol|within the protocol|inside one protocol|tie breaker|tiebreaker|tie-break';
+  const units='different units|different unit|different metric|different metrics|metrics are different|metric is different|different scale|different scales|different type|different kind|different way|different ways|different method|different measure|different measurement|different calculation|different formula|measured differently|calculated differently|worked out differently|calculate differently|measure differently|metric differently|metrics differently|them differently|own metric|own way|not comparable|incomparable|aren\'t comparable|isn\'t comparable|not directly comparable|not compared|never compared|not be compared|t be compared|cannot be compared|can not be compared|cant be compared|can\'t compare|cannot compare|can not compare|cant compare|unable to compare|no way to compare|apples|arent comparable|isnt comparable|aren t comparable|isn t comparable|not comparable between|dont mean the same|don t mean the same|do not mean the same|does not mean the same|doesnt mean the same|doesn t mean the same|mean different things|mean different|not the same thing|not the same unit|not the same units|measure things differently|measure different things|measures different things|measure something different|measures something different|measured differently|different things|different between protocols|different between the protocols|different across protocols|differ between protocols|differ across protocols|differs between protocols|different for each protocol|different for every protocol|different in each protocol|different protocols calculate|different protocols use different|different protocols measure|use different metrics|uses different metrics|use a different metric|uses a different metric|use different measures|play no part|plays no part|have nothing to do with|has nothing to do with|metrics are ignored|metric is ignored|metrics are not used|metric is not used|metrics are not considered|metric is not considered|metrics arent considered|metric isnt considered|metrics aren t considered|metric isn t considered|metrics are irrelevant|metric is irrelevant|metrics are not relevant|metric is not relevant|metrics do not matter|metric does not matter|metrics dont matter|metric doesnt matter|metrics don t matter|metric doesn t matter|metrics are not looked at|metric is not looked at';
+  /* The paper's own question is general, so the rule is the answer. The
+     prompt spells out every part the key words grade. */
+  if(chance(.5)) return {
+    prompt:'Routing protocols use both metrics and administrative distance (AD). If there is a choice of routes to the same destination, which have different metrics and ADs, which route is chosen? Explain what AD and the metric each measure, and when the metric decides between routes. What happens if two routes have the same AD and the same metric?',
     points: [
-
-      '<b>AD first:</b> of the routes to the same prefix from different sources, the one with the [[lowest|lower|smallest|smaller]] [[administrative distance|AD]] is installed, whatever its metric.',
-      '<b>Metric second:</b> the [[metric]] only chooses between routes from the [[same protocol|same source|same routing protocol|same AD|same administrative distance|equal AD|equal administrative distance]] (same AD) &mdash; e.g. two OSPF paths, lowest cost wins.',
-      'Same AD and same metric: both are installed and traffic is [[load balanced|load balance|load balancing|load share|load sharing|ECMP|equal cost|both installed|both used]] (equal-cost multipath).',
-      'Different prefix lengths are different routes and can all be installed; when forwarding, the [[longest prefix match|longest prefix|longest match|most specific|more specific|prefix length]] is used before AD is ever considered.',
+      '<b>Lowest AD wins:</b> of the routes to the same prefix from different sources, the one with the [[lowest administrative distance|'+lowerAd+']] is installed, whatever its metric &mdash; AD is compared first.',
+      '<b>AD</b> rates how [[trustworthy|trust|trusted|trusts|trustworthiness|reliable|reliability|believable|believability|credible|credibility|confidence|how good the source|how good a source]] the source of a route is (connected 0, static 1, EIGRP 90, OSPF 110, RIP 120): the lower the number, the more the router believes it.',
+      '<b>The metric</b> measures how good a path is &mdash; the [[cost of the path|hop count|best path|best route|shortest path|shortest route|fastest path|fastest route|how far|how good the path|how good a path|how good the route|how good a route|quality of the path|path quality|length of the path|path length|cost of reaching|cost to reach|cost of getting|cost of the route|cost of the link|cost of the links|path cost|route cost|link cost|cost of that path|cost of that route|bandwidth and delay|number of hops|how many hops|distance to the network|distance to the destination|which path is best|which route is best|which path is the best|which route is the best]] of reaching the network that way, worked out by the routing protocol itself (OSPF cost, RIP hop count, EIGRP bandwidth and delay).',
+      '<b>When the metric decides:</b> only between routes from the [[same routing protocol|'+sameSrc+']] (same AD) &mdash; e.g. two OSPF paths, the lower cost wins. Metrics from different protocols are in different units, so they are never compared.',
+      '<b>Same AD and same metric:</b> both routes are installed and traffic is [[load balanced|load balance|load balancing|load balances|load share|load sharing|load shared|ECMP|multipath|both installed|both are installed|both get installed|both used|both are used|both get used|both routes are used|both routes are installed|both go in|use both|uses both|install both|installs both|split the traffic|traffic is split|share the traffic|traffic is shared]] across them (equal-cost multipath).',
+    ],
+  };
+  /* R1's version names the two sources, so the model says which route R1
+     installs. The lower-AD source always has the HIGHER metric: the metric
+     is the trap. No address, so it stays a card for both IP versions (RIPng,
+     OSPFv3 and EIGRP for IPv6 keep the same ADs). */
+  const [W,L]=pick([['ospf','rip'],['ospf','rip'],['eigrp','ospf'],['eigrp','rip']]);
+  let mW, mL; do{ mW=rMetric(W); mL=rMetric(L); }while(mL>=mW);
+  const met=k=>k===W?mW:mL, nm=k=>PROTO[k].name, ad=k=>PROTO[k].ad;
+  const [a,b]=shuffle([W,L]), src=k=>nm(k)+' with a metric of '+met(k)+' (AD '+ad(k)+')';
+  /* Which route is installed is graded by pairing: "installed" / "chosen"
+     count only when they belong to the winner in the learner's sentence,
+     and "not installed" / "backup" only when they belong to the loser — so
+     "R1 installs the RIP route, not OSPF" scores nothing. Both names are
+     subjects. A bare "lower" is not a term (each route has something lower),
+     but "its AD" is, for "OSPF, because its AD is lower". "route because" is
+     not: "the RIP route rather than the OSPF route because…" would give it
+     to OSPF. "use" is taken only in front of the name ("OSPF uses cost" is
+     not the router choosing). */
+  const NAMES={ospf:['OSPF','OSPFv2','OSPFv3'], rip:['RIP','RIPv2','RIPng'], eigrp:['EIGRP']};
+  const said=(k,terms)=>NAMES[k].map(s=>terms.map(t=>s+'~'+t).join('|')).join('|');
+  const usesIt=k=>NAMES[k].map(s=>['use','using','go with','goes with','take','takes'].map(v=>v+' '+s).join('|')).join('|');
+  const won=said(W,['R1 installs','R1 will install','R1 would install','R1 should install','R1 must install','it installs','will install','would install','to install','should install','must install','is installed','gets installed','be installed','is chosen','gets chosen','be chosen','choose','chooses','chose','prefer','prefers','is preferred','gets preferred','be preferred','pick','picks','is picked','select','selects','is selected','wins','winner','is used','be used','gets used','goes in','routing table','its AD','lower AD','lowest AD','lower administrative distance','lowest administrative distance','lower admin distance','AD is compared first','AD is checked first','AD comes first','AD first','AD is lower','AD is lowest','AD is smaller','AD is less','AD is better','AD of '+ad(W),'AD '+ad(W),'trusted more','more trusted','more trustworthy','more reliable','better AD','has the better AD','has a better AD'])+'|'+
+    said(L,['not installed','not chosen','not used','not picked','not selected','not preferred','t installed','t chosen','t used','t be installed','t be chosen','t be used','t get installed','loses','lose','backup','reserve','standby'])+'|'+usesIt(W)+'|'+NAMES[L].map(n=>['is installed','gets installed','is chosen','gets chosen','wins','is the winner','is preferred','is used','gets used','route is used','route is chosen','route is installed','route gets installed','route is preferred','route wins','R1 installs','R1 chooses','R1 picks','R1 prefers','R1 uses','is picked','is selected'].map(v=>'!'+n+'~'+v).join('|')).join('|');
+  const adNum=ad(W)+' is lower|'+ad(W)+' is less|'+ad(W)+' is smaller|'+ad(W)+' is better|lower than '+ad(L)+'|less than '+ad(L)+'|smaller than '+ad(L)+'|'+ad(W)+' < '+ad(L)+'|'+ad(W)+' vs '+ad(L)+'|'+ad(W)+' beats '+ad(L);
+  const twoOf=[W,L].map(k=>['two # routes','two # paths','two routes from #','both # routes','both # paths','both from #','both learned by #','both learned from #','both routes from #','both came from #','both come from #','both routes came from #','both routes come from #','both routes are from #','both routes were from #','both are from #','both were from #','both are #','both were #','both #','inside #','within #','in # only','only in #','only within #','only inside #','between # routes','between two # routes','among # routes','if the routes are #','when the routes are #','if both routes are #','when both routes are #'].map(f=>f.replace('#',nm(k))).join('|')).join('|');
+  const UNIT={ospf:'cost', rip:'hop count', eigrp:'metric'};
+  const USES={ospf:['cost','bandwidth'], rip:['hops','hop count','the hop count','number of hops'], eigrp:['bandwidth and delay','bandwidth','delay']};
+  const unitsOf=[W,L].map(k=>NAMES[k].map(n=>USES[k].map(u=>[n+' uses '+u,n+' counts '+u,n+' is based on '+u,n+' measures '+u,n+' metric is '+u,n+' metric is based on '+u].join('|')).join('|')).join('|')).join('|');
+  return {
+    prompt:'R1 has two routes to the same network: one learned by '+src(a)+', the other learned by '+src(b)+'. Which route does R1 install, and why? Do the two metrics play any part here? Explain why or why not, and say when the metric does decide between routes.',
+    points: [
+      '<b>Here:</b> [[R1 installs the '+nm(W)+' route|'+won+']] &mdash; it has the [[lower administrative distance|'+lowerAd+'|'+adNum+']] ('+nm(W)+' '+ad(W)+' against '+nm(L)+' '+ad(L)+'), and AD is compared before the metric, so '+nm(L)+'\'s lower metric of '+mL+' never comes into it.',
+      '<b>The metrics play no part:</b> '+METRIC_NAME[L]+' and '+METRIC_NAME[W]+' are measured in [['+units+'|'+unitsOf+']], so '+mL+' is not &ldquo;better&rdquo; than '+mW+' &mdash; metrics are never compared across sources.',
+      '<b>When the metric decides:</b> only between routes from the [[same routing protocol|'+sameSrc+'|'+twoOf+']] (same AD) &mdash; e.g. if R1 had two '+nm(W)+' routes to that network, the one with the lower '+UNIT[W]+' would be installed; with equal metrics both would be installed and traffic load balanced.',
     ],
   };
 }});
 
 card({id:'q1d-floating', area:'routing', tier:1, kind:'flash', src:'Q1 d', title:'Floating static routes', gen(){
-  const p=pick(['ospf','eigrp','rip']);
-  return {
-    prompt: pick([
-      'What is the purpose of a floating static route? How do you ensure that a static route is treated as a floating static route?',
-      'R1 learns the route to its head office through '+PROTO[p].name+'. You add a static route over a backup link that should be used only if the '+PROTO[p].name+' route is lost. What is this route called, and how do you stop it replacing the '+PROTO[p].name+' route?',
-    ]),
+  const p=pick(['ospf','eigrp','rip']), N=PROTO[p].name, ad=PROTO[p].ad, eg=ad+10;
+  const cmd=mono('ip route 10.1.1.0 255.255.255.0 10.2.2.2 '+eg);
+  const lowest='[[lowest|lower|prefer|prefers|preferred|more trusted|most trusted|more believable|most believable|trustworthy]]';
+  if(chance(.5)) return {
+    prompt:'What is the purpose of a floating static route, and when does it get used? How do you make a static route a floating static route, and why does that work?',
     points: [
-
-      'A floating static route is a [[backup|backup route|secondary|failover|fail over|standby]]: it stays out of the [[routing table|table]] while the primary route exists and is installed only if the primary [[fails|failure|goes down|lost|unavailable|disappears|removed]].',
-      'Make it float by giving it an [[administrative distance|AD]] [[higher|greater|larger|bigger|more than|above]] than the primary route\'s &mdash; the AD goes at the end of the <span class="mono-inl">ip route</span> command.',
-      'e.g. primary learned by '+PROTO[p].name+' (AD '+PROTO[p].ad+'): '+mono('ip route 10.1.1.0 255.255.255.0 10.2.2.2 '+(PROTO[p].ad+10))+' &mdash; any AD from '+(PROTO[p].ad+1)+' to 254 works (255 means "never install").',
-      'Without it the static route gets the default AD of 1 and would replace the primary instead of waiting behind it.',
+      'A floating static route is a [[backup|backup route|secondary|failover|fail over|standby]]: it stays out of the routing table while the primary route exists and is installed only if the primary [[fails|failure|goes down|lost|unavailable|disappears|removed]].',
+      'Make it float by giving it an [[administrative distance|AD|admin distance|distance]] [[higher|greater|larger|bigger|more than|above]] than the primary route\'s &mdash; the AD goes at the end of the <span class="mono-inl">ip route</span> command.',
+      '<b>Why it works:</b> of two routes to the same network the router installs the one with the '+lowest+' AD, so the primary wins while it exists; without the higher AD the static route gets the default AD of 1 and would replace the primary.',
+      'e.g. primary learned by '+N+' (AD '+ad+'): '+cmd+' &mdash; any AD from '+(ad+1)+' to 254 works (255 means "never install").',
+    ],
+  };
+  /* The scenario names the primary's protocol, so its answer is a number:
+     any AD from ad+1 to 254. "#N" matches that number standing on its own,
+     so a typed command's trailing AD or "set it to 150" counts but an
+     octet of an address in the same answer never does. */
+  const vals=['an AD of '+eg];
+  for(let v=ad+1;v<255;v++) vals.push('#'+v);
+  const site=pick(['head office','data centre','main site']), r='R'+ri(1,3);
+  return {
+    prompt: r+' learns the route to its '+site+' through '+N+'. You add a static route over a backup link that should be used only if the '+N+' route is lost. What is this kind of route called? State the AD of the '+N+' route and an AD you would give the static route, and explain why that stops the static route replacing the '+N+' route.',
+    points: [
+      '<b>Here:</b> it is a [[floating static route|floating static|floating route|floating]]. '+N+'\'s [[administrative distance|AD|admin distance|distance]] is [['+ad+']], so give the static route a higher one: [['+vals.join('|')+']] or anything from '+(ad+1)+' to 254, e.g. '+cmd+'.',
+      '<b>Why:</b> of two routes to the same network the router installs the one with the '+lowest+' AD. '+N+'\'s '+ad+' beats the static route while the '+N+' route exists, so the static stays out of the routing table and is installed only if that route is lost &mdash; that is what makes it "float".',
+      'Left at a static route\'s default AD of 1 it would beat '+N+'\'s '+ad+' and replace the '+N+' route at once. 255 means "never install", so it is no use here.',
     ],
   };
 }});
@@ -423,7 +690,8 @@ card({id:'g1-adpick', area:'routing', tier:1, kind:'graded', src:'Q1 b', title:'
     grade(){
       const ok=sameSet(ans,Q.sel); markPicks(ans);
       return {ok, verdict: ok?'Correct &mdash; '+PROTO[win.k].name+' has the lowest AD.':'The '+PROTO[win.k].name+' route is installed.',
-        why: ul(['Administrative distances: '+adList(keys)+'. Lowest AD wins: <b>'+PROTO[win.k].name+'</b>.',
+        why: ul(['<b>Installed:</b> the '+PROTO[win.k].name+' route via '+win.nh+' (AD '+PROTO[win.k].ad+').',
+          'Administrative distances: '+adList(keys)+'. Lowest AD wins: <b>'+PROTO[win.k].name+'</b>.',
           'The metric column is a trap here &mdash; metrics from different protocols are in different units and are never compared.'])};
     },
   };
@@ -453,12 +721,15 @@ card({id:'g1-admetric', area:'routing', tier:2, kind:'graded', src:'Q1 c', title
     pick:{multi:true},
     grade(){
       const ok=sameSet(ans,Q.sel); markPicks(ans);
-      const why=['Step 1, AD: '+adList([...new Set(sh.map(r=>r.k))])+' &rarr; only the <b>'+PROTO[W].name+'</b> routes are considered.'];
+      const inst=sh.filter((r,i)=>ans.indexOf(i)>=0);
+      const what=inst.map(r=>'the '+PROTO[r.k].name+' route via '+r.nh+' (metric '+r.m+')').join(' and ');
+      const why=['<b>Installed:</b> '+what+(inst.length>1?' &mdash; both, load-balanced.':'.'),
+        'Step 1, AD: '+adList([...new Set(sh.map(r=>r.k))])+' &rarr; only the <b>'+PROTO[W].name+'</b> routes are considered.'];
       const ws=sh.filter(r=>r.k===W);
       if(ws.length>1) why.push('Step 2, metric: the '+PROTO[W].name+' routes have '+METRIC_NAME[W]+' '+ws.map(r=>r.m).join(' and ')+
-        (ans.length>1?' &mdash; a tie, so <b>both</b> are installed and R1 load-balances across them.':' &rarr; the lower one wins.'));
+        (ans.length>1?' &mdash; a tie, so <b>both</b> are installed and R1 load-balances across them.':' &rarr; the lower one, '+best+', wins.'));
       else why.push('There is only one '+PROTO[W].name+' route, so the metric never comes into it.');
-      return {ok, verdict: ok?'Correct.':(ans.length>1?'Both equal-cost '+PROTO[W].name+' routes are installed.':'Only the highlighted route is installed.'), why: ul(why)};
+      return {ok, verdict: ok?'Correct.':(ans.length>1?'Both equal-cost '+PROTO[W].name+' routes are installed.':'Only '+what+' is installed.'), why: ul(why)};
     },
   };
 }});
@@ -502,7 +773,8 @@ card({id:'g1-lpm', area:'routing', tier:3, kind:'graded', src:'Q1 c', title:'Lon
     pick:{multi:false},
     grade(){
       const ok=sameSet(ans,Q.sel); markPicks(ans);
-      const why=[int2ip(dest)+' matches '+match.map(r=>cidr(r.net,r.p)).join(', ')+'. The <b>longest prefix</b> wins: /'+longest+'.'];
+      const why=['<b>Used:</b> the '+PROTO[win.k].name+' '+cidr(win.net,win.p)+' route via '+win.nh+'.',
+        int2ip(dest)+' matches '+match.map(r=>cidr(r.net,r.p)).join(', ')+'. The <b>longest prefix</b> wins: /'+longest+'.'];
       if(top.length>1) why.push('Two sources offer that /'+longest+': '+adList(top.map(r=>r.k))+' &rarr; the lower AD is the one in the table.');
       const higherAd=match.filter(r=>r.p<longest&&PROTO[r.k].ad<PROTO[win.k].ad);
       if(higherAd.length) why.push('AD never compares routes of different lengths &mdash; the '+PROTO[higherAd[0].k].name+' /'+higherAd[0].p+' has a lower AD but is less specific, so it loses.');
@@ -558,40 +830,115 @@ card({id:'g1-float', area:'routing', tier:2, kind:'graded', src:'Q1 d', title:'W
 
 /* ═══ Q1 — RIP (the exam brief lists it under Routing) ═══════════════════ */
 card({id:'q1e-ripv2', area:'routing', tier:1, kind:'flash', src:'Q1', title:'RIPv1 vs RIPv2', gen(){
-  return {
-    prompt: pick(['What are the differences between RIPv1 and RIPv2?',
-      'Why would you configure version 2 under router rip rather than leave RIP at version 1?']),
+  if(chance(0.5)) return {
+    prompt: 'Compare RIPv1 and RIPv2. Explain which of them is classful and which is classless (what their updates carry about the subnet mask), how each one sends its updates, and which one can authenticate them. Then say which metric both use, and which default behaviour at classful boundaries both start with but only RIPv2 can switch off.',
     points: [
-      'RIPv1 is [[classful|classfull]]: its updates carry no subnet mask, so it can\'t handle VLSM or discontiguous networks.',
-      'RIPv2 is [[classless|subnet mask|subnet masks|carries the mask|VLSM|CIDR]]: every route is sent with its mask, so variable-length subnets work.',
-      'RIPv1 sends its updates as [[broadcasts|broadcast|255.255.255.255]]; RIPv2 [[multicasts|multicast|224.0.0.9]] them to 224.0.0.9, so hosts that don\'t run RIP aren\'t disturbed.',
-      'RIPv2 can [[authenticate|authentication|MD5]] its updates; v1 can\'t.',
-      'Both use [[hop count|hops|hop]] as the metric (15 at most), AD 120 and updates every 30 s, and both [[auto-summarise|auto-summary|auto summary|automatically summarise|summarise|summarises|summarisation]] at classful boundaries by default &mdash; v2 can turn that off with '+mono('no auto-summary')+'.',
+      '<b>Masks:</b> [[RIPv1 classful and RIPv2 classless|RIPv1~classful|RIPv1~classfull|RIPv1~no mask|RIPv1~no masks|RIPv1~no subnet mask|RIPv1~no subnet masks|RIPv1~without mask|RIPv1~without masks|RIPv1~without a mask|RIPv1~without subnet masks|RIPv1~without a subnet mask|RIPv1~doesn\'t send mask|RIPv1~doesn\'t send masks|RIPv1~doesn\'t send subnet mask|RIPv1~doesn\'t send subnet masks|RIPv1~doesn\'t include mask|RIPv1~doesn\'t include masks|RIPv1~doesn\'t include subnet mask|RIPv1~doesn\'t include subnet masks|RIPv1~doesn\'t carry mask|RIPv1~doesn\'t carry masks|RIPv1~doesn\'t carry subnet mask|RIPv1~doesn\'t carry subnet masks|RIPv1~doesn\'t support VLSM|RIPv1~doesn\'t use mask|RIPv1~doesn\'t use masks|RIPv1~doesn\'t use subnet masks|RIPv1~doesn\'t have mask|RIPv1~doesn\'t have masks|RIPv1~doesn\'t have subnet masks|RIPv1~does not send mask|RIPv1~does not send masks|RIPv1~does not send subnet mask|RIPv1~does not send subnet masks|RIPv1~does not include mask|RIPv1~does not include masks|RIPv1~does not include subnet mask|RIPv1~does not include subnet masks|RIPv1~does not carry mask|RIPv1~does not carry masks|RIPv1~does not carry subnet mask|RIPv1~does not carry subnet masks|RIPv1~does not support VLSM|RIPv1~does not use mask|RIPv1~does not use masks|RIPv1~does not use subnet masks|RIPv1~does not have mask|RIPv1~does not have masks|RIPv1~does not have subnet masks|RIPv1~not send mask|RIPv1~not send masks|RIPv1~not send subnet masks|RIPv1~not include subnet masks|RIPv1~not carry subnet masks|RIPv1~not support VLSM|RIPv1~cannot do VLSM|RIPv1~can\'t do VLSM|RIPv1~cannot handle VLSM|RIPv1~can\'t handle VLSM|RIPv1~cannot use VLSM|RIPv1~can\'t use VLSM|RIPv1~no VLSM|RIPv1~without VLSM|RIPv1~lacks masks|RIPv1~lacks subnet masks|RIPv1~sends no mask|RIPv1~sends no subnet mask|RIP v1~classful|RIP v1~classfull|RIP v1~no mask|RIP v1~no masks|RIP v1~no subnet mask|RIP v1~no subnet masks|RIP v1~without mask|RIP v1~without masks|RIP v1~without a mask|RIP v1~without subnet masks|RIP v1~without a subnet mask|RIP v1~doesn\'t send mask|RIP v1~doesn\'t send masks|RIP v1~doesn\'t send subnet mask|RIP v1~doesn\'t send subnet masks|RIP v1~doesn\'t include mask|RIP v1~doesn\'t include masks|RIP v1~doesn\'t include subnet mask|RIP v1~doesn\'t include subnet masks|RIP v1~doesn\'t carry mask|RIP v1~doesn\'t carry masks|RIP v1~doesn\'t carry subnet mask|RIP v1~doesn\'t carry subnet masks|RIP v1~doesn\'t support VLSM|RIP v1~doesn\'t use mask|RIP v1~doesn\'t use masks|RIP v1~doesn\'t use subnet masks|RIP v1~doesn\'t have mask|RIP v1~doesn\'t have masks|RIP v1~doesn\'t have subnet masks|RIP v1~does not send mask|RIP v1~does not send masks|RIP v1~does not send subnet mask|RIP v1~does not send subnet masks|RIP v1~does not include mask|RIP v1~does not include masks|RIP v1~does not include subnet mask|RIP v1~does not include subnet masks|RIP v1~does not carry mask|RIP v1~does not carry masks|RIP v1~does not carry subnet mask|RIP v1~does not carry subnet masks|RIP v1~does not support VLSM|RIP v1~does not use mask|RIP v1~does not use masks|RIP v1~does not use subnet masks|RIP v1~does not have mask|RIP v1~does not have masks|RIP v1~does not have subnet masks|RIP v1~not send mask|RIP v1~not send masks|RIP v1~not send subnet masks|RIP v1~not include subnet masks|RIP v1~not carry subnet masks|RIP v1~not support VLSM|RIP v1~cannot do VLSM|RIP v1~can\'t do VLSM|RIP v1~cannot handle VLSM|RIP v1~can\'t handle VLSM|RIP v1~cannot use VLSM|RIP v1~can\'t use VLSM|RIP v1~no VLSM|RIP v1~without VLSM|RIP v1~lacks masks|RIP v1~lacks subnet masks|RIP v1~sends no mask|RIP v1~sends no subnet mask|v1~classful|v1~classfull|v1~no mask|v1~no masks|v1~no subnet mask|v1~no subnet masks|v1~without mask|v1~without masks|v1~without a mask|v1~without subnet masks|v1~without a subnet mask|v1~doesn\'t send mask|v1~doesn\'t send masks|v1~doesn\'t send subnet mask|v1~doesn\'t send subnet masks|v1~doesn\'t include mask|v1~doesn\'t include masks|v1~doesn\'t include subnet mask|v1~doesn\'t include subnet masks|v1~doesn\'t carry mask|v1~doesn\'t carry masks|v1~doesn\'t carry subnet mask|v1~doesn\'t carry subnet masks|v1~doesn\'t support VLSM|v1~doesn\'t use mask|v1~doesn\'t use masks|v1~doesn\'t use subnet masks|v1~doesn\'t have mask|v1~doesn\'t have masks|v1~doesn\'t have subnet masks|v1~does not send mask|v1~does not send masks|v1~does not send subnet mask|v1~does not send subnet masks|v1~does not include mask|v1~does not include masks|v1~does not include subnet mask|v1~does not include subnet masks|v1~does not carry mask|v1~does not carry masks|v1~does not carry subnet mask|v1~does not carry subnet masks|v1~does not support VLSM|v1~does not use mask|v1~does not use masks|v1~does not use subnet masks|v1~does not have mask|v1~does not have masks|v1~does not have subnet masks|v1~not send mask|v1~not send masks|v1~not send subnet masks|v1~not include subnet masks|v1~not carry subnet masks|v1~not support VLSM|v1~cannot do VLSM|v1~can\'t do VLSM|v1~cannot handle VLSM|v1~can\'t handle VLSM|v1~cannot use VLSM|v1~can\'t use VLSM|v1~no VLSM|v1~without VLSM|v1~lacks masks|v1~lacks subnet masks|v1~sends no mask|v1~sends no subnet mask|version 1~classful|version 1~classfull|version 1~no mask|version 1~no masks|version 1~no subnet mask|version 1~no subnet masks|version 1~without mask|version 1~without masks|version 1~without a mask|version 1~without subnet masks|version 1~without a subnet mask|version 1~doesn\'t send mask|version 1~doesn\'t send masks|version 1~doesn\'t send subnet mask|version 1~doesn\'t send subnet masks|version 1~doesn\'t include mask|version 1~doesn\'t include masks|version 1~doesn\'t include subnet mask|version 1~doesn\'t include subnet masks|version 1~doesn\'t carry mask|version 1~doesn\'t carry masks|version 1~doesn\'t carry subnet mask|version 1~doesn\'t carry subnet masks|version 1~doesn\'t support VLSM|version 1~doesn\'t use mask|version 1~doesn\'t use masks|version 1~doesn\'t use subnet masks|version 1~doesn\'t have mask|version 1~doesn\'t have masks|version 1~doesn\'t have subnet masks|version 1~does not send mask|version 1~does not send masks|version 1~does not send subnet mask|version 1~does not send subnet masks|version 1~does not include mask|version 1~does not include masks|version 1~does not include subnet mask|version 1~does not include subnet masks|version 1~does not carry mask|version 1~does not carry masks|version 1~does not carry subnet mask|version 1~does not carry subnet masks|version 1~does not support VLSM|version 1~does not use mask|version 1~does not use masks|version 1~does not use subnet masks|version 1~does not have mask|version 1~does not have masks|version 1~does not have subnet masks|version 1~not send mask|version 1~not send masks|version 1~not send subnet masks|version 1~not include subnet masks|version 1~not carry subnet masks|version 1~not support VLSM|version 1~cannot do VLSM|version 1~can\'t do VLSM|version 1~cannot handle VLSM|version 1~can\'t handle VLSM|version 1~cannot use VLSM|version 1~can\'t use VLSM|version 1~no VLSM|version 1~without VLSM|version 1~lacks masks|version 1~lacks subnet masks|version 1~sends no mask|version 1~sends no subnet mask|RIP version 1~classful|RIP version 1~classfull|RIP version 1~no mask|RIP version 1~no masks|RIP version 1~no subnet mask|RIP version 1~no subnet masks|RIP version 1~without mask|RIP version 1~without masks|RIP version 1~without a mask|RIP version 1~without subnet masks|RIP version 1~without a subnet mask|RIP version 1~doesn\'t send mask|RIP version 1~doesn\'t send masks|RIP version 1~doesn\'t send subnet mask|RIP version 1~doesn\'t send subnet masks|RIP version 1~doesn\'t include mask|RIP version 1~doesn\'t include masks|RIP version 1~doesn\'t include subnet mask|RIP version 1~doesn\'t include subnet masks|RIP version 1~doesn\'t carry mask|RIP version 1~doesn\'t carry masks|RIP version 1~doesn\'t carry subnet mask|RIP version 1~doesn\'t carry subnet masks|RIP version 1~doesn\'t support VLSM|RIP version 1~doesn\'t use mask|RIP version 1~doesn\'t use masks|RIP version 1~doesn\'t use subnet masks|RIP version 1~doesn\'t have mask|RIP version 1~doesn\'t have masks|RIP version 1~doesn\'t have subnet masks|RIP version 1~does not send mask|RIP version 1~does not send masks|RIP version 1~does not send subnet mask|RIP version 1~does not send subnet masks|RIP version 1~does not include mask|RIP version 1~does not include masks|RIP version 1~does not include subnet mask|RIP version 1~does not include subnet masks|RIP version 1~does not carry mask|RIP version 1~does not carry masks|RIP version 1~does not carry subnet mask|RIP version 1~does not carry subnet masks|RIP version 1~does not support VLSM|RIP version 1~does not use mask|RIP version 1~does not use masks|RIP version 1~does not use subnet masks|RIP version 1~does not have mask|RIP version 1~does not have masks|RIP version 1~does not have subnet masks|RIP version 1~not send mask|RIP version 1~not send masks|RIP version 1~not send subnet masks|RIP version 1~not include subnet masks|RIP version 1~not carry subnet masks|RIP version 1~not support VLSM|RIP version 1~cannot do VLSM|RIP version 1~can\'t do VLSM|RIP version 1~cannot handle VLSM|RIP version 1~can\'t handle VLSM|RIP version 1~cannot use VLSM|RIP version 1~can\'t use VLSM|RIP version 1~no VLSM|RIP version 1~without VLSM|RIP version 1~lacks masks|RIP version 1~lacks subnet masks|RIP version 1~sends no mask|RIP version 1~sends no subnet mask|RIPv2~classless|RIPv2~classless routing|RIPv2~carries the mask|RIPv2~carries masks|RIPv2~carries subnet masks|RIPv2~carries the subnet mask|RIPv2~sends the mask|RIPv2~sends masks|RIPv2~sends subnet masks|RIPv2~sends the subnet mask|RIPv2~sends the mask with|RIPv2~includes the mask|RIPv2~includes masks|RIPv2~includes subnet masks|RIPv2~includes the subnet mask|RIPv2~subnet mask|RIPv2~subnet masks|RIPv2~mask|RIPv2~masks|RIPv2~VLSM|RIPv2~supports VLSM|RIPv2~CIDR|RIPv2~variable-length|RIPv2~variable length|RIPv2~discontiguous|RIP v2~classless|RIP v2~classless routing|RIP v2~carries the mask|RIP v2~carries masks|RIP v2~carries subnet masks|RIP v2~carries the subnet mask|RIP v2~sends the mask|RIP v2~sends masks|RIP v2~sends subnet masks|RIP v2~sends the subnet mask|RIP v2~sends the mask with|RIP v2~includes the mask|RIP v2~includes masks|RIP v2~includes subnet masks|RIP v2~includes the subnet mask|RIP v2~subnet mask|RIP v2~subnet masks|RIP v2~mask|RIP v2~masks|RIP v2~VLSM|RIP v2~supports VLSM|RIP v2~CIDR|RIP v2~variable-length|RIP v2~variable length|RIP v2~discontiguous|v2~classless|v2~classless routing|v2~carries the mask|v2~carries masks|v2~carries subnet masks|v2~carries the subnet mask|v2~sends the mask|v2~sends masks|v2~sends subnet masks|v2~sends the subnet mask|v2~sends the mask with|v2~includes the mask|v2~includes masks|v2~includes subnet masks|v2~includes the subnet mask|v2~subnet mask|v2~subnet masks|v2~mask|v2~masks|v2~VLSM|v2~supports VLSM|v2~CIDR|v2~variable-length|v2~variable length|v2~discontiguous|version 2~classless|version 2~classless routing|version 2~carries the mask|version 2~carries masks|version 2~carries subnet masks|version 2~carries the subnet mask|version 2~sends the mask|version 2~sends masks|version 2~sends subnet masks|version 2~sends the subnet mask|version 2~sends the mask with|version 2~includes the mask|version 2~includes masks|version 2~includes subnet masks|version 2~includes the subnet mask|version 2~subnet mask|version 2~subnet masks|version 2~mask|version 2~masks|version 2~VLSM|version 2~supports VLSM|version 2~CIDR|version 2~variable-length|version 2~variable length|version 2~discontiguous|RIP version 2~classless|RIP version 2~classless routing|RIP version 2~carries the mask|RIP version 2~carries masks|RIP version 2~carries subnet masks|RIP version 2~carries the subnet mask|RIP version 2~sends the mask|RIP version 2~sends masks|RIP version 2~sends subnet masks|RIP version 2~sends the subnet mask|RIP version 2~sends the mask with|RIP version 2~includes the mask|RIP version 2~includes masks|RIP version 2~includes subnet masks|RIP version 2~includes the subnet mask|RIP version 2~subnet mask|RIP version 2~subnet masks|RIP version 2~mask|RIP version 2~masks|RIP version 2~VLSM|RIP version 2~supports VLSM|RIP version 2~CIDR|RIP version 2~variable-length|RIP version 2~variable length|RIP version 2~discontiguous]]: RIPv1\'s updates carry no subnet mask, so it can\'t handle VLSM or discontiguous networks, while every RIPv2 route is sent with its mask.',
+      '<b>Updates:</b> [[RIPv1 broadcasts and RIPv2 multicasts|RIPv1~broadcast|RIPv1~broadcasts|RIPv1~broadcasting|RIPv1~255.255.255.255|RIPv1~broadcast address|RIP v1~broadcast|RIP v1~broadcasts|RIP v1~broadcasting|RIP v1~255.255.255.255|RIP v1~broadcast address|v1~broadcast|v1~broadcasts|v1~broadcasting|v1~255.255.255.255|v1~broadcast address|version 1~broadcast|version 1~broadcasts|version 1~broadcasting|version 1~255.255.255.255|version 1~broadcast address|RIP version 1~broadcast|RIP version 1~broadcasts|RIP version 1~broadcasting|RIP version 1~255.255.255.255|RIP version 1~broadcast address|RIPv2~multicast|RIPv2~multicasts|RIPv2~multicasting|RIPv2~224.0.0.9|RIPv2~multicast address|RIP v2~multicast|RIP v2~multicasts|RIP v2~multicasting|RIP v2~224.0.0.9|RIP v2~multicast address|v2~multicast|v2~multicasts|v2~multicasting|v2~224.0.0.9|v2~multicast address|version 2~multicast|version 2~multicasts|version 2~multicasting|version 2~224.0.0.9|version 2~multicast address|RIP version 2~multicast|RIP version 2~multicasts|RIP version 2~multicasting|RIP version 2~224.0.0.9|RIP version 2~multicast address]]: v1 sends to 255.255.255.255, v2 to 224.0.0.9, so hosts that don\'t run RIP aren\'t disturbed.',
+      '<b>Security:</b> [[RIPv2 can authenticate|RIPv2~authenticate|RIPv2~authenticates|RIPv2~authentication|RIPv2~authenticated|RIPv2~MD5|RIPv2~password|RIPv2~passwords|RIPv2~secure|RIPv2~security|RIP v2~authenticate|RIP v2~authenticates|RIP v2~authentication|RIP v2~authenticated|RIP v2~MD5|RIP v2~password|RIP v2~passwords|RIP v2~secure|RIP v2~security|v2~authenticate|v2~authenticates|v2~authentication|v2~authenticated|v2~MD5|v2~password|v2~passwords|v2~secure|v2~security|version 2~authenticate|version 2~authenticates|version 2~authentication|version 2~authenticated|version 2~MD5|version 2~password|version 2~passwords|version 2~secure|version 2~security|RIP version 2~authenticate|RIP version 2~authenticates|RIP version 2~authentication|RIP version 2~authenticated|RIP version 2~MD5|RIP version 2~password|RIP version 2~passwords|RIP version 2~secure|RIP version 2~security]] its updates (plain text or MD5); v1 can\'t.',
+      '<b>In common:</b> both use [[hop count|hops|hop]] as the metric (15 at most), AD 120 and updates every 30 s, and both [[auto-summarise|auto-summary|auto summary|automatically summarise|summarise|summarises|summarisation]] at classful boundaries by default &mdash; only v2 can turn that off with '+mono('no auto-summary')+'.',
+    ],
+  };
+  return {
+    prompt: 'Why would you configure '+mono('version 2')+' under '+mono('router rip')+' rather than leave RIP at version 1? Give three advantages of RIPv2 &mdash; how it handles subnet masks compared with v1, how it sends its updates, and what it adds for security &mdash; and say which default behaviour you would turn off once it is running.',
+    points: [
+      '<b>Masks:</b> RIPv2 is [[classless|subnet mask|subnet masks|carries the mask|sends the mask|includes the mask|carries masks|sends masks|includes masks|VLSM|CIDR|variable-length|variable length|discontiguous]]: every route is sent with its mask (v1, being classful, sends none), so VLSM and discontiguous networks work.',
+      '<b>Updates:</b> RIPv2 [[multicasts|multicast|224.0.0.9]] them to 224.0.0.9 instead of broadcasting, so hosts that don\'t run RIP aren\'t disturbed.',
+      '<b>Security:</b> RIPv2 can [[authenticate|authentication|MD5]] its updates, so a router won\'t accept routes from an unauthorised neighbour; v1 can\'t.',
+      '<b>Then:</b> turn off [[auto-summary|auto-summarise|auto summary|automatic summarisation|automatically summarise|summarisation]] with '+mono('no auto-summary')+', so the subnets are advertised as they are rather than summarised to their classful network.',
     ],
   };
 }});
 card({id:'q1f-riploops', area:'routing', tier:1, kind:'flash', src:'Q1', title:'RIP hop limit and split horizon', gen(){
-  return {
-    prompt: pick(['Why is a RIP network limited to 15 hops? What is split horizon, and why does RIP use it?',
-      'A link fails in a RIP network. Explain how split horizon and the 16-hop limit stop the routers looping packets for ever.']),
+  const sh='<b>Split horizon:</b> a router doesn\'t [[advertise a route back out the interface it was learned on|advertise~back|send~back|announce~back|advertise~same interface|send~same interface|out the interface it|out the same interface|interface it was learned|interface it learned|interface it came|interface it was received|interface it received|interface it arrived]], so two neighbours can\'t keep [[feeding each other|feed each other|feeds each other|ping-pong|pass it between each other|keep passing it between]] a route that has gone.';
+  const loop='[[routing loop|routing loops|forwarding loop|forwarding loops|endless loop|loop in the network|loops in the network|loop in a network|forms a loop|form a loop|creates a loop|create a loop|stuck in a loop|prevent loops|prevents loops|stop loops|stops loops|avoid loops|avoids loops]]';
+  const inf='[[counting to infinity|count to infinity|count-to-infinity|counts to infinity|count up to infinity|counting up to infinity|count forever|counts forever|count up forever|counting up forever|infinite loop|infinite loops|infinite looping|infinitely looping|loop infinitely|loops infinitely|looping infinitely|infinite count|infinitely|loop forever|loops forever|looping forever|looped forever|keep looping|keeps looping|go on forever|goes on forever|going on forever|carry on forever|increase forever|increases forever|increasing forever|rise forever|rises forever|grow forever|grows forever|for ever|forever]]';
+  const sixteen='[[16 means unreachable|16~unreachable|16~infinity|16~infinite|16~invalid|16~dropped|16~removed|16~discarded|16~down|16~too far|16~gone|16~forever|16~dead|16~invalid route|sixteen~unreachable|sixteen~infinity|sixteen~dropped|sixteen~gone|sixteen~forever|sixteen~dead|sixteen~removed|sixteen~infinite]]';
+  if(chance(.5)) return {
+    prompt:'Why is a RIP network limited to 15 hops? Say what RIP uses as its metric, what a metric of 16 means, and what problem the limit prevents. Then explain what split horizon is and why RIP uses it.',
     points: [
-      'RIP is a distance-vector protocol: each router sends its routing table to its neighbours every [[30 seconds|30 s|30 sec|30secs|every 30]], and its metric is the [[hop count|hops|hop]].',
-      'The maximum is 15 hops; a metric of [[16 means unreachable|16|unreachable|infinity|infinite|forever]], so a RIP network can be at most 15 hops across.',
-      'The limit stops [[counting to infinity|count to infinity|count-to-infinity|count forever|count up forever]]: in a [[routing loop|loop|loops|looping]] a dead route\'s metric keeps rising until it reaches 16 and is dropped.',
-      '<b>[[Split horizon|split-horizon]]:</b> a router doesn\'t advertise a route back out the interface it [[learned|learnt|learn|received]] it on, so two neighbours can\'t keep feeding each other a route that has gone.',
+      'RIP\'s metric is the [[hop count|hop counts|hops|number of routers]]: each router adds one as it passes a route on to its neighbours (every 30 seconds).',
+      'A metric of '+sixteen+', so 15 is the highest usable metric and a RIP network can be at most 15 hops across.',
+      'The limit stops '+inf+': a dead route\'s metric keeps rising round the network until it reaches 16 and is dropped, instead of growing for ever.',
+      sh,
+      'RIP uses it to avoid a '+loop+': it is a distance-vector protocol that only knows what its neighbours tell it, so split horizon is what stops the simplest two-router loops forming. Route poisoning goes further: a failed route is advertised with metric 16 so neighbours remove it straight away.',
+    ],
+  };
+  return {
+    prompt:'A link fails in a RIP network. Describe the problem that can happen as the routers keep advertising the dead route to each other and what happens to its metric, then explain how the 16-hop limit and split horizon each stop it.',
+    points: [
+      'Without protection the routers form a '+loop+': each one thinks it can reach the dead network through the other and passes the route back and forth.',
+      'Every time the route goes round, the router [[adds one hop|add one hop|adds a hop|add a hop|adds one|add one|plus one|increases by one|increase by one|increments|incremented|goes up by one|going up by one|keeps increasing|keep increasing|keeps going up|keep going up|keeps rising|keep rising|keeps growing|keep growing]] to its metric, so the routers are '+inf+'.',
+      'The limit ends it: a metric of '+sixteen+', so once the count reaches 16 the route is dropped instead of growing for ever.',
+      sh,
       'Route poisoning goes further: a failed route is advertised with metric 16 so neighbours remove it straight away.',
     ],
   };
 }});
 card({id:'q1g-autosum', area:'routing', tier:2, kind:'flash', src:'Q1', title:'RIP and discontiguous networks', gen(){
-  const b=ri(16,31), x=ri(1,120), y=x+ri(1,100);
+  /* One major network split in two by another: the two LAN routers each
+     summarise their LAN to the classful network, and the router between
+     them hears that one route from both sides. The class varies, so the
+     summary has to be worked out rather than remembered as "the /16", and
+     so does which router sits in the middle, so the answer has to name it. */
+  const cls=pick(['B','B','A','C']);
+  let maj, pfx, lans, lp, link;
+  if(cls==='A'){ const p=ri(1,200), r=p+ri(1,54); maj='10.0.0.0'; pfx=8; lp=24; lans=['10.'+p+'.'+ri(0,255)+'.0','10.'+r+'.'+ri(0,255)+'.0']; link='172.'+ri(16,31)+'.0.0'; }
+  else if(cls==='B'){ const b=ri(16,31), x=ri(1,120), y=x+ri(1,100); maj='172.'+b+'.0.0'; pfx=16; lp=24; lans=['172.'+b+'.'+x+'.0','172.'+b+'.'+y+'.0']; link='10.0.0.0'; }
+  else { const c=ri(1,254), s=shuffle([1,2,3]).slice(0,2).sort((a,b)=>a-b); maj='192.168.'+c+'.0'; pfx=24; lp=26; lans=s.map(i=>'192.168.'+c+'.'+(64*i)); link='10.0.0.0'; }
+  const sum=maj+'/'+pfx, lan=i=>lans[i]+'/'+lp;
+  const mask=['','255.0.0.0','255.255.0.0','255.255.255.0'][pfx/8];
+  const M=pick(['R1','R2','R3']), [A,B]=['R1','R2','R3'].filter(r=>r!==M);
+  /* The summary: its own prefix length, never the bare network, so a
+     /24 for a class A round does not count. */
+  const sumF=[sum,maj+' '+mask,'/'+pfx+' summary','/'+pfx+' route','/'+pfx+' network','classful summary','classful network','major network'];
+  /* Which router ends up with two routes is graded by pairing: the terms
+     count only for the middle router (or "the middle router"), so "R1 gets
+     the /16 from both sides" scores nothing when R2 is in the middle. The
+     two LAN routers are subjects too, through "R1 ... to R2" (the direction
+     the summary travels), which is what lets a sentence naming all three be
+     read correctly. Bare "both" is not a term: it is a linking word, and
+     "from both R1 and R3" would hand it to R1. */
+  const T=['both sides','both directions','both neighbours','both neighbors','both routers','both ends','both interfaces','both links','both of its interfaces','both of its links','both of them','both of its neighbours','both of its neighbors','from both of them','from both of its',
+    'each side','either side','either direction','either neighbour','two neighbours','two neighbors','two sides','two interfaces','two sources','two directions','two routes','two paths','two equal','two copies','two next hops','two entries','2 routes','2 paths','2 equal','2 entries','twice','duplicate routes',
+    'equal cost','same hop count','same metric','equal metric','equal hop count','same network','same route','same summary','same prefix','same update','same advertisement'];
+  [[A,B],[B,A]].forEach(([x,y])=>T.push('both '+x+' and '+y,'from '+x+' and '+y,'from '+x+' and from '+y,'via '+x+' and '+y,'through '+x+' and '+y,'between '+x+' and '+y));
+  const both=[M,'middle'].map(s=>T.map(t=>s+'~'+t).join('|')).join('|')+'|'+[A,B].map(s=>s+'~to '+M).join('|');
+  /* "no auto-summary" said any way a student says it. */
+  const NOUN=['auto-summary','autosummary','automatic summarisation','automatic summary'];
+  const VERB=['disabled','turned off','switched off','off','removed','stopped','deactivated','not enabled','not used','not on'];
+  const LEAD=['','is ','are ','should be ','must be ','needs to be ','has to be ','have to be ','can be ','be '];
+  const noAuto=[];
+  NOUN.forEach(n=>{
+    noAuto.push('no '+n,'without '+n,'turn '+n+' off','switch '+n+' off','turning '+n+' off','stop '+n,'stopping '+n);
+    ['disable','disabling','turn off','turning off','switch off','switching off','remove','removing','deactivate'].forEach(v=>noAuto.push(v+' '+n));
+    LEAD.forEach(l=>VERB.forEach(v=>noAuto.push(n+' '+l+v)));
+  });
+  noAuto.push('disable summarisation','disabling summarisation','turn off summarisation','turning off summarisation');
+  /* Every router, said any way a student says it, including by name. */
+  const every=['all three routers','every router','all routers','all three','all 3','all the routers','all of the routers','all of them','all of the three','the three routers','the 3 routers','three routers','3 routers','all 3 of the routers','all three of the routers','all three of them','each router','each of the routers','each of the three','each of them','every one of them','every RIP router','including the middle router','also the middle router','every router running RIP','including '+M,'also on '+M,'as well as '+M,'even '+M];
+  [[0,1,2],[0,2,1],[1,0,2],[1,2,0],[2,0,1],[2,1,0]].forEach(p=>{ const n=p.map(i=>'R'+(i+1)); every.push(n[0]+' '+n[1]+' and '+n[2],n[0]+' '+n[1]+' '+n[2]); });
+  /* Splitting the traffic between two equal routes, said any way a student
+     says it. Not "half" or "the wrong way" on their own: a routing loop
+     loses half the traffic too, and that is a different diagnosis. */
+  const lb=['load-balances','load balance','load balancing','load balanced','load-share','load shares','load sharing','ECMP','equal cost load','round robin','round-robin','per packet','per-packet',
+    'alternates between','alternate between','alternating between','alternates packets','alternate packets','alternating packets','alternates traffic','alternates the packets','alternates the traffic',
+    'splits traffic','split traffic','splits the traffic','split the traffic','traffic is split','traffic gets split','traffic split','splits packets','split packets','split across','splits across','split between','splits between','splitting traffic','splitting the traffic',
+    'divides traffic','divide traffic','divides the traffic','traffic is divided','divided between','divided across','divided equally',
+    'shares traffic','share traffic','shares the traffic','share the traffic','shared between','shared across',
+    'spreads traffic','spread traffic','spreads the traffic','spread the traffic','spread across','spread between','spread over','spreads across','spreads between',
+    'distributes traffic','distribute traffic','distributes the traffic','distributes packets','distributed across','distributed between','distributed evenly',
+    'balances traffic','balance traffic','balances the traffic','balances between','balance between','balances across',
+    'uses both','use both','using both','used both','down both','over both','across both','through both','via both','sends to both','sends traffic to both','sends packets to both','sent to both',
+    'both routes equally','both paths equally','both links equally','equally between','equally across','50/50','fifty fifty',
+    'half to each','half the traffic to each','half of the traffic to each','half the packets to each','half of the packets to each','half via each','half down each','half each way','half goes to each'];
   return {
-    prompt:'R1\'s LAN is 172.'+b+'.'+x+'.0/24 and R3\'s LAN is 172.'+b+'.'+y+'.0/24. Between them, R2 connects to both over 10.0.0.0 links. All three run RIP with the default settings, and the two LANs can\'t reliably reach each other. Explain why, and what you would change.',
+    prompt: A+'\'s LAN is '+lan(0)+' and '+B+'\'s LAN is '+lan(1)+'. Between them, '+M+' connects to both over '+link+' links. All three run RIP with the default settings, and the two LANs can\'t reliably reach each other. Explain why: what route do '+A+' and '+B+' advertise to '+M+', why, and what does '+M+' do with it? Then say what you would change, and on which routers.',
     points: [
-      'RIP [[auto-summarises|auto-summary|auto summary|summarises|summarise|summarizes|summarisation|classful boundary]] at the classful boundary: crossing into 10.0.0.0, R1 and R3 each advertise only <b>172.'+b+'.0.0/16</b>.',
-      'R2 learns that same /16 from [[both sides|both|two directions|R1 and R3|both routers]] at the same hop count, so it [[load-balances|load balance|load balancing|half|both paths|either side]] between them and about half the traffic goes to the wrong LAN.',
-      'This is a <b>discontiguous network</b>, and RIPv1 can\'t fix it because its updates carry no masks.',
-      'Fix: configure [[version 2|v2|ripv2|RIPv2]] and [[no auto-summary|no auto summary|disable auto-summary|turn off auto-summary|disable summarisation|turn off summarisation]] under '+mono('router rip')+' on [[every router|all routers|all three|each router|all the routers]] so the /24s are advertised as they are.',
+      '<b>Here:</b> '+A+' and '+B+' each advertise their LAN only as [['+sumF.join('|')+']], so [['+M+' learns that one route from both '+A+' and '+B+'|'+both+']] and can\'t tell which side each LAN is on. Fix: [[version 2|v2|ripv2|RIP v2|RIP version 2]] and [[no auto-summary|'+noAuto.join('|')+']] under '+mono('router rip')+' on [[all three routers|'+every.join('|')+']].',
+      '<b>Why:</b> RIP [[auto-summarises|autosummary|auto summary|auto summarisation|automatic summarisation|automatic summary|automatically summarise|RIP summarises|summarises at|summarises when|summarises as|summarises before|summarises across|are summarised|is summarised|get summarised|gets summarised|summarised by|classful boundary|classful boundaries|major network boundary]] at the classful boundary by default. '+lan(0)+' and '+lan(1)+' are both in the class '+cls+' network '+sum+', so crossing into '+link+' each LAN router advertises just '+sum+'.',
+      'Both routes are 1 hop, so '+M+' [[load-balances|'+lb.join('|')+']] between them and about half the traffic for each LAN goes to the wrong one.',
+      'This is a discontiguous network ('+sum+' split by '+link+'), and RIPv1 can\'t fix it because its updates carry no masks. With v2 and auto-summary off the /'+lp+'s are advertised as they are, so '+M+' learns '+lan(0)+' via '+A+' and '+lan(1)+' via '+B+'. '+M+' needs the fix too: it crosses the boundary again when it passes each LAN on.',
     ],
   };
 }});
@@ -661,9 +1008,11 @@ card({id:'g1-riphops', area:'routing', tier:2, kind:'graded', src:'Q1', title:'R
     grade(){
       const want=unreach?16:hop, okH=intOf(val('hop'))===want, okC=Q.choice===(unreach?1:0);
       markField('hop',okH,String(want)); markChips(unreach?1:0);
+      const at16='R'+(2+16-m);
       return {ok:okH&&okC, verdict: okH&&okC?'Correct.':(unreach?'16 &mdash; unreachable.':hop+', installed.'), why: ul([
-        'In '+mono('[120/'+m+']')+', 120 is RIP\'s AD and '+m+' is R2\'s hop count. Each router further on adds 1: '+m+' + '+k+' = '+hop+'.',
-        unreach?'A metric of 16 is RIP\'s infinity: '+far+' treats '+cidr(net,24)+' as unreachable and doesn\'t install it &mdash; RIP networks can be at most 15 hops across.':
+        unreach?'<b>'+far+': 16 &mdash; unreachable, so the route is not installed.</b>':'<b>'+far+': hop count '+hop+', and the route is installed.</b>',
+        'In '+mono('[120/'+m+']')+', 120 is RIP\'s AD and '+m+' is R2\'s hop count. Each router further on adds 1: '+m+' + '+k+(unreach&&hop>16?' would be '+hop+'.':' = '+hop+'.'),
+        unreach?'A metric of 16 is RIP\'s infinity: the count reaches 16 at '+(at16===far?far:at16+', so the route goes no further and '+far+' never learns it')+'. '+far+' treats '+cidr(net,24)+' as unreachable and doesn\'t install it &mdash; RIP networks can be at most 15 hops across.':
           hop+' is within RIP\'s 15-hop limit, so '+far+' installs the route.'])};
     },
   };
@@ -673,8 +1022,8 @@ card({id:'g1-riphops', area:'routing', tier:2, kind:'graded', src:'Q1', title:'R
 card({id:'q2a-rid', area:'ospf', tier:1, kind:'flash', src:'Q2 a', title:'The OSPF router ID', gen(){
   return {
     prompt: pick([
-      'How does OSPF use the router ID? There are three ways that the value of the router ID can be determined. What decides which way is used?',
-      'What is an OSPF router ID used for, and in what order does a Cisco router choose it?',
+      'How does OSPF use the router ID? Give two things it is used for. There are three ways that the value of the router ID can be determined: name them in the order the router tries them, and say when the router makes that choice.',
+      'What is an OSPF router ID used for? Give two uses, then list the order in which a Cisco router chooses its router ID and say when the choice is made.',
     ]),
     points: [
 
@@ -682,7 +1031,7 @@ card({id:'q2a-rid', area:'ospf', tier:1, kind:'flash', src:'Q2 a', title:'The OS
       '<b>1.</b> The <span class="mono-inl">[[router-id|router id]]</span> command under <span class="mono-inl">router ospf</span>.',
       '<b>2.</b> If there is none: the [[highest|largest|biggest]] IPv4 address on any [[loopback|loopbacks]] interface.',
       '<b>3.</b> If there are no loopbacks: the highest IPv4 address on an [[active|up interface|interfaces that are up|physical interface|physical interfaces|enabled|operational]] (up) physical interface.',
-      'The first of those that exists [[when the OSPF process starts|process starts|process start|ospf starts|ospf start|startup|start up|boot|boots|reload|restart|clear ip ospf process]] is used. It then stays put until the process restarts &mdash; '+mono('clear ip ospf process')+' or a reload.',
+      'The first of those that exists [[when the OSPF process starts|process starts|process start|ospf starts|ospf start|startup|start up|boot|boots|reload|restart|clear ip ospf process|first configured|process is started]] is used. It then stays put until the process restarts &mdash; '+mono('clear ip ospf process')+' or a reload.',
     ],
   };
 }});
@@ -781,18 +1130,56 @@ ridCard('g2-rid-trap',3,'Router ID traps',()=>{
 });
 
 card({id:'q2b-metric', area:'ospf', tier:1, kind:'flash', src:'Q2 b', title:'The OSPF metric', gen(){
-  return {
-    prompt: pick([
-      'What does OSPF use as its metric? If you do not specify the metric for a link explicitly, how does a Cisco router assign it a metric value?',
-      'How does a Cisco router work out the OSPF cost of a route, and why do a FastEthernet and a GigabitEthernet link end up with the same cost by default?',
-    ]),
+  /* kwModel: keys shared by both variants. The prompts ask for the formula,
+     the reference, which interfaces count and how they combine. */
+  const IFBW='interface bandwidth|link bandwidth|port bandwidth|interface speed|link speed|port speed|speed of the interface|speed of the link|bandwidth of the interface|bandwidth of the link|bandwidth of each interface|bandwidth of each link|bandwidth of that interface|bandwidth of that link|divided by the bandwidth|divided by bandwidth|divide by the bandwidth|divide by bandwidth|divided by its bandwidth|divided by the link|divided by the speed|over the bandwidth|over bandwidth|over the link|by its bandwidth|by the bandwidth|by bandwidth|by the interface|by the link speed';
+  const SUM='sum|total|add|added|adding|adds|summed|cumulative|accumulated|accumulate|combined|combine|combines|combining|equals|equal to|add up|adds up|added up|added together|plus';
+  const OUT='outgoing|outbound|exit|egress|leaving|sent out|send out';
+  if(chance(.5)) return {
+    prompt:'What does OSPF use as its metric? If you do not specify the metric for a link explicitly, how does a Cisco router assign it a metric value? Give the formula and the default reference bandwidth it uses, and say how the link values combine along a path and which interfaces count.',
     points: [
-
-      'OSPF\'s metric is [[cost]]. A route\'s cost is the [[sum|total|add|added|adding|adds|cumulative|accumulated]] of the [[outgoing|outbound|exit|egress]] interface costs along the path; lowest total wins.',
-      'Default interface cost = [[reference bandwidth|reference]] &divide; interface [[bandwidth]]. The reference is [[100 Mbps|100|10^8|100000000]], the result is rounded down, and the minimum is 1.',
+      'OSPF\'s metric is [[cost]]. A route\'s cost is the [[' + SUM + ']] of the [[' + OUT + ']] interface costs along the path; lowest total wins.',
+      'Default interface cost = [[reference bandwidth|reference|ref|ref bw|10^8|100000000]] &divide; [[' + IFBW + ']]. The reference is [[100 Mbps|100]], the result is rounded down, and the minimum is 1.',
       'So 10 Mbps &rarr; 10, a T1 serial (1544 kbps) &rarr; 64, and FastEthernet, GigabitEthernet and faster all &rarr; 1 &mdash; they can\'t be told apart.',
       'Fix that with '+mono('auto-cost reference-bandwidth 1000')+' (or higher) under '+mono('router ospf')+', the same on every router.',
       'You can also set it per interface: '+mono('ip ospf cost N')+', or change the '+mono('bandwidth')+' value the calculation uses.',
+    ],
+  };
+  /* The two-link version names its links. Any link of 100 Mbps or faster
+     costs 1 by default (the slower one exactly, the faster one because a
+     cost can't go below 1), so the model answer is "both cost 1". */
+  const LINKS=[
+    {name:'FastEthernet', mbps:100, al:['FastEthernet','Fast Ethernet','Fa','FE']},
+    {name:'GigabitEthernet', mbps:1000, al:['GigabitEthernet','Gigabit Ethernet','Gigabit','GigE','Gig','Gi','GE']},
+    {name:'10-Gigabit Ethernet', mbps:10000, al:['10-Gigabit Ethernet','10 Gigabit','10-Gig','10GigE','10GE','10G','TenGigabitEthernet','Ten Gigabit','Ten Gig']}];
+  const [A,B]=pick([[0,1],[0,2]]).map(i=>LINKS[i]);
+  const mb=n=>n>=10000?'10,000':String(n);
+  const calc=(L,lead)=>L.name+' ('+mb(L.mbps)+' Mbps)'+lead+' 100 &divide; '+mb(L.mbps)+(L.mbps===100?' = 1':' = '+(100/L.mbps)+', raised to 1');
+  const ref=B.mbps>=10000?10000:1000, after=L=>Math.max(1,Math.floor(ref/L.mbps));
+  const GEN=['both','each','they','same','equal','identical','all'];
+  /* One key for the pair. A value is paired with a name ("Gigabit: 1",
+     "1 for Gig") or with "both / each / they / same". It is the FASTER
+     link's pairing that counts: the slower one is exactly 1 anyway, and the
+     faster one being 1 as well is the answer. "0.1" is one token and "1 Gbps"
+     is skipped (see kwTokens, kwFind), so neither is a cost of 1. */
+  const f=['both cost 1','1 for both','1 each','one each','one for both',
+    A.name+' costs 1 and '+B.name+' costs 1', A.name+' is 1 and '+B.name+' is 1'];
+  GEN.concat(B.al).forEach(s=>{ f.push(s+'~1', s+'~costs one'); });
+  B.al.forEach(s=>{ f.push('1 for '+s, 'one for '+s, '1 on '+s); });
+  /* The slower link is declared as a subject too, so a value written next to
+     ITS name is not handed to the faster link ("Fa is 1 but Gig is 0.1").
+     The term can never be said, so these forms never match. */
+  A.al.forEach(s=>{ f.push(s+'~no value of its own'); });
+  const one=f.join('|');
+  return {
+    prompt:'How does a Cisco router work out the OSPF cost of a route? Give the formula for one interface, and say which interfaces along the path count and how their costs combine. By default, what cost does a '+A.name+' link get, and a '+B.name+' link? Explain why they end up the same, including the default reference bandwidth and the lowest cost an interface can have.',
+    points: [
+      '<b>Here:</b> by default the two links [['+one+']] &mdash; '+calc(A,' works out at')+', and '+calc(B,' at')+'. Equal costs, so OSPF can\'t tell the faster link from the slower one.',
+      '<b>Why:</b> the default [[reference bandwidth|reference|ref|ref bw|10^8|100000000]] is only 100 Mbps, so any link of 100 Mbps or faster divides out to 1 or less &mdash; and a cost is a whole number with a '+
+        '[[minimum of 1|minimum|lowest possible|lowest it can|lowest cost|below 1|less than 1|lower than 1|smaller than 1|at least 1|no lower than|no less than|round up|rounded up|rounds up|whole number|integer|fraction|fractional|decimal]], so a fraction counts as 1.',
+      '<b>Cost of a route:</b> each interface\'s cost is the reference bandwidth &divide; the [['+IFBW+']]; '+
+        'a route\'s cost is the [['+SUM+']] of the [['+OUT+']] interface costs along the path, and the lowest total wins.',
+      'To tell them apart, set '+mono('auto-cost reference-bandwidth '+ref)+' (or higher) under '+mono('router ospf')+', the same on every router: '+A.name+' then costs '+after(A)+' and '+B.name+' costs '+after(B)+'.',
     ],
   };
 }});
@@ -832,8 +1219,8 @@ card({id:'g2-cost-path', area:'ospf', tier:1, kind:'graded', src:'Q2 b', title:'
     grade(){
       const ok=intOf(val('cost'))===total; markField('cost',ok,String(total));
       return {ok, verdict: ok?'Correct.':'The total cost is '+total+'.',
-        why: ul(['OSPF adds up the cost of each <b>outgoing</b> interface, including the last router\'s interface onto the LAN: '+
-          routers.map(r=>r.name+' '+r.out).join(' + ')+' = <b>'+total+'</b>.',
+        why: ul(['R1\'s total cost to '+cidr(lan,24)+' is <b>'+total+'</b>: '+routers.map(r=>r.name+' '+r.outIf+' '+r.out).join(' + ')+'.',
+          'OSPF adds up the cost of each <b>outgoing</b> interface along the path, including the last router\'s interface onto the LAN.',
           'The incoming interfaces don\'t count &mdash; their cost is what the far router uses for traffic coming back.'])};
     },
   };
@@ -872,6 +1259,7 @@ card({id:'g2-best-path', area:'ospf', tier:2, kind:'graded', src:'Q2 b', title:'
       const ans=viaR2?0:1, okC=Q.choice===ans, okT=intOf(val('cost'))===Math.min(A,B);
       markChips(ans); markField('cost',okT,String(Math.min(A,B)));
       return {ok:okC&&okT, verdict: okC&&okT?'Correct.':opts[ans]+', cost '+Math.min(A,B)+'.', why: ul([
+        'R1 sends the traffic <b>'+(viaR2?'through R2':'through R3')+'</b>, total cost <b>'+Math.min(A,B)+'</b> &mdash; lower than the '+Math.max(A,B)+' '+(viaR2?'through R3':'through R2')+'.',
         'Via R2: '+c.a1+' (R1 S0/0/0) + '+c.a2+' (R2 S0/0/1) + '+c.L+' (R4 G0/2) = <b>'+A+'</b>.',
         'Via R3: '+c.b1+' (R1 G0/1) + '+c.b2+' (R3 G0/1) + '+c.b3+' (R5 G0/1) + '+c.L+' (R4 G0/2) = <b>'+B+'</b>.',
         'OSPF takes the lowest total cost'+(viaR2===false?' &mdash; even though it passes through more routers':'')+'. Only outgoing interfaces count, so the rows facing back towards R1 are ignored.'])};
@@ -880,35 +1268,62 @@ card({id:'g2-best-path', area:'ospf', tier:2, kind:'graded', src:'Q2 b', title:'
 }});
 
 card({id:'q2c-multiarea', area:'ospf', tier:1, kind:'flash', src:'Q2 c', title:'Why multi-area OSPF', gen(){
+  const LSDB='[[LSDB|link state database|link-state database|database|topology table]]',
+        FLOOD='[[floods|flood|flooding|LSA|LSAs|updates]]',
+        SPF='[[SPF|Dijkstra|recalculate|recalculation|recompute]]';
+  const how=[
+    '<b>Multi-area</b> is hierarchical: a [[backbone|area 0|area zero]] (area 0) with other areas attached to it through [[ABRs|ABR|area border router|area border routers|border router]].',
+    'Detailed topology LSAs (types 1 and 2) stay inside their own area, so a change floods and triggers SPF [[only within the area|only within|stays within|kept within|within each area|inside each area|only in the area|only that area|only in that area|stays in the area|stays inside|kept in the area|confined to the area|limited to the area|stays local|contained within]] where it happened.',
+    'ABRs pass a summary of each area to the others (type 3 LSAs) and can [[summarise|summary|summarisation|summarization|summarize|aggregate]] routes, giving [[smaller routing tables|smaller tables|routing tables are smaller|routing table is smaller|tables are smaller|fewer routes|less routes|fewer routing entries|reduces the routing table|reduced routing table]].',
+    'Result: smaller LSDBs, fewer SPF runs, less flooding, faster convergence, and problems contained within one area.',
+  ];
+  if(Math.random()<0.5) return {
+    prompt: 'How does multi-area OSPF overcome the problems with single area operation? Explain what goes wrong in one large area (what every router has to store, flood and recalculate), describe how a multi-area design is laid out (the central area and the routers that join the others to it), and explain how it reduces the load, including where changes are flooded and what happens to the routing tables and why.',
+    points: ['<b>Single-area problems:</b> every router holds the whole topology, so the '+LSDB+' and routing table get large; every change '+FLOOD+' to every router and makes all of them re-run '+SPF+' &mdash; heavy CPU, memory and bandwidth use.'].concat(how),
+  };
+  /* A scenario: the model's first point says what is wrong with THIS network
+     (its router count, and the cause of the symptom it was given). */
+  const n=ri(60,150), sym=pick([
+    {s:'its routers are struggling',
+     here:'all '+n+' routers are in one area, so every one of them keeps the whole '+LSDB+' and a full routing table, and a change anywhere '+FLOOD+' to all '+n+' and makes each of them re-run '+SPF+' &mdash; that CPU, memory and bandwidth load is what they are struggling with.'},
+    {s:'the CPU on every router spikes whenever a link anywhere in it flaps',
+     here:'the CPU spikes are '+SPF+' runs: a flap anywhere '+FLOOD+' to all '+n+' routers and every one of them recalculates its routes. Each of them also keeps the whole '+LSDB+' and a full routing table for all '+n+' routers, which costs memory.'},
+    {s:'its routers are running short of memory',
+     here:'the memory goes on the '+LSDB+': every one of the '+n+' routers stores the whole topology, plus a full routing table. On top of that, any change '+FLOOD+' to all '+n+' and makes each of them re-run '+SPF+'.'},
+  ]);
   return {
-    prompt: pick([
-      'How does multi-area OSPF overcome the problems with single area operation?',
-      'A single-area OSPF network has grown to '+ri(60,150)+' routers and its routers are struggling. What problems does one big area cause, and how does splitting it into multiple areas help?',
-    ]),
-    points: [
-
-      '<b>Single-area problems:</b> every router holds the whole topology, so the [[LSDB|link state database|link-state database|database|topology table]] and routing table get large; every change [[floods|flood|flooding|LSA|LSAs|updates]] to every router and makes all of them re-run [[SPF|Dijkstra|recalculate|recalculation|recompute]] &mdash; heavy CPU, memory and bandwidth use.',
-      '<b>Multi-area</b> is hierarchical: a [[backbone|area 0|area zero]] (area 0) with other areas attached to it through [[ABRs|ABR|area border router|area border routers|border router]].',
-      'Detailed topology LSAs (types 1 and 2) stay inside their own area, so a change floods and triggers SPF only [[within the area|that area|its own area|one area|local area|contained|inside the area|in the area]] where it happened.',
-      'ABRs pass a summary of each area to the others (type 3 LSAs) and can [[summarise|summary|summarisation|summarization|summarize|aggregate]] routes, giving [[smaller routing tables|smaller tables|smaller|fewer routes|reduced]].',
-      'Result: smaller LSDBs, fewer SPF runs, less flooding, faster convergence, and problems contained within one area.',
-    ],
+    prompt: 'A single-area OSPF network has grown to '+n+' routers and '+sym.s+'. Explain what in one big area is causing this (what every router has to store, flood and recalculate), then describe how a multi-area design would be laid out (the central area and the routers that join the others to it) and how splitting it reduces the load, including where changes are flooded and what happens to the routing tables and why.',
+    points: ['<b>Here:</b> '+sym.here].concat(how),
   };
 }});
 
 card({id:'q2d-timers', area:'ospf', tier:1, kind:'flash', src:'Q2 d', title:'Hello and dead timers', gen(){
+  const OVERHEAD='[[more overhead|overhead|bandwidth|more traffic|traffic|more hellos|more hello packets|hellos more often|cpu|processing]]';
+  const FLAP='[[flapping|flap|unstable|instability|false|falsely|by mistake|mistakenly|wrongly|lossy|packet loss|lost hellos|missed hellos]]';
+  const MATCHF='must match|match|matching|identical|mismatch|mismatched|same on both|same values|same timers|same hello|same dead|same intervals|same settings|set the same|configured the same|also set|also be set|also change|agree|equal|consistent|same as|to the same|hello too|hello as well|needs hello|also needs';
+  const MATCH='[['+MATCHF+']]';
+  if(Math.random()<0.5){
+    return {
+      prompt:'Why would you change the OSPF hello or dead timers? Give the benefit and two downsides of lowering them and the reason for raising them (and on what kind of link), say what must be true of the timers on two neighbouring routers, and say what happens to the dead timer when only the hello timer is changed.',
+      points:[
+        'Hellos discover neighbours and keep adjacencies alive. Defaults: hello 10 s and dead 40 s on Ethernet and point-to-point links (30/120 on NBMA). The dead interval is how long without a hello before the neighbour is declared down.',
+        '<b>Lower them</b> to [[detect a failure|detect|detection|reconverge|converge|convergence|failover]] [[faster|quicker|quickly|sooner|speed|speeds]].',
+        'The cost: '+OVERHEAD+' &mdash; more hello packets and CPU &mdash; and a risk of neighbours '+FLAP+' on a busy or lossy link.',
+        '<b>Raise them</b> to cut overhead on [[slow links|slow|low bandwidth|unreliable|congested|less overhead|fewer hellos|reduce overhead|less traffic|less bandwidth]], at the cost of slower failure detection.',
+        'Hello and dead intervals <b>'+MATCH+'</b> on both neighbours or the adjacency won\'t form. Set with '+mono('ip ospf hello-interval')+' / '+mono('ip ospf dead-interval')+' on the interface.',
+        'If dead hasn\'t been set by hand, changing hello sets it to [[4 &times; hello|4 times|four times|4x|x4|quadruple|4 x|times 4|times four]].',
+      ],
+    };
+  }
+  const h=pick([1,2,3,5]), d=4*h, ifn=pick(['G0/0','G0/1','S0/0/0']), nb=pick(['R2','R3']);
+  const sec=n=>n+(n===1?' second':' seconds');
   return {
-    prompt: pick([
-      'Why would you modify the hello timer or the dead timer? What effects would the changes have?',
-      'An admin lowers the OSPF hello interval on a link to 1 second. Why might they do that, what is the downside, and what must they make sure of on the neighbouring router?',
-    ]),
-    points: [
-
-      'Hellos discover neighbours and keep adjacencies alive. Defaults: hello 10 s and dead 40 s on Ethernet and point-to-point links (30/120 on NBMA). The dead interval is how long without a hello before the neighbour is declared down.',
-      '<b>Lower them</b> to detect a failed neighbour, and [[reconverge|converge|convergence|failover]], [[faster|quicker|quickly|sooner|speed|speeds]].',
-      'The cost: more hello packets &mdash; more [[bandwidth|overhead|traffic|more packets|processing]] and CPU &mdash; and a risk of neighbours [[flapping|flap|unstable|instability|false]] on a busy or lossy link.',
-      '<b>Raise them</b> to cut overhead on [[slow links|slow|low bandwidth]], at the cost of slower failure detection.',
-      'Hello and dead intervals <b>[[must match|match|matching|identical|mismatch|mismatched|same on both|same values|same timers|agree]]</b> on both neighbours or the adjacency won\'t form. Set with '+mono('ip ospf hello-interval')+' / '+mono('ip ospf dead-interval')+' on the interface; if dead hasn\'t been set by hand, changing hello sets it to [[4 &times; hello|4 times|four times|4x|x4|quadruple|4 x|times 4|times four]].',
+    prompt:'An admin lowers the OSPF hello interval on R1\'s '+ifn+' (the link to '+nb+') to '+sec(h)+' and does not set the dead interval. What dead interval will that interface now use? Why might the admin make this change, what are two downsides, and what must they make sure of on '+nb+'?',
+    points:[
+      '<b>Here:</b> the dead interval becomes [['+sec(d)+'|'+d+' seconds|'+d+' second|'+d+' s|'+d+'s|'+d+' sec|'+d+' secs|dead '+d+'|dead interval '+d+'|dead timer '+d+'|dead to '+d+'|dead of '+d+'|4 times|four times|4x|x4|4 x|times 4|times four|quadruple]] &mdash; 4 &times; the '+h+' s hello, because dead was not set by hand &mdash; down from the default 40 s.',
+      '<b>Why:</b> a failed neighbour is noticed within '+d+' s instead of 40 s, so OSPF can [[detect a failure|detect|detection|reconverge|converge|convergence|failover]] [[faster|quicker|quickly|sooner|speed|speeds]].',
+      '<b>Downside:</b> hellos go out '+(h===1?'every second':'every '+h+' s')+' instead of every 10 s &mdash; '+OVERHEAD+' &mdash; and with such a short dead interval a few lost hellos on a busy or lossy link can drop the neighbour by mistake ('+FLAP+').',
+      '<b>On '+nb+':</b> the hello and dead intervals [['+MATCHF+'|hello interval '+h+'|hello '+h+' on '+nb+'|hello '+h+' too|hello '+h+' as well]] on both ends, so '+nb+'\'s interface needs '+mono('ip ospf hello-interval '+h)+' too (giving dead '+d+' s); otherwise the adjacency goes down and won\'t re-form.',
     ],
   };
 }});
@@ -971,36 +1386,102 @@ card({id:'g2-adj', area:'ospf', tier:3, kind:'graded', src:'Q2 d', title:'Will t
     body: '<div class="ex-grid"><div>'+cliHtml(cfg(R1),'R1 (extract)')+'</div><div>'+cliHtml(cfg(R2),'R2 (extract)')+'</div></div>'+chipsHtml(OPTS),
     grade(){
       const ok=Q.choice===ans; markChips(ans);
-      return {ok, verdict: ok?'Correct.':'The answer: '+OPTS[ans]+'.', why: ul([why, 'To form an adjacency the two ends need matching hello and dead timers, the same area, the same subnet and mask, matching authentication, and neither end passive.'])};
+      return {ok, verdict: ok?'Correct.':'The answer: '+OPTS[ans]+'.', why: ul(['<b>'+OPTS[ans]+'.</b> '+why, 'To form an adjacency the two ends need matching hello and dead timers, the same area, the same subnet and mask, matching authentication, and neither end passive.'])};
     },
   };
 }});
 
 card({id:'q2e-roles', area:'ospf', tier:1, kind:'flash', src:'Q2 c', title:'OSPF router roles', gen(){
-  return {
-    prompt: pick([
-      'In multi-area OSPF, describe the roles of an internal router, a backbone router, an ABR and an ASBR.',
-      'R2 has one interface in area 0 and two in area 1, and R5 also redistributes a default route from the ISP. What OSPF roles do R2 and R5 have, and what does each role do?',
-    ]),
+  if(Math.random()<0.5) return {
+    prompt: 'In multi-area OSPF, describe the roles of an internal router, a backbone router, an ABR and an ASBR: for each one, say which areas its interfaces are in (or what else it connects to) and what job it does.',
     points: [
       '<b>Internal router:</b> every interface in the [[same area|one area|single area|a single area]], so it holds one LSDB.',
       '<b>Backbone router:</b> has at least one interface in the [[backbone|area 0|area zero]]. Every other area must connect to area 0.',
       '<b>ABR</b> (Area Border Router): interfaces in [[two or more areas|more than one area|multiple areas|several areas|two areas|connects areas|between areas]], one of them area 0. It keeps a separate LSDB for each area and passes [[summaries|summary|summarise|summarises|type 3]] of each area to the others.',
-      '<b>ASBR</b> (Autonomous System Boundary Router): connects OSPF to an [[external|outside OSPF|another routing protocol|other routing protocols|another routing domain|the Internet|ISP]] network and [[redistributes|redistribute|redistribution|injects|default-information originate]] those routes into OSPF.',
+      '<b>ASBR</b> (Autonomous System Boundary Router): connects OSPF to an [[external|outside OSPF|outside the network|to the outside|the outside world|outside world|outside routes|outside sources|out of the network|outside of the network|outside network|outside networks|other networks|another network|another routing protocol|other routing protocols|another routing domain|the Internet|ISP]] network and [[redistributes|redistribute|redistribution|injects|default-information originate]] those routes into OSPF.',
     ],
   };
+  /* A scenario: which router is the ABR, which the ASBR, the area numbers,
+     the interface split and where the external routes come from are all
+     drawn here, and the model's first points name THESE routers' roles. */
+  const names=['R1','R2','R3','R4','R5','R6'].sort(()=>Math.random()-0.5), A=names[0], B=names[1];
+  const x=pick([1,2,3,4,5,10,20,51]), split=pick([[1,2],[2,1],[1,1],[1,3]]);
+  const bInZero=Math.random()<0.35, bArea=bInZero?0:x;
+  const src=pick([
+    {txt:'a default route from the ISP', ext:'ISP|the ISP'},
+    {txt:'routes learned from a partner company\'s EIGRP network', ext:'EIGRP|partner'},
+    {txt:'static routes to a branch office that runs no routing protocol', ext:'static routes|static route|branch'},
+  ]);
+  const cnt=n=>n===1?'one':n===2?'two':'three';
+  const prompt=A+' has '+cnt(split[0])+' interface'+(split[0]>1?'s':'')+' in area 0 and '+cnt(split[1])+' in area '+x+'. '+
+    B+' has all of its interfaces in area '+bArea+', and it also redistributes '+src.txt+' into OSPF. '+
+    'Name every OSPF role '+A+' and '+B+' each have and why, then explain what an ABR does and what an ASBR does.';
+  const bRoles=bInZero
+    ? 'all its interfaces are in area 0, so [[@B is an internal router|@B~internal]] and [[@B is a backbone router|@B~backbone]] too'
+    : 'all its interfaces are in area '+x+', so [[@B is an internal router|@B~internal]] of area '+x+' (not a backbone router)';
+  const points=[
+    '<b>Here:</b> [[@A is an ABR|@A~ABR|@A~area border router|@A~border router|'+names.slice(2).map(n=>n+'~').join('|')+']], because it has interfaces in two areas (area 0 and area '+x+'), and, because one of them is in area 0, [[@A is a backbone router|@A~backbone]] as well. '+
+      '[[@B is an ASBR|@B~ASBR|@B~autonomous system boundary router|@B~boundary router]], because it redistributes '+src.txt+' into OSPF; '+bRoles+'.',
+    '<b>ABR:</b> joins its areas to the backbone. It keeps a separate LSDB for each area and [[passes summaries|summaries|summary|summarise|type 3|routes between areas|between areas|between the areas|connects areas|connects the areas|joins areas]] of each area\'s networks into the others (type 3 LSAs, '+mono('O IA')+' routes).',
+    '<b>ASBR:</b> the point where routes from [[outside OSPF|external|outside network|outside the network|to the outside|the outside world|outside world|outside routes|outside sources|out of the network|outside of the network|outside networks|other networks|another network|another routing protocol|other routing protocols|another routing domain|the Internet|'+src.ext+']] enter: it [[redistributes|redistribute|redistribution|injects|imports|brings in|default-information originate]] them into OSPF as type 5 external LSAs ('+mono('O E2')+' routes), flooded to every normal area.',
+    'For comparison: a backbone router has at least one interface in area 0; an internal router has every interface in one area and keeps a single LSDB.',
+  ].map(p=>p.replace(/@A/g,A).replace(/@B/g,B));
+  return {prompt, points};
 }});
 
 card({id:'q2f-lsa', area:'ospf', tier:2, kind:'flash', src:'Q2 c', title:'OSPF LSA types', gen(){
-  return {
-    prompt: pick(['Describe the OSPF LSA types 1, 2, 3, 4 and 5: who sends each one, and how far does it flood?',
-      'Which LSAs stay inside an area in multi-area OSPF, and which carry routes between areas or from outside OSPF?']),
+  /* Both variants are definitions, so the definitions are the answer. Each
+     key word is PAIRED with the type it belongs to ("subject~term"), so a
+     right phrase attached to the wrong type scores nothing: senders and
+     scopes in the first variant, which group each type goes in in the
+     second. Every type is recognised by number ("3", "type 3", "LSA 3") or by
+     name ("summary LSA"). Types 1 and 2, and 3 and 4, are one key word each
+     (any of them owning the phrase counts), because "types 1 and 2 stay
+     local" gives the phrase to the nearest type only. In a form list the
+     Type 4 names come before Type 3's, because "ASBR summary LSA" ends on the
+     same word as "summary LSA" and the earlier subject wins that tie. */
+  const NAMES={1:'router LSA', 2:'network LSA', 3:'summary LSA', 4:'ASBR summary LSA|ASBR summary', 5:'external LSA'};
+  const subs=n=>['type '+n,'LSA '+n,''+n,'type'+n,'lsa'+n].concat(NAMES[n].split('|'));
+  const subs12=subs(1).concat(subs(2)), subs34=subs(4).concat(subs(3));
+  const kw=(display,ss,terms,extra)=>{
+    const f=[display];
+    ss.forEach(s=>terms.forEach(t=>f.push(s+'~'+t)));
+    return '[['+f.concat(extra||[]).join('|')+']]';
+  };
+  const said=(who,ns)=>{   // "ASBR sends type 5" — the sender first, which the pairing can't see
+    const out=[];
+    who.forEach(w=>['send','originate','generate','create','advertise','produce','inject','flood'].forEach(v=>
+      ns.forEach(n=>['type '+n,'LSA '+n,''+n].forEach(a=>out.push(w+' '+v+' '+a)))));
+    return out;
+  };
+  const IN_AREA=['only within its area','within its area','within the area','within their area','within their own area','within its own area','within own area','within an area','inside its area','inside the area','inside their area','inside their own area','inside its own area','inside an area','stays in the area','stay in the area','stays in its area','stay in their area','stays in its own area','stay in their own area','stays in area','stay in area','in its own area','in their own area','in the same area','in own area','its own area','their own area','own area','its area','their area','same area','local to the area','local to its area','local','locally','area only','in the area','in an area','intra-area','intra area'];
+  const BETWEEN=['between areas','between the areas','between different areas','between two areas','between multiple areas','into other areas','into another area','into the other areas','into the next area','into neighbouring areas','into adjacent areas','into a different area','into different areas','to other areas','to another area','to different areas','to all other areas','out to other areas','other areas','another area','different areas','a different area','across areas','across area boundaries','across the area boundary','area boundaries','area boundary','inter-area','interarea','inter area','into the backbone','to the backbone','into area 0','to area 0','from one area to another','one area to another','one area into another','one area to the next','outside the area','outside its area','outside of the area','beyond the area','beyond its area','into the rest of the network','the other areas','all other areas','the next area','neighbouring areas','adjacent areas'];
+  const OUTSIDE=['outside OSPF','outside of OSPF','outside the OSPF','outside the autonomous system','outside the network','outside the domain','outside the routing domain','external routes','external networks','external route','external network','external prefixes','external destinations','routes from outside','routes outside','from outside','non-OSPF','not OSPF','another routing protocol','other routing protocols','different routing protocol','another protocol','other protocols','redistributed','redistribute','redistribution','redistributing','from the ISP','the ISP','ISP','internet','default route','static routes','another autonomous system'];
+  const ASBR_REACH=['where the ASBR is','where the ASBR can be found','find the ASBR','finding the ASBR','locate the ASBR','locating the ASBR','reach the ASBR','reaching the ASBR','reach an ASBR','get to the ASBR','route to the ASBR','path to the ASBR','way to the ASBR','location of the ASBR','ASBR location','ASBR reachability','how to reach the ASBR','how to get to the ASBR','where to find the ASBR','about the ASBR','advertises the ASBR','advertise the ASBR','the ASBR itself','ASBR can be reached'];
+  const EVERY_ROUTER=['every router','each router','all routers','every OSPF router','each OSPF router','all OSPF routers','any router','every router in the area','all routers in the area','every router in that area','routers in the area','routers in the same area','routers in that area','routers within the area','routers in its area','routers in an area','routers in each area','every single router','each router itself','the router itself','router itself','every router in an area','every one of the routers','all of the routers','all the routers','every router within the area','each router in the area','each router in the same area','routers in same area','all routers within the area'];
+  const DR=['DR','designated router'];
+  const ABR=['ABR','area border router'];
+  const ASBR=['ASBR','AS boundary router','autonomous system boundary router','boundary router','redistributing router','router that redistributes','router redistributing'];
+  const EVERY_AREA=['every area','all areas','all the areas','all other areas','all normal areas','every normal area','every other area','every non-stub area','all non-stub areas','all regular areas','every regular area','whole OSPF domain','entire OSPF domain','whole OSPF network','entire OSPF network','whole domain','entire domain','whole network','entire network','whole autonomous system','entire autonomous system','throughout the autonomous system','throughout OSPF','throughout the domain','throughout the network','all of OSPF','whole of OSPF','all OSPF areas','every OSPF area','everywhere','whole AS','entire AS','throughout the AS'];
+  if(chance(.5)) return {
+    prompt: 'Describe the OSPF LSA types 1 to 5. For each type, say which router originates it and how far it is flooded (inside its own area, into other areas, or across every area).',
     points: [
-      '<b>Type 1 [[Router LSA|Router LSAs|type 1 LSA|type 1|LSA 1]]:</b> every router describes its own links; [[flooded only within its area|within the area|inside the area|stays in the area|own area|that area]].',
-      '<b>Type 2 [[Network LSA|Network LSAs|type 2 LSA|type 2|LSA 2]]:</b> sent by the [[DR|designated router]] for a multi-access network; also stays in the area.',
-      '<b>Type 3 [[Summary LSA|Summary LSAs|type 3 LSA|type 3|LSA 3]]:</b> sent by an [[ABR|ABRs|area border router]] to advertise one area\'s networks into another; shown as '+mono('O IA')+' routes.',
-      '<b>Type 4 ASBR summary:</b> sent by an ABR so other areas can find the ASBR.',
-      '<b>Type 5 [[External LSA|External LSAs|type 5 LSA|type 5|LSA 5|AS external]]:</b> sent by the [[ASBR|ASBRs]] for routes from outside OSPF (e.g. a default route); flooded to every normal area; shown as '+mono('O*E2')+' / '+mono('O E2')+'.',
+      kw('Type 1 Router LSAs come from every router',subs(1),EVERY_ROUTER,said(['every router','each router','all routers'],[1]))+', each describing its own links.',
+      kw('Type 2 Network LSAs come from the DR',subs(2),DR,said(['DR','designated router'],[2]))+' of a multi-access network.',
+      kw('Types 1 and 2 stay in their own area',subs12,IN_AREA)+': they are flooded only within the area they were created in.',
+      kw('Types 3 and 4 come from the ABR',subs34,ABR,said(['ABR','area border router'],[3,4]))+': Type 3 Summary LSAs, and Type 4 ASBR summary LSAs, which tell other areas how to reach the ASBR.',
+      kw('Type 3 floods into other areas',subs(3).concat(subs(4)),BETWEEN)+', advertising one area\'s networks there; they appear as '+mono('O IA')+' routes.',
+      kw('Type 5 External LSAs come from the ASBR',subs(5),ASBR,said(['ASBR'],[5]))+' for routes from outside OSPF (e.g. a default route).',
+      kw('Type 5 floods to every area',subs(5),EVERY_AREA)+' except stub areas; they appear as '+mono('O E2')+' / '+mono('O*E2')+' routes.',
+    ],
+  };
+  return {
+    prompt: 'Sort the OSPF LSA types 1 to 5 into these four groups, naming each group and listing the type numbers in it: stays inside the area it was created in; carries one area\'s networks into other areas; tells other areas how to reach the ASBR; brings in routes from outside OSPF.',
+    points: [
+      kw('Types 1 and 2 stay inside their own area',subs12,IN_AREA)+': Router LSAs (from every router) and Network LSAs (from the DR) are flooded only within their own area.',
+      kw('Type 3 carries networks into other areas',subs34,BETWEEN)+': Summary LSAs, which ABRs send; they appear as '+mono('O IA')+' routes.',
+      kw('Type 4 tells other areas where the ASBR is',subs(4),ASBR_REACH)+': the ASBR summary LSA, also sent by an ABR.',
+      kw('Type 5 brings in routes from outside OSPF',subs(5),OUTSIDE)+': External LSAs, which the ASBR sends (e.g. for a default route) and which flood to every normal area.',
     ],
   };
 }});
@@ -1060,9 +1541,9 @@ card({id:'g2-net', area:'ospf', tier:2, kind:'graded', src:'Q2', title:'Write th
         if(r.areas[0]!==f.area){ why=f.name+' would be in area '+areaTxt(r.areas[0])+', not area '+f.area+'.'; break; }
       }
       markCmds('net',!why,model.join('\n'),why);
-      return {ok:!why, verdict: !why?'Correct.':'Not quite.', why: ul([...(why?[why]:[]),'e.g.<br>'+model.map(l=>mono(l.trim())).join('<br>'),
+      return {ok:!why, verdict: !why?'Correct.':'Not quite.', why: ul([...(why?[why]:[]),'One network command per OSPF interface &mdash; '+ifs.filter(f=>f.area!=null).map(f=>f.name+' in area '+f.area).join(', ')+' &mdash; and none that matches S0/0/1, the ISP link:<br>'+model.map(l=>mono(l.trim())).join('<br>'),
         'The wildcard is the inverse of the mask: /24 &rarr; 0.0.0.255, /26 &rarr; 0.0.0.63, /30 &rarr; 0.0.0.3 (0.0.0.0 matches just the one interface address).',
-        abr?'With its LANs in area '+la+' and the link to R2 in area 0, R1 is an <b>ABR</b>.':'Every interface is in area 0, so this is single-area OSPF.'])};
+        abr?'With its LANs in area '+la+' and the link to R2 in area 0, R1 is an <b>ABR</b>.':'Every OSPF interface is in area 0, so this is single-area OSPF.'])};
     },
   };
 }});
@@ -1095,9 +1576,9 @@ card({id:'g2-drbdr', area:'ospf', tier:2, kind:'graded', src:'Q2', title:'Who be
       markField('dr',okD,dr.name); markField('bdr',okB,bdr.name);
       const zero=rs.filter(r=>r.pri===0);
       return {ok:okD&&okB, verdict: okD&&okB?'Correct.':'DR '+dr.name+', BDR '+bdr.name+'.', why: ul([
+        'DR: <b>'+dr.name+'</b> (priority '+dr.pri+', RID '+int2ip(dr.rid)+'). BDR: <b>'+bdr.name+'</b> (priority '+bdr.pri+', RID '+int2ip(bdr.rid)+').',
         'Highest <b>priority</b> wins; only if priorities tie does the highest <b>router ID</b> decide.',
         ...(zero.length?[zero.map(r=>r.name).join(' and ')+' '+(zero.length>1?'have':'has')+' priority 0, so '+(zero.length>1?'they':'it')+' can never be DR or BDR.']:[]),
-        'DR: <b>'+dr.name+'</b> (priority '+dr.pri+', RID '+int2ip(dr.rid)+'). BDR: <b>'+bdr.name+'</b> (priority '+bdr.pri+', RID '+int2ip(bdr.rid)+').',
         'The election isn\'t pre-emptive: a router that joins later with a higher priority doesn\'t take over until the DR fails or OSPF restarts.'])};
     },
   };
@@ -1248,16 +1729,53 @@ function parseStdAcl(lines){
 }
 
 card({id:'q3c-place', area:'acl', tier:1, kind:'flash', src:'Q3 c', title:'Where ACLs go', gen(){
-  return {
-    prompt: pick([
-      'Where is it best to place a standard ACL? What about an extended ACL? Why?',
-      'An admin puts a standard ACL on the router interface closest to the hosts it is meant to filter. Why is that usually a mistake, and where do standard and extended ACLs belong?',
-    ]),
+  /* Placement is tied to the ACL type, so a swapped answer scores neither.
+     Generic variant: "standard~near the destination" pairing. Scenario variant:
+     enumerated phrases ("standard ACL on R3", "R3 should have the standard")
+     plus "it should be on R3" for the standard one, because the pairing's
+     fallback rule would let "standard ACL on R3, extended ACL on R1" (swapped)
+     score the extended key word. No bare generic words. */
+  const onlySrc='[[only matches the source|source only|only the source|only source|only on the source|only by the source|just the source|only check the source|only checks the source|only match the source|only filter on the source|only filter by the source|only filter by source|only look at the source|only looks at the source|only examine the source|only read the source|only see the source|only use the source|only uses the source|only care about the source|only based on the source|only filter traffic based on the source|only filter based on the source|source address only|source ip only|can not check the destination|cannot check the destination|can\'t check the destination|cannot see the destination|can\'t see the destination]]';
+  const extMatch='[[destination, protocol and port|source, destination, protocol|destination and port|destination and protocol|protocol and port|protocol or port|port and protocol|port or protocol|protocol, port|tcp or udp port|source and destination|destination and source|destination as well|destination too|destination address and port|destination address as well]]';
+  const early='[[before it wastes bandwidth|wastes bandwidth|wasting bandwidth|waste bandwidth|wasted bandwidth|saves bandwidth|save bandwidth|saving bandwidth|before it crosses the network|before it crosses|before it travels|before it reaches the rest of the network|before it uses|unnecessary traffic|unwanted traffic is dropped early|dropped before it]]';
+  const stdT=['destination','destinations','destination router','close to the destination','closest to the destination','near the destination','nearest the destination','nearest to the destination','next to the destination','at the destination','near destination','close to destination'];
+  const extT=['source','source router','close to the source','closest to the source','near the source','nearest the source','nearest to the source','next to the source','at the source','near source','close to source'];
+  const pairs=(a,t,b)=>t.map(x=>a+'~'+x).concat(b?b.map(x=>x+'~'+a):[]);
+  if(chance(.5)) return {
+    prompt: 'Where is it best to place a standard ACL, and where is it best to place an extended ACL? For each one, say what that kind of ACL can match, explain why that decides where it goes, and say what the placement saves.',
     points: [
-      '<b>Standard ACL:</b> as close to the [[destination|destinations]] as possible.',
-      'It matches only the [[source address|source only|only the source|only source|source ip]], so placed near the source it would stop that host reaching <i>every</i> destination, not just the one intended.',
-      '<b>Extended ACL:</b> [[as close to the source|close to the source|near the source|closest to the source|nearest the source|near source|at the source]] as possible.',
-      'It can match source, destination, protocol and port, so it drops exactly the unwanted traffic before it [[wastes bandwidth|bandwidth|crosses the network|travels|resources]] crossing the network.',
+      'Place a [[standard ACL close to the destination|'+pairs('standard',stdT).join('|')+']].',
+      'A standard ACL '+onlySrc+' address, so placed near the source it would stop that host reaching <i>every</i> destination, not just the one intended.',
+      'Place an [[extended ACL close to the source|'+pairs('extended',extT).join('|')+']].',
+      'An extended ACL can match source, '+extMatch+', so it can safely drop exactly the unwanted traffic near the source, '+early+' crossing the network.',
+    ],
+  };
+  const r=chance(.5)?['R1','R3']:['R3','R1'], src=r[0], dst=r[1];
+  const lans=shuffle(['Sales','HR','Finance','Marketing','Guest','Staff']), A=lans[0], B=lans[1];
+  const x=ri(2,250), net='192.168.'+x+'.0';
+  const lost=[];
+  ['loses','lose','lost','loses access to','lose access to','cannot reach','can\'t reach','can not reach','unable to reach','blocked from','blocks','also blocks','is blocked from','denied access to','no access to','no longer reach','no longer reaches'].forEach(v=>{
+    [B+' LAN','the '+B+' LAN',B].forEach(n=>lost.push(v+' '+n)); });
+  ['every destination','all destinations','every other network','all other networks','everything beyond'].forEach(w=>lost.push(w));
+  const verbs=['','on','at','in','onto','to','goes on','go on','goes at','goes to','should be on','should be at','should be in','should be','should go on','should go at','should go','would go on','would go at','would be on','is on','is at','belongs on','belongs at','belongs','must be on','must go on','needs to be on','needs to go on','is applied on','is applied to','is placed on','is placed at','is put on','can go on','is best on','is best at','is best placed on','is best placed at','is better on','is better at','ought to be on','has to be on','has to go on','be applied on','be applied to','be placed on','be placed at','be put on'];
+  const plain=(names,dev)=>{ const o=[]; names.forEach((n,i)=>verbs.concat(['apply it on','apply it to','put it on','place it on','it goes on','it should go on','it belongs on','it should be on','it goes at','it should go at']).forEach(v=>{ if(!v&&i) return; o.push((n+' '+v+' '+dev).replace(/  +/g,' ')); })); return o; };
+  const stdForms=plain(['standard','standard ACL','standard ACLs','standard one','standard list','standard access list'],dst);
+  stdForms.push('standard~close to the destination','standard~closest to the destination','standard~near the destination','standard~next to the destination','standard~at the destination','standard~near the servers','standard~close to the servers');
+  ['should have','has','gets','should get','needs','should hold','takes','should take'].forEach(v=>stdForms.push(dst+' '+v+' the standard ACL', dst+' '+v+' the standard'));
+  ['it should be on','it should be applied on','it should be applied to','it should go on','it should go at','it should be at','it should be placed on','it should be placed at','it should be put on','it belongs on','it belongs at','it should move to','it should be moved to','move it to','moved it to','it needs to be on','it needs to go on','it must be on','it must go on','put it on','place it on','apply it on'].forEach(p=>stdForms.push(p+' '+dst));
+  const extForms=plain(['extended','extended ACL','extended ACLs','extended one','extended list','extended access list'],src);
+  extForms.push('extended~close to the source','extended~closest to the source','extended~near the source','extended~next to the source','extended~at the source','extended~near the '+A+' LAN','extended~close to the '+A+' hosts');
+  ['should have','has','gets','should get','needs','should hold','takes','should take'].forEach(v=>extForms.push(src+' '+v+' the extended ACL', src+' '+v+' the extended'));
+  return {
+    prompt: 'R1, R2 and R3 are connected in a line (R1 &ndash; R2 &ndash; R3). Hosts on the '+A+' LAN ('+net+'/24, on '+src+') must not reach the Servers LAN on '+dst+', but must still reach the '+B+' LAN on R2. '+
+      'An admin applies a standard ACL denying '+net+' 0.0.0.255 inbound on '+src+'\'s interface facing the '+A+' LAN. Explain what else this breaks and why. Then say which router the standard ACL should be applied on instead, '+
+      'which router an extended ACL for the same job would go on, and what the extended ACL can match that the standard one cannot.',
+    points: [
+      '<b>Here:</b> the ACL on '+src+' drops <i>all</i> '+A+' traffic, so '+A+' [[also loses the '+B+' LAN|'+lost.join('|')+']] on R2, not only the Servers LAN. '+
+        'So the [[standard ACL on '+dst+'|'+stdForms.join('|')+']] belongs outbound on the interface facing the Servers LAN, and '+
+        'an [[extended ACL on '+src+'|'+extForms.join('|')+']] would go inbound on its '+A+' interface.',
+      'Why it went wrong: a standard ACL '+onlySrc+' address, so wherever it sits it blocks '+A+' from <i>every</i> destination beyond that point. Close to the destination, only traffic heading for the Servers LAN passes it.',
+      'An extended ACL also matches the '+extMatch+', so it can deny just '+A+' &rarr; Servers right at '+src+', '+early+' crossing R2.',
     ],
   };
 }});
@@ -1265,14 +1783,15 @@ card({id:'q3c-place', area:'acl', tier:1, kind:'flash', src:'Q3 c', title:'Where
 card({id:'q3d-established', area:'acl', tier:1, kind:'flash', src:'Q3 d', title:'The established keyword', gen(){
   return {
     prompt: pick([
-      'What is the purpose of adding the keyword established at the end of an ACL command line?',
-      'An inbound ACL on the Internet-facing interface ends an entry with "established". What traffic does that entry let in, and why is it useful?',
+      'What is the purpose of adding the keyword established at the end of an ACL command line? Say which protocol it matches and which flag bits it checks, which returning traffic it lets in and who must have started that connection, what it still keeps out, and give one limitation.',
+      'An inbound ACL on the Internet-facing interface ends an entry with "established". Which protocol and flag bits does that entry match? Which traffic does it let in and who must have started that connection, what does it still block, and what is its main limitation?',
     ]),
     points: [
-      '<b>established</b> matches only [[TCP]] segments that belong to a session already set up &mdash; those with the [[ACK|RST|ACK or RST]] bit set.',
-      'On an inbound ACL from outside it lets the [[return traffic|replies|reply|returning|responses|response]] in for connections that inside hosts [[initiated|initiate|initiates|opened|began|started from inside|inside hosts started|from inside]] &hellip;',
-      '&hellip; while [[new connections|new sessions|blocking new|initiated from outside|started from outside]] from the outside are still denied.',
-      'It only checks the TCP flags &mdash; it is not a [[stateful|state]] firewall, so a forged ACK would get through.',
+      '<b>Matches:</b> only [[TCP]] segments that belong to a session already set up &mdash; those with the [[ACK or RST|ACK|RST|acknowledgement|ACK bit|ACK flag]] bit set.',
+      '<b>Lets in:</b> on an inbound ACL from outside, the [[return traffic|replies|reply|returning|responses|response|return packets|back in|come back in|comes back in|coming back in|let back in|allowed back in|traffic back]] &hellip;',
+      '&hellip; for connections that were [[started by inside hosts|initiated from inside|started from inside|opened from inside|inside hosts initiated|began inside|begun inside|began from inside|that began inside|inside hosts started|inside hosts opened|initiated by inside|started by inside|opened by inside|initiated by the inside|started by the inside|inside initiated|inside-initiated|internal hosts initiated|started by internal|initiated by internal|initiated by a host inside|started by a host inside|initiated by hosts inside|started by hosts inside|initiated by an inside|started by an inside|started internally|internally started|initiated internally|internally initiated|started on the inside|initiated on the inside|started within|initiated within|started from within|initiated from within|we started|we initiated|started by us|initiated by us|you started|you initiated|already started|already initiated|previously started|previously initiated|started by the internal|initiated by the internal|started from the inside|initiated from the inside|started by the user|initiated by the user|user started|user initiated|started by the host|initiated by the host|inside started|internal started|started by the local|initiated by the local|started locally|initiated locally]].',
+      '<b>Still blocks:</b> [[new connections|new sessions|new TCP|new connection|new session|start the connection|start a connection|starts the connection|starts a connection|starting connections|starting a connection|starting the connection|start connections|starts connections|start new connections|starting new connections|connection attempts|connection requests|incoming connections|started from outside|started by outside|initiated from outside|initiated by outside|started from the outside|initiated from the outside|started by an outside|initiated by an outside|started by the outside|initiated by the outside|outside-initiated|outside initiated|SYN]] from the outside (a SYN with no ACK does not match).',
+      '<b>Limitation:</b> it only checks the TCP flags &mdash; it is [[not stateful|stateless|not a stateful|no state|does not track|doesn\'t track|not track|not a firewall|faked|forged ACK|spoofed ACK|faked ACK|fake ACK|crafted ACK]], so a forged ACK would get through.',
     ],
   };
 }});
@@ -1295,7 +1814,7 @@ function wcCard(id,tier,title,cross){
         const why=['First = address AND NOT wildcard = <b>'+int2ip(first)+'</b>; last = address OR wildcard = <b>'+int2ip(last)+'</b>.'];
         if(cross&&base!==first) why.push('The address isn\'t the start of the block: '+int2ip(base)+' has bits set where the wildcard has 1s, and the router ignores those bits, so the range starts at '+int2ip(first)+'.');
         if(cross) why.push(int2ip(wc)+' has '+(32-pfx)+' one-bits &rarr; 2<sup>'+(32-pfx)+'</sup> = <b>'+count.toLocaleString('en')+'</b> addresses.');
-        return {ok:okF&&okL&&okC, verdict: okF&&okL&&okC?'Correct.':int2ip(first)+' to '+int2ip(last)+'.', why: ul(why)};
+        return {ok:okF&&okL&&okC, verdict: okF&&okL&&okC?'Correct.':int2ip(first)+' to '+int2ip(last)+(cross?' ('+count.toLocaleString('en')+' addresses)':'')+'.', why: ul(why)};
       },
     };
   }});
@@ -1453,13 +1972,21 @@ card({id:'g3-ext', area:'acl', tier:3, kind:'graded', src:'Q3', title:'Write and
 }});
 
 card({id:'q3e-acl6', area:'acl', tier:1, kind:'flash', src:'Q3', title:'IPv6 ACLs', gen(){
+  /* ND is only credited when the answer says it is permitted / keeps working, so "ND is blocked" scores nothing. */
+  const nd=[];
+  ['neighbour discovery','neighbor discovery','ND','NDP','NS','NA','neighbour solicitation','neighbor solicitation','neighbour advertisement','neighbor advertisement'].forEach(t=>{
+    nd.push('permit '+t,'allow '+t,'permit for '+t,'allow for '+t,t+' is permitted',t+' is allowed',t+' still works',t+' keeps working','not block '+t);
+  });
+  nd.push('solicitation and advertisement are permitted','solicitation and advertisement are allowed','solicitation and advertisement still work');
   return {
-    prompt: pick(['How do IPv6 ACLs differ from IPv4 ACLs?','What do you have to do differently when you write and apply an ACL for IPv6 traffic?']),
+    prompt: pick([
+      'How do IPv6 ACLs differ from IPv4 ACLs? Explain how an IPv6 list is identified (numbered or named), what each entry can match on, how addresses are written in it, which command applies it to an interface, and what the implicit entries at the end of every IPv6 ACL still permit.',
+      'What do you have to do differently when you write and apply an ACL for IPv6 traffic? Describe how the list is identified, what each entry matches on, how you write the addresses, the command that applies it to an interface, and what IPv6 traffic the implicit entries at the end still allow.']),
     points: [
-      'IPv6 ACLs are always [[named|name]] &mdash; there are no numbered or standard IPv6 lists &mdash; and each entry works like an [[extended|extended ACL|source and destination]] entry: protocol, source and destination.',
-      'There are no wildcard masks: addresses are written with a [[prefix length|prefix-length|/64|prefix]] (2001:db8:acad:10::/64), or host / any.',
+      'IPv6 ACLs are [[always named|only named|are named|is named|must be named|named list|named ACL|named access list|named not numbered|named rather than numbered|named instead of numbered|not numbered|no numbered|given a name|identified by name|use a name|use names]] &mdash; there are no numbered or standard IPv6 lists &mdash; and each entry works like an [[extended ACL|extended style|like extended|source and destination|source destination|destination and source|source plus destination|source address|destination address|destination|protocol and source|protocol source|protocol plus source]] entry: protocol, source and destination (and ports).',
+      'There are no wildcard masks: addresses are written with a [[prefix length|prefix-length|/64|prefix|CIDR|slash notation|no wildcard|without wildcard]] (2001:db8:acad:10::/64), or host / any.',
       'A list is applied to an interface with '+mono('ipv6 traffic-filter <name> in|out')+' ([[traffic-filter|traffic filter]], not ip access-group), and to vty lines with ipv6 access-class.',
-      'Every IPv6 ACL ends with implicit permits for [[neighbour discovery|neighbor discovery|ND|NS|NA|nd-na|nd-ns]] (NS, Neighbour Solicitation, and NA, Neighbour Advertisement &mdash; IPv6\'s version of ARP) before the implicit deny ipv6 any any, so ND keeps working. An explicit deny ipv6 any any at the end would block ND too.',
+      'Every IPv6 ACL ends with [[implicit permits for neighbour discovery|'+nd.join('|')+']] (NS, Neighbour Solicitation, and NA, Neighbour Advertisement &mdash; IPv6\'s version of ARP) before the implicit deny ipv6 any any, so ND keeps working. An explicit deny ipv6 any any at the end would block ND too.',
     ],
   };
 }});
@@ -1510,9 +2037,10 @@ card({id:'g3-acl6', area:'acl', tier:2, kind:'graded', src:'Q3', title:'Write an
       const okAcl=!aclWhy, okApply=!applyWhy, okIf=Q.ifSel===tgt;
       markCmds('acl',okAcl,model.join('\n'),aclWhy); markField('apply',okApply,'ipv6 traffic-filter '+name+' in'); markIfs(tgt);
       return {ok:okAcl&&okApply&&okIf, verdict: okAcl&&okApply&&okIf?'Correct.':'Check '+[okAcl?null:'the ACL', okApply?null:'the apply command', okIf?null:'the interface'].filter(Boolean).join(', ')+'.',
-        why: ul([...(applyWhy?[applyWhy]:[]),'e.g.<br>'+model.map(l=>mono(l.trim())).join('<br>')+'<br>'+mono('interface '+tgt.split(' ')[1].toLowerCase())+' '+mono('ipv6 traffic-filter '+name+' in')+' on '+tgt.split(' ')[0]+'.',
+        why: ul(['It goes on <b>'+tgt+' inbound</b>, the interface facing LAN'+(a+1)+' (the source), e.g.<br>'+model.map(l=>mono(l.trim())).join('<br>')+'<br>then on '+tgt.split(' ')[0]+': '+mono('interface '+tgt.split(' ')[1].toLowerCase())+', '+mono('ipv6 traffic-filter '+name+' in'),
+          ...(applyWhy?[applyWhy]:[]),
           'IPv6 entries name the protocol, the source <b>and</b> the destination, with prefix lengths instead of wildcards.',
-          'Like an extended ACL it goes near the <b>source</b>: '+tgt+' inbound.'])};
+          'Like an extended ACL it goes near the <b>source</b>, so traffic for LAN'+(b+1)+' is dropped before it crosses the network.'])};
     },
   };
 }});
@@ -1610,7 +2138,8 @@ card({id:'g4-nat', area:'nat', tier:1, kind:'graded', src:'Q4 a', title:'Address
     grade(){
       const ok=gradeIps({p1s:S.ip,p1d:P.lo,p2s:sc.global,p2d:P.lo});
       return {ok, verdict: ok?'Correct.':'Packet 2 leaves as '+int2ip(sc.global)+' &rarr; '+int2ip(P.lo)+'.',
-        why: ul(['Packet 1 is untranslated: inside local '+int2ip(S.ip)+' &rarr; '+int2ip(P.lo)+'.',
+        why: ul(['<b>Here:</b> Packet 1 is <b>'+int2ip(S.ip)+' &rarr; '+int2ip(P.lo)+'</b>; Packet 2 is <b>'+int2ip(sc.global)+' &rarr; '+int2ip(P.lo)+'</b>.',
+          'Packet 1 hasn\'t reached NAT yet, so it carries '+S.name+'\'s own (inside local) address, '+int2ip(S.ip)+'.',
           NAT_KIND_TEXT[kind]+': inside global <b>'+int2ip(sc.global)+'</b>.',
           'NAT only rewrites the inside address &mdash; the destination stays '+int2ip(P.lo)+' both times.'])};
     },
@@ -1625,7 +2154,8 @@ card({id:'g4-nat-reply', area:'nat', tier:2, kind:'graded', src:'Q4 a', title:'T
     grade(){
       const ok=gradeIps({p3s:P.lo,p3d:sc.global,p4s:P.lo,p4d:S.ip});
       return {ok, verdict: ok?'Correct.':'Packet 3: '+int2ip(P.lo)+' &rarr; '+int2ip(sc.global)+'; Packet 4: '+int2ip(P.lo)+' &rarr; '+int2ip(S.ip)+'.',
-        why: ul([NAT_KIND_TEXT[kind]+', so the ping left as '+int2ip(sc.global)+' and the ISP replies to <b>that</b> address.',
+        why: ul(['<b>Here:</b> Packet 3 is <b>'+int2ip(P.lo)+' &rarr; '+int2ip(sc.global)+'</b>; Packet 4 is <b>'+int2ip(P.lo)+' &rarr; '+int2ip(S.ip)+'</b>.',
+          NAT_KIND_TEXT[kind]+', so the ping left as '+int2ip(sc.global)+' and the ISP replies to <b>that</b> address.',
           'The Gateway finds the translation and rewrites the destination back to the inside local, <b>'+int2ip(S.ip)+'</b>, for Packet 4.',
           'The source, '+int2ip(P.lo)+', is never changed.'])};
     },
@@ -1641,10 +2171,10 @@ card({id:'g4-nat-trap', area:'nat', tier:3, kind:'graded', src:'Q4 a', title:'Is
     grade(){
       const okS=ip2int(val('p2s'))===src; markField('p2s',okS,int2ip(src));
       const okC=Q.choice===(works?0:1); markChips(works?0:1);
-      const why=sc.global==null?
+      const why=['<b>Here:</b> Packet 2 leaves with source <b>'+int2ip(src)+'</b>'+(works?' (translated)':' (not translated)')+', and the ping <b>'+(works?'succeeds':'fails')+'</b>.'].concat(sc.global==null?
         [S.name+' ('+int2ip(S.ip)+') isn\'t matched by access-list 1, so NAT leaves it alone: Packet 2 still has the private source <b>'+int2ip(S.ip)+'</b>.',
          'The ISP has no route back to '+cidr(P.lan,24)+', so the reply is dropped &mdash; the ping <b>fails</b>.']:
-        [NAT_KIND_TEXT[kind]+': <b>'+int2ip(src)+'</b>.','The ISP routes the public block back to the Gateway, which translates the reply &mdash; the ping <b>succeeds</b>.'];
+        [NAT_KIND_TEXT[kind]+': <b>'+int2ip(src)+'</b>.','The ISP routes the public block back to the Gateway, which translates the reply &mdash; the ping <b>succeeds</b>.']);
       return {ok:okS&&okC, verdict: okS&&okC?'Correct.':'Source '+int2ip(src)+'; the ping '+(works?'succeeds':'fails')+'.', why: ul(why)};
     },
   };
@@ -1668,34 +2198,100 @@ card({id:'g4-count', area:'nat', tier:2, kind:'graded', src:'Q4 c', title:'How m
 }});
 
 card({id:'q4b-static', area:'nat', tier:1, kind:'flash', src:'Q4 b', title:'Why static NAT', gen(){
-  return {
-    prompt: pick(['Why would you use the static NAT option?','The company\'s web server sits on the inside network. Why does it need static NAT rather than the dynamic pool everyone else uses?']),
+  if(Math.random()<0.5) return {
+    prompt:'Why would you use the static NAT option? Say what kind of mapping it creates, what kind of inside device needs it, and why dynamic NAT or PAT would not work for that device.',
     points: [
-      'Static NAT is a permanent [[one-to-one|one to one|1 to 1|1:1|fixed|permanent]] mapping between one inside local and one inside global address.',
-      'It is for inside devices that must be [[reachable from outside|reachable|accessible from outside|from the internet|from outside|accessible]] &mdash; typically a [[server|servers|web server]].',
-      'Outside hosts need a fixed public address to start a connection to; dynamic NAT and PAT only create a translation when the inside host [[sends first|initiates|initiated|initiate|sends traffic first|first contact]].',
+      'Static NAT is a permanent [[one-to-one|one to one|1 to 1|1:1|permanent mapping|permanently maps|permanently map|permanently mapped|static mapping|fixed mapping|one fixed|one public address|one for one]] mapping between one inside local and one inside global address.',
+      'It is for inside devices that must be [[reachable from outside|reachable from outside|reachable from the internet|accessible from outside|accessible from the internet|from the internet|from outside|connect to|people outside|outside users|outside hosts|external users|inbound|can reach|reach it|access it]] &mdash; typically a [[server|servers|web server|mail server]].',
+      'Outside hosts need a fixed public address to start a connection to; dynamic NAT and PAT only create a translation when the inside host [[sends first|sends traffic first|sends traffic out first|sends out first|goes out first|traffic goes out first|starts traffic|starts conversation|starts connection|starts first|initiates|initiated|initiate|outbound traffic|outbound connection|originates|first contact]].',
     ],
   };
+  /* A scenario: the server, its private address and the public address it is
+     published at are drawn here, and the first point answers for THIS server. */
+  const srv=pick([{n:'web server',c:'browsers'},{n:'mail server',c:'other mail servers'},{n:'FTP server',c:'customers'}]);
+  const lan=pick([{p:'192.168.1.',h:ri(10,30)},{p:'10.1.10.',h:ri(10,30)},{p:'172.16.5.',h:ri(10,30)}]);
+  const priv=lan.p+lan.h, pubH=ri(225,230), pub='209.165.200.'+pubH;
+  const prompt='The company\'s '+srv.n+' ('+priv+') sits on the inside network and is published at '+pub+
+    '; everyone else gets out through a dynamic NAT pool of 209.165.200.242 to 209.165.200.254. '+
+    'Why does the '+srv.n+' need static NAT rather than the pool? Say what static NAT gives it, and explain why a pool address would not work for it.';
+  return {prompt, points:[
+    '<b>Here:</b> static NAT maps '+priv+' to '+pub+' [[one-to-one|one to one|1 to 1|1:1|permanent mapping|permanently maps|permanently map|permanently mapped|static mapping|fixed mapping|one fixed|one public address|one for one]], so '+srv.c+' on the Internet can always [[reach the '+srv.n+'|reachable from outside|reachable from the internet|accessible from outside|accessible from the internet|from the internet|from outside|connect to|people outside|outside users|outside hosts|external users|inbound|can reach|reach it|access it]] at that [[fixed public address|permanent public address|permanent address|static address|same public address|same public IP|same address|same IP|fixed address|fixed IP|known address|never changes|does not change|stays the same|where to find it]].',
+    '<b>Why not the pool:</b> dynamic NAT only creates a translation when the inside host [[sends first|sends traffic first|sends traffic out first|sends out first|goes out first|traffic goes out first|starts traffic|starts conversation|starts connection|starts first|initiates|initiated|initiate|outbound traffic|outbound connection|originates|first contact]], so a connection started from outside has no translation to arrive on.',
+    'And a pool address is only lent while the translation lasts &mdash; it [[times out|time out|timeout|expire|expires|expired|temporary|temporarily|released|returned to the pool|may be different|might be different|could be different|different next time|different address|address changes|could change|can change|would change|might change|may change|not fixed|not permanent]], so the '+srv.n+' could come back on a different one and nobody outside would know which.',
+  ]};
 }});
 card({id:'q4c-howmany', area:'nat', tier:1, kind:'flash', src:'Q4 c', title:'Public addresses for NAT and PAT', gen(){
+  /* PAT's answer is "one", said many ways. The unpaired forms are built from
+     number x address-word x with/for x PAT/overload, so "a single public
+     address for overload" and "1 public address with PAT" count wherever they
+     sit in a list; the paired forms (only/just/single/1/one address) need PAT
+     to own them, so "PAT needs one for each host" does not. Bare "needs one"
+     is left out on purpose: it would also match that wrong answer. */
+  const nums=['one','1','single'], things=['address','public address','ip','public ip','ip address','public ip address'], preps=['with','for','using','via'], pats=['PAT','overload'];
+  const pf=['PAT needs only one'];
+  pats.forEach(function(p){
+    ['only one','just one','single','1','one address','one public address','one ip','one public ip','only 1'].forEach(function(t){ pf.push(p+'~'+t); });
+    nums.forEach(function(n){ preps.forEach(function(pr){ pf.push(n+' '+pr+' '+p); }); });
+    nums.forEach(function(n){ things.forEach(function(t){ preps.forEach(function(pr){ pf.push(n+' '+t+' '+pr+' '+p); }); }); });
+  });
+  const PAT='[['+pf.join('|')+']]';
+  const PORT='PAT tells the sessions apart by [[port number|port numbers|ports|port]], so many inside hosts share one inside global address.';
+  const RUNOUT='When every pool address is in use, the next host [[can\'t|cannot|fail|denied|dropped|wait|unable|blocked|no translation]] get out until a translation times out.';
+  if(Math.random()<0.5){
+    const n=ri(30,120), m=ri(6,n-10);
+    const df=['dynamic NAT needs '+m];
+    ['needs','need','requires','require','uses','is','would need','will need'].forEach(function(v){ df.push(('dynamic NAT '+v+' '+m).replace('  ',' ')); });
+    ['for','with','in'].forEach(function(pr){ ['','addresses ','public addresses ','ip addresses '].forEach(function(t){ df.push(m+' '+t+pr+' dynamic NAT'); }); });
+    df.push(m+' for NAT', m+' addresses for NAT', m+' public addresses for NAT', m+' with NAT');
+    return {
+      prompt:'An office has '+n+' PCs. At the busiest time of day, at most '+m+' of them are using the Internet at once. How many public addresses does the company need with dynamic NAT, and how many with dynamic NAT with overload (PAT)? Explain why each needs that many, and say what happens with dynamic NAT if the pool is smaller than that.',
+      points: [
+        '<b>Here:</b> [['+df.join('|')+']] public addresses, and '+PAT+' public address. Only the peak counts: the other '+(n-m)+' PCs are not online then, so they need no address of their own.',
+        '<b>Dynamic NAT:</b> each inside host online gets [[its own public address|own public address|own address|own public ip|own ip|one-to-one|one to one|1:1|1 to 1|at the same time|simultaneously|at once|concurrently|same time]] from the pool for as long as its translation lasts, so the pool must cover the '+m+' at the peak.',
+        RUNOUT,
+        '<b>Overload (PAT):</b> '+PORT,
+      ],
+    };
+  }
   return {
-    prompt:'How many public addresses would you need with dynamic NAT? With dynamic NAT with overload? Explain your answer.',
+    prompt:'How many public addresses would you need with dynamic NAT, and how many with dynamic NAT with overload (PAT)? Explain why each needs that many, and say what happens with dynamic NAT when every pool address is in use.',
     points: [
-      '<b>Dynamic NAT:</b> one public address per inside host using the Internet [[at the same time|simultaneously|concurrently|at once|same time]] &mdash; the pool must be as big as that peak.',
-      'When the pool runs out, further hosts [[can\'t|cannot|fail|denied|dropped|wait|unable]] get out until a translation times out.',
-      '<b>Overload (PAT):</b> as few as [[one public address|one address|1 public address|1 address|single public address|single address|one ip|single ip|one public ip]] for all of them.',
-      'PAT tells the sessions apart by [[port number|port numbers|ports|port]], so many inside hosts share one inside global address.',
+      '[[Dynamic NAT needs one address per host online at the same time|dynamic NAT~per host|dynamic NAT~each host|dynamic NAT~every host|dynamic NAT~for each|dynamic NAT~same time|dynamic NAT~simultaneous|dynamic NAT~at once|dynamic NAT~concurrent|dynamic NAT~as many]] &mdash; the pool must be as big as that peak.',
+      'Each of those hosts is given [[its own public address|own public address|own address|own public ip|own ip|one-to-one|one to one|1:1|1 to 1]] from the pool while its translation lasts.',
+      RUNOUT,
+      '<b>Overload (PAT):</b> '+PAT+' public address for all of them.',
+      PORT,
     ],
   };
 }});
 card({id:'q4d-patport', area:'nat', tier:1, kind:'flash', src:'Q4 d', title:'Two hosts, same source port', gen(){
-  return {
-    prompt: pick(['What happens if two internal users select the same port number for a communication which requires PAT?',
-      'Two inside PCs both open a connection from source port '+ri(1025,60000)+' through a PAT router with one public address. How does the router keep them apart?']),
+  /* Generic: the rule itself. Scenario: two named PCs, one port, one public
+     address, and which PC connects first is drawn — the model says which PC
+     keeps the port and which one is moved, and the key words pair each
+     outcome with its PC. */
+  const tableKw='[[translation table|NAT table|PAT table|translations table|table entry|unique combination|unique pair|address and port|IP and port|socket]]';
+  if(Math.random()<0.5) return {
+    prompt:'What happens if two internal users select the same source port number for a communication which requires PAT? Explain what the router does with each user\'s port, how it keeps the two sessions apart, and how the replies get back to the right user.',
     points: [
-      'PAT identifies each session by its inside address and [[source port|port number|port]].',
-      'The second host can\'t use the same inside global address and port, so the router [[assigns a different port|different port|another port|new port|next available port|changes the port|translates the port|unique port]] for it.',
-      'Replies come back to that port, and the router [[translates them back|translate back|maps back|maps it back|original port]] to the right inside host and its original port.',
+      'The first session [[keeps its port|first keeps|first one keeps|first user keeps|first host keeps|first connection keeps|first session keeps|keeps the port|keeps its original port|keeps its source port]] on the public (inside global) address.',
+      'That address and port are now taken, so for the second user the router [[assigns a different port|different port|new port|another port|next available port|unique port|changes the port|translates the port|other port|free port|port is changed|port translation]].',
+      'Each session is a separate entry in the '+tableKw+': inside address and port mapped to the public address and its own port, so no two sessions share an entry.',
+      'Replies come back to that public port, and the router [[translates them back|translate back|translated back|translates the reply back|translates replies back|translates it back|maps back|maps it back|changes it back|reverse translation|back to the original port|back to its original port]] to the right inside host and its original port.',
+    ],
+  };
+  const n=ri(1025,60000), pub='209.165.200.'+ri(225,238), a=ri(10,60), b=a+ri(1,9);
+  const pcs=[{name:'PC-A', ip:'192.168.1.'+a},{name:'PC-B', ip:'192.168.1.'+b}];
+  const firstI=ri(0,1), F=pcs[firstI], L=pcs[1-firstI];
+  const subj=(p,ord)=>[p.name, p.name.replace('-',''), ord];
+  const pair=(p,ord,terms)=>subj(p,ord).map(s=>terms.map(t=>s+'~'+t).join('|')).join('|');
+  const keepKw='[['+F.name+' keeps port '+n+'|'+pair(F,'first',['keeps','stays','retains','unchanged',String(n)])+']]';
+  const moveKw='[['+L.name+' gets a different port|'+pair(L,'second',['different port','new port','another port','next available port','other port','unique port','free port','changed','changes','translated port',String(n+1),'1024'])+']]';
+  return {
+    prompt:'PC-A ('+pcs[0].ip+') and PC-B ('+pcs[1].ip+') both open a connection from source port '+n+' through a PAT router whose only public address is '+pub+'. '+F.name+' connects first. Which public (inside global) port does each PC end up with? Explain how the router keeps the two sessions apart and how each reply gets back to the right PC.',
+    points: [
+      '<b>Here:</b> '+keepKw+' on '+pub+' (it was first, and the port was free); '+moveKw+' on '+pub+', because '+pub+':'+n+' is already in use.',
+      'Each session is a separate entry in the '+tableKw+': '+F.ip+':'+n+' &rarr; '+pub+':'+n+' and '+L.ip+':'+n+' &rarr; '+pub+':&lt;new port&gt;, so the two never share an entry.',
+      'A reply arrives addressed to '+pub+' and one of those two ports; the router looks the port up and [[translates it back|translate back|translated back|translates the reply back|translates replies back|translates them back|maps back|maps it back|changes it back|reverse translation|back to port '+n+'|back to the original port|back to its original port]] to the right PC\'s address and port '+n+'.',
     ],
   };
 }});
@@ -1851,33 +2447,53 @@ rtCard('g4-rt-hard',3,'Supernets and local routes',P=>pick([
 /* ═══ Q5 — DHCPv4 ═════════════════════════════════════════════════════════ */
 card({id:'q5a-dora', area:'dhcp', tier:1, kind:'flash', src:'Q5 a', title:'How a PC gets an address', gen(){
   return {
-    prompt: pick(['Describe how a PC obtains an IPv4 address using DHCPv4.','A PC boots with no IP address. Walk through the DHCPv4 exchange that gives it one.']),
+    prompt: pick(['Describe how a PC obtains an IPv4 address using DHCPv4. Name the four messages in order and say what each one does, say who each message is sent to when the PC has no address yet, and say how long the PC may keep the address it is given.',
+      'A PC boots with no IP address. Walk through the DHCPv4 exchange that gives it one: name each message in order and what it does, explain who the first message is sent to (the PC has no address to send from), and say how long the PC may keep the address.']),
     points: [
-      '<b>1. [[Discover|DHCPDISCOVER]]</b> &mdash; the client has no address, so it [[broadcasts|broadcast]] to find a DHCP server.',
+      '<b>1. [[Discover|DHCPDISCOVER]]</b> &mdash; the client has no address, so it [[broadcasts|broadcast|broadcasted|255.255.255.255|all-ones address|sent to everyone|to every device on the LAN|to all devices on the LAN|to all hosts]] to find a DHCP server.',
       '<b>2. [[Offer|DHCPOFFER]]</b> &mdash; a server offers an address (plus mask, gateway, DNS) and a lease time.',
       '<b>3. [[Request|DHCPREQUEST]]</b> &mdash; the client asks for that offer, still by broadcast, so any other servers know theirs was declined.',
-      '<b>4. [[Acknowledgement|DHCPACK|ACK|acknowledge|acknowledges]]</b> &mdash; the server confirms; the client uses the address for the [[lease|leases|leased]] time and renews it before it runs out.',
+      '<b>4. [[Acknowledgement|DHCPACK|ACK|acknowledge|acknowledges]]</b> &mdash; the server confirms; the client uses the address for the [[lease|leases|leased|lease period|expires|expiry|renew|renews|for a set time|limited time|time limit]] time and renews it before it runs out.',
     ],
   };
 }});
 card({id:'q5b-relay', area:'dhcp', tier:1, kind:'flash', src:'Q5 b', title:'Where the DHCP server must be', gen(){
-  return {
-    prompt: pick(['By default, where must the DHCP server for a PC be? How can we overcome this restriction?',
-      'The DHCP server is moved to a data-centre network two routers away from the PCs, and the PCs stop getting addresses. Why, and how do you fix it?']),
+  /* Shared key words: why the Discover never reaches a remote server, and
+     what a relay does about it. */
+  const bcast='[[broadcast|broadcasts|broadcasted|broadcasting]]';
+  const noFwd='[[routers do not forward broadcasts|do not forward|not forward|t forward|never forward|not cross|t cross|not pass through|t pass through|block broadcast|blocks broadcast|drop broadcast|drops broadcast|stop broadcast|stops broadcast|t get forward|not get forward|t be forward|not be forward|isn t forward|aren t forward|is blocked|are blocked|get blocked|gets blocked|blocked by|blocked at|is dropped|are dropped|get dropped|gets dropped|dropped by|dropped at|stay on the LAN|stays on the LAN|stay in the LAN|stays in the LAN|stay on the local|stays on the local|stay in the local|stays in the local|stay local|stays local|not leave|never leave|t leave]]';
+  const relay='[[DHCP relay|relay|relays|relay agent|relaying]]';
+  const ucast='[[unicast|unicasts|unicasted|unicasting]]';
+  if(chance(.5)) return {
+    prompt: 'By default, where must the DHCP server for a PC be, and why? How can we overcome this restriction? Name the feature and the command, and say how the router then sends the client\'s DHCP messages on to the server.',
     points: [
       'By default the server must be on the [[same subnet|same network|same LAN|same broadcast domain|local subnet|local network|same segment|same VLAN]] as the client.',
-      'The client\'s Discover is a [[broadcast|broadcasts]], and routers [[do not forward broadcasts|don\'t forward|do not forward|not forwarded|block|blocks|drop|drops|stop]].',
-      'Fix: make the router a [[DHCP relay|relay|relay agent]] &mdash; [[ip helper-address|helper-address|helper address|helper]] &lt;server&gt; on the interface facing the clients.',
-      'The router then forwards the DHCP broadcasts to the server as [[unicast|unicasts]].',
+      'Why: the client has no address yet, so its Discover is a '+bcast+', and '+noFwd+' &mdash; it never reaches a server on another network.',
+      'Fix: make the router a '+relay+' with [[ip helper-address|helper-address|helper address|ip helper|helper]] &lt;server&gt; on the interface facing the clients.',
+      'The router then forwards the client\'s DHCP broadcasts to the server as '+ucast+' (and passes the replies back).',
+    ],
+  };
+  const gw=pick(['R1','R2','R3']), ifc=pick(['G0/0','G0/1','G0/2']), n=ifc.slice(-1);
+  const lan='192.168.'+ri(10,250)+'.0/24', srv='10.'+ri(1,250)+'.'+ri(1,250)+'.'+pick([10,20,50,100,200]);
+  const ifForms=['G0/'+n,'Gi0/'+n,'Gig0/'+n,'GigabitEthernet0/'+n,'GigabitEthernet 0/'+n,'LAN interface','interface facing the PCs','PC-facing interface','client-facing interface','interface facing the clients']
+    .map(f=>gw+'~'+f).join('|');
+  const help=['ip helper-address','helper-address','helper address','ip helper','helper-address pointing to','helper-address set to','helper-address of'].map(f=>f+' '+srv).join('|');
+  return {
+    prompt: 'PCs on '+gw+'\'s '+ifc+' LAN ('+lan+') got their addresses from a DHCP server on that LAN. The server is moved to a data-centre network two routers away, at '+srv+', and the PCs stop getting addresses. Explain why. Then give the command that fixes it, saying which router and interface it goes on, what role that router then plays, and how it sends the PCs\' DHCP messages on to the server.',
+    points: [
+      '<b>Here:</b> the server is no longer on the PCs\' subnet. Fix it on the PCs\' gateway, [['+gw+' '+ifc+'|'+ifForms+']], with [['+help+']].',
+      'Why: the PCs have no address yet, so their Discover is a '+bcast+', and '+noFwd+' &mdash; it never leaves '+lan+' to reach '+srv+'.',
+      'With the helper address, '+gw+' acts as a '+relay+': it picks up the PCs\' DHCP broadcasts on '+ifc+' and forwards them to '+srv+' as '+ucast+', then passes the server\'s replies back onto the LAN.',
     ],
   };
 }});
 card({id:'q5c-exclude', area:'dhcp', tier:1, kind:'flash', src:'Q5 c', title:'Excluded addresses', gen(){
   return {
-    prompt: pick(['Why might we exclude some addresses from the range of addresses in a DHCP pool?','What does ip dhcp excluded-address protect against?']),
+    prompt: pick(['Why might we exclude some addresses from the range of addresses in a DHCP pool? Say which kinds of devices usually use the excluded addresses, how those devices get their addresses, and what could go wrong if they were not excluded.',
+      'What problem does <span class="mono-inl">ip dhcp excluded-address</span> protect against? Explain how the problem would arise &mdash; which kinds of devices use the excluded addresses and how they get them.']),
     points: [
-      'Some devices are configured with [[static|statically|manually|fixed]] addresses from the same subnet &mdash; the [[default gateway|gateway|router interface|router\'s interface|router address|gateway address]] address, [[servers|server|printer|printers]], switch management addresses.',
-      'If the pool could hand those out, a client could be given an address already in use: an IP address [[conflict|conflicts|duplicate|clash|same address]].',
+      'Some devices are configured with [[static|statically|manually|manual|fixed|hard-coded|hardcoded|by hand]] addresses from the same subnet &mdash; the [[default gateway|gateway|router interface|router\'s interface|router address|router\'s address|router\'s IP|gateway address]] address, [[printers and servers|printers|printer|file server|web server|DNS server|mail server|email server|switch management|management address|management IP|and servers|or servers|like servers|such as servers|static server|server\'s address|server\'s IP|servers]], and switch management addresses.',
+      'If the pool could hand those out, a client could be given an address already in use: an IP address [[conflict|conflicts|duplicate|clash|same address|same IP|already in use|already used|already assigned|already taken|overlap|overlapping|overlaps]].',
       'Exclusions keep them out of the pool: '+mono('ip dhcp excluded-address 192.168.1.1 192.168.1.10')+'.',
     ],
   };
@@ -2013,15 +2629,56 @@ card({id:'g5-pool', area:'dhcp', tier:3, kind:'graded', src:'Q5', title:'Build a
 
 /* ═══ Q5 — DHCPv6 ═════════════════════════════════════════════════════════ */
 card({id:'q5d-v6', area:'dhcp', tier:1, kind:'flash', src:'Q5', title:'How an IPv6 host gets an address', gen(){
+  /* Both variants are general (no scenario). Each prompt asks for exactly what
+     its key words grade. Key words that say WHICH method does a thing are
+     "method~term" pairings, so a bare list of the three names scores nothing,
+     and the flags are graded by value (M = 1 / O = 1 / both 0). */
+  const K=forms=>'[['+forms.join('|')+']]';
+  const uniq=a=>a.filter((x,i)=>a.indexOf(x)===i);
+  const pair=(subj,terms)=>terms.map(t=>subj+'~'+t);
+  /* SLAAC: the host makes its own address */
+  const OWN=K(['SLAAC the host builds its own address'].concat(pair('SLAAC',['own address','own','itself','builds','build','creates','create','generates','generate','makes','make','picks','pick','chooses','choose','selects','self','EUI-64','EUI64','random','randomly','autoconfigure','autoconfigures','autoconfigured'])));
+  /* Stateless: the address is still SLAAC's */
+  const SLESS=K(['Stateless takes its address from SLAAC'].concat(pair('stateless',['SLAAC address','SLAAC for the address','SLAAC for address','uses SLAAC','use SLAAC','is SLAAC','is SLAAC with','still SLAAC','own','itself','builds','creates','generates','makes','picks','chooses','information','other information','other settings','other config','other configuration','no record','keeps no record'])));
+  /* Stateful: the server assigns the address */
+  const ASSIGN=K(['the stateful DHCPv6 server assigns the address'].concat(pair('stateful',['assign','assigns','assigned','hands out','gives out','gives the address','gives addresses','gives it','provides the address','provides addresses','provides it','allocates','allocate','allocated','lease','leases','leased','picks','pick','issues','offers the address'])));
+  const TRACK=K(['A stateful server keeps track of every client'].concat(pair('stateful',['track','tracks','record','records','log','logs','DUID','database','binding','bindings','table','remembers','remember','keeps a list'])));
+  /* DNS: which server supplies it is part of the key word */
+  const Ds=['DHCP','DHCPv6'], Ss=['DHCP','DHCPv6','DHCP server','DHCPv6 server'];
+  const Vs=['provides','gives','supplies','sends','offers','hands out'];
+  const Xs=['DNS','DNS server','DNS information','information like DNS','information such as DNS','info such as DNS','information to the device such as DNS','information to the devices such as DNS','other information such as DNS'];
+  let dns=['DNS server from the DHCPv6 server'];
+  Ds.forEach(d=>['from','comes from','is from','provided by','is provided by','supplied by','is supplied by','given by','is given by','is'].forEach(v=>['DNS','DNS server','DNS information'].forEach(x=>dns.push(x+' '+v+' '+d))));
+  dns.push('DNS and other information from DHCP','DNS and other information from DHCPv6','DNS DHCP','DNS DHCPv6','DNS server DHCP','DNS server DHCPv6');
+  Ss.forEach(sv=>Vs.forEach(v=>Xs.forEach(x=>{ dns.push(sv+' '+v+' '+x); if(/server/.test(sv)){ dns.push(sv+' which '+v+' '+x); dns.push(sv+' that '+v+' '+x); } })));
+  const DNS=K(uniq(dns));
+  /* Default gateway: from the RA, in so many words */
+  const Gs=['gateway','default gateway'], Rs=['RA','RAs','router advertisement','router advertisements','router s RA','router s RAs','router s router advertisement'];
+  let gw=['gateway from the RA'];
+  Gs.forEach(g=>['from','learned from','is learned from','comes from','is from','taken from','is taken from','obtained from','is obtained from','got from','provided by','is provided by','supplied by','is supplied by','given by','is given by','set by','is set by','advertised by','is advertised by','advertised in','sent in','is sent in','learned via','is learned via','learned through'].forEach(v=>Rs.forEach(r=>gw.push(g+' '+v+' '+r))));
+  Rs.forEach(r=>['for','gives','provides','supplies','sets','advertises','tells the host','is used for'].forEach(w=>['the gateway','the default gateway','gateway','default gateway'].forEach(g=>gw.push(r+' '+w+' '+g))));
+  ['gateway is the router s link local','gateway is the link local','gateway is link local','gateway is fe80','gateway link local','gateway fe80','default gateway is the router s link local','default gateway is the link local','default gateway is fe80'].forEach(x=>gw.push(x));
+  const GW=K(uniq(gw));
+  /* The two flags, by value */
+  const M=K(['M flag set to 1','M 1','M flag 1','M flag is 1','M flag set','M flag is set','M flag is set to 1','M bit 1','M bit set','M bit is set','M flag on','M flag means stateful','M flag for stateful','M flag is for stateful','managed flag 1','managed flag is 1','managed flag set','managed flag is set','managed config flag set','managed config flag 1','managed config flag is set','managed address flag set','M 0 and O 0','M and O 0','M and O both 0','both 0','both flags 0','both flags are 0']);
+  const O=K(['O flag set to 1','O 1','O flag 1','O flag is 1','O flag set','O flag is set','O flag is set to 1','O bit 1','O bit set','O bit is set','O flag on','O flag means stateless','O flag for stateless','O flag is for stateless','other flag 1','other flag set','other flag is set','other config flag set','other config flag 1','other config flag is set','other configuration flag set','0 and O 0','O 0 and M 0','M and O are 0','both are 0','both flags set to 0','both off','both flags off','neither flag set']);
+  const FLAGS='The RA\'s flags tell the host which: '+M+' (M = 1) &rarr; stateful; '+O+' (O = 1 with M = 0) &rarr; stateless; both 0 &rarr; SLAAC only.';
+  if(chance(.5)) return {
+    prompt:'Describe the three ways an IPv6 host can be given its address &mdash; SLAAC, stateless DHCPv6 and stateful DHCPv6. For each one, explain where the address comes from, what the DHCPv6 server provides (if there is one) and whether anything keeps track of the addresses. Then explain how the host knows which method to use: which two flags in the router\'s RA, and what value each has for each method.',
+    points:[
+      '<b>SLAAC:</b> no server is involved. The host takes the /64 prefix from the router\'s Router Advertisement (RA); with '+OWN+' from that prefix, using EUI-64 or a random interface ID. Nothing keeps track of which addresses are used.',
+      '<b>Stateless DHCPv6:</b> '+SLESS+', exactly as above, but a DHCPv6 server also provides other information; the host gets the '+DNS+'. The server keeps no record of addresses.',
+      '<b>Stateful DHCPv6:</b> '+ASSIGN+' (and the other information, like DNS), the same job as DHCPv4. '+TRACK+', so it knows which addresses are in use.',
+      FLAGS,
+    ],
+  };
   return {
-    prompt: pick(['Describe the three ways an IPv6 host can be given its address: SLAAC, stateless DHCPv6 and stateful DHCPv6. How does the host know which one to use?',
-      'Compare SLAAC, stateless DHCPv6 and stateful DHCPv6. Where does the host get its address, its DNS server and its default gateway in each?']),
-    points: [
-      '<b>[[SLAAC|stateless address autoconfiguration|autoconfiguration]]:</b> the host takes the [[prefix|/64 prefix|network prefix]] from the router\'s [[Router Advertisement|RA|RAs|router advertisements]] and makes its own interface ID ([[EUI-64|EUI64|random|randomly]]). Nothing keeps track of which addresses are used.',
-      '<b>[[Stateless DHCPv6|stateless DHCP|stateless]]:</b> the address still comes from SLAAC, but other information such as the [[DNS server|DNS|domain name]] comes from a DHCPv6 server, which keeps no record of addresses.',
-      '<b>[[Stateful DHCPv6|stateful DHCP|stateful]]:</b> a DHCPv6 server [[assigns the address|assigns addresses|hands out the address|hands out addresses|gives out the address|gives out addresses|gives the address|provides the address|allocates|leases]] (and the other information) and keeps track of it, like DHCPv4.',
-      'The RA\'s flags tell the host which: [[M flag|M bit|managed flag|managed-config-flag|managed address|managed]] = 1 &rarr; stateful; [[O flag|O bit|other flag|other-config-flag|other configuration|other config]] = 1 with M = 0 &rarr; stateless; both 0 &rarr; SLAAC only.',
-      'In every case the default gateway is the router\'s [[link-local|link local|fe80]] address, learned from the RA &mdash; DHCPv6 never hands out a gateway.',
+    prompt:'Compare SLAAC, stateless DHCPv6 and stateful DHCPv6. For each one, explain where the host gets its address, its DNS server and its default gateway. Then say which two flags in the router\'s RA tell the host which method to use, and what value each has for each method.',
+    points:[
+      '<b>Address:</b> with SLAAC the host takes the /64 prefix from the router\'s RA and '+OWN+' (EUI-64 or a random interface ID); '+SLESS+'; with stateful DHCPv6 '+ASSIGN+' and keeps track of it, like DHCPv4.',
+      '<b>DNS server:</b> SLAAC alone gets none from DHCPv6 (only from the RA, if the router includes it); in stateless and stateful DHCPv6 the host gets the '+DNS+'.',
+      '<b>Default gateway:</b> the same in all three &mdash; the host takes the '+GW+', which is the router\'s link-local address (e.g. fe80::1). DHCPv6 never hands out a gateway.',
+      FLAGS,
     ],
   };
 }});
@@ -2067,7 +2724,11 @@ card({id:'g5-v6msgs', area:'dhcp', tier:2, kind:'graded', src:'Q5', title:'DHCPv
       return {ok, verdict: ok?'Correct.':seq.join(', ')+'.', why: ul([
         stateful?'Stateful DHCPv6 is four messages, like DORA: <b>SOLICIT</b> (client, to the all-DHCP-servers multicast ff02::1:2) &rarr; <b>ADVERTISE</b> &rarr; <b>REQUEST</b> &rarr; <b>REPLY</b>.':
           'Stateless DHCPv6 is just <b>INFORMATION-REQUEST</b> &rarr; <b>REPLY</b>: the client already has its SLAAC address and only asks for the other information (DNS, domain).',
-        'DHCPDISCOVER, OFFER and ACK are DHCPv4; the Router Solicitation is ICMPv6, sent to the router before any of this.'])};
+        'Not part of it: '+dist.map(d=>({DHCPDISCOVER:'DHCPDISCOVER is DHCPv4 (DHCPv6 starts with SOLICIT)',DHCPOFFER:'DHCPOFFER is DHCPv4 (the DHCPv6 equivalent is ADVERTISE)',DHCPACK:'DHCPACK is DHCPv4 (DHCPv6 confirms with REPLY)',
+          'ROUTER SOLICITATION':'the Router Solicitation is ICMPv6, sent to the router (not the server) before any of this &mdash; and the RA has already arrived',
+          'INFORMATION-REQUEST':'INFORMATION-REQUEST is stateless DHCPv6 &mdash; it asks only for the other information, never for an address',
+          SOLICIT:'SOLICIT starts stateful DHCPv6, looking for a server to lease an address &mdash; a stateless client already has its SLAAC address',
+          ADVERTISE:'ADVERTISE is a server\'s answer to a stateful SOLICIT, which a stateless client never sends'})[d]).join('; ')+'.'])};
     },
   };
 }});
@@ -2188,13 +2849,30 @@ function q6Body(P,cfg,hosts){
 
 card({id:'q6-roas', area:'ts', tier:1, kind:'flash', src:'Q6', title:'Router-on-a-stick: what\'s wrong?', gen(){
   const P=chance(.6)?{x:10,y:20,h1:10,h2:10}:q6Plan();
+  /* "Fa0/1 goes in VLAN x" is graded by fixed-order phrases, never by subject
+     pairing, so an answer that swaps the two ports' VLANs scores neither:
+     "switchport access vlan <y> on fa0/1 and ... <x> on fa0/2" contains no
+     phrase that joins fa0/2 to <y> or fa0/1 to <x> the wrong way round. */
+  const port=(n,h,v)=>{
+    const ps=['Fa0/'+n,'F0/'+n,'Fa 0/'+n,'FastEthernet0/'+n,'FastEthernet 0/'+n,h,'port '+n];
+    const link=['in','to','=','is in','are in','should be in','must be in','needs to be in','goes in','goes into','belongs in','belongs to','put in','placed in','assigned to','is assigned to','should be assigned to','is','access','->'];
+    const out=[];
+    ps.forEach(p=>{
+      link.forEach(l=>{ out.push(p+' '+l+' VLAN '+v); out.push(p+' '+l+' vlan'+v); });
+      out.push(p+' switchport access vlan '+v);
+      out.push(p+' vlan '+v);
+      out.push('VLAN '+v+' on '+p); out.push('VLAN '+v+' for '+p); out.push('VLAN '+v+' to '+p);
+      out.push('switchport access vlan '+v+' on '+p);
+    });
+    return out.join('|');
+  };
   return {
-    prompt:'In the figure, host H1 cannot communicate with host H2. Clearly identify, describe and explain the cause of the problem. What modifications do you need to make to fix it?',
+    prompt:'In the figure, host H1 cannot communicate with host H2. Clearly identify, describe and explain the cause of the problem &mdash; say which VLAN the hosts\' frames end up in and why R1 can\'t route them. What modifications do you need to make to fix it? Give the S1 commands.',
     body: q6Body(P,q6Config(P,'access'),false),
     points: [
-      'S1 makes Fa0/1 and Fa0/2 access ports but never assigns them a VLAN, so both stay in the [[default VLAN 1|VLAN 1|default VLAN|vlan1|native VLAN]].',
-      'Their frames cross the trunk untagged (VLAN 1), but R1 only has subinterfaces for VLANs '+P.x+' and '+P.y+', so neither host can reach its [[default gateway|gateway|subinterface|subinterfaces]] &mdash; and H1 and H2 are in different subnets, so they need the router.',
-      'Fix on S1: put Fa0/1 in [[VLAN '+P.x+'|vlan'+P.x+']] and Fa0/2 in [[VLAN '+P.y+'|vlan'+P.y+']] with [[switchport access vlan|access vlan]] under each interface.',
+      '<b>Here:</b> S1 makes Fa0/1 (H1) and Fa0/2 (H2) access ports but never assigns them a VLAN, so both stay in the [[default VLAN 1|VLAN 1|vlan1|default VLAN|native VLAN|no VLAN|not assigned|never assigned|unassigned]] instead of VLAN '+P.x+' and VLAN '+P.y+'.',
+      'Why it breaks: their frames cross the trunk untagged (VLAN 1), but R1 only has subinterfaces for VLANs '+P.x+' and '+P.y+' &mdash; [[no subinterface for VLAN 1|no subinterface|no sub-interface|no matching subinterface|has no subinterface|have a subinterface for VLAN 1|without a subinterface|subinterface for VLAN 1|subinterface for the default VLAN|no encapsulation dot1q 1|no interface for VLAN 1|no gateway for VLAN 1|no router interface for VLAN 1|VLAN 1 is not configured on the router|VLAN 1 isn\'t configured on the router|doesn\'t know about VLAN 1|does not know about VLAN 1]] &mdash; so neither host can reach its default gateway. H1 and H2 are in different subnets, so they need the router.',
+      'Fix on S1: put [[Fa0/1 in VLAN '+P.x+'|'+port(1,'H1',P.x)+']] and [[Fa0/2 in VLAN '+P.y+'|'+port(2,'H2',P.y)+']] with [[switchport access vlan|access vlan|switchport access|assign the VLAN|assign VLANs|assign the ports|assign the port|assign each port]] under each interface.',
       'e.g. '+mono('interface fa0/1')+' '+mono('switchport access vlan '+P.x)+', then '+mono('interface fa0/2')+' '+mono('switchport access vlan '+P.y)+' (and '+mono('vlan '+P.x)+' / '+mono('vlan '+P.y)+' if the VLANs don\'t exist yet).',
     ],
   };
@@ -2219,25 +2897,34 @@ function q6ModelText(P,fault){
 }
 function q6FaultCard(id,tier,title,faults){
   card({id, area:'ts', tier, kind:'graded', src:'Q6', title, gen(){
-    const P=q6Plan(), fault=pick(faults), causes=Object.keys(Q6_CAUSE), ans=causes.indexOf(fault);
+    const P=q6Plan(), fault=pick(faults), causes=Object.keys(Q6_CAUSE), ans=causes.indexOf(fault), cfg=q6Config(P,fault);
+    /* the VLAN the planted tag fault really uses, read back from the config shown */
+    const tags=cfg.r1.map(l=>/encapsulation dot1q (\d+)/.exec(l)).filter(Boolean), z=tags.length>1?+tags[1][1]:P.y;
     return {
       prompt:'Host H1 cannot communicate with host H2. Pick the cause, then type the commands that fix it (interface lines included).',
-      body: q6Body(P,q6Config(P,fault),true)+chipsHtml(causes.map(k=>Q6_CAUSE[k]))+
+      body: q6Body(P,cfg,true)+chipsHtml(causes.map(k=>Q6_CAUSE[k]))+
         cmdsHtml('fix','Fix &mdash; one command per line, Ctrl+Enter submits','e.g. interface fa0/9',4),
       grade(){
         const okC=Q.choice===ans; markChips(ans);
         const sc=iosScript(cmdLines('fix')), need=q6Fix(P,fault), miss=need.filter(n=>!hasCmd(sc,n[0],n[1]));
         const okF=!miss.length;
         markCmds('fix',okF,q6ModelText(P,fault),okF?null:'Missing: '+miss.map(n=>n[1]+' (under '+n[0]+')').join('; '));
+        const gw='so neither host reaches its gateway ('+mono('192.168.'+P.x+'.1')+' / '+mono('192.168.'+P.y+'.1')+'), and H1 and H2 are in different subnets, so they need R1 to talk.';
         const expl={
-          access:'Fa0/1 and Fa0/2 are access ports with no VLAN, so both sit in VLAN 1; R1 has no subinterface for VLAN 1, so neither host reaches its gateway.',
-          swap:'H1\'s port is in VLAN '+P.y+' and H2\'s in VLAN '+P.x+', but each host is addressed for the other VLAN, so neither reaches its own gateway.',
-          trunk:'S1 Gi0/1 is an access port, so it carries one VLAN untagged and drops the tagged frames R1\'s subinterfaces send.',
-          shut:'Router interfaces start shut down, and nothing enables Gi0/0 &mdash; its subinterfaces stay down with it.',
-          tag:'Gi0/0.'+P.y+' tags frames with the wrong VLAN, so it never exchanges frames with VLAN '+P.y+'.',
-          ip:'Gi0/0.'+P.y+' has an address in 192.168.'+(P.y+1)+'.0/24, so H2\'s gateway 192.168.'+P.y+'.1 doesn\'t exist.',
+          access:['<b>Here:</b> S1 Fa0/1 and Fa0/2 are '+mono('switchport mode access')+' but have no '+mono('switchport access vlan')+', so H1 and H2 are both in VLAN 1 instead of VLAN '+P.x+' and VLAN '+P.y+'.',
+            'R1 only has subinterfaces for VLANs '+P.x+' and '+P.y+' &mdash; none for VLAN 1 &mdash; '+gw],
+          swap:['<b>Here:</b> S1 has the hosts\' ports swapped: Fa0/1 (H1) is in VLAN '+P.y+' and Fa0/2 (H2) is in VLAN '+P.x+'.',
+            'H1 is addressed for VLAN '+P.x+' (192.168.'+P.x+'.'+P.h1+') and H2 for VLAN '+P.y+' (192.168.'+P.y+'.'+P.h2+'), so in the wrong VLAN each one\'s gateway is on the other subinterface and neither reaches it.'],
+          trunk:['<b>Here:</b> S1 Gi0/1, the link to R1, is '+mono('switchport mode access')+' &mdash; it should be '+mono('switchport mode trunk')+'.',
+            'An access port carries one VLAN untagged (VLAN 1 here), so the VLAN '+P.x+' and '+P.y+' frames never cross to R1 and R1\'s tagged replies are dropped &mdash; '+gw],
+          shut:['<b>Here:</b> R1 Gi0/0 is never enabled &mdash; the configuration has no '+mono('no shutdown')+' under it.',
+            'Router interfaces start shut down, and Gi0/0.'+P.x+' and Gi0/0.'+P.y+' stay down with their physical interface &mdash; '+gw],
+          tag:['<b>Here:</b> R1 Gi0/0.'+P.y+' has '+mono('encapsulation dot1q '+z)+' &mdash; it should be '+mono('encapsulation dot1q '+P.y)+'.',
+            'It tags and accepts VLAN '+z+' frames, so it never exchanges frames with VLAN '+P.y+': H2 can\'t reach its gateway 192.168.'+P.y+'.1, and H1 can\'t reach H2 through R1.'],
+          ip:['<b>Here:</b> R1 Gi0/0.'+P.y+' has '+mono('ip address 192.168.'+(P.y+1)+'.1')+' &mdash; it should be '+mono('192.168.'+P.y+'.1 255.255.255.0')+'.',
+            'H2\'s gateway 192.168.'+P.y+'.1 doesn\'t exist, and R1 has no interface in 192.168.'+P.y+'.0/24, so H1\'s traffic can\'t be routed to H2 either.'],
         }[fault];
-        return {ok:okC&&okF, verdict: okC&&okF?'Correct.':Q6_CAUSE[fault]+'.', why: ul([expl,'Fix:<br>'+q6ModelText(P,fault).split('\n').map(l=>mono(l.trim())).join('<br>')])};
+        return {ok:okC&&okF, verdict: okC&&okF?'Correct.':Q6_CAUSE[fault]+'.', why: ul(expl.concat(['Fix:<br>'+q6ModelText(P,fault).split('\n').map(l=>mono(l.trim())).join('<br>')]))};
       },
     };
   }});
@@ -2415,7 +3102,7 @@ const TS_SCEN={
         return null; },
       model: fault==='timers'?['interface s0/0/0',' no ip ospf hello-interval']:['router ospf 1',' no network '+w+' 0.0.0.3 area '+ar,' network '+w+' 0.0.0.3 area 0'],
       points: fault==='timers'?[
-        'R2 sets [[ip ospf hello-interval '+h+'|hello-interval|hello interval|hello timer|hello]] '+h+' on S0/0/0, which also makes its dead interval '+(4*h)+'; R1 uses the defaults, 10 and 40.',
+        'R2 sets [[ip ospf hello-interval|hello-interval|hello interval|hello timer|hello]] '+h+' on S0/0/0, which also makes its dead interval '+(4*h)+'; R1 uses the defaults, 10 and 40.',
         'OSPF neighbours must have [[matching|must match|mismatch|mismatched|same on both|identical]] hello and dead intervals, so the adjacency never forms and no routes are exchanged.',
         'Fix: on R2 [[interface s0/0/0|s0/0/0|S0/0/0|Serial0/0/0]], no ip ospf hello-interval (back to 10/40).']:[
         'R2 puts the R1–R2 link in [[area '+ar+']] while R1 has it in area 0.',
@@ -2457,18 +3144,144 @@ function tsCard(id,tier,title,scen){
         const err=s.check(cmdLines('fix')), okF=!err;
         markCmds('fix',okF,s.model.join('\n'),err);
         return {ok:okC&&okF, verdict: okC&&okF?'Correct.':s.cause.replace(/&mdash;.*/,'').trim()+'.',
-          why: ul(s.points.map(p=>p.replace(KW_RE,(m,b)=>b.split('|')[0])).concat(['Fix:<br>'+s.model.map(l=>mono(l.trim())).join('<br>')]))};
+          why: ul(['<b>Here:</b> '+s.cause+'.'].concat(s.points.map(p=>p.replace(KW_RE,(m,b)=>b.split('|')[0])),['Commands:<br>'+s.model.map(l=>mono(l.trim())).join('<br>')]))};
       },
     };
   }});
 }
 tsCard('g6-ts',2,'Troubleshoot: DHCP, NAT, static routes',['relay','natin','staticnet']);
 tsCard('g6-ts-hard',3,'Troubleshoot: ACLs, OSPF, DHCP pools',['acldir','ospf','poolgw','natacl']);
+/* q6-ts's own model answer for a TS_SCEN scenario: what is wrong HERE first
+   (the device or interface and its value), then why that gives exactly this
+   symptom, then the fix. Values are read back from the scenario that drew the
+   prompt (its model fix and its config), so the two never differ; TS_SCEN's
+   own points stay as the graded cards' explanation.
+   Cause key words are PAIRED ("R2~term") so they count only for the right
+   device or interface, and the first key of every variant carries DECOYS:
+   forms that never match anything ("should be~zqx") but are subjects too. A
+   decoy sitting between the real subject and the term takes ownership, so
+   "R2 is outbound and should be inbound", "G0/1 is correctly outside" and
+   "S0/0/1 should be inside" score nothing. Fix keys are commands or imperative
+   phrases; none of them is a bare value. */
+function q6tsPoints(s){
+  const P=s.P, L=str=>str.split('|');
+  const K=(shown,forms)=>'[['+[shown].concat(forms).join('|')+']]';
+  const pair=(subs,terms)=>[].concat(...subs.map(a=>terms.map(t=>a+'~'+t)));
+  const cat=(heads,sufs,val)=>[].concat(...heads.map(h=>sufs.map(f=>h+f+val)));
+  const gen=(...lists)=>lists.reduce((acc,l)=>[].concat(...acc.map(x=>l.map(y=>(x+' '+y).trim()))),['']);
+  const DEC=L("should be|needs to be|need to be|must be|has to be|supposed to be|instead of|rather than|not|correctly|correct|properly");
+  const decoy=names=>pair(DEC.concat(names||[]),['zqx']);
+  const R1=L("R1|Router 1|Router1"), R2=L("R2|Router 2|Router2");
+  const G01=L("G0/1|Gi0/1|Gig0/1|GigabitEthernet0/1|GigabitEthernet 0/1|LAN interface|LAN-facing interface"), S001=L("S0/0/1|Serial0/0/1|Serial 0/0/1|Se0/0/1|serial interface|serial link|WAN interface|outside interface|ISP");
+  const GI01=L("g0/1|gi0/1|gig0/1|gigabitethernet0/1|gigabitethernet 0/1"), GI00=L("g0/0|gi0/0|gig0/0|gigabitethernet0/0|gigabitethernet 0/0");
+  const NOTRANS=L("aren't translated|isn't translated|never translated|not being translated|nothing is translated|nothing gets translated|no translation|no translations|untranslated|not natted|aren't natted|doesn't translate|does not translate|doesn't get translated|don't get translated|not get translated|are not translated|is not translated|not translated");
+  const NOREPLY=L("can't reply|cannot reply|can't respond|cannot respond|has no route back|no route back|can't route back|cannot route back|no return route|can't route private|can't route to private|cannot route private|no route to the private|no route to 192.168|can't send replies|cannot send replies|replies never come back|reply never comes back|not routable|non-routable|unroutable|can't return|cannot return|drops the replies|doesn't know how to reply|can't be replied to|cannot be replied to|can't be answered");
+  const NF=L("don't forward|doesn't forward|do not forward|does not forward|never forwarded|never forward|never cross|never crosses|never pass|never passes|never get forwarded|don't get forwarded|doesn't get forwarded|won't forward|will not forward|can't forward|cannot forward|can't cross|cannot cross|don't cross|doesn't cross|do not cross|does not cross|won't cross|will not cross|stop at the router|stops at the router|drops broadcasts|drop broadcasts|block broadcasts|blocks broadcasts|blocked by the router|don't pass|doesn't pass|do not pass|does not pass|are not forwarded|is not forwarded|are not passed|are not routed|is not routed|aren't forwarded|isn't forwarded|don't route|doesn't route|does not route|do not route|stays on the LAN|stay on the LAN|confined to the LAN|limited to the LAN|never leaves the LAN|never leave the LAN");
+  const adj=L("never become neighbours|never become neighbors|no adjacency|adjacency never forms|adjacency doesn't form|adjacency can't form|adjacency won't form|adjacency isn't formed|adjacency is not formed|adjacency not formed|adjacency fails|never form an adjacency|don't form an adjacency|won't form an adjacency|can't form an adjacency|cannot form an adjacency|prevents an adjacency|prevent an adjacency|prevents the adjacency|prevents adjacency|no neighbour relationship|won't become neighbours|don't become neighbours|can't become neighbours|cannot become neighbours|never neighbours|not neighbours|aren't neighbours|no neighbourship|stop the neighbours forming|stops the neighbours forming|stop neighbours forming|stops neighbours forming|prevent neighbours forming|prevents neighbours forming|neighbours don't form|neighbours won't form|neighbours can't form|neighbours never form|neighbours do not form|neighbours cannot form|hellos are rejected|hellos are ignored|hellos rejected|ignore the hellos|ignore each other's hellos|reject the hellos|reject each other's hellos|no routes are exchanged|don't exchange routes|no routes exchanged|no routes");
+  switch(s.id){
+  case 'relay':{
+    const srv=P.B+'.10', wl=s.model.find(l=>/no ip helper/.test(l)), wr=wl?wl.trim().split(' ').pop():null;
+    const OBJ=L("helper|helper address|helper-address|ip helper-address|relay|relay agent|DHCP relay|DHCP helper");
+    const missing=gen(L("no|missing|without|lacks|lacking|is missing a|is missing the|has no|doesn't have a|does not have a|hasn't got a|has not got a|needs a|need a|forgot the|forgot a|hasn't configured a|has not configured a|didn't configure a|did not configure a"),OBJ).concat(
+      OBJ.map(o=>o+' is missing'),OBJ.map(o=>o+' missing'),OBJ.map(o=>o+" isn't configured"),OBJ.map(o=>o+' not configured'),OBJ.map(o=>o+' is not configured'),OBJ.map(o=>o+' is not set'),L("not relaying|isn't relaying|doesn't relay|does not relay|not configured with a helper|isn't configured with a helper"));
+    const wrongT=gen(L("helper|helper address|helper-address|ip helper-address|relay|relay address"),L("on"),GI00.concat(L("the LAN interface|the LAN-facing interface|its LAN interface|the interface|the client interface|the clients interface")),L("is wrong|is incorrect|is set wrong|is configured wrong|is pointing at the wrong server")).concat(L("wrong helper|wrong helper address|wrong ip helper-address|wrong relay|wrong relay address|wrong server|wrong DHCP server|wrong address|incorrect helper|incorrect helper address|incorrect ip helper-address|incorrect relay|incorrect address|incorrect server|incorrect DHCP server|helper address is wrong|helper-address is wrong|helper is wrong|relay is wrong|helper address is incorrect|helper-address is incorrect|helper is incorrect|relay is incorrect|helper address set wrong|helper address is set wrong|helper address is configured wrong|is configured with the wrong|is pointing at the wrong|points to the wrong|pointing to the wrong")).concat(wr?
+        ['points to '+wr,'pointing to '+wr,'pointed to '+wr,'points at '+wr,'relays to '+wr,'relaying to '+wr,'forwards to '+wr,'sends to '+wr,'helper address '+wr,'helper-address '+wr,'helper address is '+wr,'helper address set to '+wr,'helper address of '+wr,'helper address to '+wr]:[]);
+    const addF=L("ip helper-address "+srv+"|helper-address "+srv+"|helper address "+srv+"|helper address to "+srv+"|helper address as "+srv+"|helper address set to "+srv+"|helper address of "+srv+"|helper address should be "+srv+"|helper to "+srv+"|helper as "+srv+"|relay to "+srv+"|relays to "+srv+"|points to "+srv+"|point to "+srv+"|point it to "+srv+"|pointing to "+srv+"|points at "+srv+"|point it at "+srv).concat(
+      wr?['from '+wr+' to '+srv]:[],
+      [].concat(...GI00.map(g=>[g+' r1 config if ip helper-address '+srv,g+' no ip helper-address '+(wr||'zqx')+' ip helper-address '+srv])));
+    const remF=wr?L("no helper-address "+wr+"|no helper address "+wr+"|remove "+wr+"|delete "+wr+"|remove the wrong helper|delete the wrong helper|remove the old helper|remove the wrong one|remove the wrong address|remove the existing helper|remove the incorrect helper|replace "+wr+"|change "+wr+"|from "+wr+" to|instead of "+wr+"|rather than "+wr+"|"+wr+" with|"+wr+" to "+srv+"|"+wr+" for "+srv+"|"+wr+" by "+srv+"|swap "+wr).concat(
+        [].concat(...GI00.map(g=>[g+' no ip helper-address '+wr,g+' no helper-address '+wr,g+' r1 config if no ip helper-address '+wr]))):[];
+    return [
+      '<b>Here:</b> '+K(wr?"R1's G0/0 ip helper-address is wrong":"R1's G0/0 has no ip helper-address",decoy(['R2','G0/1','Gi0/1','LAN-B']).concat(pair(R1,wr?wrongT:missing)))+
+        (wr?' &mdash; it relays to '+wr+' instead of the DHCP server '+srv:'')+', so the PCs\' DHCP requests never reach '+srv+'.',
+      'The 169.254.x.x addresses mean DHCP failed. A DHCPDISCOVER is a '+K('broadcast',['broadcasts','broadcasted','broadcasting'])+', and a router '+K('does not forward broadcasts',NF)+' onto other networks &mdash; an ip helper-address on the clients\' interface is what turns it into a unicast to the server.',
+      'Fix: interface g0/0'+(wr?', '+K('no ip helper-address '+wr,remF)+', then ':', ')+K('add ip helper-address '+srv,addF)+'.'];
+  }
+  case 'natin':{
+    const out=s.model.indexOf(' no ip nat outside')>=0;
+    const INS=L("inside|nat inside|ip nat inside|an inside interface|the inside interface|an inside"), OUTS=L("outside|nat outside|ip nat outside|an outside interface|the outside interface");
+    const cause=out?
+      gen(L("is|is wrongly|is incorrectly|is mistakenly|has been|was"),L("marked|set|configured|defined|declared"),L("as|to|"),OUTS).concat(
+        L("has ip nat outside|has nat outside|is ip nat outside|is nat outside|is an outside interface|wrongly outside|wrongly marked outside|outside instead of inside|outside rather than inside|outside instead of ip nat inside|outside instead of nat inside|outside but should|outside when it should|marked outside but|marked as outside but|marked outside when|set as outside when|set to outside when|outside by mistake|wrong side|set the wrong way|backwards|swapped"),
+        gen(L("should be|needs to be|must be|should be marked|needs to be marked|should be set to|needs to be set to|should be marked as|needs to be marked as|should be configured as|needs to be configured as|needs"),[''],[''],INS),L("not inside|isn't inside|not nat inside|isn't nat inside")):
+      gen(L("not|isn't"),L("marked|set|configured|defined|designated"),L("as|to|for|"),INS).concat(
+        L("isn't configured for nat|not configured for nat|no nat inside|no ip nat inside|no nat configured|no nat|unmarked|missing ip nat inside|missing nat inside|missing inside|lacks ip nat inside|lacks nat inside|without ip nat inside|without nat inside|doesn't have ip nat inside|does not have ip nat inside|doesn't have nat inside|has no ip nat inside|has no nat inside|hasn't got ip nat inside|has no inside|not inside|isn't inside|not nat inside|isn't nat inside|not an inside interface|isn't an inside interface|not the inside interface|isn't the inside interface"),
+        gen(L("should be|needs to be|must be|should be marked|needs to be marked|should be set to|needs to be set to|should be marked as|needs to be marked as|should be configured as|needs to be configured as|needs"),[''],[''],INS));
+    const seqs=(cmds)=>[].concat(...GI01.map(g=>[g+' '+cmds.join(' '),g+' '+cmds.map(c=>'gateway config if '+c).join(' ')]));
+    const addF=pair(G01,L("ip nat inside|nat inside|as inside|to inside")).concat(seqs(['ip nat inside']),out?seqs(['no ip nat outside','ip nat inside']).concat(seqs(['no nat outside','ip nat inside']),seqs(['ip nat inside','no ip nat outside'])):[]);
+    const remF=out?pair(G01,L("no ip nat outside|no nat outside|remove ip nat outside|remove nat outside|remove outside|remove the outside|remove the ip nat outside|take off outside|delete ip nat outside|from outside to inside|outside to inside")).concat(seqs(['no ip nat outside']),seqs(['no nat outside'])):[];
+    return [
+      '<b>Here:</b> the Gateway\'s '+K(out?'G0/1 is marked ip nat outside instead of inside':'G0/1 is not marked ip nat inside',decoy(S001).concat(pair(G01,cause)))+' (S0/0/1 is correctly ip nat outside).',
+      'NAT only translates packets that arrive on an inside interface and leave an outside one, so the PCs\' pings are '+K('not translated',NOTRANS)+'. They reach the ISP with their private source addresses, and the ISP '+K('can\'t reply',NOREPLY)+' to a private address.',
+      'Fix: interface g0/1, '+(out?K('no ip nat outside on g0/1',remF)+', then ':'')+K('ip nat inside on g0/1',addF)+'.'];
+  }
+  case 'natacl':{
+    const m=/access-list 1 permit (\S+) (\S+)/.exec(s.body), lan=int2ip(P.lan), isMask=m[2]==='255.255.255.0', wn=m[1];
+    const ACL=L("ACL 1|access-list 1|access list 1|ACL|access-list|access list|acl1");
+    const fixW=['wildcard 0.0.0.255','wildcard of 0.0.0.255','wildcard mask 0.0.0.255','wildcard mask of 0.0.0.255','permit '+lan+' 0.0.0.255',lan+' 0.0.0.255','with 0.0.0.255','use 0.0.0.255','using 0.0.0.255','to 0.0.0.255','should be 0.0.0.255','be 0.0.0.255','needs 0.0.0.255','need 0.0.0.255','255.255.255.0 with 0.0.0.255','255.255.255.0 to 0.0.0.255','255.255.255.0 for 0.0.0.255','255.255.255.0 by 0.0.0.255','0.0.0.255 instead of 255.255.255.0','0.0.0.255 rather than 255.255.255.0','0.0.0.255 not 255.255.255.0'];
+    if(isMask) return [
+      '<b>Here:</b> the Gateway\'s access-list 1 permits '+lan+' with 255.255.255.0 &mdash; '+K('a subnet mask instead of a wildcard',decoy().concat(pair(ACL,L("uses a subnet mask|used a subnet mask|using a subnet mask|has a subnet mask|is a subnet mask|as a subnet mask|subnet mask instead of a wildcard|subnet mask rather than a wildcard|subnet mask not a wildcard|subnet mask where a wildcard|mask instead of a wildcard|mask rather than a wildcard|mask not a wildcard|mask where a wildcard|netmask instead of a wildcard|uses a netmask|uses a mask|used a mask|has a mask|isn't a wildcard|is not a wildcard|not a wildcard mask|wildcard is wrong|wildcard mask is wrong|wrong wildcard|incorrect wildcard|wrong mask|wildcard is backwards|wildcard is inverted|inverted wildcard|should be a wildcard|should use a wildcard|needs a wildcard|needs to be a wildcard|needs a wildcard mask|should use a wildcard mask|uses 255.255.255.0 as the wildcard|uses 255.255.255.0 as a wildcard|has 255.255.255.0 as the wildcard|has 255.255.255.0 as a wildcard|wildcard is 255.255.255.0|wildcard of 255.255.255.0|wildcard 255.255.255.0|wildcard mask 255.255.255.0"))))+'.',
+      'As a wildcard, 255.255.255.0 checks the first three octets loosely and the last one exactly, so it '+K('only matches addresses ending in .0',L("only matches .0|ending in .0|ends in .0|end in .0|only .0|only the .0|last octet must be 0|last octet is 0|last octet 0|only addresses ending|only matches the network address|only the network address"))+' &mdash; none of the PCs. Their traffic is '+K('not translated',NOTRANS)+', so it reaches the ISP with private addresses it '+K('can\'t reply',NOREPLY)+' to.',
+      'Fix: no access-list 1, then access-list 1 permit '+lan+' '+K('wildcard 0.0.0.255',fixW)+'.'];
+    const wnT=['wn instead of lan','wn rather than lan','wn not the lan','is for wn','is set to wn','is wn','contains wn','lists wn','matches wn','only matches wn','has wn','uses wn'].map(t=>t.replace('wn',wn).replace('lan',lan));
+    return [
+      '<b>Here:</b> the Gateway\'s '+K('access-list 1 permits the wrong network ('+wn+')',decoy().concat(pair(ACL,L("wrong network|wrong subnet|wrong address|wrong range|wrong LAN|wrong IP range|incorrect network|incorrect subnet|incorrect address|different network|different subnet|another network|another subnet|doesn't match the LAN|doesn't match the PCs|doesn't include the PCs|doesn't cover the PCs|isn't the PCs' network|isn't the LAN").concat(wnT))))+' instead of the PCs\' '+lan+'/24.',
+      'NAT only translates sources the ACL permits, so the PCs\' pings are '+K('not translated',NOTRANS)+'. They reach the ISP with '+K('private source addresses',L("private source addresses|private source address|private addresses|private address|private IPs|private IP|private source"))+' it has no route back to.',
+      'Fix: no access-list 1, then '+K('access-list 1 permit '+lan+' 0.0.0.255',L("access list 1 permit "+lan+" 0.0.0.255|permit "+lan+" 0.0.0.255|"+lan+" 0.0.0.255|permit "+lan+" with 0.0.0.255").concat(pair(ACL,L("should permit "+lan+"|needs to permit "+lan+"|must permit "+lan+"|should match "+lan+"|needs to match "+lan+"|should include "+lan+"|should be "+lan+"|needs to be "+lan))))+'.'];
+  }
+  case 'staticnet':{
+    const wn=s.model[0].split(' ')[3], nh=int2ip(P.wan+2), b=P.B+'.0';
+    const R1c=pair(R1,L("wrong network|wrong destination|wrong subnet|wrong address|wrong route|wrong prefix|incorrect network|incorrect route|incorrect destination|incorrect subnet|incorrect address|typo|mistyped|typed wrong|mistyped the network|route to LAN-B is wrong|route to LAN-B is incorrect|route for LAN-B is wrong|route is wrong|route is incorrect|static route is wrong|static route is incorrect|route has the wrong|route is for the wrong").concat(['route for '+wn,'route to '+wn,'static route for '+wn,'static route to '+wn,'points to '+wn,'is for '+wn,'names '+wn,'uses '+wn,'has '+wn,'route '+wn]));
+    return [
+      '<b>Here:</b> '+K('R1\'s static route is for the wrong network ('+wn+')',decoy(['R2','LAN-A','LAN-C']).concat(R1c))+' instead of LAN-B, '+b+'/24, so '+K('R1 has no route to LAN-B',pair(R1,L("no route|no route to LAN-B|no route to "+b+"|missing route|missing a route|doesn't have a route|does not have a route|has not got a route|lacks a route|no path|can't reach LAN-B|cannot reach LAN-B|can't route|cannot route|doesn't know how to reach|doesn't know how to get to|does not know how to get to|doesn't know the way to|doesn't know a route to|doesn't know about LAN-B|doesn't know LAN-B|has no way to reach|has no way of reaching|doesn't know where LAN-B is|can't get to|cannot get to|not in the routing table|isn't in the routing table|no entry for LAN-B")))+'.',
+      'Packets from LAN-A for '+b+' reach R1, find no matching route and no default route, and R1 '+K('drops them',pair(R1,L("drops the packets|drops the traffic|drops it|drop them|drop the packets|dropped by R1|discards them|discards the packets|discards it|R1 drops|R1 discards|throws them away|can't forward them|cannot forward them|doesn't forward them|has nowhere to send")).concat(L("dropped by R1|R1 drops them|R1 drops the packets|R1 drops the traffic|R1 drops it|R1 discards them|R1 discards the packets")))+'. The serial link works and R2\'s routes back to LAN-A and LAN-C are correct, which is why LAN-B hosts can still ping R1.',
+      'Fix: on R1, no ip route '+wn+' 255.255.255.0 '+nh+', then '+K('ip route '+b+' 255.255.255.0 '+nh,L("ip route "+b+"|route "+b+" 255.255.255.0|add a route to "+b+"|add a route for "+b+"|add a static route to "+b+"|add a static route for "+b+"|route to "+b+" 255.255.255.0|route for "+b+" 255.255.255.0|replace it with "+b+"|change it to "+b+"|should be "+b+"|should be for "+b+"|needs to be "+b+"|correct it to "+b))+'.'];
+  }
+  case 'acldir':{
+    const n=s.model[1].trim().split(' ')[3];
+    const noIn=pair(L('no ip access-group '+n+' out|no ip access-group '+n+' in|no ip access-group'),['zqx']);
+    const A=L("applied inbound|applied in|applied incoming|is inbound|set inbound|configured inbound|ACL inbound|access-list inbound|access list inbound|has it inbound|has the ACL inbound|inbound instead of outbound|inbound rather than outbound|in instead of out|in rather than out|in the in direction|in the inbound direction|inbound direction|wrong direction|wrong way|direction is wrong|incorrect direction|wrong way round|the wrong way|backwards|ip access-group "+n+" in|access-group "+n+" in|in the wrong direction|facing the wrong way");
+    const fixO=L("apply it outbound|apply outbound|apply the ACL outbound|apply it out|move it to outbound|change it to outbound|change to outbound|change it from inbound to outbound|change inbound to outbound|from in to out|from inbound to outbound|reapply it outbound|re-apply it outbound|apply it in the out direction|should be outbound|needs to be outbound|must be outbound|outbound instead of inbound|outbound rather than inbound|set it outbound|put it outbound|configure it outbound|apply it as outbound|apply it to outbound");
+    return [
+      '<b>Here:</b> '+K('R2\'s ACL '+n+' is applied inbound on G0/0',decoy(['R1','Router 1','G0/1','Gi0/1','Gig0/1','GigabitEthernet0/1','LAN-A']).concat(noIn,pair(R2,A)))+' &mdash; it should be outbound.',
+      'A standard ACL checks only the '+K('source address',L("source addresses|source|sources|sender|source IP"))+'. Inbound on G0/0 it '+K('only sees traffic from LAN-B',L("only sees traffic from LAN-B|only sees LAN-B|sees traffic from LAN-B|only traffic from LAN-B|comes from LAN-B|come from LAN-B|never sees LAN-C|never sees traffic from LAN-C|doesn't see LAN-C|does not see LAN-C|never see LAN-C|never matches|never match|deny never matches|never hits|LAN-C never reaches|LAN-C is never seen|LAN-C traffic never"))+', whose source is never LAN-C, so its deny never matches and LAN-C traffic going the other way passes untested.',
+      'Applied outbound on the same interface (near the destination, LAN-B) it checks every packet entering LAN-B. Fix: interface g0/0, '+K('no ip access-group '+n+' in',L("no access-group "+n+" in|remove the inbound|remove it from inbound|remove it from in|remove it inbound|take it off inbound|delete the inbound|remove ip access-group "+n+" in|remove access-group "+n+" in|undo ip access-group "+n+" in"))+', then '+K('apply ip access-group '+n+' out',L("in ip access-group "+n+" out|apply it outbound|apply outbound|apply the ACL outbound|apply it out|reapply it outbound|re-apply it outbound|apply it in the out direction|change it to outbound|change to outbound|move it to outbound|change it from inbound to outbound|change inbound to outbound|from inbound to outbound|from in to out").concat(pair(R2,fixO),pair(['ip access-group'],[n+' out'])))+'.'];
+  }
+  case 'ospf':{
+    const w=int2ip(P.wan);
+    if(s.model[0]==='interface s0/0/0'){
+      const h=+/hello-interval (\d+)/.exec(s.body)[1], d=4*h;
+      const hello=cat(L("hello-interval|hello interval|hello timer|hello timers|hello|ip ospf hello-interval"),['',' is',' set to',' of',' to',' at',' changed to',' configured as',' configured to'],' '+h).concat(cat(L("dead interval|dead timer|dead-interval"),['',' is',' of',' set to'],' '+d),['hello and dead '+h,'hello and dead '+h+' '+d,'timers '+h,'timers are '+h,'timers set to '+h,'is set to '+h,'set to '+h,'is configured as '+h,'is configured with '+h,'changed to '+h,'uses '+h,'using '+h],
+        L("wrong hello|incorrect hello|wrong hello interval|wrong hello timer|incorrect hello interval|incorrect hello timer|wrong timers|wrong timer|incorrect timers|hello interval doesn't match|hello timer doesn't match|hello interval is different|hello timer is different|hello interval is wrong|hello timer is wrong|hello interval is incorrect|hello timer is incorrect|timers are different|timers don't match|timers do not match|timer mismatch|hello mismatch|hello interval mismatch|hello timer mismatch|non-default hello|changed hello"));
+      return [
+        '<b>Here:</b> '+K('R2\'s S0/0/0 has ip ospf hello-interval '+h,decoy(['R1','Router 1','Router1','default','defaults']).concat(pair(R2,hello)))+', so its hello/dead intervals are '+h+'/'+d+' while R1 uses the defaults, 10/40.',
+        'OSPF neighbours must have '+K('matching hello and dead intervals',L("matching|must match|have to match|need to match|needs to match|don't match|do not match|doesn't match|mismatch|mismatched|not the same|aren't the same|same on both"))+', so the hellos are rejected, they '+K('never become neighbours',adj)+' and no routes are exchanged &mdash; LAN-A can\'t reach LAN-B.',
+        'Fix: on R2, interface s0/0/0, '+K('no ip ospf hello-interval',L("no ip ospf hello|no hello-interval|no hello interval|remove the hello-interval|remove hello-interval|remove the hello interval|remove the hello timer|remove the hello|delete the hello-interval|delete the hello|ip ospf hello-interval 10|s0/0/0 ip ospf hello-interval 10|s0/0/0 no ip ospf hello-interval").concat(pair(R2,L("back to the default|back to default|default hello|default timers|back to 10|reset the hello to 10|reset the hello interval to 10|reset the hello-interval to 10|reset hello to 10|reset it to 10|reset to 10|set it to 10|set it back to 10|set hello to 10|set the hello to 10|set hello interval 10|set the hello interval to 10|change it to 10|change it back to 10|change the hello to 10|change the hello interval to 10|change hello to 10|hello-interval 10|hello interval 10|hello 10|hello timer 10|hello back to 10|revert the hello|revert to the default"))))+' (back to 10/40).'];
+    }
+    const ar=s.model[1].trim().split(' ').pop();
+    return [
+      '<b>Here:</b> '+K('R2 puts the R1–R2 link ('+w+' 0.0.0.3) in area '+ar,decoy(['R1','Router 1','Router1']).concat(pair(R2,['area '+ar,'in area '+ar,'to area '+ar,'area '+ar+' instead of area 0','area '+ar+' rather than area 0','not in area 0',"isn't in area 0",'not area 0','wrong area','in the wrong area','a different area','different area','mismatched area','area mismatch','network '+w+' 0.0.0.3 area '+ar])))+', while R1 has it in area 0.',
+      'Both ends of a link must be in the '+K('same area',L("same area|matching area|matching areas|area mismatch|areas don't match|area doesn't match|areas do not match|different areas|different area|wrong area|mismatched areas|mismatched area|areas must match|area must match|not in the same area|area ID mismatch|area IDs don't match"))+', or their hellos are rejected: they '+K('never become neighbours',adj)+' and no routes are exchanged.',
+      'Fix: on R2 under router ospf 1, no network '+w+' 0.0.0.3 area '+ar+', then '+K('network '+w+' 0.0.0.3 area 0',L("router ospf 1 network "+w+" 0.0.0.3 area 0|"+w+" 0.0.0.3 area 0").concat(pair(R2,L("change it to area 0|change to area 0|change the area to 0|change area to 0|put it in area 0|put the link in area 0|move it to area 0|move the link to area 0|set it to area 0|set the area to 0|into area 0|should be in area 0|should be area 0|needs to be in area 0|needs to be area 0|area 0 instead|replace area "+ar+" with area 0|change area "+ar+" to area 0|area "+ar+" with area 0|area "+ar+" to area 0|from area "+ar+" to area 0|area "+ar+" to 0|network "+w+" 0.0.0.3 area 0"))))+'.'];
+  }
+  case 'poolgw':{
+    const bad=/default-router (\S+)/.exec(s.body)[1], name=s.model[0].replace('ip dhcp pool ',''), gw=P.A+'.1', off=bad===P.B+'.1';
+    const GW=L("default gateway|gateway|default-router|default router|pool|DHCP pool");
+    const fixT=L("default-router "+gw+"|default router "+gw+"|default-router to "+gw+"|default router to "+gw+"|gateway to "+gw+"|gateway "+gw+"|gateway of "+gw+"|gateway as "+gw+"|gateway should be "+gw+"|should be "+gw+"|change it to "+gw+"|change to "+gw+"|set it to "+gw+"|set to "+gw+"|replace "+bad+" with "+gw+"|"+bad+" with "+gw+"|"+bad+" to "+gw+"|from "+bad+" to "+gw+"|"+bad+" for "+gw+"|"+gw+" instead of "+bad+"|"+gw+" rather than "+bad+"|point it to "+gw+"|point to "+gw+"|use "+gw+"|set "+gw);
+    return [
+      '<b>Here:</b> R1\'s DHCP pool '+name+' hands out '+K('the wrong default gateway, '+bad,decoy().concat(pair(GW,L("wrong|wrong address|wrong gateway|wrong default gateway|incorrect|incorrect address|incorrect gateway|incorrect default gateway|is "+bad+"|set to "+bad+"|of "+bad+"|as "+bad+"|given as "+bad+"|configured as "+bad+"|configured to "+bad+"|points to "+bad+"|pointing to "+bad+"|"+bad))))+'; R1\'s G0/0 is '+gw+'.',
+      'Traffic between PCs on LAN-A goes '+K('directly',L("directly to each other|same subnet|same LAN|same network|local traffic|locally|don't need the gateway|doesn't need the gateway|don't use the gateway|doesn't use the gateway|without the gateway|no gateway needed|isn't needed|not needed|doesn't go through the gateway|don't go through the gateway"))+', so it still works. Everything for another network is sent to the gateway, and '+bad+' '+
+        K(off?'isn\'t on LAN-A':'is not a router',L("isn't on LAN-A|not on LAN-A|not on the LAN|isn't on the LAN|not in the subnet|different subnet|another subnet|wrong subnet|doesn't exist|does not exist|no device|nothing at|not a router|isn't a router|not R1|isn't R1|not the router|isn't the router|nonexistent|non-existent|no router|nothing answers|no one answers"))+(off?' (it is R2\'s address on LAN-B)':' (no device answers at it)')+', so nothing leaves the LAN.',
+      'Fix: under ip dhcp pool '+name+', '+K('default-router '+gw,fixT)+'; the PCs pick it up when they renew their lease.'];
+  }
+  }
+  return s.points;
+}
 card({id:'q6-ts', area:'ts', tier:2, kind:'flash', src:'Q6', title:'Troubleshoot it in writing', gen(){
   const s=tsBuild(pick(Object.keys(TS_SCEN)));
   return {
-    prompt:s.symptom.replace(/ Fix it <b>on R2<\/b>\./,'')+' Clearly identify, describe and explain the cause of the problem. What modifications do you need to make to fix it?',
-    body:s.body, points:s.points,
+    prompt:s.symptom+' Identify the cause (which device, and which interface or line, is wrong), explain why it produces exactly this symptom, and give the commands that fix it.',
+    body:s.body, points:q6tsPoints(s),
   };
 }});
 
