@@ -1472,24 +1472,29 @@ const EXAM_KEYS={
   ],
   "keeps its port": [
     "first keeps", "first one keeps", "first user keeps", "first host keeps", "first connection keeps",
-    "first session keeps", "keeps the port", "keeps its original port", "keeps its source port"
+    "first session keeps", "keeps the port", "keeps its original port", "keeps its source port",
+    "gets the port", "gets its port", "gets to keep"
   ],
   "assigns a different port": [
     "different port", "new port", "another port", "next available port", "unique port",
-    "changes the port", "translates the port", "other port", "free port", "port is changed",
+    "changes the port", "translates the port to", "translates the source port to", "other port", "free port", "port is changed",
     "port translation"
   ],
   "translates them back": [
     "translate back", "translated back", "translates the reply back", "translates replies back",
     "translates it back", "maps back", "maps it back", "changes it back", "reverse translation",
-    "back to the original port", "back to its original port"
+    "back to the original port", "back to its original port",
+    "translates the port back", "translates the source port back", "translates the ports back",
+    "translates the address back", "port back to"
   ],
   "{F} keeps port {n}": ["{FS}~{KEEP}"],
   "{L} gets a different port": ["{LS}~{MOVE}"],
   "translates it back": [
     "translate back", "translated back", "translates the reply back", "translates replies back",
     "translates them back", "maps back", "maps it back", "changes it back", "reverse translation",
-    "back to port {n}", "back to the original port", "back to its original port"
+    "back to port {n}", "back to the original port", "back to its original port",
+    "translates the port back", "translates the source port back", "translates the ports back",
+    "translates the address back", "port back to"
   ],
 },
 "q5a-dora": {
