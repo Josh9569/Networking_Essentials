@@ -1345,7 +1345,9 @@ const EXAM_KEYS={
   ],
   "not stateful": [
     "stateless", "not a stateful", "no state", "does not track", "doesn't track", "not track",
-    "not a firewall", "faked", "forged ACK", "spoofed ACK", "faked ACK", "fake ACK", "crafted ACK"
+    "not a firewall", "faked", "forged ACK", "spoofed ACK", "faked ACK", "fake ACK", "crafted ACK",
+    "spoof", "spoofed", "spoofing", "spoofable", "forged", "forge", "forging", "can be faked", "fake the flag",
+    "fake the ACK", "set the ACK bit", "sets the ACK bit"
   ],
   "return traffic#dir": [
     "replies", "reply", "returning", "responses", "response", "return packets", "back in", "respond",
