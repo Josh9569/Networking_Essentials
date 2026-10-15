@@ -452,6 +452,14 @@ const EXAM_KEYS={
   "floating static route": ["floating static", "floating route", "floating"],
 },
 "q1e-ripv2": {
+  _lists: {
+    "V1N": ["RIPv1", "RIP v1", "v1", "version 1", "RIP version 1"],
+    "AV": [
+      "auth", "authentication", "authenticate", "MD5", "supports auth", "supports authentication",
+      "has auth", "has authentication", "uses authentication", "can authenticate", "offers authentication",
+      "provides authentication", "does authentication", "allows authentication"
+    ],
+  },
   "RIPv1 classful and RIPv2 classless": [
     "RIPv1~classful", "RIPv1~classfull", "RIPv1~no mask", "RIPv1~no masks", "RIPv1~no subnet mask",
     "RIPv1~no subnet masks", "RIPv1~without mask", "RIPv1~without masks", "RIPv1~without a mask",
@@ -638,7 +646,9 @@ const EXAM_KEYS={
     "v2~authenticated", "v2~MD5", "version 2~authenticate", "version 2~authenticates",
     "version 2~authentication", "version 2~authenticated", "version 2~MD5",
     "RIP version 2~authenticate", "RIP version 2~authenticates", "RIP version 2~authentication",
-    "RIP version 2~authenticated", "RIP version 2~MD5"
+    "RIP version 2~authenticated", "RIP version 2~MD5",
+    "auth", "authenticate", "authenticates", "authentication", "authenticated", "MD5",
+    "@!{V1N}~{AV}"
   ],
   "hop count": ["hops", "hop"],
   "auto-summarise": [
