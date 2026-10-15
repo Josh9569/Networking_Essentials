@@ -1245,7 +1245,7 @@ card({id:'q2c-multiarea', area:'ospf', tier:1, kind:'flash', src:'Q2 c', title:'
     'Result: smaller LSDBs, fewer SPF runs, less flooding, faster convergence, and problems contained within one area.',
   ];
   if(Math.random()<0.5) return {
-    prompt: 'How does multi-area OSPF overcome the problems with single area operation? Explain what goes wrong in one large area, describe how a multi-area design is laid out, and explain how it reduces the load.',
+    prompt: 'How does multi-area OSPF overcome the problems with single-area operation? Explain why one large area causes problems, how multi-area OSPF is structured, and how that structure reduces the work each router has to do.',
     points: ['<b>Single-area problems:</b> every router holds the whole topology, so the '+LSDB+' and routing table get large; every change '+FLOOD+' to every router and makes all of them re-run '+SPF+' &mdash; heavy CPU, memory and bandwidth use.'].concat(how),
   };
   /* A scenario: the model's first point says what is wrong with THIS network
@@ -1259,7 +1259,7 @@ card({id:'q2c-multiarea', area:'ospf', tier:1, kind:'flash', src:'Q2 c', title:'
      here:'the memory goes on the '+LSDB+': every one of the '+n+' routers stores the whole topology, plus a full routing table. On top of that, any change '+FLOOD+' to all '+n+' and makes each of them re-run '+SPF+'.'},
   ]);
   return {
-    prompt: 'A single-area OSPF network has grown to '+n+' routers and '+sym.s+'. Explain what in one big area is causing this, then describe how a multi-area design would be laid out and how splitting it reduces the load.',
+    prompt: 'A single-area OSPF network has grown to '+n+' routers and '+sym.s+'. Explain why having every router in one area causes this. Then explain how multi-area OSPF is structured, and how that structure reduces the work each router has to do.',
     points: ['<b>Here:</b> '+sym.here].concat(how),
   };
 }});
