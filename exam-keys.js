@@ -630,7 +630,7 @@ const EXAM_KEYS={
     "RIP version 2~224.0.0.9", "RIP version 2~multicast address"
   ],
   "RIPv2 can authenticate": [
-    "RIPv2~authenticate", "RIPv2~authenticates", "RIPv2~authentication", "RIPv2~authenticated",
+    "RIPv2~authenticate", "RIPv2~auth", "RIP v2~auth", "v2~auth", "version 2~auth", "RIP version 2~auth", "RIPv2~authenticates", "RIPv2~authentication", "RIPv2~authenticated",
     "RIPv2~MD5", "RIP v2~authenticate", "RIP v2~authenticates", "RIP v2~authentication",
     "RIP v2~authenticated", "RIP v2~MD5", "v2~authenticate", "v2~authenticates", "v2~authentication",
     "v2~authenticated", "v2~MD5", "version 2~authenticate", "version 2~authenticates",
