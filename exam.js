@@ -2864,7 +2864,7 @@ card({id:'g6-subif', area:'ts', tier:2, kind:'graded', src:'Q6', title:'Add a VL
   const v=pick([30,40,50,60,70,99,110,150]), native=chance(.3), gwo=pick([1,1,254]);
   const model=['interface gi0/0.'+v,' encapsulation dot1q '+v+(native?' native':''),' ip address 192.168.'+v+'.'+gwo+' 255.255.255.0'];
   return {
-    prompt:'R1 Gi0/0 is trunked to S1 (router-on-a-stick). Add routing for <b>VLAN '+v+'</b>, network 192.168.'+v+'.0/24, with R1 as the gateway <b>192.168.'+v+'.'+gwo+'</b>'+
+    prompt:'R1 Gi0/0 is trunked to S1 (router-on-a-stick). On <b>R1</b>, add routing for <b>VLAN '+v+'</b>, network 192.168.'+v+'.0/24, with R1 as the gateway <b>192.168.'+v+'.'+gwo+'</b>'+
       (native?'. VLAN '+v+' is the trunk\'s <b>native VLAN</b>.':'.')+' Write the commands.',
     body: cmdsHtml('sub','Commands &mdash; one per line, Ctrl+Enter submits','e.g. interface gi0/0.5',3),
     grade(){
