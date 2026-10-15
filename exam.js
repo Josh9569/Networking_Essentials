@@ -575,15 +575,15 @@ card({id:'q1b-adpair', area:'routing', tier:1, kind:'flash', src:'Q1 b', title:'
      An active verb in front of the name ("uses the OSPF route") is the
      router choosing; "OSPF uses cost" is not, so use/take are never paired. */
   const met=[a,b].filter(k=>k!=='static').map(k=>METRIC_NAME[k]);
-  const units='[[different units]]';
+  const units='[[metrics aren\'t compared across protocols]]';
   return {
     prompt:'If a router has a choice between two routes to a destination, one provided by '+src(a)+' and the other by '+src(b)+', which one will the router choose? Why? Do the two routes\' metrics play any part?',
     points: [
       '<b>Here:</b> [[the {nmW} route is chosen]]. The router compares the [[administrative distance]] of the two sources and the lower one wins: '+PROTO[W].name+' ('+PROTO[W].ad+') is lower than '+PROTO[L].name+' ('+PROTO[L].ad+').',
       'AD represents how trustworthy the source of a route is &mdash; the lower the number, the more it is trusted. When two sources offer the same prefix, only the one with the lowest AD is installed in the routing table.',
       met.length===2
-        ? 'The metrics play no part: '+met[0]+' and '+met[1]+' are measured in '+units+', so they can\'t be compared across sources. A metric only chooses between routes from the same source.'
-        : 'The metrics play no part: a static route has no metric (0) to set against '+met[0]+', and metrics from different sources are in '+units+' anyway, so they are never compared.',
+        ? 'The metrics play no part: '+met[0]+' and '+met[1]+' are measured in different units, so '+units+' &mdash; a metric only chooses between routes from the same protocol.'
+        : 'The metrics play no part: a static route has no metric (0) to set against '+met[0]+', and '+units+' or sources anyway &mdash; they are in different units.',
       'The '+nm(L)+' route is kept in reserve and installed only if the '+nm(W)+' route disappears.',
     ],
     vars:{nmW:nm(W), Wn:KW_NAME[W].split('|'), Ln:KW_NAME[L].split('|'), WN:PROTO[W].name, LN:PROTO[L].name,

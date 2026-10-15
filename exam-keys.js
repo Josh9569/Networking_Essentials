@@ -272,6 +272,17 @@ const EXAM_KEYS={
       "different for every protocol", "different between protocols", "different in each protocol",
       "metrics are different", "different metrics"
     ],
+    "XP": [
+      "only within a protocol", "only within the same protocol", "within a protocol", "within one protocol",
+      "within the same protocol", "inside a protocol", "inside one protocol", "not between protocols",
+      "not across protocols", "between protocols", "across protocols", "compare only within",
+      "only compare within", "only compared within", "not compared between", "aren t compared between",
+      "are not compared between", "never compared between", "don t compare across", "do not compare across",
+      "can t compare across", "cannot compare across", "don t compare between", "do not compare between",
+      "can t be compared between", "cannot be compared between", "no effect", "not have any effect",
+      "not have any affect", "don t have any effect", "doesn t have any effect", "have no effect",
+      "has no effect", "no affect", "don t matter here", "does not matter here", "doesn t matter here"
+    ],
     "NOMETRIC": [
       "no metric", "metric of 0", "metric 0", "metric is 0", "metric of zero", "zero metric",
       "t have a metric"
@@ -281,7 +292,7 @@ const EXAM_KEYS={
     "@{Wn}~{CHOSEN}", "@{Wn}~{LOWER}", "@{TAKE} {Wn}", "@{Wn} {USED}", "@{Wn} {WINS}", "^{Wn}",
     "^{Wn} route", "^{Wn} routes", "@!{Ln}~{VETO}"
   ],
-  "different units": ["{UNITS}", "{NM}"],
+  "metrics aren't compared across protocols": ["different units", "{UNITS}", "{XP}", "{NM}"],
   "administrative distance": ["AD", "admin distance"],
   "trustworthy": [
     "trust", "trusts", "trusted", "trustworthiness", "reliable", "reliability", "believable",
@@ -343,7 +354,9 @@ const EXAM_KEYS={
       "metric is not looked at", "get a say", "gets a say", "no say", "not the same type",
       "aren t the same type", "arent the same type", "isn t the same type", "wouldn t matter",
       "would not matter", "doesn t matter", "does not matter", "don t matter", "do not matter",
-      "not relevant here", "irrelevant here"
+      "not relevant here", "irrelevant here", "not between protocols", "not across protocols", "only compare within",
+      "compare only within", "not compared between", "never compared between", "not have any effect",
+      "not have any affect", "have no effect", "has no effect"
     ],
     "LOW": [
       "{LOWERAD}", "better administrative distance", "better admin distance", "better AD",
