@@ -281,8 +281,6 @@ const EXAM_KEYS={
     "@{Wn}~{CHOSEN}", "@{Wn}~{LOWER}", "@{TAKE} {Wn}", "@{Wn} {USED}", "@{Wn} {WINS}", "^{Wn}",
     "^{Wn} route", "^{Wn} routes", "@!{Ln}~{VETO}"
   ],
-  "{WN} {Wad}": [">{Wn}~{Wad}"],
-  "{LN} {Lad}": [">{Ln}~{Lad}"],
   "different units": ["{UNITS}", "{NM}"],
   "administrative distance": ["AD", "admin distance"],
   "trustworthy": [
@@ -420,15 +418,6 @@ const EXAM_KEYS={
   ],
 },
 "q1d-floating": {
-  _lists: {
-    "ST": [
-      "static", "static route", "floating static", "floating static route", "floating route", "backup",
-      "backup route", "backup link", "floating"
-    ],
-    "PR": ["{N}", "{N} route", "primary", "primary route", "dynamic route"],
-  },
-  "{N} AD of {ad}": [">{PR}~{ad}"],
-  "static AD of {eg}": [">{ST}~{V}"],
   "lowest AD wins": [
     "lowest wins", "lowest one wins", "lowest AD is installed", "lowest is installed",
     "lowest AD is preferred", "lowest is preferred", "lowest AD is chosen", "installs the lowest",

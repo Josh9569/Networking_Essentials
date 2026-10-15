@@ -565,9 +565,9 @@ card({id:'q1b-adpair', area:'routing', tier:1, kind:'flash', src:'Q1 b', title:'
   const [a,b]=shuffle(pair), W=PROTO[a].ad<PROTO[b].ad?a:b, L=W===a?b:a;
   const src=k=>k==='static'?'a static route':'the routing protocol '+PROTO[k].name;
   const nm=k=>k==='static'?'static':PROTO[k].name;
-  /* Key words: exam-keys.js. Which source the answer picks, and which AD
-     belongs to which source, are graded by pairing (subject~term): "RIP is
-     chosen over OSPF" or "OSPF 120, RIP 110" score nothing for OSPF. Every
+  /* Key words: exam-keys.js. Which source the answer picks is graded by
+     pairing (subject~term): "RIP is chosen over OSPF" scores nothing for
+     OSPF. AD numbers are not graded (owner's call); the model shows them. Every
      name a learner might use (KW_NAME) is a subject, the loser's included,
      which is what lets a sentence naming both be read the right way round.
      The loser named as the choice vetoes the key word ("RIP is chosen. OSPF
@@ -577,16 +577,16 @@ card({id:'q1b-adpair', area:'routing', tier:1, kind:'flash', src:'Q1 b', title:'
   const met=[a,b].filter(k=>k!=='static').map(k=>METRIC_NAME[k]);
   const units='[[different units]]';
   return {
-    prompt:'If a router has a choice between two routes to a destination, one provided by '+src(a)+' and the other by '+src(b)+', which one will the router choose? Explain why: name the value the router compares, give it for both sources, and say what that value represents. Do the two routes\' metrics play any part? Why or why not?',
+    prompt:'If a router has a choice between two routes to a destination, one provided by '+src(a)+' and the other by '+src(b)+', which one will the router choose? Explain why: name the value the router compares and say what it represents. Do the two routes\' metrics play any part? Why or why not?',
     points: [
-      '<b>Here:</b> [[the {nmW} route is chosen]]. The router compares the [[administrative distance]] of the two sources and the lower one wins: [[{WN} {Wad}]] against [[{LN} {Lad}]].',
+      '<b>Here:</b> [[the {nmW} route is chosen]]. The router compares the [[administrative distance]] of the two sources and the lower one wins: '+PROTO[W].name+' ('+PROTO[W].ad+') is lower than '+PROTO[L].name+' ('+PROTO[L].ad+').',
       'AD represents how [[trustworthy]] the source of a route is &mdash; the lower the number, the more it is trusted. When two sources offer the same prefix, only the one with the lowest AD is installed in the routing table.',
       met.length===2
         ? 'The metrics play no part: '+met[0]+' and '+met[1]+' are measured in '+units+', so they can\'t be compared across sources. A metric only chooses between routes from the same source.'
         : 'The metrics play no part: a static route has no metric (0) to set against '+met[0]+', and metrics from different sources are in '+units+' anyway, so they are never compared.',
       'The '+nm(L)+' route is kept in reserve and installed only if the '+nm(W)+' route disappears.',
     ],
-    vars:{nmW:nm(W), Wn:KW_NAME[W].split('|'), Ln:KW_NAME[L].split('|'), WN:PROTO[W].name, LN:PROTO[L].name, Wad:PROTO[W].ad, Lad:PROTO[L].ad,
+    vars:{nmW:nm(W), Wn:KW_NAME[W].split('|'), Ln:KW_NAME[L].split('|'), WN:PROTO[W].name, LN:PROTO[L].name,
       NM:W==='static'||L==='static'?'{NOMETRIC}':null},
   };
 }});
@@ -654,22 +654,18 @@ card({id:'q1d-floating', area:'routing', tier:1, kind:'flash', src:'Q1 d', title
       'e.g. primary learned by '+N+' (AD '+ad+'): '+cmd+' &mdash; any AD from '+(ad+1)+' to 254 works (255 means "never install").',
     ],
   };
-  /* The scenario names the primary's protocol, so its answer is a number:
-     any AD from ad+1 to 254. "#N" matches that number standing on its own,
-     so a typed command's trailing AD or "set it to 150" counts but an
-     octet of an address in the same answer never does. Each number is
-     paired with the route it belongs to (exam-keys.js), so "OSPF is 150 and
-     the static route is 110" scores neither. */
-  const V=[]; for(let v=ad+1;v<255;v++) V.push(v);
+  /* No AD number is graded (owner: the exam doesn't need them memorised).
+     The scenario's key words are the name, giving the static route a higher
+     AD than the protocol's, and the lowest-AD rule; the numbers stay in the
+     model as plain text. */
   const site=pick(['head office','data centre','main site']), r='R'+ri(1,3);
   return {
-    prompt: r+' learns the route to its '+site+' through '+N+'. You add a static route over a backup link that should be used only if the '+N+' route is lost. What is this kind of route called? State the AD of the '+N+' route and an AD you would give the static route, and explain why that stops the static route replacing the '+N+' route.',
+    prompt: r+' learns the route to its '+site+' through '+N+'. You add a static route over a backup link that should be used only if the '+N+' route is lost. What is this kind of route called? How do you set up the static route so that it stays out of the routing table while the '+N+' route exists, and why does that work?',
     points: [
-      '<b>Here:</b> it is a [[floating static route]]. The primary route has an [[{N} AD of {ad}]], so give the static route a higher one: a [[static AD of {eg}]] or anything from '+(ad+1)+' to 254, e.g. '+cmd+'.',
-      '<b>Why:</b> of two routes to the same network the router installs the one with the '+lowest+' AD. '+N+'\'s '+ad+' beats the static route while the '+N+' route exists, so the static stays out of the routing table and is installed only if that route is lost &mdash; that is what makes it "float".',
-      'Left at a static route\'s default AD of 1 it would beat '+N+'\'s '+ad+' and replace the '+N+' route at once. 255 means "never install", so it is no use here.',
+      '<b>Here:</b> it is a [[floating static route]]. Give the static route a '+higher+' than the '+N+' route&rsquo;s, at the end of the <span class="mono-inl">ip route</span> command &mdash; e.g. '+N+' is '+ad+', so '+cmd+' (anything from '+(ad+1)+' to 254 works).',
+      '<b>Why:</b> of two routes to the same network the router installs the one with the '+lowest+' AD. '+N+'\'s lower AD beats the static route while the '+N+' route exists, so the static stays out of the routing table and is installed only if that route is lost &mdash; that is what makes it "float".',
+      'Left at a static route\'s default AD it would beat '+N+' and replace the '+N+' route at once. 255 means "never install", so it is no use here.',
     ],
-    vars:{N, ad, eg, V},
   };
 }});
 
@@ -693,7 +689,7 @@ card({id:'g1-adpick', area:'routing', tier:1, kind:'graded', src:'Q1 b', title:'
   const ans=[rows.indexOf(win)];
   return {
     prompt:'R1 has learned <b>'+cidr(net,24)+'</b> from '+n+' sources. Which route does R1 install in its routing table?',
-    body: pickTable(['Source','Next hop','Metric'], rows.map(r=>[PROTO[r.k].name, r.nh, String(r.m)])),
+    body: pickTable(['Source','AD','Next hop','Metric'], rows.map(r=>[PROTO[r.k].name, String(PROTO[r.k].ad), r.nh, String(r.m)])),
     pick:{multi:false},
     grade(){
       const ok=sameSet(ans,Q.sel); markPicks(ans);
@@ -725,7 +721,7 @@ card({id:'g1-admetric', area:'routing', tier:2, kind:'graded', src:'Q1 c', title
   const ans=sh.map((r,i)=>r.k===W&&r.m===best?i:-1).filter(i=>i>=0);
   return {
     prompt:'R1 has these candidate routes to <b>'+cidr(netOf(net,pfx),pfx)+'</b>. Select <b>every</b> route R1 installs in its routing table &mdash; it may be one or more.',
-    body: pickTable(['Source','Next hop','Metric'], sh.map(r=>[PROTO[r.k].name, r.nh, String(r.m)])),
+    body: pickTable(['Source','AD','Next hop','Metric'], sh.map(r=>[PROTO[r.k].name, String(PROTO[r.k].ad), r.nh, String(r.m)])),
     pick:{multi:true},
     grade(){
       const ok=sameSet(ans,Q.sel); markPicks(ans);
@@ -777,7 +773,7 @@ card({id:'g1-lpm', area:'routing', tier:3, kind:'graded', src:'Q1 c', title:'Lon
   const ans=[sh.indexOf(win)];
   return {
     prompt:'R1 has learned the routes below. A packet arrives for <b>'+int2ip(dest)+'</b>. Which route does R1 use to forward it?',
-    body: pickTable(['Source','Network','Next hop'], sh.map(r=>[PROTO[r.k].name, cidr(r.net,r.p), r.nh])),
+    body: pickTable(['Source','AD','Network','Next hop'], sh.map(r=>[PROTO[r.k].name, String(PROTO[r.k].ad), cidr(r.net,r.p), r.nh])),
     pick:{multi:false},
     grade(){
       const ok=sameSet(ans,Q.sel); markPicks(ans);
@@ -811,7 +807,7 @@ card({id:'g1-float', area:'routing', tier:2, kind:'graded', src:'Q1 d', title:'W
   const net=dflt?0:netOf((rNet24()+ri(0,255))>>>0,pfx);
   const l1=rLink30(), l2=rLink30(), nh1=l1+2, nh2=l2+2;
   const what=dflt?'its <b>default route</b> to the ISP':'<b>'+cidr(net,pfx)+'</b>';
-  const how=prim==='static'?'a static route via '+int2ip(nh1):PROTO[prim].name+' (via '+int2ip(nh1)+')';
+  const how=prim==='static'?'a static route via '+int2ip(nh1)+' (AD 1)':PROTO[prim].name+' (via '+int2ip(nh1)+', AD '+A+')';
   const goodAd=Math.min(254,A+(A<10?4:10));
   const model='ip route '+int2ip(net)+' '+maskStr(pfx)+' '+int2ip(nh2)+' '+goodAd;
   return {
