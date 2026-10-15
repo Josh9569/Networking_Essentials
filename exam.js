@@ -2721,7 +2721,7 @@ function q6Config(P,fault){
   return {r1, s1};
 }
 function q6Topo(P){
-  return '<svg class="ex-topo ex-q6fig" viewBox="0 0 260 250" role="img" aria-label="R1 trunked to S1, H1 and H2 below">'+
+  return '<svg class="ex-topo ex-q6fig" viewBox="0 0 260 264" role="img" aria-label="R1 trunked to S1, H1 and H2 below">'+
     '<path class="ln" d="M130 52 V104 M110 134 L70 186 M150 134 L190 186"/>'+
     '<rect class="rt" x="90" y="10" width="80" height="42" rx="10"/><text class="rt-name" x="130" y="36" text-anchor="middle">R1</text>'+
     '<rect class="rt" x="90" y="104" width="80" height="30" rx="6"/><text class="rt-name" x="130" y="124" text-anchor="middle">S1</text>'+
@@ -2729,31 +2729,66 @@ function q6Topo(P){
     '<text class="t-sub" x="80" y="160" text-anchor="end">Fa0/1</text><text class="t-sub" x="180" y="160">Fa0/2</text>'+
     '<rect class="rt" x="40" y="186" width="60" height="28" rx="6"/><text class="rt-name" x="70" y="205" text-anchor="middle">H1</text>'+
     '<rect class="rt" x="160" y="186" width="60" height="28" rx="6"/><text class="rt-name" x="190" y="205" text-anchor="middle">H2</text>'+
-    '<text x="70" y="234" text-anchor="middle">VLAN '+P.x+'</text><text x="190" y="234" text-anchor="middle">VLAN '+P.y+'</text></svg>';
+    '<text x="70" y="234" text-anchor="middle">VLAN '+P.x+'</text><text x="190" y="234" text-anchor="middle">VLAN '+P.y+'</text>'+
+    '<text class="t-sub" x="70" y="252" text-anchor="middle">192.168.'+P.x+'.'+P.h1+'</text><text class="t-sub" x="190" y="252" text-anchor="middle">192.168.'+P.y+'.'+P.h2+'</text></svg>';
 }
 function q6Body(P,cfg,hosts){
   return '<div class="ex-q6"><div class="ex-topo-wrap">'+q6Topo(P)+'</div><div>'+cliHtml(cfg.r1.join('\n'))+cliHtml(cfg.s1.join('\n'))+'</div></div>'+
     (hosts?'<div class="ex-scroll"><table class="rt-table ex-table"><thead><tr><th>Host</th><th>VLAN</th><th>Address</th><th>Gateway</th></tr></thead><tbody>'+
       '<tr><td>H1</td><td>'+P.x+'</td><td>192.168.'+P.x+'.'+P.h1+'/24</td><td>192.168.'+P.x+'.1</td></tr>'+
-      '<tr><td>H2</td><td>'+P.y+'</td><td>192.168.'+P.y+'.'+P.h2+'/24</td><td>192.168.'+P.y+'.1</td></tr></tbody></table></div>':'');
+      '<tr><td>H2</td><td>'+P.y+'</td><td>192.168.'+P.y+'.'+P.h2+'/24</td><td>'+(P.gw2||'192.168.'+P.y+'.1')+'</td></tr></tbody></table></div>':'');
 }
 
 card({id:'q6-roas', area:'ts', tier:1, kind:'flash', src:'Q6', title:'Router-on-a-stick: what\'s wrong?', gen(){
-  const P=chance(.6)?{x:10,y:20,h1:10,h2:10}:q6Plan();
-  /* Key words: exam-keys.js. "Fa0/1 goes in VLAN x" is graded by fixed-order phrases, never by subject
-     pairing, so an answer that swaps the two ports' VLANs scores neither:
-     "switchport access vlan <y> on fa0/1 and ... <x> on fa0/2" contains no
-     phrase that joins fa0/2 to <y> or fa0/1 to <x> the wrong way round. */
+  /* One fault per draw, from the same planted configurations as the graded
+     g6-fault cards, plus a wrong default gateway on H2 (owner: the answer
+     should rotate). The figure shows each host's address and the table its
+     gateway, so a correct host is visibly correct. Key words: exam-keys.js. */
+  const P=chance(.4)?{x:10,y:20,h1:10,h2:10}:q6Plan();
+  const fault=pick(['access','trunk','shut','tag','ip','swap','hgw']);
+  const cfg=q6Config(P,fault==='hgw'?'none':fault);
+  const tags=cfg.r1.map(l=>/encapsulation dot1q (\d+)/.exec(l)).filter(Boolean), z=tags.length>1?+tags[1][1]:P.y;
+  const bad=fault==='hgw'?'192.168.'+P.y+'.'+pick([254,100,2].filter(v=>v!==P.h2)):null;
+  if(bad) P.gw2=bad;
+  const gw1='192.168.'+P.x+'.1', gw2='192.168.'+P.y+'.1', w=P.y+1;
+  const sub='Gi0/0.'+P.y;
+  const reach='[[can\'t reach its gateway]]';
+  const pts={
+    access:[
+      '<b>Here:</b> S1 makes Fa0/1 (H1) and Fa0/2 (H2) access ports but never assigns them a VLAN, so both stay in the [[default VLAN 1]] instead of VLAN '+P.x+' and VLAN '+P.y+'.',
+      'Why it breaks: their frames cross the trunk untagged (VLAN 1), but R1 only has subinterfaces for VLANs '+P.x+' and '+P.y+' &mdash; [[no subinterface for VLAN 1]] &mdash; so neither host can reach its default gateway. H1 and H2 are in different subnets, so they need R1 to talk.',
+      'Fix on S1: put [[Fa0/1 in VLAN {x}]] and [[Fa0/2 in VLAN {y}]] with [[switchport access vlan]] under each interface.',
+      'e.g. '+mono('interface fa0/1')+' '+mono('switchport access vlan '+P.x)+', then '+mono('interface fa0/2')+' '+mono('switchport access vlan '+P.y)+' (and '+mono('vlan '+P.x)+' / '+mono('vlan '+P.y)+' if the VLANs don\'t exist yet).'],
+    trunk:[
+      '<b>Here:</b> S1 Gi0/1, the link to R1, is set to '+mono('switchport mode access')+': [[Gi0/1 is not a trunk]].',
+      'An access port [[only carries one VLAN]] (VLAN 1, untagged), so the VLAN '+P.x+' and '+P.y+' frames never reach R1&rsquo;s subinterfaces and neither host '+reach+'. H1 and H2 are in different subnets, so they need R1 to talk.',
+      'Fix on S1: '+mono('interface gi0/1')+' then [[switchport mode trunk]].'],
+    shut:[
+      '<b>Here:</b> R1&rsquo;s configuration never enables Gi0/0 &mdash; there is no '+mono('no shutdown')+' under it, so [[Gi0/0 is shut down]].',
+      'Router interfaces start shut down, and the [[subinterfaces go down with it]] (Gi0/0.'+P.x+' and Gi0/0.'+P.y+'), so neither host '+reach+' and nothing is routed between the VLANs.',
+      'Fix on R1: '+mono('interface gi0/0')+' then [[no shutdown]].'],
+    tag:[
+      '<b>Here:</b> R1 '+sub+' has '+mono('encapsulation dot1q '+z)+': [[the subinterface tags the wrong VLAN]] &mdash; it should be VLAN '+P.y+'.',
+      'It only sends and accepts VLAN '+z+' frames, so H2 (VLAN '+P.y+') '+reach+' ('+gw2+'), and H1 can\'t reach H2 through R1.',
+      'Fix on R1: '+mono('interface gi0/0.'+P.y)+' then [[encapsulation dot1q {y}]].'],
+    ip:[
+      '<b>Here:</b> R1 '+sub+' has '+mono('ip address 192.168.'+w+'.1')+': [[the subinterface is in the wrong subnet]] &mdash; it should be 192.168.'+P.y+'.1.',
+      'H2&rsquo;s gateway '+gw2+' doesn\'t exist, so H2 '+reach+', and R1 has no interface in 192.168.'+P.y+'.0/24 to route H1\'s traffic to H2.',
+      'Fix on R1: '+mono('interface gi0/0.'+P.y)+' then [[ip address 192.168.{y}.1 255.255.255.0]].'],
+    swap:[
+      '<b>Here:</b> S1 has [[the ports in each other\'s VLANs]]: Fa0/1 (H1) is in VLAN '+P.y+' and Fa0/2 (H2) is in VLAN '+P.x+'.',
+      'H1 is addressed for VLAN '+P.x+' and H2 for VLAN '+P.y+', so in the wrong VLAN each host '+reach+' &mdash; its gateway is on the other subinterface.',
+      'Fix on S1: '+mono('interface fa0/1')+' [[switchport access vlan {x}#s1]], then '+mono('interface fa0/2')+' [[switchport access vlan {y}#s2]].'],
+    hgw:[
+      '<b>Here:</b> the switch and router are correct, but [[H2\'s default gateway is wrong]]: it is set to '+bad+' instead of R1&rsquo;s '+gw2+'.',
+      'H1 and H2 are in different subnets, so H2 sends its replies to the gateway, and [[there is no router at {bad}]] &mdash; they go nowhere. H1 can reach R1, but H2 can\'t answer.',
+      'Fix on H2: [[set the default gateway to 192.168.{y}.1]].'],
+  }[fault];
   return {
     prompt:'In the figure, host H1 cannot communicate with host H2. Clearly identify, describe and explain the cause of the problem. What modifications do you need to make to fix it?',
-    body: q6Body(P,q6Config(P,'access'),false),
-    points: [
-      '<b>Here:</b> S1 makes Fa0/1 (H1) and Fa0/2 (H2) access ports but never assigns them a VLAN, so both stay in the [[default VLAN 1]] instead of VLAN '+P.x+' and VLAN '+P.y+'.',
-      'Why it breaks: their frames cross the trunk untagged (VLAN 1), but R1 only has subinterfaces for VLANs '+P.x+' and '+P.y+' &mdash; [[no subinterface for VLAN 1]] &mdash; so neither host can reach its default gateway. H1 and H2 are in different subnets, so they need the router.',
-      'Fix on S1: put [[Fa0/1 in VLAN {x}]] and [[Fa0/2 in VLAN {y}]] with [[switchport access vlan]] under each interface.',
-      'e.g. '+mono('interface fa0/1')+' '+mono('switchport access vlan '+P.x)+', then '+mono('interface fa0/2')+' '+mono('switchport access vlan '+P.y)+' (and '+mono('vlan '+P.x)+' / '+mono('vlan '+P.y)+' if the VLANs don\'t exist yet).',
-    ],
-    vars:{x:P.x, y:P.y},
+    body: q6Body(P,cfg,true),
+    points: pts,
+    vars:{x:P.x, y:P.y, z, w, bad:bad||'', sub},
   };
 }});
 

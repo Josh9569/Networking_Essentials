@@ -1626,6 +1626,7 @@ const EXAM_KEYS={
     "AV": ["VLAN ", ""],
   },
   "Fa0/1 in VLAN {x}": [
+    "<access vlan {x}..access vlan {y}", "<vlan {x} to..vlan {y} to",
     "{AP} {x} and {AV}{y}",
     "{PS1} {LINK} VLAN {x}", "{PS1} {LINK} vlan{x}", "{PS1} switchport access vlan {x}",
     "{PS1} vlan {x}", "VLAN {x} on {PS1}", "VLAN {x} for {PS1}", "VLAN {x} to {PS1}",
@@ -1634,6 +1635,7 @@ const EXAM_KEYS={
     "!{PS1} switchport access vlan {y}"
   ],
   "Fa0/2 in VLAN {y}": [
+    "<access vlan {x}..access vlan {y}", "<vlan {x} to..vlan {y} to",
     "{AP} {x} and {AV}{y}",
     "{PS2} {LINK} VLAN {y}", "{PS2} {LINK} vlan{y}", "{PS2} switchport access vlan {y}",
     "{PS2} vlan {y}", "VLAN {y} on {PS2}", "VLAN {y} for {PS2}", "VLAN {y} to {PS2}",
@@ -1656,6 +1658,81 @@ const EXAM_KEYS={
     "no interface for VLAN 1", "no gateway for VLAN 1", "no router interface for VLAN 1",
     "VLAN 1 is not configured on the router", "VLAN 1 isn't configured on the router",
     "doesn't know about VLAN 1", "does not know about VLAN 1"
+  ],
+  "can't reach its gateway": [
+    "can t reach its gateway", "cannot reach its gateway", "can not reach its gateway", "can t reach the gateway",
+    "cannot reach the gateway", "can t reach their gateway", "cannot reach their gateway", "can t reach the default gateway",
+    "cannot reach the default gateway", "can t get to the gateway", "can t get to its gateway", "no way to reach the gateway",
+    "gateway is unreachable", "gateway unreachable", "can t reach R1", "cannot reach R1", "can t reach the router",
+    "cannot reach the router", "never reach R1", "never reaches R1", "never reach the router", "don t reach R1",
+    "doesn t reach R1", "can t be routed", "cannot be routed", "can t route", "cannot route", "isn t routed", "not routed"
+  ],
+  "Gi0/1 is not a trunk": [
+    "not a trunk", "isn t a trunk", "is not a trunk", "not trunking", "isn t trunking", "not set to trunk",
+    "not set as a trunk", "not in trunk mode", "should be a trunk", "needs to be a trunk", "should be trunk",
+    "should be trunked", "needs to be trunked", "no trunk", "trunk is missing", "missing trunk", "missing the trunk",
+    "is an access port", "set to access", "set as access", "mode access on gi0/1", "gi0/1 is access",
+    "gi0/1 is in access mode", "access instead of trunk", "access mode instead of trunk"
+  ],
+  "only carries one VLAN": [
+    "one VLAN", "single VLAN", "only VLAN 1", "only carries VLAN 1", "untagged", "doesn t carry", "can t carry",
+    "won t carry", "does not carry", "cannot carry", "only one vlan", "tags are dropped", "tagged frames",
+    "drops the tags", "drops tagged", "can t pass", "won t pass", "doesn t pass", "only passes"
+  ],
+  "switchport mode trunk": ["mode trunk", "make it a trunk", "set it to trunk", "change it to trunk", "trunk mode", "set gi0/1 to trunk"],
+  "Gi0/0 is shut down": [
+    "shut down", "shutdown", "is shut", "is down", "administratively down", "admin down", "not enabled",
+    "never enabled", "isn t enabled", "never brought up", "not brought up", "no no shutdown", "missing no shutdown",
+    "missing the no shutdown", "forgot no shutdown", "disabled", "turned off", "not turned on", "never turned on"
+  ],
+  "subinterfaces go down with it": [
+    "subinterfaces are down", "subinterfaces go down", "subinterfaces down", "subinterfaces stay down",
+    "sub-interfaces are down", "sub interfaces are down", "subinterfaces can t come up", "subinterfaces won t come up",
+    "subinterfaces don t work", "subinterfaces won t work", "subinterfaces are also down", "subinterfaces depend",
+    "subinterfaces need", "subinterfaces rely", "all the subinterfaces", "both subinterfaces"
+  ],
+  "no shutdown": ["no shut", "bring it up", "enable gi0/0", "enable the interface", "turn it on"],
+  "the subinterface tags the wrong VLAN": [
+    "dot1q {z}", "encapsulation dot1q {z}", "wrong tag", "wrong vlan tag", "wrong encapsulation", "wrong dot1q",
+    "tagged {z}", "tags {z}", "tags vlan {z}", "vlan {z} instead of", "{z} instead of {y}", "tag should be {y}",
+    "should be dot1q {y}", "wrong vlan number", "mismatched vlan", "vlan mismatch", "encapsulation is wrong",
+    "encapsulation is incorrect", "wrong vlan on the subinterface", "subinterface has the wrong vlan"
+  ],
+  "encapsulation dot1q {y}": ["dot1q {y}", "encapsulation dot1q {y}", "encapsulation dot1Q {y}", "change the tag to {y}", "tag {y}"],
+  "the subinterface is in the wrong subnet": [
+    "wrong subnet", "wrong ip", "wrong ip address", "wrong address", "192.168.{w}.1", "{w}.1", "different subnet",
+    "wrong network", "should be 192.168.{y}.1", "incorrect ip", "incorrect address", "ip is wrong", "address is wrong",
+    "ip address is wrong", "ip address is incorrect", "not in 192.168.{y}"
+  ],
+  "ip address 192.168.{y}.1 255.255.255.0": [
+    "ip address 192.168.{y}.1", "192.168.{y}.1 255.255.255.0", "change the ip to 192.168.{y}.1",
+    "change it to 192.168.{y}.1", "set it to 192.168.{y}.1", "readdress", "re-address"
+  ],
+  "the ports in each other's VLANs": [
+    "swapped", "switched around", "swapped around", "the wrong way round", "the wrong way around", "wrong way round",
+    "wrong way around", "each other s VLAN", "each other s VLANs", "each others VLAN", "each others VLANs", "reversed",
+    "mixed up", "back to front", "the other way round", "the other way around", "fa0/1 is in vlan {y}",
+    "fa0/2 is in vlan {x}", "h1 is in vlan {y}", "h2 is in vlan {x}", "wrong vlans", "in the wrong vlan",
+    "opposite vlans", "opposite vlan"
+  ],
+  "switchport access vlan {x}#s1": ["access vlan {x}", "fa0/1 to vlan {x}", "fa0/1 in vlan {x}", "h1 in vlan {x}", "h1 to vlan {x}", "fa0/1 into vlan {x}"],
+  "switchport access vlan {y}#s2": ["access vlan {y}", "fa0/2 to vlan {y}", "fa0/2 in vlan {y}", "h2 in vlan {y}", "h2 to vlan {y}", "fa0/2 into vlan {y}"],
+  "H2's default gateway is wrong": [
+    "wrong gateway", "wrong default gateway", "gateway is wrong", "gateway is incorrect", "incorrect gateway",
+    "incorrect default gateway", "gateway should be", "gateway is {bad}", "gateway of {bad}", "gateway set to {bad}",
+    "{bad}", "default gateway is wrong", "default gateway is incorrect", "bad gateway", "wrong default-gateway",
+    "gateway is set wrong", "gateway isn t", "gateway is not"
+  ],
+  "there is no router at {bad}": [
+    "not a router", "isn t a router", "is not a router", "no router", "doesn t exist", "does not exist",
+    "nothing at", "not R1", "isn t R1", "no device", "nobody", "no one", "goes nowhere", "go nowhere",
+    "isn t the router", "is not the router", "wrong place", "never reach R1", "never reaches R1",
+    "can t reach R1", "cannot reach R1", "can t reach the router", "can t send", "can t reply", "cannot reply"
+  ],
+  "set the default gateway to 192.168.{y}.1": [
+    "gateway to 192.168.{y}.1", "gateway 192.168.{y}.1", "192.168.{y}.1", "gateway should be 192.168.{y}.1",
+    "change the gateway", "change the default gateway", "set the gateway", "set the default gateway",
+    "fix the gateway", "correct the gateway", "update the gateway"
   ],
   "switchport access vlan": [
     "access vlan", "switchport access", "assign the VLAN", "assign VLANs", "assign the ports",
