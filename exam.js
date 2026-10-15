@@ -839,7 +839,7 @@ card({id:'g1-float', area:'routing', tier:2, kind:'graded', src:'Q1 d', title:'W
 /* ═══ Q1 — RIP (the exam brief lists it under Routing) ═══════════════════ */
 card({id:'q1e-ripv2', area:'routing', tier:1, kind:'flash', src:'Q1', title:'RIPv1 vs RIPv2', gen(){
   if(chance(0.5)) return {
-    prompt: 'Compare RIPv1 and RIPv2. Explain which of them is classful and which is classless (what their updates carry about the subnet mask), how each one sends its updates, and which one can authenticate them. Then say which metric both use, and which default behaviour at classful boundaries both start with but only RIPv2 can switch off.',
+    prompt: 'Compare RIPv1 and RIPv2: explain their differences and what they have in common.',
     points: [
       '<b>Masks:</b> [[RIPv1 classful and RIPv2 classless]]: RIPv1\'s updates carry no subnet mask, so it can\'t handle VLSM or discontiguous networks, while every RIPv2 route is sent with its mask.',
       '<b>Updates:</b> [[RIPv1 broadcasts and RIPv2 multicasts]]: v1 sends to 255.255.255.255, v2 to 224.0.0.9, so hosts that don\'t run RIP aren\'t disturbed.',
