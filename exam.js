@@ -1245,7 +1245,7 @@ card({id:'q2c-multiarea', area:'ospf', tier:1, kind:'flash', src:'Q2 c', title:'
     'Result: smaller LSDBs, fewer SPF runs, less flooding, faster convergence, and problems contained within one area.',
   ];
   if(Math.random()<0.5) return {
-    prompt: 'How does multi-area OSPF overcome the problems with single area operation? Explain what goes wrong in one large area, describe how a multi-area design is laid out, and explain how it reduces the load, including where changes are flooded and what happens to the routing tables and why.',
+    prompt: 'How does multi-area OSPF overcome the problems with single area operation? Explain what goes wrong in one large area, describe how a multi-area design is laid out, and explain how it reduces the load.',
     points: ['<b>Single-area problems:</b> every router holds the whole topology, so the '+LSDB+' and routing table get large; every change '+FLOOD+' to every router and makes all of them re-run '+SPF+' &mdash; heavy CPU, memory and bandwidth use.'].concat(how),
   };
   /* A scenario: the model's first point says what is wrong with THIS network
@@ -1259,7 +1259,7 @@ card({id:'q2c-multiarea', area:'ospf', tier:1, kind:'flash', src:'Q2 c', title:'
      here:'the memory goes on the '+LSDB+': every one of the '+n+' routers stores the whole topology, plus a full routing table. On top of that, any change '+FLOOD+' to all '+n+' and makes each of them re-run '+SPF+'.'},
   ]);
   return {
-    prompt: 'A single-area OSPF network has grown to '+n+' routers and '+sym.s+'. Explain what in one big area is causing this, then describe how a multi-area design would be laid out and how splitting it reduces the load, including where changes are flooded and what happens to the routing tables and why.',
+    prompt: 'A single-area OSPF network has grown to '+n+' routers and '+sym.s+'. Explain what in one big area is causing this, then describe how a multi-area design would be laid out and how splitting it reduces the load.',
     points: ['<b>Here:</b> '+sym.here].concat(how),
   };
 }});
@@ -1269,7 +1269,7 @@ card({id:'q2d-timers', area:'ospf', tier:1, kind:'flash', src:'Q2 d', title:'Hel
   const FLAP='[[flapping]]';
   if(Math.random()<0.5){
     return {
-      prompt:'Why would you change the OSPF hello or dead timers? Give the benefit and two downsides of lowering them and the reason for raising them (and on what kind of link), say what must be true of the timers on two neighbouring routers, and say what happens to the dead timer when only the hello timer is changed.',
+      prompt:'Why would you change the OSPF hello or dead timers? Give the benefit and two downsides of lowering them and the reason for raising them, say what must be true of the timers on two neighbouring routers, and say what happens to the dead timer when only the hello timer is changed.',
       points:[
         'Hellos discover neighbours and keep adjacencies alive. Defaults: hello 10 s and dead 40 s on Ethernet and point-to-point links (30/120 on NBMA). The dead interval is how long without a hello before the neighbour is declared down.',
         '<b>Lower them</b> to [[detect a failure]] [[faster]].',
@@ -3162,7 +3162,7 @@ function q6tsPoints(s){
 card({id:'q6-ts', area:'ts', tier:2, kind:'flash', src:'Q6', title:'Troubleshoot it in writing', gen(){
   const s=tsBuild(pick(Object.keys(TS_SCEN)));
   return {
-    prompt:s.symptom+' Identify the cause (which device, and which interface or line, is wrong), explain why it produces exactly this symptom, and give the commands that fix it.',
+    prompt:s.symptom+' Identify the cause, explain why it produces exactly this symptom, and give the commands that fix it.',
     body:s.body, points:q6tsPoints(s),
   };
 }});
