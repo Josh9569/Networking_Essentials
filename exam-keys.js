@@ -1103,7 +1103,11 @@ const EXAM_KEYS={
     "detect", "detection", "reconverge", "converge", "convergence", "failover", "notice", "notices",
     "noticed", "spot", "spots", "spotted", "find out", "finds out", "found out", "find a dead",
     "finds a dead", "realise", "realises", "realised", "discover", "discovers", "discovered", "react",
-    "reacts", "recover", "recovers", "declared down", "declare it down"
+    "reacts", "recover", "recovers", "declared down", "declare it down", "identify", "identifies",
+    "identified", "tell when", "tells when", "know when", "knows when", "neighbour goes down",
+    "neighbor goes down", "neighbour went down", "neighbour is down", "neighbor is down", "neighbour dies",
+    "neighbour has failed", "neighbour fails", "neighbor fails", "router goes down", "link goes down",
+    "link is down", "when it goes down"
   ],
   "faster": ["quicker", "quickly", "sooner", "speed", "speeds"],
   "slow links": [
