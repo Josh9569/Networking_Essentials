@@ -1026,6 +1026,15 @@ function ridIfaces(nPhys,nLoop){
   const loops=Array.from({length:nLoop},(_,i)=>({name:'Loopback'+i, ip:fresh(()=>ip2int(pick(['1.1.1.','2.2.2.','10.10.10.','172.16.'+ri(0,9)+'.','192.168.'+ri(0,9)+'.','100.'+ri(1,99)+'.'+ri(0,9)+'.'])+ri(1,254))), up:true, loop:true}));
   return phys.concat(loops);
 }
+/* Shut the highest-addressed interface of the kind given (owner: an interface
+   that is down but has the highest address should come up on every tier,
+   not only the Hard traps). Returns it, or null when it would leave none of
+   that kind up. */
+function ridShutTop(ifs,loop){
+  const set=ifs.filter(f=>!!f.loop===loop&&f.up); if(set.length<2) return null;
+  const top=set.reduce((x,f)=>f.ip>x.ip?f:x); top.up=false; return top;
+}
+function ridDownNote(f,loop){ return f.name+' has the highest '+(loop?'loopback ':'')+'address but is administratively down, so it can\'t be the router ID.'; }
 function ridBrief(ifs){
   const rows=['Interface              IP-Address      OK? Method Status                Protocol'];
   ifs.forEach(f=>{
@@ -1056,20 +1065,25 @@ function ridCard(id,tier,title,build){
 }
 ridCard('g2-rid-basic',1,'Work out the router ID',()=>{
   const ifs=ridIfaces(ri(3,4),0), cfg=chance(.35)?ip2int(ri(1,9)+'.'+ri(1,9)+'.'+ri(1,9)+'.'+ri(1,9)):null;
+  const down=cfg==null&&chance(.35)?ridShutTop(ifs,false):null;
   const a=ridAuto(ifs);
   return {
     body: cliHtml(ridBrief(ifs),'R1# show ip interface brief')+cliHtml('router ospf 1\n'+(cfg!=null?' router-id '+int2ip(cfg)+'\n':'')+' network 0.0.0.0 255.255.255.255 area 0','R1# show running-config | section router ospf'),
     rid: cfg!=null?cfg:a.f.ip,
     why: cfg!=null?['A '+mono('router-id')+' command always wins: '+int2ip(cfg)+'. The interface addresses are never looked at.']:
-      ['There is '+a.why+': '+a.f.name+' ('+int2ip(a.f.ip)+').','"Highest" means numerically, octet by octet &mdash; not alphabetically.'],
+      ['There is '+a.why+': '+a.f.name+' ('+int2ip(a.f.ip)+').'].concat(down?[ridDownNote(down,false)]:[],['"Highest" means numerically, octet by octet &mdash; not alphabetically.']),
   };
 });
 ridCard('g2-rid-loop',2,'Router ID with loopbacks',()=>{
   const ifs=ridIfaces(ri(2,3),ri(1,2)), cfg=chance(.25)?ip2int(ri(1,9)+'.'+ri(1,9)+'.'+ri(1,9)+'.'+ri(1,9)):null;
-  const a=ridAuto(ifs), hiPhys=ifs.filter(f=>!f.loop).reduce((x,f)=>f.ip>x.ip?f:x);
+  /* a down loopback (when there is another to take over) or a down physical interface as a distractor */
+  const downL=cfg==null&&chance(.3)?ridShutTop(ifs,true):null, downP=cfg==null&&!downL&&chance(.3)?ridShutTop(ifs,false):null;
+  const a=ridAuto(ifs), hiPhys=ifs.filter(f=>!f.loop&&f.up).reduce((x,f)=>f.ip>x.ip?f:x);
   const why=cfg!=null?['A '+mono('router-id')+' command beats loopbacks and physical interfaces alike: '+int2ip(cfg)+'.']:
     ['There is '+a.why+': '+a.f.name+' ('+int2ip(a.f.ip)+').'];
+  if(downL) why.push(ridDownNote(downL,true));
   if(cfg==null&&hiPhys.ip>a.f.ip) why.push(hiPhys.name+' has a higher address ('+int2ip(hiPhys.ip)+') but a loopback beats any physical interface.');
+  if(downP) why.push(downP.name+' is administratively down, so it is out of the running anyway.');
   return {
     body: cliHtml(ridBrief(ifs),'R1# show ip interface brief')+cliHtml('router ospf 1\n'+(cfg!=null?' router-id '+int2ip(cfg)+'\n':'')+' network 0.0.0.0 255.255.255.255 area 0','R1# show running-config | section router ospf'),
     rid: cfg!=null?cfg:a.f.ip, why,
