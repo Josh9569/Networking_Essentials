@@ -1057,7 +1057,9 @@ const EXAM_KEYS={
     "that one area", "its own area", "own area", "limited to that area", "limited to that one area",
     "only routers in that area", "only routers in the area", "only the routers in that area",
     "only flooded inside", "only flooded within", "only affects that area", "only affects the area",
-    "doesn t leave the area", "does not leave the area", "never leaves the area", "kept local"
+    "doesn t leave the area", "does not leave the area", "never leaves the area", "kept local",
+    "what is in their area", "what is in its area", "in their own area", "within their area",
+    "within its area", "only their area", "only its area", "only their own area"
   ],
   "summarise": ["summary", "summarisation", "summarization", "summarize", "aggregate"],
   "smaller routing tables": [
