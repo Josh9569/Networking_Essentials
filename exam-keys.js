@@ -702,6 +702,22 @@ const EXAM_KEYS={
     "sixteen~forever", "sixteen~dead", "sixteen~removed", "sixteen~infinite"
   ],
   "hop count": ["hop counts", "hops", "number of routers"],
+  "sends its routing table to its neighbours": [
+    "sends its routing table", "send its routing table", "sends their routing table", "send their routing tables",
+    "sends routing tables", "shares its routing table", "share their routing tables", "whole routing table",
+    "full routing table", "entire routing table", "routing table to its neighbours", "routing updates",
+    "periodic updates", "sends updates", "send updates", "advertises its routes", "advertise their routes",
+    "advertise routes", "advertises routes", "advertise the route", "advertises the route",
+    "learns from its neighbours", "learn from its neighbours", "learn from neighbours",
+    "what its neighbours tell it", "routing by rumour", "distance vector", "distance-vector"
+  ],
+  "30 seconds": ["30 s", "30 sec", "30 secs", "30secs", "every 30"],
+  "marked invalid after 180 seconds": [
+    "180 seconds", "180 s", "180 sec", "#180", "invalid timer", "marked invalid", "marked as invalid",
+    "marks it invalid", "marks it as invalid", "timer runs out", "timer expires", "times out", "timed out",
+    "stops hearing", "no longer hears", "not heard", "stops receiving updates", "holddown", "hold-down",
+    "hold down timer", "flush timer", "flushed", "240 seconds", "#240"
+  ],
   "adds one hop": [
     "add one hop", "adds a hop", "add a hop", "adds one", "add one", "plus one", "increases by one",
     "increase by one", "increments", "incremented", "goes up by one", "going up by one",
@@ -1258,7 +1274,11 @@ const EXAM_KEYS={
     "wastes bandwidth", "wasting bandwidth", "waste bandwidth", "wasted bandwidth", "saves bandwidth",
     "save bandwidth", "saving bandwidth", "before it crosses the network", "before it crosses",
     "before it travels", "before it reaches the rest of the network", "before it uses",
-    "unnecessary traffic", "unwanted traffic is dropped early", "dropped before it"
+    "unnecessary traffic", "unwanted traffic is dropped early", "dropped before it",
+    "reduces network traffic", "reduce network traffic", "reducing network traffic", "less network traffic",
+    "reduces traffic", "reduce traffic", "reducing traffic", "less traffic", "lowers traffic",
+    "cuts down traffic", "cuts down on traffic", "saves traffic", "reduces the load", "reduces load",
+    "reduces congestion", "less congestion", "bandwidth"
   ],
 },
 "q3d-established": {
@@ -1503,7 +1523,12 @@ const EXAM_KEYS={
   ],
 },
 "q5a-dora": {
-  "Discover": ["DHCPDISCOVER"],
+  "Discover": [
+    "DHCPDISCOVER", "find the DHCP server", "find a DHCP server", "find DHCP server", "find the server",
+    "find a server", "finds the DHCP server", "finds a DHCP server", "to find the DHCP", "to find a DHCP",
+    "looking for a DHCP server", "looking for the DHCP server", "looks for a DHCP server",
+    "search for a DHCP server", "searches for a DHCP server", "locate a DHCP server", "locate the DHCP server"
+  ],
   "broadcasts": [
     "broadcast", "broadcasted", "255.255.255.255", "all-ones address", "sent to everyone",
     "to every device on the LAN", "to all devices on the LAN", "to all hosts"
@@ -1518,7 +1543,7 @@ const EXAM_KEYS={
   ],
   "Discover, Offer, Request, Acknowledgement": [
     "DORA",
-    "<discover/dhcpdiscover..offer/dhcpoffer..request/dhcprequest..acknowledgement/acknowledgment/acknowledge/acknowledges/ack/dhcpack"
+    "<discover/dhcpdiscover/find/locate/look/search..offer/dhcpoffer..request/dhcprequest..acknowledgement/acknowledgment/acknowledge/acknowledges/ack/dhcpack"
   ],
 },
 "q5b-relay": {
@@ -1527,10 +1552,6 @@ const EXAM_KEYS={
       "G0/{n}", "Gi0/{n}", "Gig0/{n}", "GigabitEthernet0/{n}", "GigabitEthernet 0/{n}", "LAN interface",
       "interface facing the PCs", "PC-facing interface", "client-facing interface",
       "interface facing the clients"
-    ],
-    "HELP": [
-      "helper-address", "helper address", "ip helper", "helper-address pointing to",
-      "helper-address set to", "helper-address of"
     ],
   },
   "broadcast": ["broadcasts", "broadcasted", "broadcasting"],
@@ -1555,7 +1576,6 @@ const EXAM_KEYS={
   ],
   "ip helper-address": ["helper-address", "helper address", "ip helper", "helper"],
   "{gw} {ifc}": ["{gw}~{IFF}", "{OTHERS}~"],
-  "ip helper-address {srv}": ["{HELP} {srv}"],
 },
 "q5c-exclude": {
   "static": [
@@ -1593,8 +1613,17 @@ const EXAM_KEYS={
     "PS2": [
       "Fa0/2", "F0/2", "Fa 0/2", "FastEthernet0/2", "FastEthernet 0/2", "H2", "port 2"
     ],
+    "AP": [
+      "access vlan", "access vlans", "assign vlan", "assign vlans", "assigned vlan", "assigned vlans",
+      "assign them to vlan", "assign them to vlans", "assigned to vlan", "assigned to vlans", "put in vlan",
+      "put in vlans", "put them in vlan", "put them in vlans", "ports in vlan", "ports in vlans",
+      "hosts in vlan", "hosts in vlans", "ports to vlan", "ports to vlans", "interfaces in vlan",
+      "interfaces to vlan"
+    ],
+    "AV": ["VLAN ", ""],
   },
   "Fa0/1 in VLAN {x}": [
+    "{AP} {x} and {AV}{y}",
     "{PS1} {LINK} VLAN {x}", "{PS1} {LINK} vlan{x}", "{PS1} switchport access vlan {x}",
     "{PS1} vlan {x}", "VLAN {x} on {PS1}", "VLAN {x} for {PS1}", "VLAN {x} to {PS1}",
     "switchport access vlan {x} on {PS1}", "!{PS1} {VLINK} VLAN {y}", "!VLAN {y} on {PS1}",
@@ -1602,6 +1631,7 @@ const EXAM_KEYS={
     "!{PS1} switchport access vlan {y}"
   ],
   "Fa0/2 in VLAN {y}": [
+    "{AP} {x} and {AV}{y}",
     "{PS2} {LINK} VLAN {y}", "{PS2} {LINK} vlan{y}", "{PS2} switchport access vlan {y}",
     "{PS2} vlan {y}", "VLAN {y} on {PS2}", "VLAN {y} for {PS2}", "VLAN {y} to {PS2}",
     "switchport access vlan {y} on {PS2}", "!{PS2} {VLINK} VLAN {x}", "!VLAN {x} on {PS2}",

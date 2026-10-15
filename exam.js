@@ -873,13 +873,14 @@ card({id:'q1f-riploops', area:'routing', tier:1, kind:'flash', src:'Q1', title:'
     ],
   };
   return {
-    prompt:'A link fails in a RIP network. Describe the problem that can happen as the routers keep advertising the dead route to each other and what happens to its metric, then explain how the 16-hop limit and split horizon each stop it.',
+    prompt:'Explain how RIP maps the network, how it prevents routing loops, and how it detects routes that have gone down.',
     points: [
-      'Without protection the routers form a '+loop+': each one thinks it can reach the dead network through the other and passes the route back and forth.',
-      'Every time the route goes round, the router [[adds one hop]] to its metric, so the routers are '+inf+'.',
-      'The limit ends it: a metric of '+sixteen+', so once the count reaches 16 the route is dropped instead of growing for ever.',
-      sh,
+      'RIP is a distance-vector protocol: each router [[sends its routing table to its neighbours]] every [[30 seconds]], and its metric is the [[hop count]] &mdash; each router adds one as it passes a route on.',
+      'The maximum is 15 hops; a metric of '+sixteen+', so a RIP network can be at most 15 hops across.',
+      'The limit stops '+inf+': in a routing loop a dead route\'s metric keeps rising until it reaches 16 and is dropped.',
+      sh.replace('[[feeding each other]]','feeding each other'),
       'Route poisoning goes further: a failed route is advertised with metric 16 so neighbours remove it straight away.',
+      'A route that stops arriving in updates is [[marked invalid after 180 seconds]] (the invalid timer), held down so a bad update can\'t revive it, and flushed from the table after 240 seconds.',
     ],
   };
 }});
@@ -2399,7 +2400,7 @@ card({id:'q5b-relay', area:'dhcp', tier:1, kind:'flash', src:'Q5 b', title:'Wher
   return {
     prompt: 'PCs on '+gw+'\'s '+ifc+' LAN ('+lan+') got their addresses from a DHCP server on that LAN. The server is moved to a data-centre network two routers away, at '+srv+', and the PCs stop getting addresses. Explain why. Then give the command that fixes it, saying which router and interface it goes on, what role that router then plays, and how it sends the PCs\' DHCP messages on to the server.',
     points: [
-      '<b>Here:</b> the server is no longer on the PCs\' subnet. Fix it on the PCs\' gateway, [[{gw} {ifc}]], with [[ip helper-address {srv}]].',
+      '<b>Here:</b> the server is no longer on the PCs\' subnet. Fix it on the PCs\' gateway, [[{gw} {ifc}]], with [[ip helper-address]] '+srv+'.',
       'Why: the PCs have no address yet, so their Discover is a '+bcast+', and '+noFwd+' &mdash; it never leaves '+lan+' to reach '+srv+'.',
       'With the helper address, '+gw+' acts as a '+relay+': it picks up the PCs\' DHCP broadcasts on '+ifc+' and forwards them to '+srv+' as '+ucast+', then passes the server\'s replies back onto the LAN.',
     ],
