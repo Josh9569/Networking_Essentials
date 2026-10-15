@@ -811,7 +811,7 @@ card({id:'g1-float', area:'routing', tier:2, kind:'graded', src:'Q1 d', title:'W
   const goodAd=Math.min(254,A+(A<10?4:10));
   const model='ip route '+int2ip(net)+' '+maskStr(pfx)+' '+int2ip(nh2)+' '+goodAd;
   return {
-    prompt:'R1 reaches '+what+' through '+how+' over its primary link. Write the <b>floating static route</b> that sends this traffic to the backup next hop <b>'+int2ip(nh2)+'</b>, used only if the primary route is lost.',
+    prompt:'R1 reaches '+what+' through '+how+' over its primary link. On <b>R1</b>, write the <b>floating static route</b> that sends this traffic to the backup next hop <b>'+int2ip(nh2)+'</b>, used only if the primary route is lost.',
     body: fieldHtml('cmd','Command (global configuration mode)','e.g. ip route 198.51.100.0 255.255.255.0 203.0.113.2',true),
     grade(){
       const r=parseIpRoute(val('cmd'));
@@ -2499,7 +2499,7 @@ card({id:'g5-exclude', area:'dhcp', tier:2, kind:'graded', src:'Q5 c', title:'Wr
   while(i<sorted.length){ let j=i; while(j+1<sorted.length&&sorted[j+1]===sorted[j]+1) j++; model.push('ip dhcp excluded-address '+H(sorted[i])+(j>i?' '+H(sorted[j]):'')); i=j+1; }
   return {
     prompt:'R1 hands out addresses in <b>'+cidr(net,24)+'</b>. These are set statically and must never be leased: the default gateway <b>'+H(gw)+'</b>, the servers <b>'+H(s)+'&ndash;'+H(e)+
-      '</b>, the printer <b>'+H(pr)+'</b>'+(mg?' and switch S1\'s management address <b>'+H(mg)+'</b>':'')+'. Write the command(s) that exclude exactly those addresses.',
+      '</b>, the printer <b>'+H(pr)+'</b>'+(mg?' and switch S1\'s management address <b>'+H(mg)+'</b>':'')+'. On R1, write the command(s) that exclude exactly those addresses.',
     body: cmdsHtml('ex','Exclusions &mdash; one command per line, Ctrl+Enter submits','e.g. ip dhcp excluded-address 198.51.100.1 198.51.100.9',3),
     grade(){
       const p=parseExclusions(cmdLines('ex'));
