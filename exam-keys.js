@@ -1437,7 +1437,7 @@ const EXAM_KEYS={
       "address", "public address", "ip", "public ip", "ip address", "public ip address"
     ],
     "PREPS": ["with", "for", "using", "via"],
-    "DYNS": ["dynamic NAT", "dynamic", "NAT", "NAT pool", "pool"],
+    "DYNS": ["dynamic NAT", "DNAT", "dynamic", "NAT", "NAT pool", "pool"],
     "PERHOST": [
       "needs one address per host", "needs one per host", "needs an address per host",
       "needs one address for each host", "needs one for each host", "one address per host",
@@ -1447,7 +1447,13 @@ const EXAM_KEYS={
     "DV": ["needs", "need", "requires", "require", "uses", "is", "would need", "will need"],
     "DT": ["", "addresses ", "public addresses ", "ip addresses "],
     "DPR": ["for", "with", "in"],
-    "DNS": ["dynamic NAT", "dynamic", "NAT"],
+    "DN": ["DNAT", "dynamic NAT"],
+    "DH": [
+      "per host", "each host", "every host", "for each", "same time", "simultaneous", "at once",
+      "concurrent", "as many", "active devices", "active hosts", "devices online", "hosts online",
+      "online at once", "in use at once", "per device", "each device", "every device", "per active"
+    ],
+    "DNS": ["dynamic NAT", "DNAT", "dynamic", "NAT"],
   },
   "port number": ["port numbers", "ports", "port"],
   "can't": [
@@ -1460,7 +1466,7 @@ const EXAM_KEYS={
   "Dynamic NAT needs one address per host online at the same time": [
     "dynamic NAT~per host", "dynamic NAT~each host", "dynamic NAT~every host", "dynamic NAT~for each",
     "dynamic NAT~same time", "dynamic NAT~simultaneous", "dynamic NAT~at once",
-    "dynamic NAT~concurrent", "dynamic NAT~as many"
+    "dynamic NAT~concurrent", "dynamic NAT~as many", "{DN}~{DH}"
   ],
   "its own public address#2": [
     "own public address", "own address", "own public ip", "own ip", "one-to-one", "one to one", "1:1",
