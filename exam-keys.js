@@ -1136,7 +1136,8 @@ const EXAM_KEYS={
     "another routing protocol", "other routing protocols", "another routing domain", "the Internet",
     "ISP"
   ],
-  "redistributes": ["redistribute", "redistribution", "injects", "default-information originate"],
+  "redistributes": ["redistribute", "redistribution", "injects", "default-information originate",
+    "advertise the external route", "advertise external routes", "advertise the external routes", "advertise outside routes", "advertise the outside route", "advertise routes from outside", "advertise them into OSPF", "advertise it into OSPF", "advertise into OSPF", "advertise those routes into OSPF", "advertise the external network", "advertise external networks"],
   "{B} is an internal router": ["{B}~internal"],
   "{B} is a backbone router": ["{B}~backbone"],
   "{A} is a backbone router": ["{A}~backbone"],
@@ -1146,6 +1147,7 @@ const EXAM_KEYS={
     "between the areas", "connects areas", "connects the areas", "joins areas"
   ],
   "redistributes#2": [
+    "advertise the external route", "advertise external routes", "advertise the external routes", "advertise outside routes", "advertise the outside route", "advertise routes from outside", "advertise them into OSPF", "advertise it into OSPF", "advertise into OSPF", "advertise those routes into OSPF", "advertise the external network", "advertise external networks",
     "redistribute", "redistribution", "injects", "imports", "brings in",
     "default-information originate"
   ],
