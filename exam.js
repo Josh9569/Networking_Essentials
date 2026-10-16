@@ -1557,7 +1557,14 @@ function markCmds(id,ok,model,why){
   ta.readOnly=true; f.classList.remove('ok','bad','show');
   if(ok){ f.classList.add('ok'); h.textContent='Correct'; }
   else if(!ta.value.trim()){ f.classList.add('show'); ta.value=model; h.textContent='Revealed'; }
-  else { f.classList.add('bad'); h.textContent=why||'Not quite'; }
+  else { f.classList.add('bad'); h.textContent=why?decodeEnt(why):'Not quite'; }
+}
+/* The reasons are written with HTML entities (&mdash;) like the rest of the
+   page, but the hint is set as text because it quotes what was typed. Decode
+   the entities only, so a typed "<" stays a "<". */
+function decodeEnt(s){
+  const t=document.createElement('textarea');
+  return String(s).replace(/&(?:[a-z]+|#\d+);/gi,m=>{ t.innerHTML=m; return t.value; });
 }
 /* IOS keywords, so the usual abbreviations (int, sw acc vl, enc dot, no sh,
    ip helper, ip dhcp ex, def, dns) are read as the full command. A word only
