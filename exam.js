@@ -3997,7 +3997,9 @@ function syncControls(){
    transitions from where it was (styles: exam.css .ex-bar) and a bar that
    has just reached 100% comfortable flares once, then breathes; one that
    was already full when the page loaded only breathes. It is rebuilt only
-   when the set of areas changes (difficulty). */
+   when the set of areas changes (difficulty). The Total row sums every
+   area's row (unticked areas included, like the rows above it) and has the
+   same bar, so the whole course fills and flares the same way. */
 function renderSide(){
   const p=pool();
   $('ch-ans').textContent=S.answered;
@@ -4009,30 +4011,44 @@ function renderSide(){
   if(fresh){
     body.dataset.key=key;
     body.innerHTML='<table class="rt-table ex-prog"><thead><tr><th>Area</th><th>New</th><th>Learning</th><th>Comfortable</th><th></th></tr></thead><tbody>'+
-      areas.map(a=>'<tr data-a="'+a.id+'"><td>'+a.name+'</td><td class="ex-n-new"></td><td class="ex-n-learn"></td><td class="ex-n-comf"></td>'+
-        '<td class="ex-bar-cell"><div class="ex-bar"><span class="ex-b-comf" style="width:0"></span><span class="ex-b-learn" style="width:0"></span></div></td></tr>').join('')+
-      '</tbody></table>';
+      areas.map(a=>progRow('<tr data-a="'+a.id+'">',a.name)).join('')+
+      '</tbody><tfoot>'+progRow('<tr class="ex-total" data-a="total">','Total')+'</tfoot></table>';
   }
-  const set=()=>areas.forEach(a=>{
-    const tr=body.querySelector('tr[data-a="'+a.id+'"]'); if(!tr) return;
-    const cs=CARDS.filter(c=>c.area===a.id&&inTier(c));
-    const n={new:0,learn:0,comf:0}; cs.forEach(c=>n[cardStatus(c.id)]++);
-    const off=S.off.indexOf(a.id)>=0;
-    tr.classList.toggle('ex-off',off);
-    if(off) tr.title='Not in the rotation (unticked under Areas)'; else tr.removeAttribute('title');
+  /* one row's counts and bar */
+  const paint=(tr,n,len)=>{
     tr.querySelector('.ex-n-new').textContent=n.new;
     tr.querySelector('.ex-n-learn').textContent=n.learn;
     tr.querySelector('.ex-n-comf').textContent=n.comf;
-    const bar=tr.querySelector('.ex-bar'), full=cs.length>0&&n.comf===cs.length;
-    bar.querySelector('.ex-b-comf').style.width=(100*n.comf/cs.length)+'%';
-    bar.querySelector('.ex-b-learn').style.width=(100*n.learn/cs.length)+'%';
+    const bar=tr.querySelector('.ex-bar'), full=len>0&&n.comf===len;
+    bar.querySelector('.ex-b-comf').style.width=(len?100*n.comf/len:0)+'%';
+    bar.querySelector('.ex-b-learn').style.width=(len?100*n.learn/len:0)+'%';
     bar.classList.toggle('ex-has',n.comf>0);
     if(!full) bar.classList.remove('ex-full','ex-flare');
     else if(!bar.classList.contains('ex-full')&&!bar.classList.contains('ex-flare')) bar.classList.add(first?'ex-full':'ex-flare');
-  });
+  };
+  const set=()=>{
+    const tot={new:0,learn:0,comf:0}; let all=0;
+    areas.forEach(a=>{
+      const tr=body.querySelector('tr[data-a="'+a.id+'"]'); if(!tr) return;
+      const cs=CARDS.filter(c=>c.area===a.id&&inTier(c));
+      const n={new:0,learn:0,comf:0}; cs.forEach(c=>n[cardStatus(c.id)]++);
+      const off=S.off.indexOf(a.id)>=0;
+      tr.classList.toggle('ex-off',off);
+      if(off) tr.title='Not in the rotation (unticked under Areas)'; else tr.removeAttribute('title');
+      paint(tr,n,cs.length);
+      Object.keys(tot).forEach(k=>tot[k]+=n[k]); all+=cs.length;
+    });
+    const tt=body.querySelector('tr[data-a="total"]'); if(tt) paint(tt,tot,all);
+  };
   /* a new table starts its bars at 0, so they fill on the next frame */
   if(fresh&&!first) requestAnimationFrame(set); else if(fresh) requestAnimationFrame(()=>requestAnimationFrame(set)); else set();
   renderSide.seen=true;
+}
+
+/* One progress-table row: name, the three counts and the bar. */
+function progRow(open,name){
+  return open+'<td>'+name+'</td><td class="ex-n-new"></td><td class="ex-n-learn"></td><td class="ex-n-comf"></td>'+
+    '<td class="ex-bar-cell"><div class="ex-bar"><span class="ex-b-comf" style="width:0"></span><span class="ex-b-learn" style="width:0"></span></div></td></tr>';
 }
 
 let resetArmed=null;
