@@ -2142,7 +2142,7 @@ function natTableHtml(P,withC){
 }
 /* Gateway's NAT configuration and translation table for one round, and the
    inside global the sender ends up with (null = not translated). */
-function natScenario(P,kind,sender){
+function natScenario(P,kind,sender,busy){
   const lines=['interface GigabitEthernet0/1',' ip nat inside','interface Serial0/0/1',' ip nat outside'];
   /* the static address (pub+2..12) must not fall inside the pool, so a round
      with both starts the pool at .18 of the block, as Lab 10A does */
@@ -2153,14 +2153,20 @@ function natScenario(P,kind,sender){
   if(kind==='static'||kind==='staticwins'){
     const g=P.pub+ri(2,12);
     lines.push('ip nat inside source static '+int2ip(S.ip)+' '+int2ip(g)); rows.push([g,S.ip]); global=g;
-    if(kind==='staticwins'){ lines.push(aclLine,pool,'ip nat inside source list 1 pool PUBLIC'); }
+    if(kind==='staticwins'){
+      lines.push(aclLine,pool,'ip nat inside source list 1 pool PUBLIC');
+      /* busy: other hosts hold pool addresses too, and the static row sits anywhere among them */
+      if(busy){ shuffle(P.pcs.filter((p,i)=>i!==sender)).slice(0,ri(1,2)).forEach((p,k)=>rows.splice(ri(0,rows.length),0,[first+k,p.ip])); }
+    }
   } else if(kind==='dyn'||kind==='dynhas'){
     lines.push(aclLine,pool,'ip nat inside source list 1 pool PUBLIC');
-    const others=P.pcs.filter((p,i)=>i!==sender).slice(0,ri(0,2));
-    let k=0;
-    if(kind==='dynhas'){ rows.push([first,S.ip]); global=first; k=1; }
-    others.forEach(p=>{ rows.push([first+k,p.ip]); k++; });
-    if(kind==='dyn') global=first+k;
+    /* busy: at least one other host is already bound, so the table is never
+       empty and "the first pool address" is not automatically the answer */
+    const others=shuffle(P.pcs.filter((p,i)=>i!==sender)).slice(0,busy?ri(1,2):ri(0,2));
+    /* the sender's own binding sits anywhere in the table, not always first */
+    const held=others.map(p=>p.ip); if(kind==='dynhas') held.splice(busy?ri(0,held.length):0,0,S.ip);
+    held.forEach((ip,k)=>{ rows.push([first+k,ip]); if(ip===S.ip) global=first+k; });
+    if(kind==='dyn') global=first+held.length;
   } else if(kind==='pat'){
     lines.push(aclLine,'ip nat inside source list 1 interface Serial0/0/1 overload'); global=P.gwOut;
   } else if(kind==='patpool'){
@@ -2214,6 +2220,30 @@ card({id:'g4-nat', area:'nat', tier:1, kind:'graded', src:'Q4 a', title:'Address
         why: ul(['<b>Here:</b> Packet 1 is <b>'+int2ip(S.ip)+' &rarr; '+int2ip(P.lo)+'</b>; Packet 2 is <b>'+int2ip(sc.global)+' &rarr; '+int2ip(P.lo)+'</b>.',
           'Packet 1 hasn\'t reached NAT yet, so it carries '+S.name+'\'s own (inside local) address, '+int2ip(S.ip)+'.',
           NAT_KIND_TEXT[kind]+': inside global <b>'+int2ip(sc.global)+'</b>.',
+          'NAT only rewrites the inside address &mdash; the destination stays '+int2ip(P.lo)+' both times.'])};
+    },
+  };
+}});
+
+/* Packets 1 and 2 again, but the translation table decides: usually the
+   sender already holds a dynamic binding (anywhere in the table) and keeps
+   it; otherwise other hosts are bound and it takes the next free address,
+   or a static mapping beats the pool. So neither "the first row" nor "the
+   first pool address" is a shortcut. */
+card({id:'g4-nat-held', area:'nat', tier:2, kind:'graded', src:'Q4 a', title:'Already in the translation table?', gen(){
+  const P=natPlan(), kind=pick(['dynhas','dynhas','dyn','staticwins']), sender=kind==='staticwins'?0:ri(0,2), S=P.pcs[sender], sc=natScenario(P,kind,sender,true);
+  const why=kind==='dynhas'?S.name+' ('+int2ip(S.ip)+') already has a row in the translation table, so the Gateway reuses it: inside global <b>'+int2ip(sc.global)+'</b>. A new address is only taken for a host with no binding.':
+    kind==='dyn'?S.name+' ('+int2ip(S.ip)+') has no row yet. The pool addresses already in the table are taken, so it gets the next free one: <b>'+int2ip(sc.global)+'</b>.':
+    S.name+' has a static mapping to <b>'+int2ip(sc.global)+'</b>, and a static mapping is used before the dynamic pool is looked at.';
+  return {
+    prompt:'<b>'+S.name+'</b> pings the ISP\'s Lo0 interface. What are the source and destination IP addresses of <b>Packet 1</b> (as it leaves '+S.name+') and <b>Packet 2</b> (as it leaves the Gateway towards the ISP)?',
+    body: natBody(P,sc,true)+pktFields('p1','p2'),
+    grade(){
+      const ok=gradeIps({p1s:S.ip,p1d:P.lo,p2s:sc.global,p2d:P.lo});
+      return {ok, verdict: ok?'Correct.':'Packet 2 leaves as '+int2ip(sc.global)+' &rarr; '+int2ip(P.lo)+'.',
+        why: ul(['<b>Here:</b> Packet 1 is <b>'+int2ip(S.ip)+' &rarr; '+int2ip(P.lo)+'</b>; Packet 2 is <b>'+int2ip(sc.global)+' &rarr; '+int2ip(P.lo)+'</b>.',
+          'Packet 1 hasn\'t reached NAT yet, so it carries '+S.name+'\'s own (inside local) address, '+int2ip(S.ip)+'.',
+          why,
           'NAT only rewrites the inside address &mdash; the destination stays '+int2ip(P.lo)+' both times.'])};
     },
   };
