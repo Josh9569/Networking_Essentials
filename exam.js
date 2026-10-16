@@ -189,6 +189,17 @@ function sameSet(a,set){ return a.length===set.size&&a.every(i=>set.has(i)); }
 function chipsHtml(opts){
   return '<div class="ex-chips">'+opts.map((o,i)=>'<button type="button" class="cbtn ex-chip" data-c="'+i+'">'+o+'</button>').join('')+'</div>';
 }
+/* A second chip group (the troubleshooting cards' device pick), kept apart
+   from .ex-chip so the two answers don't share Q.choice. */
+function devChipsHtml(opts){
+  return '<div class="ex-chips">'+opts.map((o,i)=>'<button type="button" class="cbtn ex-dchip" data-d="'+i+'">'+o+'</button>').join('')+'</div>';
+}
+function markDevChips(answer){
+  document.querySelectorAll('#qbody .ex-dchip').forEach(b=>{
+    const i=+b.dataset.d; b.disabled=true; b.classList.remove('on');
+    if(i===answer) b.classList.add('ex-ok'); else if(i===Q.dev) b.classList.add('ex-bad');
+  });
+}
 function markChips(answer){
   document.querySelectorAll('#qbody .ex-chip').forEach(b=>{
     const i=+b.dataset.c; b.disabled=true; b.classList.remove('on');
@@ -3163,22 +3174,26 @@ function tsTable(P){
   const w1=int2ip(P.wan+1), w2=int2ip(P.wan+2);
   const r=(d,i,a,c)=>'<tr><td>'+d+'</td><td>'+i+'</td><td>'+a+'</td><td style="font-family:var(--font)">'+c+'</td></tr>';
   return '<div class="ex-scroll"><table class="rt-table ex-table"><thead><tr><th>Device</th><th>Interface</th><th>Address</th><th>Connects to</th></tr></thead><tbody>'+
-    r('R1','G0/0',P.A+'.1/24','LAN-A (PCs)')+r('','G0/1',P.C+'.1/24','LAN-C')+r('','S0/0/0',w1+'/30','R2 S0/0/0')+
+    r('R1','G0/0',P.A+'.1/24','LAN-A (PCs)')+r('','G0/1',P.C+'.1/24','LAN-C')+r('','S0/0/0 (DCE)',w1+'/30','R2 S0/0/0')+
     r('R2','G0/0',P.B+'.1/24','LAN-B (servers, incl. '+P.B+'.10)')+r('','S0/0/0',w2+'/30','R1 S0/0/0')+'</tbody></table></div>';
 }
 /* every "ip access-group N in|out" (and its "no" form) under one interface */
 function tsAclApplied(sc,ifc){
   return sc.filter(o=>o.ifc===ifc).map(o=>/^(no )?ip access-group (\S+)(?: (in|out))?$/.exec(o.cmd)).filter(Boolean).map(m=>({no:!!m[1], num:m[2], dir:m[3]||null}));
 }
+/* Which device is at fault is its own question (owner: the causes used to
+   name it, which gave the answer away), so the causes below never name one. */
+const TS_DEVS_RT=['R1','R2','The PCs'], TS_DEVS_NAT=['Gateway','ISP','The PCs'];
 const TS_SCEN={
   relay(){
     const P=tsPlan(), srv=P.B+'.10', wrong=chance(.5)?pick([int2ip(P.wan+2),P.B+'.1',P.B+'.11']):null;
     const r1='interface GigabitEthernet0/0\n ip address '+P.A+'.1 255.255.255.0'+(wrong?'\n ip helper-address '+wrong:'')+
-      '\ninterface Serial0/0/0\n ip address '+int2ip(P.wan+1)+' 255.255.255.252\n!\nip route '+P.B+'.0 255.255.255.0 '+int2ip(P.wan+2);
+      '\ninterface Serial0/0/0\n ip address '+int2ip(P.wan+1)+' 255.255.255.252\n clock rate 64000\n!\nip route '+P.B+'.0 255.255.255.0 '+int2ip(P.wan+2);
     return {P, body:tsTable(P)+cliHtml(r1,'R1# show running-config (extract)'),
       symptom:'The PCs on LAN-A are set to get their addresses by DHCP, but they all end up with 169.254.x.x addresses. The DHCP server '+srv+' on LAN-B has a pool for LAN-A, and a LAN-A host with a static address can ping it.',
-      cause:'R1 G0/0 doesn\'t relay the PCs\' DHCP requests to '+srv+' &mdash; its ip helper-address is '+(wrong?'wrong':'missing'),
-      others:['The DHCP server must be on LAN-A &mdash; DHCP can never cross a router','R1 has no route to LAN-B','The relay belongs on R2 G0/0, next to the server','The PCs need a default gateway set before DHCP can work'],
+      dev:'R1', devs:TS_DEVS_RT,
+      cause:'The interface facing the PCs doesn\'t relay their DHCP requests to '+srv+' &mdash; its ip helper-address is '+(wrong?'wrong':'missing'),
+      others:['DHCP can never cross a router &mdash; the server has to be on LAN-A','There is no route to LAN-B','The relay belongs on the interface facing the server, not the PCs','A default gateway has to be set before DHCP can work'],
       check(lines){ const sc=iosScript(lines);
         const h=sc.filter(o=>o.ifc==='g0/0').map(o=>/^(no )?ip helper-address (\S+)$/.exec(o.cmd)).filter(Boolean);
         if(!h.some(m=>!m[1]&&ip2int(m[2])===ip2int(srv))) return 'G0/0 needs ip helper-address '+srv+'.';
@@ -3195,8 +3210,9 @@ const TS_SCEN={
       '\ninterface Serial0/0/1\n ip address '+int2ip(P.gwOut)+' 255.255.255.252\n ip nat outside\n!\naccess-list 1 permit '+int2ip(P.lan)+' 0.0.0.255\nip nat inside source list 1 interface Serial0/0/1 overload\nip route 0.0.0.0 0.0.0.0 '+int2ip(P.isp);
     return {P, body:natTableHtml(P,false)+cliHtml(cfg,'Gateway# show running-config (extract)'),
       symptom:'The PCs can ping the Gateway\'s G0/1 and S0/0/1 addresses, but not the ISP\'s Lo0 ('+int2ip(P.lo)+'). '+mono('show ip nat translations')+' on the Gateway is empty.',
-      cause:'G0/1 isn\'t marked as the NAT inside interface',
-      others:['access-list 1 doesn\'t match the LAN','PAT needs a pool &mdash; it can\'t use the interface address','The Gateway has no route to the ISP','S0/0/1 should be ip nat inside'],
+      dev:'Gateway', devs:TS_DEVS_NAT,
+      cause:'The LAN interface isn\'t marked as the NAT inside interface',
+      others:['The access list doesn\'t match the LAN','PAT needs a pool &mdash; it can\'t use the interface address','There is no route to the ISP','The WAN interface should be ip nat inside'],
       check(lines){ const sc=iosScript(lines);
         if(!hasCmd(sc,'g0/1','ip nat inside')) return 'G0/1 needs ip nat inside.';
         if(wrongOut&&!hasCmd(sc,'g0/1','no ip nat outside')) return 'G0/1 is also marked outside &mdash; remove it with no ip nat outside.';
@@ -3212,8 +3228,9 @@ const TS_SCEN={
     const cfg='interface GigabitEthernet0/1\n ip address '+int2ip(P.gw)+' 255.255.255.0\n ip nat inside\ninterface Serial0/0/1\n ip address '+int2ip(P.gwOut)+' 255.255.255.252\n ip nat outside\n!\n'+bad+'\nip nat inside source list 1 interface Serial0/0/1 overload\nip route 0.0.0.0 0.0.0.0 '+int2ip(P.isp);
     return {P, body:natTableHtml(P,false)+cliHtml(cfg,'Gateway# show running-config (extract)'),
       symptom:'The PCs can ping the Gateway\'s G0/1 and S0/0/1 addresses, but not the ISP\'s Lo0 ('+int2ip(P.lo)+'). '+mono('show ip nat translations')+' on the Gateway is empty.',
-      cause:'access-list 1 doesn\'t match the PCs\' addresses, so NAT never translates them',
-      others:['G0/1 isn\'t marked ip nat inside','The NAT rule is missing overload','The ISP has no route to the public address','NAT needs a pool &mdash; it can\'t use the interface address'],
+      dev:'Gateway', devs:TS_DEVS_NAT,
+      cause:'The access list NAT uses doesn\'t match the PCs\' addresses, so NAT never translates them',
+      others:['The LAN interface isn\'t marked ip nat inside','The NAT rule is missing overload','There is no route back to the public address','NAT needs a pool &mdash; it can\'t use the interface address'],
       check(lines){
         const acc=lines.filter(l=>/^acc/i.test(l)), del=iosLines(lines).some(o=>o.cmd==='no access-list 1');
         const p=parseStdAcl((del?[]:[bad]).concat(acc));
@@ -3227,19 +3244,29 @@ const TS_SCEN={
           'access-list 1 names the [[wrong network]] (192.168.'+((x+1)&255)+'.0), not the PCs\' '+cidr(P.lan,24)+'.',
         'Fix: replace it with access-list 1 permit '+int2ip(P.lan)+' [[0.0.0.255]].']};
   },
-  staticnet(){
-    const P=tsPlan(), bOct=+P.B.split('.')[2], wrongNet='192.168.'+(bOct===254?bOct-1:bOct+1)+'.0';
-    const r1='interface Serial0/0/0\n ip address '+int2ip(P.wan+1)+' 255.255.255.252\n!\nip route '+wrongNet+' 255.255.255.0 '+int2ip(P.wan+2);
-    const r2='interface Serial0/0/0\n ip address '+int2ip(P.wan+2)+' 255.255.255.252\n!\nip route '+P.A+'.0 255.255.255.0 '+int2ip(P.wan+1)+'\nip route '+P.C+'.0 255.255.255.0 '+int2ip(P.wan+1);
+  /* o.mirror (the graded card only, half the time): the wrong route is R2's
+     route back to LAN-A, so the device at fault isn't always R1. The written
+     card (q6-ts) keeps the R1 version, which its key words are written for. */
+  staticnet(o){
+    const P=tsPlan(), m=!!(o&&o.mirror);
+    const oct=x=>+x.split('.')[2], near=x=>'192.168.'+(oct(x)===254?oct(x)-1:oct(x)+1)+'.0';
+    const tgt=m?P.A:P.B, wrongNet=near(tgt), nh=int2ip(P.wan+(m?1:2)), fix='ip route '+tgt+'.0 255.255.255.0 '+nh;
+    const r1='interface Serial0/0/0\n ip address '+int2ip(P.wan+1)+' 255.255.255.252\n clock rate 64000\n!\nip route '+(m?P.B+'.0':wrongNet)+' 255.255.255.0 '+int2ip(P.wan+2);
+    const r2='interface Serial0/0/0\n ip address '+int2ip(P.wan+2)+' 255.255.255.252\n!\nip route '+(m?wrongNet:P.A+'.0')+' 255.255.255.0 '+int2ip(P.wan+1)+'\nip route '+P.C+'.0 255.255.255.0 '+int2ip(P.wan+1);
     return {P, body:tsTable(P)+cliHtml(r1,'R1 (extract)')+cliHtml(r2,'R2 (extract)'),
-      symptom:'PCs on LAN-A can ping R2\'s S0/0/0 ('+int2ip(P.wan+2)+') but not the servers on LAN-B. LAN-B hosts can ping R1\'s S0/0/0.',
-      cause:'R1\'s static route names the wrong network, so R1 has no route to LAN-B',
-      others:['R2 has no route back to LAN-A','R1 S0/0/0 needs a clock rate','The static route needs an administrative distance','R2 G0/0 is shut down'],
+      symptom:m?'The servers on LAN-B can ping R1\'s S0/0/0 ('+int2ip(P.wan+1)+') and hosts on LAN-C, but not the PCs on LAN-A. PCs on LAN-A can\'t reach LAN-B either.':
+        'PCs on LAN-A can ping R2\'s S0/0/0 ('+int2ip(P.wan+2)+') but not the servers on LAN-B. LAN-B hosts can ping R1\'s S0/0/0.',
+      dev:m?'R2':'R1', devs:TS_DEVS_RT,
+      cause:'A static route names the wrong network, so there is no route to '+(m?'LAN-A':'LAN-B'),
+      others:['There is no route back to '+(m?'LAN-B':'LAN-A'),'The serial link needs a clock rate on its DCE end','The static route needs an administrative distance','The '+(m?'LAN-A':'LAN-B')+' interface is shut down'],
       check(lines){
-        const ok=iosLines(lines).map(o=>o.cmd).some(l=>{ const m=/^ip route (\S+) (\S+) (\S+)(?: \d+)?$/.exec(l); return m&&ip2int(m[1])===ip2int(P.B+'.0')&&m[2]==='255.255.255.0'&&(ip2int(m[3])===P.wan+2||NR.acIfNorm(m[3])==='s0/0/0'); });
-        return ok?null:'R1 needs ip route '+P.B+'.0 255.255.255.0 '+int2ip(P.wan+2)+'.'; },
-      model:['no ip route '+wrongNet+' 255.255.255.0 '+int2ip(P.wan+2),'ip route '+P.B+'.0 255.255.255.0 '+int2ip(P.wan+2)],
-      points:['R1 can reach R2 (the serial link works) but has [[no route]] to LAN-B, '+P.B+'.0/24, so it drops the PCs\' packets.',
+        const ok=iosLines(lines).map(o=>o.cmd).some(l=>{ const x=/^ip route (\S+) (\S+) (\S+)(?: \d+)?$/.exec(l); return x&&ip2int(x[1])===ip2int(tgt+'.0')&&x[2]==='255.255.255.0'&&(ip2int(x[3])===ip2int(nh)||NR.acIfNorm(x[3])==='s0/0/0'); });
+        return ok?null:(m?'R2':'R1')+' needs '+fix+'.'; },
+      model:['no ip route '+wrongNet+' 255.255.255.0 '+nh, fix],
+      points:m?['R2 has [[no route]] back to LAN-A, '+P.A+'.0/24: its static route was typed for '+wrongNet+' &mdash; the [[wrong network]].',
+        'R1\'s route to LAN-B is fine, so the PCs\' packets arrive, but every reply from LAN-B is dropped at R2. LAN-C still works because R2\'s route to it is right.',
+        'Fix: on R2 add [[ip route '+P.A+'.0 255.255.255.0|ip route]] '+nh+' (and remove the wrong route).']:
+       ['R1 can reach R2 (the serial link works) but has [[no route]] to LAN-B, '+P.B+'.0/24, so it drops the PCs\' packets.',
         'Its static route was typed for '+wrongNet+' &mdash; the [[wrong network]].',
         'R2\'s routes back to LAN-A and LAN-C are fine, which is why LAN-B can reach R1.',
         'Fix: on R1 add [[ip route '+P.B+'.0 255.255.255.0|ip route]] '+int2ip(P.wan+2)+' (and remove the wrong route).']};
@@ -3249,8 +3276,9 @@ const TS_SCEN={
     const r2='access-list '+n+' deny '+P.C+'.0 0.0.0.255\naccess-list '+n+' permit any\n!\ninterface GigabitEthernet0/0\n ip address '+P.B+'.1 255.255.255.0\n ip access-group '+n+' in';
     return {P, body:tsTable(P)+cliHtml(r2,'R2# show running-config (extract)'),
       symptom:'The policy is that hosts on <b>LAN-C</b> ('+P.C+'.0/24) must not reach <b>LAN-B</b>; everything else is allowed. ACL '+n+' was written for it, but LAN-C hosts can still reach the LAN-B servers.',
-      cause:'ACL '+n+' is applied inbound on R2 G0/0, so it only checks traffic leaving LAN-B',
-      others:['A standard ACL must go near the source, on R1 G0/1','The wildcard 0.0.0.255 matches the wrong hosts','permit any has to come before the deny','A standard ACL can\'t do this &mdash; it needs an extended ACL'],
+      dev:'R2', devs:TS_DEVS_RT,
+      cause:'ACL '+n+' is applied inbound on the LAN-B interface, so it only checks traffic leaving LAN-B',
+      others:['A standard ACL must go near the source, on the LAN-C interface','The wildcard 0.0.0.255 matches the wrong hosts','permit any has to come before the deny','A standard ACL can\'t do this &mdash; it needs an extended ACL'],
       check(lines){ const a=tsAclApplied(iosScript(lines),'g0/0');
         if(!a.some(x=>!x.no&&x.num===String(n)&&x.dir==='out')) return 'Apply it outbound on G0/0: ip access-group '+n+' out.';
         if(!a.some(x=>x.no&&x.num===String(n)&&x.dir!=='out')) return 'Remove the inbound one too: no ip access-group '+n+' in.';
@@ -3263,12 +3291,13 @@ const TS_SCEN={
   ospf(){
     const P=tsPlan(), fault=pick(['timers','area']), h=pick([5,15,20,30]), ar=pick([1,2,5]);
     const w=int2ip(P.wan);
-    const r1='interface Serial0/0/0\n ip address '+int2ip(P.wan+1)+' 255.255.255.252\n!\nrouter ospf 1\n network '+P.A+'.0 0.0.0.255 area 0\n network '+P.C+'.0 0.0.0.255 area 0\n network '+w+' 0.0.0.3 area 0';
+    const r1='interface Serial0/0/0\n ip address '+int2ip(P.wan+1)+' 255.255.255.252\n clock rate 64000\n!\nrouter ospf 1\n network '+P.A+'.0 0.0.0.255 area 0\n network '+P.C+'.0 0.0.0.255 area 0\n network '+w+' 0.0.0.3 area 0';
     const r2='interface Serial0/0/0\n ip address '+int2ip(P.wan+2)+' 255.255.255.252'+(fault==='timers'?'\n ip ospf hello-interval '+h:'')+'\n!\nrouter ospf 1\n network '+P.B+'.0 0.0.0.255 area 0\n network '+w+' 0.0.0.3 area '+(fault==='area'?ar:0);
     return {P, body:tsTable(P)+cliHtml(r1,'R1 (extract)')+cliHtml(r2,'R2 (extract)'),
-      symptom:'R1 and R2 never become OSPF neighbours ('+mono('show ip ospf neighbor')+' is empty on both), so LAN-A can\'t reach LAN-B. Fix it <b>on R2</b>.',
-      cause: fault==='timers'?'The hello and dead intervals on the R1–R2 link don\'t match':'The R1–R2 link is in different areas on R1 and R2',
-      others:[fault==='timers'?'The R1–R2 link is in different areas on R1 and R2':'The hello and dead intervals on the R1–R2 link don\'t match','R2\'s network command has the wrong wildcard','R2 S0/0/0 is a passive interface','R1 and R2 have the same router ID'],
+      symptom:'R1 and R2 never become OSPF neighbours ('+mono('show ip ospf neighbor')+' is empty on both), so LAN-A can\'t reach LAN-B. The network\'s standard is the OSPF default timers, with the R1–R2 link in area 0.',
+      dev:'R2', devs:TS_DEVS_RT,
+      cause: fault==='timers'?'The hello and dead intervals on the R1–R2 link don\'t match':'The R1–R2 link is in a different area at each end',
+      others:[fault==='timers'?'The R1–R2 link is in a different area at each end':'The hello and dead intervals on the R1–R2 link don\'t match','A network command has the wrong wildcard','The serial interface is passive','The two routers have the same router ID'],
       check(lines){
         let mode='', hello=fault==='timers'?h:10, dead=null; const nets=[{a:P.wan,w:3,area:fault==='area'?ar:0},{a:ip2int(P.B+'.0'),w:255,area:0}];
         for(const {raw,cmd} of iosLines(lines)){ const l=cmd; let m;
@@ -3308,8 +3337,9 @@ const TS_SCEN={
     const r1='ip dhcp excluded-address '+P.A+'.1 '+P.A+'.'+lo+'\n!\nip dhcp pool '+name+'\n network '+P.A+'.0 255.255.255.0\n default-router '+bad+'\n dns-server '+P.B+'.10\n!\ninterface GigabitEthernet0/0\n ip address '+P.A+'.1 255.255.255.0';
     return {P, body:tsTable(P)+cliHtml(r1,'R1# show running-config (extract)'),
       symptom:'The PCs on LAN-A get addresses from R1 (e.g. '+P.A+'.'+(lo+1)+') and can ping each other, but can\'t reach anything off LAN-A &mdash; not even R1\'s S0/0/0.',
-      cause:'R1\'s DHCP pool gives the PCs the wrong default gateway',
-      others:['R1 G0/0 needs ip helper-address','The excluded range overlaps the pool','The pool\'s network command is wrong','R1 G0/0 is shut down'],
+      dev:'R1', devs:TS_DEVS_RT,
+      cause:'The DHCP pool gives the PCs the wrong default gateway',
+      others:['The LAN interface needs ip helper-address','The excluded range overlaps the pool','The pool\'s network command is wrong','The LAN interface is shut down'],
       check(lines){ let inPool=false, gw=null;
         for(const {raw,cmd} of iosLines(lines)){ const l=cmd, t=raw.trim().split(/\s+/); let m;
           if(/^ip dhcp pool \S+$/.test(l)){ inPool=t[3]===name; if(!inPool) return t[3].toLowerCase()===name.toLowerCase()?'Pool names are case-sensitive: '+name+', not '+t[3]+'.':'The existing pool is '+name+'.'; continue; }
@@ -3323,21 +3353,23 @@ const TS_SCEN={
         'Fix: under [[ip dhcp pool '+name+'|ip dhcp pool|the pool]], default-router '+P.A+'.1; the PCs pick it up when they renew their lease.']};
   },
 };
-function tsBuild(id){
-  const s=TS_SCEN[id](), opts=shuffle([s.cause].concat(s.others)); s.id=id; s.opts=opts; s.ans=opts.indexOf(s.cause); return s;
+function tsBuild(id,o){
+  const s=TS_SCEN[id](o), opts=shuffle([s.cause].concat(s.others)); s.id=id; s.opts=opts; s.ans=opts.indexOf(s.cause); return s;
 }
 function tsCard(id,tier,title,scen){
   card({id, area:'ts', tier, kind:'graded', src:'Q6', title, gen(){
-    const s=tsBuild(pick(scen));
+    const s=tsBuild(pick(scen),{mirror:chance(.5)});
     return {
-      prompt:s.symptom+' Pick the cause, then type the commands that fix it (interface or mode lines included).',
-      body: s.body+chipsHtml(s.opts)+cmdsHtml('fix','Fix &mdash; one command per line, Ctrl+Enter submits','Type the commands that fix it, interface lines included',4),
+      prompt:s.symptom+' Pick the device at fault and the cause, then type the commands that fix it (interface or mode lines included).',
+      body: s.body+'<div class="ex-apply"><span class="ex-apply-lbl">Device:</span>'+devChipsHtml(s.devs)+'</div>'+
+        '<div class="ex-apply-lbl ex-cause-lbl">Cause:</div>'+chipsHtml(s.opts)+cmdsHtml('fix','Fix &mdash; one command per line, Ctrl+Enter submits','Type the commands that fix it, interface lines included',4),
       grade(){
+        const okD=Q.dev===s.devs.indexOf(s.dev); markDevChips(s.devs.indexOf(s.dev));
         const okC=Q.choice===s.ans; markChips(s.ans);
         const err=s.check(cmdLines('fix')), okF=!err;
         markCmds('fix',okF,s.model.join('\n'),err);
-        return {ok:okC&&okF, verdict: okC&&okF?'Correct.':s.cause.replace(/&mdash;.*/,'').trim()+'.',
-          why: ul(['<b>Here:</b> '+s.cause+'.'].concat(s.points.map(p=>p.replace(KW_RE,(m,b)=>b.split('|')[0])),['Commands:<br>'+s.model.map(l=>mono(l.trim())).join('<br>')]))};
+        return {ok:okD&&okC&&okF, verdict: okD&&okC&&okF?'Correct.':'On '+s.dev+': '+s.cause.replace(/&mdash;.*/,'').trim()+'.',
+          why: ul(['<b>Here:</b> the fault is on <b>'+s.dev+'</b>. '+s.cause+'.'].concat(s.points.map(p=>p.replace(KW_RE,(m,b)=>b.split('|')[0])),['Commands:<br>'+s.model.map(l=>mono(l.trim())).join('<br>')]))};
       },
     };
   }});
@@ -3782,7 +3814,7 @@ function loadQ(){
   }
   lastId=cur.id;
   if(!S.cards[cur.id]) S.lastNew=S.step;
-  Q=cur.gen(); Q.sel=new Set(); Q.choice=null; Q.order=[]; Q.ifSel=null;
+  Q=cur.gen(); Q.sel=new Set(); Q.choice=null; Q.dev=null; Q.order=[]; Q.ifSel=null;
   const area=AREAS.find(a=>a.id===cur.area);
   $('q-tag').textContent=cur.src+' · '+area.name+' · '+(cur.kind==='flash'?'Flashcard':'Auto-marked')+' · '+TIER_NAME[cur.tier];
   const st=cardStatus(cur.id);
@@ -3885,6 +3917,8 @@ $('qbody').addEventListener('click',e=>{
     $('qbody').querySelectorAll('.rt-row.pick').forEach(tr=>tr.classList.toggle('sel',Q.sel.has(+tr.dataset.i)));
     return;
   }
+  const dchip=e.target.closest('.ex-dchip');
+  if(dchip){ Q.dev=+dchip.dataset.d; $('qbody').querySelectorAll('.ex-dchip').forEach(b=>b.classList.toggle('on',+b.dataset.d===Q.dev)); return; }
   const chip=e.target.closest('.ex-chip');
   if(chip){ Q.choice=+chip.dataset.c; $('qbody').querySelectorAll('.ex-chip').forEach(b=>b.classList.toggle('on',+b.dataset.c===Q.choice)); return; }
   const ifg=e.target.closest('.ex-topo.pickable .ex-if');
