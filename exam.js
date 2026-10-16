@@ -1621,11 +1621,11 @@ function decodeEnt(s){
 const IOS_VOCAB=['interface','switchport','access','vlan','mode','trunk','no','shutdown','encapsulation','dot1q','ip','address',
   'native','helper-address','dhcp','excluded-address','pool','network','default-router','dns-server',
   'router','rip','version','auto-summary','passive-interface','ospf','area','hello-interval','dead-interval',
-  'nat','inside','outside','source','overload','static','list','netmask',
+  'nat','inside','outside','source','overload','static','list','netmask','allowed',
   'ipv6','traffic-filter','nd','other-config-flag','managed-config-flag','server','relay','destination','domain-name','prefix'];
 /* Words kept exactly as typed: "in"/"out" are directions (never "inside"),
    "default" a keyword of its own (never "default-router"). */
-const IOS_KEEP=['in','out','default'];
+const IOS_KEEP=['in','out','default','add'];
 function iosNorm(line){
   return line.trim().split(/\s+/).map(t=>{
     const l=t.toLowerCase(); if(IOS_VOCAB.indexOf(l)>=0||IOS_KEEP.indexOf(l)>=0) return l;
@@ -2821,7 +2821,7 @@ card({id:'q6-roas', area:'ts', tier:1, kind:'flash', src:'Q6', title:'Router-on-
     trunk:[
       '<b>Here:</b> S1 Gi0/1, the link to R1, is set to '+mono('switchport mode access')+': [[Gi0/1 is not a trunk]].',
       'An access port [[only carries one VLAN]] (VLAN 1, untagged), so the VLAN '+P.x+' and '+P.y+' frames never reach R1&rsquo;s subinterfaces and neither host '+reach+'. H1 and H2 are in different subnets, so they need R1 to talk.',
-      'Fix on S1: '+mono('interface gi0/1')+' then [[switchport mode trunk]].'],
+      'Fix on S1: '+mono('interface gi0/1')+' then [[switchport mode trunk]], and limit it to the two VLANs with '+mono('switchport trunk allowed vlan '+P.x+','+P.y)+'.'],
     shut:[
       '<b>Here:</b> R1&rsquo;s configuration never enables Gi0/0 &mdash; there is no '+mono('no shutdown')+' under it, so [[Gi0/0 is shut down]].',
       'Router interfaces start shut down, and the [[subinterfaces go down with it]] (Gi0/0.'+P.x+' and Gi0/0.'+P.y+'), so neither host '+reach+' and nothing is routed between the VLANs.',
@@ -2858,7 +2858,7 @@ function q6Fix(P,fault){
   return {
     access:[['f0/1','switchport access vlan '+P.x],['f0/2','switchport access vlan '+P.y]],
     swap:[['f0/1','switchport access vlan '+P.x],['f0/2','switchport access vlan '+P.y]],
-    trunk:[['g0/1','switchport mode trunk']],
+    trunk:[['g0/1','switchport mode trunk'],['g0/1','switchport trunk allowed vlan '+P.x+','+P.y]],
     shut:[['g0/0','no shutdown']],
     tag:[[sub(P.y),'encapsulation dot1q '+P.y]],
     ip:[[sub(P.y),'ip address 192.168.'+P.y+'.1 255.255.255.0']],
@@ -2866,7 +2866,20 @@ function q6Fix(P,fault){
 }
 function q6ModelText(P,fault){
   const name={'f0/1':'fa0/1','f0/2':'fa0/2','g0/1':'gi0/1','g0/0':'gi0/0'};
-  return q6Fix(P,fault).map(p=>'interface '+(name[p[0]]||p[0].replace(/^g/,'gi'))+'\n '+p[1]).join('\n');
+  return q6Fix(P,fault).map((p,i,a)=>(i&&a[i-1][0]===p[0]?'':'interface '+(name[p[0]]||p[0].replace(/^g/,'gi'))+'\n')+' '+p[1]).join('\n');
+}
+/* Does a "switchport trunk allowed vlan" line under ifc let every VLAN of
+   want through? Takes lists and ranges ("50,60", "50-60", "add 60"), in any
+   order and with other VLANs as well; "all" is the default and doesn't count. */
+function q6TrunkAllows(script,ifc,want){
+  const got=new Set();
+  script.forEach(o=>{
+    const m=o.ifc===ifc&&/^switchport trunk allowed vlan (add )?([\d,\-]+)$/.exec(o.cmd.replace(/\s*([,\-])\s*/g,'$1'));
+    if(!m) return;
+    if(!m[1]) got.clear();
+    m[2].split(',').forEach(r=>{ const b=r.split('-').map(Number); for(let v=b[0];v<=(b[1]||b[0]);v++) got.add(v); });
+  });
+  return want.every(v=>got.has(v));
 }
 function q6FaultCard(id,tier,title,faults){
   card({id, area:'ts', tier, kind:'graded', src:'Q6', title, gen(){
@@ -2879,7 +2892,7 @@ function q6FaultCard(id,tier,title,faults){
         cmdsHtml('fix','Fix &mdash; one command per line, Ctrl+Enter submits','e.g. interface fa0/9',4),
       grade(){
         const okC=Q.choice===ans; markChips(ans);
-        const sc=iosScript(cmdLines('fix')), need=q6Fix(P,fault), miss=need.filter(n=>!hasCmd(sc,n[0],n[1]));
+        const sc=iosScript(cmdLines('fix')), need=q6Fix(P,fault), miss=need.filter(n=>!(/^switchport trunk allowed vlan /.test(n[1])?q6TrunkAllows(sc,n[0],[P.x,P.y]):hasCmd(sc,n[0],n[1])));
         const okF=!miss.length;
         markCmds('fix',okF,q6ModelText(P,fault),okF?null:'Missing: '+miss.map(n=>n[1]+' (under '+n[0]+')').join('; '));
         const gw='so neither host reaches its gateway ('+mono('192.168.'+P.x+'.1')+' / '+mono('192.168.'+P.y+'.1')+'), and H1 and H2 are in different subnets, so they need R1 to talk.';
@@ -2889,7 +2902,8 @@ function q6FaultCard(id,tier,title,faults){
           swap:['<b>Here:</b> S1 has the hosts\' ports swapped: Fa0/1 (H1) is in VLAN '+P.y+' and Fa0/2 (H2) is in VLAN '+P.x+'.',
             'H1 is addressed for VLAN '+P.x+' (192.168.'+P.x+'.'+P.h1+') and H2 for VLAN '+P.y+' (192.168.'+P.y+'.'+P.h2+'), so in the wrong VLAN each one\'s gateway is on the other subinterface and neither reaches it.'],
           trunk:['<b>Here:</b> S1 Gi0/1, the link to R1, is '+mono('switchport mode access')+' &mdash; it should be '+mono('switchport mode trunk')+'.',
-            'An access port carries one VLAN untagged (VLAN 1 here), so the VLAN '+P.x+' and '+P.y+' frames never cross to R1 and R1\'s tagged replies are dropped &mdash; '+gw],
+            'An access port carries one VLAN untagged (VLAN 1 here), so the VLAN '+P.x+' and '+P.y+' frames never cross to R1 and R1\'s tagged replies are dropped &mdash; '+gw,
+            mono('switchport trunk allowed vlan '+P.x+','+P.y)+' then limits the trunk to the two VLANs R1 routes, rather than every VLAN on S1.'],
           shut:['<b>Here:</b> R1 Gi0/0 is never enabled &mdash; the configuration has no '+mono('no shutdown')+' under it.',
             'Router interfaces start shut down, and Gi0/0.'+P.x+' and Gi0/0.'+P.y+' stay down with their physical interface &mdash; '+gw],
           tag:['<b>Here:</b> R1 Gi0/0.'+P.y+' has '+mono('encapsulation dot1q '+z)+' &mdash; it should be '+mono('encapsulation dot1q '+P.y)+'.',
