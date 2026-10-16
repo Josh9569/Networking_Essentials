@@ -3791,7 +3791,7 @@ function loadQ(){
   $('q-prompt').innerHTML=Q.prompt;
   if(cur.kind==='flash'){
     $('qbody').innerHTML=(Q.body||'')+
-      '<div class="afield ex-flash-f" id="f-flash"><label>Your answer</label>'+
+      '<div class="afield ex-flash-f" id="f-flash"><label>Your answer &mdash; Enter for a new line, Ctrl+Enter submits</label>'+
       '<textarea id="in-flash" class="ex-flash" rows="5" spellcheck="true" placeholder="In your own words &mdash; Ctrl+Enter submits"></textarea></div>'+
       '<div id="flash-cmp"></div>';
     $('chkbtn').disabled=true;
