@@ -1024,7 +1024,9 @@ const EXAM_KEYS={
     "ospf is started", "ospf is first started", "ospf starts up", "ospf is enabled", "ospf is first enabled",
     "ospf is turned on", "ospf is first turned on", "ospf begins", "process begins", "ospf is first configured",
     "ospf is configured", "router ospf is configured", "router ospf is entered", "process initialises",
-    "ospf initialises", "on startup", "at startup", "at start up"
+    "ospf initialises", "on startup", "at startup", "at start up", "start of ospf", "start of the process",
+    "start of ospf process", "beginning of ospf", "beginning of the process", "ospf starting", "starting ospf",
+    "ospf process starting", "ospf process begins"
   ],
 },
 "q2b-metric": {
