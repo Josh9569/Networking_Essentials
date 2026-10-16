@@ -311,16 +311,6 @@ const EXAM_KEYS={
       "AD is more important", "AD matters more", "AD takes priority", "AD takes precedence", "AD before",
       "AD over the metric", "AD over metric", "AD wins", "AD decides"
     ],
-    "SAMESRC": [
-      "same routing protocol", "same protocol", "same source", "same AD", "same administrative distance",
-      "equal AD", "equal administrative distance", "same admin distance", "same ADs", "equal ADs",
-      "ADs are equal", "ADs are the same", "AD is the same", "AD is equal", "AD is tied", "ADs are tied",
-      "ADs tie", "one protocol", "single protocol", "same dynamic protocol",
-      "same dynamic routing protocol", "same routing source", "same routing protocols", "same protocols",
-      "same type of route", "AD matches", "ADs match", "AD match", "the AD matches", "within a protocol",
-      "within one protocol", "within the protocol", "inside one protocol", "tie breaker", "tiebreaker",
-      "tie-break"
-    ],
     "UNITS": [
       "different units", "different unit", "different metric", "different metrics",
       "metrics are different", "metric is different", "different scale", "different scales",
@@ -386,27 +376,15 @@ const EXAM_KEYS={
       "{adW} is lower", "{adW} is less", "{adW} is smaller", "{adW} is better", "lower than {adL}",
       "less than {adL}", "smaller than {adL}", "{adW} < {adL}", "{adW} vs {adL}", "{adW} beats {adL}"
     ],
-    "TWO": [
-      "two {K} routes", "two {K} paths", "two routes from {K}", "both {K} routes", "both {K} paths",
-      "both from {K}", "both learned by {K}", "both learned from {K}", "both routes from {K}",
-      "both came from {K}", "both come from {K}", "both routes came from {K}",
-      "both routes come from {K}", "both routes are from {K}", "both routes were from {K}",
-      "both are from {K}", "both were from {K}", "both are {K}", "both were {K}", "both {K}",
-      "inside {K}", "within {K}", "in {K} only", "only in {K}", "only within {K}", "only inside {K}",
-      "between {K} routes", "between two {K} routes", "among {K} routes", "if the routes are {K}",
-      "when the routes are {K}", "if both routes are {K}", "when both routes are {K}"
-    ],
     "UV": ["uses", "counts", "is based on", "measures", "metric is", "metric is based on"],
   },
   "lowest administrative distance": ["{LOWERAD}"],
-  "same routing protocol": ["{SAMESRC}"],
   "R1 installs the {WN} route": [
     "^{Wn}", "^{Wn} route", "^the {Wn} route", "{Wn}~{WINT}", "{Ln}~{LOSET}", "{USEV} {Wn}",
     "!{Ln}~{LVETO}"
   ],
   "{WN} has the lower AD": ["{Wn}~{LOW}", "@!{Ln}~{LOW}", "{ADNUM}"],
   "different units": ["{UNITS}", "{Wn} {UV} {WU}", "{Ln} {UV} {LU}"],
-  "same routing protocol#R1": ["{SAMESRC}", "{TWO}"],
   "trustworthy": [
     "trust", "trusted", "trusts", "trustworthiness", "reliable", "reliability", "believable",
     "believability", "credible", "credibility", "confidence", "how good the source",

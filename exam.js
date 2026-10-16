@@ -592,18 +592,18 @@ card({id:'q1b-adpair', area:'routing', tier:1, kind:'flash', src:'Q1 b', title:'
 }});
 card({id:'q1c-admetric', area:'routing', tier:1, kind:'flash', src:'Q1 c', title:'Metric vs administrative distance', gen(){
   /* Key words: exam-keys.js. "Lowest AD wins" is the verdict on the paper's
-     general question and the reason on R1's; the metric only decides within
-     one source. "tie" alone is left out: the general prompt also asks what a
-     tie on both values does. */
+     general question and the reason on R1's. Neither prompt asks when the
+     metric decides (owner), so "same routing protocol" is plain text in the
+     model, not a key word. */
   /* The paper's own question is general, so the rule is the answer. The
      prompt spells out every part the key words grade. */
   if(chance(.5)) return {
-    prompt:'Routing protocols use both metrics and administrative distance (AD). If there is a choice of routes to the same destination, which have different metrics and ADs, which route is chosen? What does each one measure, and when does the metric matter at all?',
+    prompt:'Routing protocols use both metrics and administrative distance (AD). If there is a choice of routes to the same destination, which have different metrics and ADs, which route is chosen? What does each one measure?',
     points: [
       '<b>Lowest AD wins:</b> of the routes to the same prefix from different sources, the one with the [[lowest administrative distance]] is installed, whatever its metric &mdash; AD is compared first.',
       '<b>AD</b> rates how [[trustworthy]] the source of a route is (connected 0, static 1, EIGRP 90, OSPF 110, RIP 120): the lower the number, the more the router believes it.',
       '<b>The metric</b> measures how good a path is &mdash; the [[cost of the path]] of reaching the network that way, worked out by the routing protocol itself (OSPF cost, RIP hop count, EIGRP bandwidth and delay).',
-      '<b>When the metric decides:</b> only between routes from the [[same routing protocol]] (same AD) &mdash; e.g. two OSPF paths, the lower cost wins. Metrics from different protocols are in different units, so they are never compared.',
+      '<b>When the metric decides:</b> only between routes from the same routing protocol (same AD) &mdash; e.g. two OSPF paths, the lower cost wins. Metrics from different protocols are in different units, so they are never compared.',
       '<b>Same AD and same metric:</b> both routes are installed and traffic is load balanced across them (equal-cost multipath).',
     ],
   };
@@ -628,11 +628,11 @@ card({id:'q1c-admetric', area:'routing', tier:1, kind:'flash', src:'Q1 c', title
   const UNIT={ospf:'cost', rip:'hop count', eigrp:'metric'};
   const USES={ospf:['cost','bandwidth'], rip:['hops','hop count','the hop count','number of hops'], eigrp:['bandwidth and delay','bandwidth','delay']};
   return {
-    prompt:'R1 has two routes to the same network: one learned by '+src(a)+', the other learned by '+src(b)+'. Which route does R1 install, and why? Do the metrics play any part, and when does the metric matter at all?',
+    prompt:'R1 has two routes to the same network: one learned by '+src(a)+', the other learned by '+src(b)+'. Which route does R1 install, and why? Do the metrics play any part?',
     points: [
       '<b>Here:</b> [[R1 installs the {WN} route]] &mdash; [[{WN} has the lower AD]] ('+nm(W)+' '+ad(W)+' against '+nm(L)+' '+ad(L)+'), and AD is compared before the metric, so '+nm(L)+'\'s lower metric of '+mL+' never comes into it.',
       '<b>The metrics play no part:</b> '+METRIC_NAME[L]+' and '+METRIC_NAME[W]+' are measured in [[different units]], so '+mL+' is not &ldquo;better&rdquo; than '+mW+' &mdash; metrics are never compared across sources.',
-      '<b>When the metric decides:</b> only between routes from the [[same routing protocol#R1]] (same AD) &mdash; e.g. if R1 had two '+nm(W)+' routes to that network, the one with the lower '+UNIT[W]+' would be installed; with equal metrics both would be installed and traffic load balanced.',
+      '<b>When the metric decides:</b> only between routes from the same routing protocol (same AD) &mdash; e.g. if R1 had two '+nm(W)+' routes to that network, the one with the lower '+UNIT[W]+' would be installed; with equal metrics both would be installed and traffic load balanced.',
     ],
     vars:{WN:nm(W), Wn:NAMES[W], Ln:NAMES[L], adW:ad(W), adL:ad(L), K:[nm(W),nm(L)], WU:USES[W], LU:USES[L]},
   };
