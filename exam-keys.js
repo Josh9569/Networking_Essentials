@@ -1024,7 +1024,9 @@ const EXAM_KEYS={
     "ospf is started", "ospf is first started", "ospf starts up", "ospf is enabled", "ospf is first enabled",
     "ospf is turned on", "ospf is first turned on", "ospf begins", "process begins", "ospf is first configured",
     "ospf is configured", "router ospf is configured", "router ospf is entered", "process initialises",
-    "ospf initialises", "on startup", "at startup", "at start up"
+    "ospf initialises", "on startup", "at startup", "at start up", "start of ospf", "start of the process",
+    "start of ospf process", "beginning of ospf", "beginning of the process", "ospf starting", "starting ospf",
+    "ospf process starting", "ospf process begins"
   ],
 },
 "q2b-metric": {
@@ -1088,7 +1090,10 @@ const EXAM_KEYS={
   "smaller routing tables": [
     "smaller tables", "routing tables are smaller", "routing table is smaller", "tables are smaller",
     "fewer routes", "less routes", "fewer routing entries", "reduces the routing table",
-    "reduced routing table"
+    "reduced routing table", "smaller LSDB and routing table", "smaller link state database and routing table",
+    "smaller link-state database and routing table", "smaller database and routing table",
+    "smaller topology table and routing table", "LSDB and routing table get smaller",
+    "LSDB and routing table are smaller", "database and routing table are smaller"
   ],
 },
 "q2d-timers": {

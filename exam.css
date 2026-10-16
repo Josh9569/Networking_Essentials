@@ -103,8 +103,10 @@ mark.ex-kw.miss { color: var(--err-text); box-shadow: inset 0 -2px 0 var(--err-t
 .ex-topo .t-v6  { font-size: 10px; }
 .ex-topo .rt-name { font-family: var(--font); font-size: 14px; font-weight: 600; }
 .ex-topo .rt   { fill: var(--surface); stroke: var(--border-m); stroke-width: 1.5; }
-.ex-topo .ln   { fill: none; stroke: var(--text-s); stroke-width: 2; }
-.ex-topo .ser  { stroke: var(--err-text); stroke-dasharray: 7 4; }
+/* Links are the labs' own .cable / .cable.serial (styles.css), so they look
+   the same as every packet-tracer canvas. A figure isn't a canvas: nothing
+   here can be clicked or deleted, so the lab's pointer and red hover go. */
+.ex-topo .cable { pointer-events: none; cursor: default; }
 .ex-if rect    { fill: var(--surface); stroke: var(--border-m); }
 .ex-if text    { font-size: 11.5px; }
 .ex-topo.pickable .ex-if { cursor: pointer; }
