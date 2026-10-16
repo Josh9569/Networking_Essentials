@@ -1053,7 +1053,10 @@ const EXAM_KEYS={
   "smaller routing tables": [
     "smaller tables", "routing tables are smaller", "routing table is smaller", "tables are smaller",
     "fewer routes", "less routes", "fewer routing entries", "reduces the routing table",
-    "reduced routing table"
+    "reduced routing table", "smaller LSDB and routing table", "smaller link state database and routing table",
+    "smaller link-state database and routing table", "smaller database and routing table",
+    "smaller topology table and routing table", "LSDB and routing table get smaller",
+    "LSDB and routing table are smaller", "database and routing table are smaller"
   ],
 },
 "q2d-timers": {
