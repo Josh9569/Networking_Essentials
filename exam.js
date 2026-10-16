@@ -1759,16 +1759,17 @@ function q3Plan(){
 function q3Topo(P,pick,lab){
   const L=i=>lab?lab.lans[i]:cidr(P.lans[i],24);
   let s='<svg class="ex-topo'+(pick?' pickable':'')+'" viewBox="0 100 800 164" role="img" aria-label="R1 and R2 with four LANs">';
-  s+='<path class="ln" d="M250 132 H172 M172 110 V154"/><path class="ln" d="M295 154 V214 M262 214 H328"/>'+
-     '<path class="ln ser" d="M340 132 H470"/><path class="ln" d="M560 132 H638 M638 110 V154"/><path class="ln" d="M515 154 V214 M482 214 H548"/>';
+  s+='<path class="cable" d="M250 132 H172 M172 110 V154"/><path class="cable" d="M295 154 V214 M262 214 H328"/>'+
+     '<path class="cable serial" d="M340 132 H470"/><path class="cable" d="M560 132 H638 M638 110 V154"/><path class="cable" d="M515 154 V214 M482 214 H548"/>';
   [['R1',250],['R2',470]].forEach(r=>{ s+='<rect class="rt" x="'+r[1]+'" y="110" width="90" height="44" rx="10"/><text class="rt-name" x="'+(r[1]+45)+'" y="137" text-anchor="middle">'+r[0]+'</text>'; });
   s+='<text x="162" y="128" text-anchor="end">'+L(0)+'</text><text class="t-sub" x="162" y="145" text-anchor="end">LAN1</text>'+
      '<text x="295" y="236" text-anchor="middle">'+L(1)+'</text><text class="t-sub" x="295" y="253" text-anchor="middle">LAN2</text>'+
      '<text x="648" y="128">'+L(2)+'</text><text class="t-sub" x="648" y="145">LAN3</text>'+
      '<text x="515" y="236" text-anchor="middle">'+L(3)+'</text><text class="t-sub" x="515" y="253" text-anchor="middle">LAN4</text>'+
      '<text class="t-sub" x="405" y="156" text-anchor="middle">'+(lab?lab.wan:cidr(P.wan,30))+'</text>';
-  s+=ifPill('R1 G0/0','G0/0',211,132,pick)+ifPill('R1 G0/1','G0/1',326,184,pick)+ifPill('R1 S0/0/0','S0/0/0',374,132,pick)+
-     ifPill('R2 S0/0/0','S0/0/0',436,132,pick)+ifPill('R2 G0/0','G0/0',599,132,pick)+ifPill('R2 G0/1','G0/1',546,184,pick);
+  /* the pills sit beside their link, never on it, so every cable shows end to end */
+  s+=ifPill('R1 G0/0','G0/0',211,113,pick)+ifPill('R1 G0/1','G0/1',326,184,pick)+ifPill('R1 S0/0/0','S0/0/0',374,113,pick)+
+     ifPill('R2 S0/0/0','S0/0/0',436,113,pick)+ifPill('R2 G0/0','G0/0',599,113,pick)+ifPill('R2 G0/1','G0/1',546,184,pick);
   return '<div class="ex-topo-wrap">'+s.replace('class="ex-topo','class="ex-topo ex-topo-wide')+'</svg>'+q3TopoNarrow(P,pick,lab)+'</div>';
 }
 /* The same network stacked for a phone — R1 above R2, LANs either side — so
@@ -1777,16 +1778,16 @@ function q3Topo(P,pick,lab){
 function q3TopoNarrow(P,pick,lab){
   const L=i=>lab?lab.lans[i]:cidr(P.lans[i],24), v6=lab?' class="t-v6"':'';   // IPv6 prefixes need the smaller type to fit
   let s='<svg class="ex-topo ex-topo-narrow'+(pick?' pickable':'')+'" viewBox="0 78 340 236" role="img" aria-label="R1 and R2 with four LANs">';
-  s+='<path class="ln" d="M125 130 H70 M70 110 V150"/><path class="ln" d="M215 130 H270 M270 110 V150"/>'+
-     '<path class="ln ser" d="M170 150 V230"/><path class="ln" d="M215 250 H270 M270 230 V270"/><path class="ln" d="M125 250 H70 M70 230 V270"/>';
+  s+='<path class="cable" d="M125 130 H70 M70 110 V150"/><path class="cable" d="M215 130 H270 M270 110 V150"/>'+
+     '<path class="cable serial" d="M170 150 V230"/><path class="cable" d="M215 250 H270 M270 230 V270"/><path class="cable" d="M125 250 H70 M70 230 V270"/>';
   [['R1',110],['R2',230]].forEach(r=>{ s+='<rect class="rt" x="125" y="'+r[1]+'" width="90" height="40" rx="10"/><text class="rt-name" x="170" y="'+(r[1]+25)+'" text-anchor="middle">'+r[0]+'</text>'; });
   s+='<text'+v6+' x="70" y="90" text-anchor="middle">'+L(0)+'</text><text class="t-sub" x="70" y="104" text-anchor="middle">LAN1</text>'+
      '<text'+v6+' x="270" y="90" text-anchor="middle">'+L(1)+'</text><text class="t-sub" x="270" y="104" text-anchor="middle">LAN2</text>'+
      '<text'+v6+' x="270" y="290" text-anchor="middle">'+L(2)+'</text><text class="t-sub" x="270" y="304" text-anchor="middle">LAN3</text>'+
      '<text'+v6+' x="70" y="290" text-anchor="middle">'+L(3)+'</text><text class="t-sub" x="70" y="304" text-anchor="middle">LAN4</text>'+
      '<text class="t-sub'+(lab?' t-v6':'')+'" x="210" y="194">'+(lab?lab.wan:cidr(P.wan,30))+'</text>';
-  s+=ifPill('R1 G0/0','G0/0',97,130,pick)+ifPill('R1 G0/1','G0/1',243,130,pick)+ifPill('R1 S0/0/0','S0/0/0',170,168,pick)+
-     ifPill('R2 S0/0/0','S0/0/0',170,212,pick)+ifPill('R2 G0/0','G0/0',243,250,pick)+ifPill('R2 G0/1','G0/1',97,250,pick);
+  s+=ifPill('R1 G0/0','G0/0',97,143,pick)+ifPill('R1 G0/1','G0/1',243,143,pick)+ifPill('R1 S0/0/0','S0/0/0',133,168,pick)+
+     ifPill('R2 S0/0/0','S0/0/0',133,212,pick)+ifPill('R2 G0/0','G0/0',243,238,pick)+ifPill('R2 G0/1','G0/1',97,238,pick);
   return s+'</svg>';
 }
 function applyHtml(noDir){
@@ -2862,7 +2863,7 @@ function q6Config(P,fault){
 }
 function q6Topo(P){
   return '<svg class="ex-topo ex-q6fig" viewBox="0 0 260 264" role="img" aria-label="R1 trunked to S1, H1 and H2 below">'+
-    '<path class="ln" d="M130 52 V104 M110 134 L70 186 M150 134 L190 186"/>'+
+    '<path class="cable" d="M130 52 V104 M110 134 L70 186 M150 134 L190 186"/>'+
     '<rect class="rt" x="90" y="10" width="80" height="42" rx="10"/><text class="rt-name" x="130" y="36" text-anchor="middle">R1</text>'+
     '<rect class="rt" x="90" y="104" width="80" height="30" rx="6"/><text class="rt-name" x="130" y="124" text-anchor="middle">S1</text>'+
     '<text class="t-sub" x="138" y="68">Gi0/0</text><text class="t-sub" x="138" y="98">Gi0/1</text>'+
