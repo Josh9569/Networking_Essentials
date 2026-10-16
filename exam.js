@@ -812,7 +812,7 @@ card({id:'g1-float', area:'routing', tier:2, kind:'graded', src:'Q1 d', title:'W
   const model='ip route '+int2ip(net)+' '+maskStr(pfx)+' '+int2ip(nh2)+' '+goodAd;
   return {
     prompt:'R1 reaches '+what+' through '+how+' over its primary link. On <b>R1</b>, write the <b>floating static route</b> that sends this traffic to the backup next hop <b>'+int2ip(nh2)+'</b>, used only if the primary route is lost.',
-    body: fieldHtml('cmd','Command (global configuration mode)','e.g. ip route 198.51.100.0 255.255.255.0 203.0.113.2',true),
+    body: fieldHtml('cmd','Command (global configuration mode)','Type the command that adds the backup route',true),
     grade(){
       const r=parseIpRoute(val('cmd'));
       let why=null;
@@ -958,7 +958,7 @@ card({id:'g1-rip', area:'routing', tier:2, kind:'graded', src:'Q1', title:'Confi
     prompt:'Configure <b>RIPv'+ver+'</b> on R1 so that it advertises all of its connected networks, '+sumAsk+'and stop RIP updates being sent out of the LAN interface'+(lans.length>1?'s':'')+'.',
     body:'<div class="ex-scroll"><table class="rt-table ex-table"><thead><tr><th>R1 interface</th><th>Address</th><th>Connects to</th></tr></thead><tbody>'+
       ifs.map(f=>'<tr><td>'+f.name+'</td><td>'+int2ip(f.ip)+'/'+f.pfx+'</td><td style="font-family:var(--font)">'+(f.lan?'LAN (PCs only)':f.to)+'</td></tr>').join('')+'</tbody></table></div>'+
-      cmdsHtml('rip','Commands &mdash; one per line, Ctrl+Enter submits','e.g. router rip',6),
+      cmdsHtml('rip','Commands &mdash; one per line, Ctrl+Enter submits','Type the commands that set up RIP on R1, one per line',6),
     grade(){
       let why=null, inRip=false, v=null, noAuto=false, pasDef=false; const nets=new Set(), pas=new Set(), notPas=new Set();
       for(const {raw,cmd} of iosLines(cmdLines('rip'))){
@@ -1529,7 +1529,7 @@ card({id:'g2-net', area:'ospf', tier:2, kind:'graded', src:'Q2', title:'Write th
     prompt:'Configure <b>OSPF process 1</b> on R1 with <b>network</b> commands (wildcard masks) so each interface below runs OSPF in the area shown. The link to the ISP must <b>not</b> run OSPF.',
     body:'<div class="ex-scroll"><table class="rt-table ex-table"><thead><tr><th>R1 interface</th><th>Address</th><th>OSPF area</th></tr></thead><tbody>'+
       ifs.map(f=>'<tr><td>'+f.name+'</td><td>'+int2ip(f.ip)+'/'+f.pfx+'</td><td style="font-family:var(--font)">'+(f.area==null?'none &mdash; link to the ISP':'Area '+f.area)+'</td></tr>').join('')+'</tbody></table></div>'+
-      cmdsHtml('net','Commands &mdash; one per line, Ctrl+Enter submits','e.g. network 198.51.100.0 0.0.0.255 area 0',5),
+      cmdsHtml('net','Commands &mdash; one per line, Ctrl+Enter submits','Type the commands that put R1\'s interfaces into OSPF, one per line',5),
     grade(){
       const p=parseOspfNets(cmdLines('net'));
       let why=p.err||null;
@@ -1916,7 +1916,7 @@ card({id:'g3-acl', area:'acl', tier:2, kind:'graded', src:'Q3 b', title:'Write a
   return {
     prompt:'Write a <b>standard ACL</b> that controls access into <b>LAN'+(t+1)+'</b> ('+cidr(P.lans[t],24)+'). Host <b>'+int2ip(host)+'</b> and all hosts in <b>LAN'+(nl+1)+
       '</b> are permitted; all other networks are not. Then say which router interface it goes on, and in which direction.',
-    body: q3Topo(P,true)+cmdsHtml('acl','Standard ACL &mdash; one command per line, Ctrl+Enter submits','e.g. access-list 7 permit host 198.51.100.9',3)+applyHtml(),
+    body: q3Topo(P,true)+cmdsHtml('acl','Standard ACL &mdash; one command per line, Ctrl+Enter submits','Type the ACL, one entry per line',3)+applyHtml(),
     grade(){
       const p=parseStdAcl(cmdLines('acl'));
       let aclWhy=p.err||null;
@@ -2031,7 +2031,7 @@ card({id:'g3-ext', area:'acl', tier:3, kind:'graded', src:'Q3', title:'Write and
   const tgt=Q3_IF[a];
   return {
     prompt:policy+' Write an <b>extended ACL</b> for this, then say which interface it goes on and in which direction.',
-    body: q3Topo(P,true)+cmdsHtml('acl','Extended ACL &mdash; one command per line, Ctrl+Enter submits','e.g. access-list 101 deny tcp 198.51.100.0 0.0.0.255 host 203.0.113.9 eq 23',3)+applyHtml(),
+    body: q3Topo(P,true)+cmdsHtml('acl','Extended ACL &mdash; one command per line, Ctrl+Enter submits','Type the ACL, one entry per line',3)+applyHtml(),
     grade(){
       const p=parseExtAcl(cmdLines('acl'));
       let aclWhy=p.err||null;
@@ -2081,8 +2081,8 @@ card({id:'g3-acl6', area:'acl', tier:2, kind:'graded', src:'Q3', title:'Write an
   const tgt=Q3_IF[a];
   return {
     prompt:'The network now runs IPv6. Hosts in <b>LAN'+(a+1)+'</b> must not reach anything in <b>LAN'+(b+1)+'</b>; all other IPv6 traffic is allowed. Write an IPv6 ACL named <b>'+name+'</b>, the command that applies it, and click the interface it goes on.',
-    body: q3Topo(P,true,{lans:P6.lans, wan:P6.wan})+cmdsHtml('acl','IPv6 ACL &mdash; one command per line, Ctrl+Enter submits','e.g. ipv6 access-list EXAMPLE',3)+
-      fieldHtml('apply','Command that applies it (interface configuration mode)','e.g. ipv6 traffic-filter EXAMPLE out',true)+applyHtml(true),
+    body: q3Topo(P,true,{lans:P6.lans, wan:P6.wan})+cmdsHtml('acl','IPv6 ACL &mdash; one command per line, Ctrl+Enter submits','Type the ACL, one command per line',3)+
+      fieldHtml('apply','Command that applies it (interface configuration mode)','Type the command that puts the list on the interface',true)+applyHtml(true),
     grade(){
       const lines=cmdLines('acl'); let aclWhy=null; const acl=NR.aclMake(name,false,6,true);
       const head=(lines[0]||'').split(/\s+/);
@@ -2418,7 +2418,7 @@ function natCfgCard(id,tier,title,kinds){
     const model=natCfgModel(P,kind,X,pool);
     return {
       prompt:task+' Include the interface commands.',
-      body: natTableHtml(P,false)+cmdsHtml('nat','Gateway configuration &mdash; one command per line, Ctrl+Enter submits','e.g. ip nat inside source static 198.51.100.5 203.0.113.5',6),
+      body: natTableHtml(P,false)+cmdsHtml('nat','Gateway configuration &mdash; one command per line, Ctrl+Enter submits','Type the Gateway\'s NAT configuration, one command per line',6),
       grade(){
         const why=natCfgCheck(P,kind,X,pool);
         markCmds('nat',!why,model.join('\n'),why);
@@ -2590,7 +2590,7 @@ card({id:'g5-relay', area:'dhcp', tier:2, kind:'graded', src:'Q5 b', title:'Conf
     prompt:'The PCs on R1\'s <b>'+lanIf+'</b> LAN get their addresses from the DHCP server <b>'+int2ip(srv)+'</b>, which is on a different network. Which R1 interface needs configuring, and what command goes on it?',
     body:'<div class="ex-scroll"><table class="rt-table ex-table"><thead><tr><th>R1 interface</th><th>Network</th><th>Connects to</th></tr></thead><tbody>'+
       rows.map(r=>'<tr><td>'+r[0]+'</td><td>'+r[1]+'</td><td style="font-family:var(--font)">'+r[2]+'</td></tr>').join('')+'</tbody></table></div>'+
-      '<div class="ex-apply"><span class="ex-apply-lbl">Interface:</span>'+chipsHtml(ifs)+'</div>'+fieldHtml('cmd','Command (interface configuration mode)','e.g. ip helper-address 198.51.100.5',true),
+      '<div class="ex-apply"><span class="ex-apply-lbl">Interface:</span>'+chipsHtml(ifs)+'</div>'+fieldHtml('cmd','Command (interface configuration mode)','Type the command that gets the PCs\' DHCP requests to the server',true),
     grade(){
       const okI=Q.choice===ifs.indexOf(lanIf); markChips(ifs.indexOf(lanIf));
       const n=iosNorm(cmdLines('cmd')[0]||'','if'), m=/^ip helper-address (\S+)$/.exec(n);
@@ -2629,7 +2629,7 @@ card({id:'g5-exclude', area:'dhcp', tier:2, kind:'graded', src:'Q5 c', title:'Wr
   return {
     prompt:'R1 hands out addresses in <b>'+cidr(net,24)+'</b>. These are set statically and must never be leased: the default gateway <b>'+H(gw)+'</b>, the servers <b>'+H(s)+'&ndash;'+H(e)+
       '</b>, the printer <b>'+H(pr)+'</b>'+(mg?' and switch S1\'s management address <b>'+H(mg)+'</b>':'')+'. On R1, write the command(s) that exclude exactly those addresses.',
-    body: cmdsHtml('ex','Exclusions &mdash; one command per line, Ctrl+Enter submits','e.g. ip dhcp excluded-address 198.51.100.1 198.51.100.9',3),
+    body: cmdsHtml('ex','Exclusions &mdash; one command per line, Ctrl+Enter submits','Type the commands that keep those addresses from being leased, one per line',3),
     grade(){
       const p=parseExclusions(cmdLines('ex'));
       let why=p.err||null;
@@ -2652,7 +2652,7 @@ card({id:'g5-pool', area:'dhcp', tier:3, kind:'graded', src:'Q5', title:'Build a
   const model=['ip dhcp pool '+name,' network '+int2ip(net)+' '+maskStr(pfx),' default-router '+int2ip(gw),' dns-server '+int2ip(dns)];
   return {
     prompt:'Make R1 the DHCP server for <b>'+cidr(net,pfx)+'</b>: create a pool named <b>'+name+'</b> that leases addresses from that network, with default gateway <b>'+int2ip(gw)+'</b> and DNS server <b>'+int2ip(dns)+'</b>.',
-    body: cmdsHtml('pool','Pool &mdash; one command per line, Ctrl+Enter submits','e.g. ip dhcp pool EXAMPLE',5),
+    body: cmdsHtml('pool','Pool &mdash; one command per line, Ctrl+Enter submits','Type the commands that create the pool and fill it in, one per line',5),
     grade(){
       const L=iosLines(cmdLines('pool'));
       let why=null, inPoolMode=false, seen={net:false,gw:false,dns:false};
@@ -2776,7 +2776,7 @@ card({id:'g5-v6relay', area:'dhcp', tier:2, kind:'graded', src:'Q5', title:'Conf
     prompt:'The PCs on R1\'s <b>'+lanIf+'</b> LAN must get their IPv6 settings from the DHCPv6 server <b>'+srv+'</b>, on another network. Which R1 interface needs configuring, and what command goes on it?',
     body:'<div class="ex-scroll"><table class="rt-table ex-table"><thead><tr><th>R1 interface</th><th>Address</th><th>Connects to</th></tr></thead><tbody>'+
       rows.map(r=>'<tr><td>'+r[0]+'</td><td>'+r[1]+'</td><td style="font-family:var(--font)">'+r[2]+'</td></tr>').join('')+'</tbody></table></div>'+
-      '<div class="ex-apply"><span class="ex-apply-lbl">Interface:</span>'+chipsHtml(ifs)+'</div>'+fieldHtml('cmd','Command (interface configuration mode)','e.g. ipv6 dhcp relay destination 2001:db8:ffff::5',true),
+      '<div class="ex-apply"><span class="ex-apply-lbl">Interface:</span>'+chipsHtml(ifs)+'</div>'+fieldHtml('cmd','Command (interface configuration mode)','Type the command that gets the PCs\' DHCPv6 requests to the server',true),
     grade(){
       const okI=Q.choice===ifs.indexOf(lanIf); markChips(ifs.indexOf(lanIf));
       const n2=iosNorm(cmdLines('cmd')[0]||'','if'), m=/^ipv6 dhcp relay destination (\S+)( \S+)?$/.exec(n2);
@@ -2799,7 +2799,7 @@ card({id:'g5-v6cfg', area:'dhcp', tier:3, kind:'graded', src:'Q5', title:'Config
   return {
     prompt:'Make R1 a <b>'+(stateful?'stateful':'stateless')+' DHCPv6</b> server for its G0/1 LAN ('+pfx+'/64). Create a pool named <b>'+name+'</b> that gives out the DNS server <b>'+dns+'</b> and the domain name <b>'+dom+'</b>'+
       (stateful?', and leases addresses from the LAN\'s prefix':'')+'. Then enable it on G0/1 and set the RA flag the PCs need.',
-    body: cmdsHtml('v6','Commands &mdash; one per line, Ctrl+Enter submits','e.g. ipv6 dhcp pool EXAMPLE',7),
+    body: cmdsHtml('v6','Commands &mdash; one per line, Ctrl+Enter submits','Type the commands for the pool and for G0/1, one per line',7),
     grade(){
       let why=null, mode='', seen={pool:false,dns:false,dom:false,addr:false,srv:false,flag:false};
       for(const {raw,cmd} of iosLines(cmdLines('v6'))){
@@ -2973,7 +2973,7 @@ function q6FaultCard(id,tier,title,faults){
     return {
       prompt:'Host H1 cannot communicate with host H2. Pick the cause, then type the commands that fix it (interface lines included).',
       body: q6Body(P,cfg,true)+chipsHtml(causes.map(k=>Q6_CAUSE[k]))+
-        cmdsHtml('fix','Fix &mdash; one command per line, Ctrl+Enter submits','e.g. interface fa0/9',4),
+        cmdsHtml('fix','Fix &mdash; one command per line, Ctrl+Enter submits','Type the commands that fix it, interface lines included',4),
       grade(){
         const okC=Q.choice===ans; markChips(ans);
         const sc=iosScript(cmdLines('fix')), need=q6Fix(P,fault), miss=need.filter(n=>!(/^switchport trunk allowed vlan /.test(n[1])?q6TrunkAllows(sc,n[0],[P.x,P.y]):hasCmd(sc,n[0],n[1])));
@@ -3009,7 +3009,7 @@ card({id:'g6-subif', area:'ts', tier:2, kind:'graded', src:'Q6', title:'Add a VL
   return {
     prompt:'R1 Gi0/0 is trunked to S1 (router-on-a-stick). On <b>R1</b>, add routing for <b>VLAN '+v+'</b>, network 192.168.'+v+'.0/24, with R1 as the gateway <b>192.168.'+v+'.'+gwo+'</b>'+
       (native?'. VLAN '+v+' is the trunk\'s <b>native VLAN</b>.':'.')+' Write the commands.',
-    body: cmdsHtml('sub','Commands &mdash; one per line, Ctrl+Enter submits','e.g. interface gi0/0.5',3),
+    body: cmdsHtml('sub','Commands &mdash; one per line, Ctrl+Enter submits','Type the commands that give VLAN '+v+' its gateway on R1, one per line',3),
     grade(){
       const sc=iosScript(cmdLines('sub'));
       const subs=[...new Set(sc.map(o=>o.ifc).filter(f=>/^g0\/0\.\d+$/.test(f)))];
@@ -3209,7 +3209,7 @@ function tsCard(id,tier,title,scen){
     const s=tsBuild(pick(scen));
     return {
       prompt:s.symptom+' Pick the cause, then type the commands that fix it (interface or mode lines included).',
-      body: s.body+chipsHtml(s.opts)+cmdsHtml('fix','Fix &mdash; one command per line, Ctrl+Enter submits','e.g. interface g0/9',4),
+      body: s.body+chipsHtml(s.opts)+cmdsHtml('fix','Fix &mdash; one command per line, Ctrl+Enter submits','Type the commands that fix it, interface lines included',4),
       grade(){
         const okC=Q.choice===s.ans; markChips(s.ans);
         const err=s.check(cmdLines('fix')), okF=!err;
