@@ -827,7 +827,7 @@ card({id:'g1-float', area:'routing', tier:2, kind:'graded', src:'Q1 d', title:'W
       markField('cmd',ok,model);
       return {ok, verdict: ok?'Correct &mdash; AD '+r.ad+' floats above '+PROTO[prim].name+'\'s '+A+'.':'Not quite.',
         why: ul([...(why?[why]:[]), 'Any AD from <b>'+(A+1)+' to 254</b> works: higher than '+PROTO[prim].name+' ('+A+'), lower than 255.',
-          'e.g. '+mono(model)])};
+          'The correct command to run: '+mono(model)])};
     },
   };
 }});
@@ -918,51 +918,82 @@ card({id:'q1g-autosum', area:'routing', tier:2, kind:'flash', src:'Q1', title:'R
 
 /* The classful network a RIP "network" statement stands for. */
 function classfulNet(ip){ const o=ip>>>24; const p=o<128?8:o<192?16:24; return {net:netOf(ip,p), pfx:p}; }
-card({id:'g1-rip', area:'routing', tier:2, kind:'graded', src:'Q1', title:'Configure RIPv2', gen(){
-  const lanA=ip2int('192.168.'+ri(0,254)+'.0'), two=chance(.6), lanB=ip2int('172.'+ri(16,31)+'.'+ri(0,255)+'.0');
-  const w1=rLink30(); let w2=null; if(chance(.5)) for(;;){ w2=ip2int('10.'+(w1>>>16&255)+'.'+ri(0,255)+'.'+(ri(0,63)*4)); if(w2!==w1) break; }
-  const ifs=[{name:'G0/0', n:'g0/0', ip:lanA+1, pfx:24, lan:true}];
-  if(two) ifs.push({name:'G0/1', n:'g0/1', ip:lanB+1, pfx:24, lan:true});
-  ifs.push({name:'S0/0/0', n:'s0/0/0', ip:w1+1, pfx:30, lan:false, to:'R2'});
-  if(w2!=null) ifs.push({name:'S0/0/1', n:'s0/0/1', ip:w2+1, pfx:30, lan:false, to:'R3'});
+/* A subnet of the given class: 10.x.y (A), 172.16-31.x (B) or 192.168.x (C). */
+function ripSubnet(cls,pfx){
+  const ip=ip2int(cls==='A'?'10.'+ri(0,254)+'.'+ri(0,255)+'.'+ri(0,255):cls==='B'?'172.'+ri(16,31)+'.'+ri(0,255)+'.'+ri(0,255):'192.168.'+ri(0,254)+'.'+ri(0,255));
+  return netOf(ip,pfx);
+}
+/* g1-rip rotates everything the commands depend on: the RIP version, whether
+   auto-summary is to be turned off (RIPv2 only: v1 always summarises), how
+   many LANs and links R1 has, their addresses and classes, and which ports
+   they are on. On RIPv1 no major network holds two different masks, since v1
+   carries none; on RIPv2 a LAN may share its major network with a link, so
+   one network statement covers both. */
+card({id:'g1-rip', area:'routing', tier:2, kind:'graded', src:'Q1', title:'Configure RIP', gen(){
+  const ver=pick([1,2,2]), noAutoAsk=ver===2&&chance(.6);
+  const kit=pick([{eth:['G0/0','G0/1','G0/2'], ser:['S0/0/0','S0/0/1']}, {eth:['G0/0','G0/1'], ser:['S0/0/0','S0/0/1']}, {eth:['Fa0/0','Fa0/1'], ser:['S0/0/0','S0/0/1']}]);
+  const nLan=chance(.6)?2:1, nWan=chance(.5)?2:1;
+  let ifs;
+  for(;;){
+    const eth=shuffle(kit.eth), ser=shuffle(kit.ser); let ok=true; ifs=[];
+    for(let i=0;i<nLan;i++) ifs.push({name:eth.shift(), lan:true, pfx:pick([24,24,25,26]), cls:pick(['A','B','C','C'])});
+    for(let i=0;i<nWan;i++){
+      const name=(eth.length&&chance(.3))?eth.shift():ser.shift();
+      ifs.push({name, lan:false, pfx:30, cls:i&&chance(.6)?ifs[ifs.length-1].cls:pick(['A','A','B','C']), to:'R'+(i+2)});
+    }
+    ifs.forEach(f=>{ f.net=ripSubnet(f.cls,f.pfx); f.ip=f.net+1; f.n=NR.acIfNorm(f.name); });
+    const masks={};
+    ifs.forEach((f,i)=>{
+      if(ifs.some((g,j)=>j<i&&netOf(f.net,Math.min(f.pfx,g.pfx))===netOf(g.net,Math.min(f.pfx,g.pfx)))) ok=false;   // overlapping subnets
+      const m=classfulNet(f.ip).net; if(ver===1&&masks[m]!=null&&masks[m]!==f.pfx) ok=false; masks[m]=f.pfx;
+    });
+    if(ok) break;
+  }
+  const order=kit.eth.concat(kit.ser); ifs.sort((a,b)=>order.indexOf(a.name)-order.indexOf(b.name));
   const majors=[...new Set(ifs.map(f=>classfulNet(f.ip).net))];
-  const lanIfs=ifs.filter(f=>f.lan).map(f=>f.n);
-  const model=['router rip',' version 2',' no auto-summary'].concat(majors.map(m=>' network '+int2ip(m))).concat(ifs.filter(f=>f.lan).map(f=>' passive-interface '+f.name));
+  const lans=ifs.filter(f=>f.lan);
+  const model=['router rip',' version '+ver].concat(noAutoAsk?[' no auto-summary']:[]).concat(majors.map(m=>' network '+int2ip(m))).concat(lans.map(f=>' passive-interface '+f.name));
+  const sumAsk=ver===1?'':noAutoAsk?'turn <b>off automatic summarisation</b>, ':'leave <b>automatic summarisation on</b>, ';
   return {
-    prompt:'Configure <b>RIPv2</b> on R1 so that it advertises all of its connected networks, turn <b>off automatic summarisation</b>, and stop RIP updates being sent out of the LAN interface'+(two?'s':'')+'.',
+    prompt:'Configure <b>RIPv'+ver+'</b> on R1 so that it advertises all of its connected networks, '+sumAsk+'and stop RIP updates being sent out of the LAN interface'+(lans.length>1?'s':'')+'.',
     body:'<div class="ex-scroll"><table class="rt-table ex-table"><thead><tr><th>R1 interface</th><th>Address</th><th>Connects to</th></tr></thead><tbody>'+
       ifs.map(f=>'<tr><td>'+f.name+'</td><td>'+int2ip(f.ip)+'/'+f.pfx+'</td><td style="font-family:var(--font)">'+(f.lan?'LAN (PCs only)':f.to)+'</td></tr>').join('')+'</tbody></table></div>'+
       cmdsHtml('rip','Commands &mdash; one per line, Ctrl+Enter submits','e.g. router rip',6),
     grade(){
-      let why=null, inRip=false, v2=false, noAuto=false, pasDef=false; const nets=new Set(), pas=new Set(), notPas=new Set();
+      let why=null, inRip=false, v=null, noAuto=false, pasDef=false; const nets=new Set(), pas=new Set(), notPas=new Set();
       for(const raw of cmdLines('rip')){
         const l=iosNorm(raw); let m;
         if(l==='router rip'){ inRip=true; continue; }
         if(l==='exit'||l==='end') continue;
         if(!inRip){ why='"'+raw+'" goes under router rip &mdash; start with that.'; break; }
-        if(l==='version 2'){ v2=true; continue; }
-        if(l==='version 1'){ why='The brief asks for RIPv2.'; break; }
+        if((m=/^version ([12])$/.exec(l))){ v=+m[1]; if(v!==ver){ why='The brief asks for RIPv'+ver+'.'; break; } continue; }
         if(l==='no auto-summary'){ noAuto=true; continue; }
+        if(l==='auto-summary'){ noAuto=false; continue; }
         if((m=/^network (\S+)$/.exec(l))){ const a=ip2int(m[1]); if(a==null){ why='"'+raw+'" has an invalid address.'; break; } nets.add(classfulNet(a).net); continue; }
         if(l==='passive-interface default'){ pasDef=true; continue; }
         if((m=/^(no )?passive-interface (.+)$/.exec(l))){ (m[1]?notPas:pas).add(NR.acIfNorm(m[2].replace(/\s+/g,''))); continue; }
         why='"'+raw+'" isn\'t needed here.'; break;
       }
       if(!why&&!inRip) why='Start with router rip.';
-      if(!why&&!v2) why='RIP runs version 1 until you type version 2.';
-      if(!why&&!noAuto) why='Automatic summarisation is still on: add no auto-summary.';
+      if(!why&&ver===2&&v!==2) why='RIP runs version 1 until you type version 2.';
+      if(!why&&noAutoAsk&&!noAuto) why='Automatic summarisation is still on: add no auto-summary.';
+      if(!why&&!noAutoAsk&&noAuto) why=ver===1?'RIPv1 always summarises, so no auto-summary does nothing here &mdash; leave it out.':'The brief keeps automatic summarisation on, so leave out no auto-summary.';
       if(!why){ const miss=majors.filter(m=>!nets.has(m)), extra=[...nets].filter(n=>majors.indexOf(n)<0);
         if(miss.length) why='Nothing advertises '+miss.map(int2ip).join(', ')+'.';
         else if(extra.length) why='R1 has no interface in '+extra.map(int2ip).join(', ')+'.'; }
       if(!why){
         const isPas=n=>pasDef?!notPas.has(n):pas.has(n);
-        const wanP=ifs.filter(f=>!f.lan&&isPas(f.n)), lanN=ifs.filter(f=>f.lan&&!isPas(f.n));
+        const wanP=ifs.filter(f=>!f.lan&&isPas(f.n)), lanN=lans.filter(f=>!isPas(f.n));
         if(wanP.length) why=wanP[0].name+' is passive, so R1 would stop exchanging updates with '+wanP[0].to+'.';
         else if(lanN.length) why=lanN[0].name+' still sends RIP updates onto the LAN &mdash; make it passive.';
       }
       markCmds('rip',!why,model.join('\n'),why);
-      return {ok:!why, verdict: !why?'Correct.':'Not quite.', why: ul([...(why?[why]:[]),'e.g.<br>'+model.map(l=>mono(l.trim())).join('<br>'),
-        'RIP '+mono('network')+' commands take the <b>classful</b> network'+(majors.length<ifs.length?' &mdash; one '+mono('network '+int2ip(classfulNet(w1+1).net))+' covers every interface in it':'')+'; a subnet address is turned into its classful network anyway.',
+      const shared=majors.filter(m=>ifs.filter(f=>classfulNet(f.ip).net===m).length>1);
+      return {ok:!why, verdict: !why?'Correct.':'Not quite.', why: ul([...(why?[why]:[]),'The correct commands to run:<br>'+model.map(l=>mono(l.trim())).join('<br>'),
+        'RIP '+mono('network')+' commands take the <b>classful</b> network'+(shared.length?' &mdash; one '+mono('network '+int2ip(shared[0]))+' covers every interface in it':'')+'; a subnet address is turned into its classful network anyway.',
+        ver===1?'RIPv1 always summarises at the classful boundary (its updates carry no masks), so there is nothing to type for summarisation.':
+          noAutoAsk?mono('no auto-summary')+' makes RIPv2 advertise each subnet with its mask instead of summarising it to the classful network at the boundary.':
+          'Automatic summarisation is RIPv2\'s default, so leaving it on needs no command.',
         mono('passive-interface')+' stops updates on the LANs (no routers there) while the LAN networks are still advertised.'])};
     },
   };
@@ -1811,7 +1842,7 @@ card({id:'g3-acl', area:'acl', tier:2, kind:'graded', src:'Q3 b', title:'Write a
       }
       const okAcl=!aclWhy, okIf=Q.ifSel===tgt, okDir=Q.choice===1;
       markCmds('acl',okAcl,model.join('\n'),aclWhy); markIfs(tgt); markChips(1);
-      const why=['e.g. '+model.map(mono).join('<br>')+' &mdash; the implicit <b>deny any</b> at the end blocks everyone else.',
+      const why=['The correct commands to run:<br>'+model.map(mono).join('<br>')+' &mdash; the implicit <b>deny any</b> at the end blocks everyone else.',
         'A standard ACL matches only the source, so it goes as close to the destination as possible: <b>'+tgt+' outbound</b>, on the interface facing LAN'+(t+1)+'.'];
       if(Q.ifSel===tgt&&!okDir) why.push('Inbound on that interface would filter traffic <i>leaving</i> LAN'+(t+1)+', not entering it.');
       else if(Q.ifSel&&!okIf) why.push('On '+Q.ifSel+' it would also filter traffic that isn\'t going to LAN'+(t+1)+'.');
@@ -1926,7 +1957,7 @@ card({id:'g3-ext', area:'acl', tier:3, kind:'graded', src:'Q3', title:'Write and
       }
       const okAcl=!aclWhy, okIf=Q.ifSel===tgt, okDir=Q.choice===0;
       markCmds('acl',okAcl,model.join('\n'),aclWhy); markIfs(tgt); markChips(0);
-      const why=['e.g. '+model.map(mono).join('<br>')+(kind==='ssh'?' &mdash; the permit for '+int2ip(H)+' has to come <b>before</b> the deny, because the first match wins.':' &mdash; without the final '+mono('permit ip any any')+' the implicit deny would block everything else.'),
+      const why=['The correct commands to run:<br>'+model.map(mono).join('<br>')+(kind==='ssh'?' &mdash; the permit for '+int2ip(H)+' has to come <b>before</b> the deny, because the first match wins.':' &mdash; without the final '+mono('permit ip any any')+' the implicit deny would block everything else.'),
         'An extended ACL names the destination too, so it goes as close to the <b>source</b> as possible: <b>'+tgt+' inbound</b>, so the unwanted traffic never crosses the network.'];
       if(kind==='ping') why.push('The '+mono('echo')+' keyword matters: without it the entry would also drop LAN'+(a+1)+'\'s <i>replies</i> when LAN'+(b+1)+' pings it.');
       return {ok:okAcl&&okIf&&okDir, verdict: okAcl&&okIf&&okDir?'Correct.':'Check '+[okAcl?null:'the ACL', okIf&&okDir?null:'where it goes'].filter(Boolean).join(' and ')+'.', why: ul(why)};
@@ -1995,7 +2026,7 @@ card({id:'g3-acl6', area:'acl', tier:2, kind:'graded', src:'Q3', title:'Write an
       const okAcl=!aclWhy, okApply=!applyWhy, okIf=Q.ifSel===tgt;
       markCmds('acl',okAcl,model.join('\n'),aclWhy); markField('apply',okApply,'ipv6 traffic-filter '+name+' in'); markIfs(tgt);
       return {ok:okAcl&&okApply&&okIf, verdict: okAcl&&okApply&&okIf?'Correct.':'Check '+[okAcl?null:'the ACL', okApply?null:'the apply command', okIf?null:'the interface'].filter(Boolean).join(', ')+'.',
-        why: ul(['It goes on <b>'+tgt+' inbound</b>, the interface facing LAN'+(a+1)+' (the source), e.g.<br>'+model.map(l=>mono(l.trim())).join('<br>')+'<br>then on '+tgt.split(' ')[0]+': '+mono('interface '+tgt.split(' ')[1].toLowerCase())+', '+mono('ipv6 traffic-filter '+name+' in'),
+        why: ul(['It goes on <b>'+tgt+' inbound</b>, the interface facing LAN'+(a+1)+' (the source). The correct commands to run:<br>'+model.map(l=>mono(l.trim())).join('<br>')+'<br>then on '+tgt.split(' ')[0]+': '+mono('interface '+tgt.split(' ')[1].toLowerCase())+', '+mono('ipv6 traffic-filter '+name+' in'),
           ...(applyWhy?[applyWhy]:[]),
           'IPv6 entries name the protocol, the source <b>and</b> the destination, with prefix lengths instead of wildcards.',
           'Like an extended ACL it goes near the <b>source</b>, so traffic for LAN'+(b+1)+' is dropped before it crosses the network.'])};
@@ -2307,7 +2338,7 @@ function natCfgCard(id,tier,title,kinds){
       grade(){
         const why=natCfgCheck(P,kind,X,pool);
         markCmds('nat',!why,model.join('\n'),why);
-        return {ok:!why, verdict: !why?'Correct.':'Not quite.', why: ul([...(why?[why]:[]),'e.g.<br>'+model.map(l=>mono(l.trim())).join('<br>'),
+        return {ok:!why, verdict: !why?'Correct.':'Not quite.', why: ul([...(why?[why]:[]),'The correct commands to run:<br>'+model.map(l=>mono(l.trim())).join('<br>'),
           'Every NAT needs '+mono('ip nat inside')+' on the LAN interface and '+mono('ip nat outside')+' on the interface towards the ISP &mdash; without them nothing is translated.',
           kind==='static'?'A static mapping needs no ACL: it always applies to that one host.':'The ACL says <i>which</i> inside hosts get translated; it must be a standard ACL that matches the LAN.'])};
       },
@@ -2524,7 +2555,7 @@ card({id:'g5-exclude', area:'dhcp', tier:2, kind:'graded', src:'Q5 c', title:'Wr
         else if(extra.length) why='Also excludes '+extra.length+' address'+(extra.length>1?'es':'')+' that should be leased (e.g. '+int2ip(extra[0])+').';
       }
       markCmds('ex',!why,model.join('\n'),why);
-      return {ok:!why, verdict: !why?'Correct.':'Not quite.', why: ul([...(why?[why]:[]),'e.g. '+model.map(mono).join('<br>'),
+      return {ok:!why, verdict: !why?'Correct.':'Not quite.', why: ul([...(why?[why]:[]),'The correct commands to run:<br>'+model.map(mono).join('<br>'),
         'One line can take a range (first and last) or a single address; exclusions are global configuration, outside the pool.'])};
     },
   };
@@ -2564,7 +2595,7 @@ card({id:'g5-pool', area:'dhcp', tier:3, kind:'graded', src:'Q5', title:'Build a
       if(!why&&!seen.gw) why='The pool has no default-router.';
       if(!why&&!seen.dns) why='The pool has no dns-server.';
       markCmds('pool',!why,model.join('\n'),why);
-      return {ok:!why, verdict: !why?'Correct.':'Not quite.', why: ul([...(why?[why]:[]),'e.g.<br>'+model.map(mono).join('<br>'),
+      return {ok:!why, verdict: !why?'Correct.':'Not quite.', why: ul([...(why?[why]:[]),'The correct commands to run:<br>'+model.map(mono).join('<br>'),
         'The '+mono('network')+' line takes a dotted mask ('+maskStr(pfx)+') or a prefix length written /'+pfx+'.'])};
     },
   };
@@ -2716,7 +2747,7 @@ card({id:'g5-v6cfg', area:'dhcp', tier:3, kind:'graded', src:'Q5', title:'Config
       if(!why&&!seen.srv) why='Enable the pool on G0/1 with ipv6 dhcp server '+name+'.';
       if(!why&&!seen.flag) why=stateful?'Set the M flag on G0/1 (ipv6 nd managed-config-flag) or the PCs will never ask for an address.':'Set the O flag on G0/1 (ipv6 nd other-config-flag) or the PCs will never ask for the DNS server.';
       markCmds('v6',!why,model.join('\n'),why);
-      return {ok:!why, verdict: !why?'Correct.':'Not quite.', why: ul([...(why?[why]:[]),'e.g.<br>'+model.map(l=>mono(l.trim())).join('<br>'),
+      return {ok:!why, verdict: !why?'Correct.':'Not quite.', why: ul([...(why?[why]:[]),'The correct commands to run:<br>'+model.map(l=>mono(l.trim())).join('<br>'),
         stateful?'The M flag tells the PCs to get their address from DHCPv6; the pool\'s address prefix is where it comes from.':'Stateless: the PCs keep their SLAAC address, and the O flag tells them to ask DHCPv6 only for the other information.',
         'There is no default-router in a DHCPv6 pool: the gateway always comes from the RA.'])};
     },
@@ -2892,7 +2923,7 @@ card({id:'g6-subif', area:'ts', tier:2, kind:'graded', src:'Q6', title:'Add a VL
         else if(!hasCmd(sc,f,'ip address 192.168.'+v+'.'+gwo+' 255.255.255.0')) why='The subinterface needs ip address 192.168.'+v+'.'+gwo+' 255.255.255.0.';
       }
       markCmds('sub',!why,model.join('\n'),why);
-      return {ok:!why, verdict: !why?'Correct.':'Not quite.', why: ul([...(why?[why]:[]),'e.g.<br>'+model.map(mono).join('<br>'),
+      return {ok:!why, verdict: !why?'Correct.':'Not quite.', why: ul([...(why?[why]:[]),'The correct commands to run:<br>'+model.map(mono).join('<br>'),
         'The subinterface number doesn\'t have to match the VLAN, but matching it is the convention; the '+mono('encapsulation dot1q')+' line is what ties it to VLAN '+v+
         (native?', and <b>native</b> makes it send and receive that VLAN untagged':'')+'.'])};
     },
