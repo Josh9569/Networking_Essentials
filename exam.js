@@ -1540,7 +1540,14 @@ card({id:'g2-net', area:'ospf', tier:2, kind:'graded', src:'Q2', title:'Write th
         if(r.areas.length>1){ why=f.name+' is matched by network commands for different areas.'; break; }
         if(r.areas[0]!==f.area){ why=f.name+' would be in area '+areaTxt(r.areas[0])+', not area '+f.area+'.'; break; }
       }
-      markCmds('net',!why,model.join('\n'),why);
+      /* two network statements are the same line when they catch the same R1 interfaces in the same area */
+      const netEq=(t,m)=>{ const a=/^network (\S+) (\S+) area (\S+)$/.exec(t.cmd), b=/^network (\S+) (\S+) area (\S+)$/.exec(m.cmd);
+        if(!a||!b) return undefined;
+        const st=x=>({a:ip2int(x[1]), w:ip2int(x[2]), area:/^\d+$/.test(x[3])?+x[3]:ip2int(x[3])});
+        const p=st(a), q=st(b); if(p.a==null||p.w==null||p.area!==q.area) return false;
+        const hits=x=>ifs.filter(f=>((f.ip&~x.w)>>>0)===((x.a&~x.w)>>>0)).map(f=>f.name).join();
+        return hits(p)===hits(q)&&hits(p)!==''; };
+      markCmds('net',!why,model.join('\n'),why,netEq);
       return {ok:!why, verdict: !why?'Correct.':'Not quite.', why: ul([...(why?[why]:[]),'One network command per OSPF interface &mdash; '+ifs.filter(f=>f.area!=null).map(f=>f.name+' in area '+f.area).join(', ')+' &mdash; and none that matches S0/0/1, the ISP link:<br>'+model.map(l=>mono(l.trim())).join('<br>'),
         'The wildcard is the inverse of the mask: /24 &rarr; 0.0.0.255, /26 &rarr; 0.0.0.63, /30 &rarr; 0.0.0.3 (0.0.0.0 matches just the one interface address).',
         abr?'With its LANs in area '+la+' and the link to R2 in area 0, R1 is an <b>ABR</b>.':'Every OSPF interface is in area 0, so this is single-area OSPF.'])};
@@ -1601,12 +1608,97 @@ function cmdsHtml(id,label,ph,rows){
 function cmdLines(id){
   return val(id).split('\n').map(l=>l.replace(/^\s*\S*\(config[^)]*\)#\s*/i,'').replace(/^\s*[A-Za-z][\w-]*#\s*/,'').trim()).filter(Boolean);
 }
-function markCmds(id,ok,model,why){
+/* A command box after Submit: every typed line marked right or wrong, the
+   lines the answer needed and didn't get, and "4/6 lines correct". The
+   card's own grader still decides the round; this only shows where the
+   answer went wrong. eq(typed, model) is a card's own "same line" test (it
+   returns true/false, or undefined to leave it to cmdSame). */
+function markCmds(id,ok,model,why,eq){
   const f=document.getElementById('f-'+id), ta=document.getElementById('in-'+id), h=document.getElementById('h-'+id);
   ta.readOnly=true; f.classList.remove('ok','bad','show');
-  if(ok){ f.classList.add('ok'); h.textContent='Correct'; }
-  else if(!ta.value.trim()){ f.classList.add('show'); ta.value=model; h.textContent='Revealed'; }
-  else { f.classList.add('bad'); h.textContent=why?decodeEnt(why):'Not quite'; }
+  const old=document.getElementById('ln-'+id); if(old) old.remove();
+  if(!ta.value.trim()){ f.classList.add('show'); ta.value=model; h.textContent='Revealed'; return; }
+  const m=cmdMarks(cmdLines(id),model.split('\n').map(l=>l.trim()).filter(Boolean),eq,ok,why);
+  f.classList.add(ok?'ok':'bad');
+  const row=(cls,mark,o,note)=>'<div class="ex-ln '+cls+(o.mode!=='global'?' sub':'')+'"><span class="ex-ln-m">'+mark+'</span><span class="ex-ln-t">'+esc(o.raw.trim())+'</span>'+(note?'<span class="ex-ln-n">'+esc(note)+'</span>':'')+'</div>';
+  const list=document.createElement('div'); list.id='ln-'+id; list.className='ex-lines';
+  list.innerHTML=m.typed.map(t=>t.skip?row('skip','&middot;',t.o):t.other?row('skip','&middot;',t.o,t.note):row(t.ok?'ok':'bad',t.ok?'&#10003;':'&#10007;',t.o,t.note)).join('')+
+    m.missing.map(o=>row('miss','+',o,'missing')).join('');
+  ta.style.display='none'; ta.insertAdjacentElement('afterend',list);
+  h.textContent=ok?'Correct \u2014 '+m.total+'/'+m.total+' lines':
+    m.right+'/'+m.total+' lines correct'+(m.extra?' \u00b7 '+m.extra+' line'+(m.extra>1?'s':'')+' not needed':'')+(why?' \u2014 '+decodeEnt(why):'');
+}
+/* Pair typed lines with the model's, in any order, each in its own mode and
+   interface. */
+function cmdMarks(lines,model,eq,ok,why){
+  const T=iosLines(lines), M=iosLines(model), used=new Set();
+  const why0=why?decodeEnt(why):'';
+  const typed=T.map(o=>{
+    if(o.cmd==='exit'||o.cmd==='end') return {o, skip:true};
+    let hit=-1;
+    M.forEach((mo,j)=>{ if(hit<0&&!used.has(j)&&cmdSame(o,mo,eq)) hit=j; });
+    if(hit>=0) used.add(hit);
+    /* the grader's reason quotes this very line: it is the one that's wrong */
+    const named=!ok&&why0&&why0.indexOf('"'+o.raw.trim()+'"')>=0;
+    /* On a passing answer a line the model doesn't have is an alternative
+       or a harmless extra: shown, but neither ticked nor crossed. */
+    if(ok&&hit<0) return {o, other:true, note:'not in the model answer'};
+    return {o, ok:hit>=0&&!named, note:named||hit>=0?'':'not needed'};
+  });
+  const missing=ok?[]:M.filter((mo,j)=>!used.has(j)&&mo.cmd!=='exit'&&mo.cmd!=='end');
+  const total=M.filter(mo=>mo.cmd!=='exit'&&mo.cmd!=='end').length;
+  return {typed, missing, total, right:ok?total:typed.filter(t=>t.ok).length, extra:ok?0:typed.filter(t=>!t.skip&&!t.other&&!t.ok).length};
+}
+/* A line's own context: the interface it was typed under, else its mode. */
+function cmdCtx(o){ return o.mode==='if'?'if:'+o.ifc:o.mode; }
+/* One word as IOS reads it: a keyword spelled out, an address in one
+   spelling, an interface name in one spelling; anything else (names) as
+   typed, because IOS names are case-sensitive. */
+function cmdTok(o,i){
+  if(o.kws[i]) return o.toks[i];
+  const w=o.words[i];
+  if(ip2int(w)!=null) return int2ip(ip2int(w));
+  const v6=/^([0-9a-f:]+)(\/\d+)?$/i.exec(w); if(v6&&w.indexOf(':')>=0&&NR.ac6Parse(v6[1])!=null) return NR.ac6Fmt(NR.ac6Parse(v6[1]))+(v6[2]||'');
+  if(/^(gigabitethernet|gig|gi|g|fastethernet|fa|f|serial|se|s|loopback|lo)\d/i.test(w)) return NR.acIfNorm(w);
+  return w;
+}
+function cmdCanon(o){ return o.words.map((w,i)=>cmdTok(o,i)).join(' '); }
+/* The same line, or one IOS would treat as the same. */
+function cmdSame(t,m,eq){
+  if(cmdCtx(t)!==cmdCtx(m)) return false;
+  const e=eq?eq(t,m):undefined; if(e!==undefined) return e;
+  if(/^interface /.test(t.cmd)&&/^interface /.test(m.cmd)) return NR.acIfNorm(t.words.slice(1).join(''))===NR.acIfNorm(m.words.slice(1).join(''));
+  if(cmdCanon(t)===cmdCanon(m)) return true;
+  let a, b;
+  /* RIP network commands take the classful network: 10.1.2.0 is network 10.0.0.0 */
+  if(t.mode==='rip'&&(a=/^network (\S+)$/.exec(t.cmd))&&(b=/^network (\S+)$/.exec(m.cmd))&&ip2int(a[1])!=null&&ip2int(b[1])!=null)
+    return classfulNet(ip2int(a[1])).net===classfulNet(ip2int(b[1])).net;
+  /* an allowed-VLAN list is a set */
+  if((a=/^switchport trunk allowed vlan ([\d,\-]+)$/.exec(t.cmd))&&(b=/^switchport trunk allowed vlan ([\d,\-]+)$/.exec(m.cmd))){
+    const set=x=>{ const g=new Set(); x.split(',').forEach(r=>{ const q=r.split('-').map(Number); for(let v=q[0];v<=(q[1]||q[0]);v++) g.add(v); }); return [...g].sort((p,q)=>p-q).join(','); };
+    return set(a[1])===set(b[1]);
+  }
+  /* an ACL entry is the entry it parses to: "host 10.1.1.1" is "10.1.1.1 0.0.0.0" */
+  const ta=cmdAce(t), ma=cmdAce(m);
+  return !!(ta&&ma&&ta===ma);
+}
+function cmdAce(o){
+  /* what an entry matches, not how it was written: "host X" and "X 0.0.0.0"
+     are one entry, and address bits under the wildcard don't count */
+  const norm=v=>{ if(!v||typeof v!=='object') return v; const c={};
+    Object.keys(v).sort().forEach(k=>{ if(k!=='kind'&&k!=='seq'&&k!=='matches') c[k]=norm(v[k]); });
+    if(typeof c.ipInt==='number'&&typeof c.wcInt==='number') c.ipInt=(c.ipInt&~c.wcInt)>>>0;
+    return c; };
+  const w=o.words, strip=a=>JSON.stringify(norm(a));
+  let num=null, act, rest;
+  if(o.mode==='global'&&/^access-list \d+ (permit|deny)( |$)/.test(o.cmd)){ num=w[1]; act=w[2].toLowerCase(); rest=w.slice(3); }
+  else if(o.mode==='acl'&&/^(\d+ )?(permit|deny)( |$)/i.test(o.raw.trim())){ const i=/^\d+$/.test(w[0])?1:0; act=w[i].toLowerCase(); rest=w.slice(i+1); }
+  else return null;
+  rest=rest.map(x=>x.toLowerCase());
+  const v6=rest[0]==='ipv6'||rest.some(x=>x.indexOf(':')>=0);
+  const kind=num!=null?NR.aclNumKind(+num):(v6?'v6':['ip','tcp','udp','icmp'].indexOf(rest[0])>=0?'ext':'std');
+  const r=kind==='v6'?NR.ac6ParseAce(act,rest):kind==='ext'?NR.acxParseAce(act,rest):NR.acParseAce(act,rest);
+  return r&&r.ace?(num!=null?num+':':'')+strip(r.ace):null;
 }
 /* The reasons are written with HTML entities (&mdash;) like the rest of the
    page, but the hint is set as text because it quotes what was typed. Decode
@@ -1677,18 +1769,18 @@ const IOS_TREE={
 /* One line through one mode's tree: the line with its keywords spelled out,
    and whether every keyword position was filled by a real keyword. */
 function iosWalk(words,root){
-  const out=[]; let cur=root, ok=true;
+  const out=[], kws=[]; let cur=root, ok=true;
   for(let i=0;i<words.length;i++){
     const t=words[i].toLowerCase();
-    if(cur===undefined){ out.push(t); continue; }
+    if(cur===undefined){ out.push(t); kws.push(false); continue; }
     const ks=Object.keys(cur).filter(k=>k!=='*');
     let kw=ks.indexOf(t)>=0?t:null;
     if(!kw){ const c=ks.filter(k=>k.startsWith(t)&&t.length>=cur[k][0]); if(c.length===1) kw=c[0]; }
-    if(kw){ out.push(kw); const nx=cur[kw][1]; cur=nx==='self'?root:nx; continue; }
-    if('*' in cur){ out.push(t); cur=cur['*']; continue; }
-    ok=false; out.push(...words.slice(i).map(w=>w.toLowerCase())); break;
+    if(kw){ out.push(kw); kws.push(true); const nx=cur[kw][1]; cur=nx==='self'?root:nx; continue; }
+    if('*' in cur){ out.push(t); kws.push(false); cur=cur['*']; continue; }
+    ok=false; words.slice(i).forEach(w=>{ out.push(w.toLowerCase()); kws.push(false); }); break;
   }
-  return {line:out.join(' '), ok};
+  return {line:out.join(' '), ok, out, kws};
 }
 /* The mode a command leaves the console in. */
 function iosNextMode(n,mode){
@@ -1716,7 +1808,7 @@ function iosLines(lines,mode){
     mode=iosNextMode(n,mode);
     if(mode==='if'&&/^interface /.test(n)) ifc=NR.acIfNorm(n.slice(10).replace(/\s+/g,''));
     else if(mode!=='if') ifc='';
-    out.push({cmd:n, raw, mode:was, ifc});
+    out.push({cmd:n, raw, mode:was, ifc, words, toks:r.out, kws:r.kws});
   });
   return out;
 }
@@ -2142,7 +2234,7 @@ function natTableHtml(P,withC){
 }
 /* Gateway's NAT configuration and translation table for one round, and the
    inside global the sender ends up with (null = not translated). */
-function natScenario(P,kind,sender){
+function natScenario(P,kind,sender,busy){
   const lines=['interface GigabitEthernet0/1',' ip nat inside','interface Serial0/0/1',' ip nat outside'];
   /* the static address (pub+2..12) must not fall inside the pool, so a round
      with both starts the pool at .18 of the block, as Lab 10A does */
@@ -2153,14 +2245,20 @@ function natScenario(P,kind,sender){
   if(kind==='static'||kind==='staticwins'){
     const g=P.pub+ri(2,12);
     lines.push('ip nat inside source static '+int2ip(S.ip)+' '+int2ip(g)); rows.push([g,S.ip]); global=g;
-    if(kind==='staticwins'){ lines.push(aclLine,pool,'ip nat inside source list 1 pool PUBLIC'); }
+    if(kind==='staticwins'){
+      lines.push(aclLine,pool,'ip nat inside source list 1 pool PUBLIC');
+      /* busy: other hosts hold pool addresses too, and the static row sits anywhere among them */
+      if(busy){ shuffle(P.pcs.filter((p,i)=>i!==sender)).slice(0,ri(1,2)).forEach((p,k)=>rows.splice(ri(0,rows.length),0,[first+k,p.ip])); }
+    }
   } else if(kind==='dyn'||kind==='dynhas'){
     lines.push(aclLine,pool,'ip nat inside source list 1 pool PUBLIC');
-    const others=P.pcs.filter((p,i)=>i!==sender).slice(0,ri(0,2));
-    let k=0;
-    if(kind==='dynhas'){ rows.push([first,S.ip]); global=first; k=1; }
-    others.forEach(p=>{ rows.push([first+k,p.ip]); k++; });
-    if(kind==='dyn') global=first+k;
+    /* busy: at least one other host is already bound, so the table is never
+       empty and "the first pool address" is not automatically the answer */
+    const others=shuffle(P.pcs.filter((p,i)=>i!==sender)).slice(0,busy?ri(1,2):ri(0,2));
+    /* the sender's own binding sits anywhere in the table, not always first */
+    const held=others.map(p=>p.ip); if(kind==='dynhas') held.splice(busy?ri(0,held.length):0,0,S.ip);
+    held.forEach((ip,k)=>{ rows.push([first+k,ip]); if(ip===S.ip) global=first+k; });
+    if(kind==='dyn') global=first+held.length;
   } else if(kind==='pat'){
     lines.push(aclLine,'ip nat inside source list 1 interface Serial0/0/1 overload'); global=P.gwOut;
   } else if(kind==='patpool'){
@@ -2214,6 +2312,30 @@ card({id:'g4-nat', area:'nat', tier:1, kind:'graded', src:'Q4 a', title:'Address
         why: ul(['<b>Here:</b> Packet 1 is <b>'+int2ip(S.ip)+' &rarr; '+int2ip(P.lo)+'</b>; Packet 2 is <b>'+int2ip(sc.global)+' &rarr; '+int2ip(P.lo)+'</b>.',
           'Packet 1 hasn\'t reached NAT yet, so it carries '+S.name+'\'s own (inside local) address, '+int2ip(S.ip)+'.',
           NAT_KIND_TEXT[kind]+': inside global <b>'+int2ip(sc.global)+'</b>.',
+          'NAT only rewrites the inside address &mdash; the destination stays '+int2ip(P.lo)+' both times.'])};
+    },
+  };
+}});
+
+/* Packets 1 and 2 again, but the translation table decides: usually the
+   sender already holds a dynamic binding (anywhere in the table) and keeps
+   it; otherwise other hosts are bound and it takes the next free address,
+   or a static mapping beats the pool. So neither "the first row" nor "the
+   first pool address" is a shortcut. */
+card({id:'g4-nat-held', area:'nat', tier:2, kind:'graded', src:'Q4 a', title:'Already in the translation table?', gen(){
+  const P=natPlan(), kind=pick(['dynhas','dynhas','dyn','staticwins']), sender=kind==='staticwins'?0:ri(0,2), S=P.pcs[sender], sc=natScenario(P,kind,sender,true);
+  const why=kind==='dynhas'?S.name+' ('+int2ip(S.ip)+') already has a row in the translation table, so the Gateway reuses it: inside global <b>'+int2ip(sc.global)+'</b>. A new address is only taken for a host with no binding.':
+    kind==='dyn'?S.name+' ('+int2ip(S.ip)+') has no row yet. The pool addresses already in the table are taken, so it gets the next free one: <b>'+int2ip(sc.global)+'</b>.':
+    S.name+' has a static mapping to <b>'+int2ip(sc.global)+'</b>, and a static mapping is used before the dynamic pool is looked at.';
+  return {
+    prompt:'<b>'+S.name+'</b> pings the ISP\'s Lo0 interface. What are the source and destination IP addresses of <b>Packet 1</b> (as it leaves '+S.name+') and <b>Packet 2</b> (as it leaves the Gateway towards the ISP)?',
+    body: natBody(P,sc,true)+pktFields('p1','p2'),
+    grade(){
+      const ok=gradeIps({p1s:S.ip,p1d:P.lo,p2s:sc.global,p2d:P.lo});
+      return {ok, verdict: ok?'Correct.':'Packet 2 leaves as '+int2ip(sc.global)+' &rarr; '+int2ip(P.lo)+'.',
+        why: ul(['<b>Here:</b> Packet 1 is <b>'+int2ip(S.ip)+' &rarr; '+int2ip(P.lo)+'</b>; Packet 2 is <b>'+int2ip(sc.global)+' &rarr; '+int2ip(P.lo)+'</b>.',
+          'Packet 1 hasn\'t reached NAT yet, so it carries '+S.name+'\'s own (inside local) address, '+int2ip(S.ip)+'.',
+          why,
           'NAT only rewrites the inside address &mdash; the destination stays '+int2ip(P.lo)+' both times.'])};
     },
   };

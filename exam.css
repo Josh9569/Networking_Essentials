@@ -66,6 +66,20 @@
 .afield textarea.ex-cmds { width: 100%; min-height: 70px; resize: vertical; font-family: var(--mono); font-size: 13.5px; line-height: 1.55; color: var(--text); background: transparent; border: none; outline: none; }
 .afield textarea.ex-cmds::placeholder { color: var(--text-t); }
 .afield.bad .ahint, .afield.show .ahint { white-space: normal; }
+/* After Submit the box shows each typed line marked (markCmds): ✓ right,
+   ✗ wrong or not needed, + a line the answer needed, · exit/end or, on a
+   passing answer, a line the model answer does not have. Lines typed
+   in a sub-mode are indented as in a running config. */
+.ex-lines      { font-family: var(--mono); font-size: 13.5px; line-height: 1.55; }
+.ex-ln         { display: flex; gap: 8px; align-items: baseline; }
+.ex-ln.sub .ex-ln-t { padding-left: 1ch; }
+.ex-ln-m       { width: 1.2ch; flex: none; text-align: center; font-weight: 700; }
+.ex-ln-t       { min-width: 0; overflow-wrap: anywhere; color: var(--text); }
+.ex-ln-n       { flex: none; margin-left: auto; padding-left: 12px; font-size: 12px; color: var(--text-t); }
+.ex-ln.ok   .ex-ln-m { color: var(--ok-text); }
+.ex-ln.bad  .ex-ln-m, .ex-ln.bad .ex-ln-t { color: var(--err-text); }
+.ex-ln.miss .ex-ln-m, .ex-ln.miss .ex-ln-t, .ex-ln.miss .ex-ln-n { color: var(--warn-text); }
+.ex-ln.skip .ex-ln-m, .ex-ln.skip .ex-ln-t { color: var(--text-t); }
 
 /* Flashcards: the answer box, then yours beside the model answer. */
 .afield textarea.ex-flash { width: 100%; min-height: 110px; resize: vertical; font-family: var(--font); font-size: 14px; line-height: 1.5; color: var(--text); background: transparent; border: none; outline: none; }
