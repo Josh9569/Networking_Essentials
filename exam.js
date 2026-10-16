@@ -791,7 +791,7 @@ card({id:'g1-lpm', area:'routing', tier:3, kind:'graded', src:'Q1 c', title:'Lon
 /* Write the floating static route. */
 function parseIpRoute(s){
   const t=s.replace(/^\S*\(config\)#\s*/i,'').trim().split(/\s+/);
-  if(t.length<2||t[0].toLowerCase()!=='ip'||!/^ro(u(t(e)?)?)?$/i.test(t[1])) return {err:'Start with ip route.'};
+  if(t.length<2||t[0].toLowerCase()!=='ip'||t[1].toLowerCase()!=='route') return {err:'Start with ip route.'};
   if(t.some(x=>x.indexOf('/')>=0&&/^\d/.test(x))) return {err:'IOS takes a dotted mask (e.g. 255.255.255.0), not /24.'};
   const net=ip2int(t[2]||''), mask=ip2int(t[3]||'');
   if(net==null||mask==null) return {err:'Expected ip route <network> <mask> <next hop> [AD].'};
@@ -961,8 +961,8 @@ card({id:'g1-rip', area:'routing', tier:2, kind:'graded', src:'Q1', title:'Confi
       cmdsHtml('rip','Commands &mdash; one per line, Ctrl+Enter submits','e.g. router rip',6),
     grade(){
       let why=null, inRip=false, v=null, noAuto=false, pasDef=false; const nets=new Set(), pas=new Set(), notPas=new Set();
-      for(const raw of cmdLines('rip')){
-        const l=iosNorm(raw); let m;
+      for(const {raw,cmd} of iosLines(cmdLines('rip'))){
+        const l=cmd; let m;
         if(l==='router rip'){ inRip=true; continue; }
         if(l==='exit'||l==='end') continue;
         if(!inRip){ why='"'+raw+'" goes under router rip &mdash; start with that.'; break; }
@@ -1490,8 +1490,8 @@ card({id:'q2f-lsa', area:'ospf', tier:2, kind:'flash', src:'Q2 c', title:'OSPF L
    interface in. Returns {err} or {stmts:[{a,w,area,line}], pid}. */
 function parseOspfNets(lines){
   const stmts=[]; let inOspf=false;
-  for(const raw of lines){
-    const l=iosNorm(raw); let m;
+  for(const {raw,cmd} of iosLines(lines)){
+    const l=cmd; let m;
     if(/^router ospf \d+$/.test(l)){ inOspf=true; continue; }
     if(/^(exit|end|log-adjacency-changes|passive-interface .+|router-id \S+|auto-cost .+)$/.test(l)) continue;
     if((m=/^network (\S+) (\S+) area (\S+)$/.exec(l))){
@@ -1615,35 +1615,116 @@ function decodeEnt(s){
   const t=document.createElement('textarea');
   return String(s).replace(/&(?:[a-z]+|#\d+);/gi,m=>{ t.innerHTML=m; return t.value; });
 }
-/* IOS keywords, so the usual abbreviations (int, sw acc vl, enc dot, no sh,
-   ip helper, ip dhcp ex, def, dns) are read as the full command. A word only
-   expands when exactly one keyword starts with it. */
-const IOS_VOCAB=['interface','switchport','access','vlan','mode','trunk','no','shutdown','encapsulation','dot1q','ip','address',
-  'native','helper-address','dhcp','excluded-address','pool','network','default-router','dns-server',
-  'router','rip','version','auto-summary','passive-interface','ospf','area','hello-interval','dead-interval',
-  'nat','inside','outside','source','overload','static','list','netmask','allowed',
-  'ipv6','traffic-filter','nd','other-config-flag','managed-config-flag','server','relay','destination','domain-name','prefix'];
-/* Words kept exactly as typed: "in"/"out" are directions (never "inside"),
-   "default" a keyword of its own (never "default-router"). */
-const IOS_KEEP=['in','out','default','add'];
-function iosNorm(line){
-  return line.trim().split(/\s+/).map(t=>{
-    const l=t.toLowerCase(); if(IOS_VOCAB.indexOf(l)>=0||IOS_KEEP.indexOf(l)>=0) return l;
-    const m=IOS_VOCAB.filter(w=>w.startsWith(l)); return l.length>=2&&m.length===1?m[0]:l;
-  }).join(' ');
+/* IOS abbreviations, read the way a real router or switch reads them: a word
+   is a keyword only where IOS expects that keyword, and it may be shortened
+   only as far as IOS itself allows at that point (IOS 15 on an ISR G2 router
+   and a Catalyst 2960). Each entry is [shortest abbreviation, what follows].
+   The shortest form is the point where the word stops clashing with every
+   other keyword IOS has in that position, not just the ones these cards use:
+   "net" is network under router rip (neighbor is the only other "ne" word)
+   but not in a DHCP pool, where netbios-name-server also starts "net"; "def"
+   is never default-router, because every mode also has the default command;
+   "ip route" can't be shortened at all, because ip routing starts the same
+   way. Where the real competitors weren't certain, the shortest form is the
+   longer, safe one. What follows is a node, '*' for an argument, or nothing
+   (the rest of the line is arguments). "no" starts the mode's own commands
+   again. */
+const IOS_EXIT={exit:[3], end:[3]};
+const IOS_TREE={
+  global:Object.assign({
+    no:[2,'self'], interface:[3], hostname:[5], 'access-list':[8], vlan:[2],
+    line:[3,{vty:[2], console:[3]}],
+    router:[6,{rip:[3], ospf:[4]}],
+    ip:[2,{route:[5], routing:[7],
+      'access-list':[8,{extended:[2], standard:[2]}],
+      dhcp:[4,{pool:[2], 'excluded-address':[2]}],
+      nat:[3,{
+        inside:[3,{source:[2,{static:[2], list:[2,{'*':{interface:[3,{'*':{overload:[2]}}], pool:[3,{'*':{overload:[2]}}]}}]}]}],
+        outside:[3,{source:[2]}],
+        pool:[3,{'*':{'*':{'*':{netmask:[3], 'prefix-length':[2]}}}}]}]}],
+    ipv6:[4,{'unicast-routing':[3], 'access-list':[8], route:[5], router:[6,{ospf:[4]}], dhcp:[4,{pool:[2]}]}],
+  },IOS_EXIT),
+  if:Object.assign({
+    no:[2,'self'], shutdown:[2], description:[4],
+    switchport:[2,{
+      mode:[2,{access:[2], trunk:[2]}],
+      access:[2,{vlan:[2]}],
+      trunk:[2,{native:[2,{vlan:[2]}], allowed:[2,{vlan:[2,{add:[2], remove:[2], except:[3], all:[3], none:[2], '*':undefined}]}]}]}],
+    encapsulation:[3,{dot1q:[3,{'*':{native:[2]}}]}],
+    ip:[2,{address:[3], 'helper-address':[4], 'access-group':[8],
+      nat:[3,{inside:[2], outside:[2]}],
+      ospf:[2,{'hello-interval':[3], 'dead-interval':[3], cost:[2], priority:[3]}]}],
+    ipv6:[4,{address:[3], enable:[2], 'traffic-filter':[9],
+      nd:[2,{'managed-config-flag':[2], 'other-config-flag':[2], prefix:[2,{default:[3,{'no-autoconfig':[4]}], '*':undefined}]}],
+      dhcp:[4,{server:[2], client:[2], relay:[2,{destination:[2]}]}],
+      ospf:[2]}],
+  },IOS_EXIT),
+  rip:Object.assign({
+    no:[2,'self'], version:[2], network:[3], 'auto-summary':[2],
+    'passive-interface':[3,{default:[3], '*':undefined}],
+    'default-information':[9,{originate:[2]}],
+  },IOS_EXIT),
+  ospf:Object.assign({
+    no:[2,'self'], network:[3,{'*':{'*':{area:[2]}}}], 'router-id':[4], 'auto-cost':[2], area:[2],
+    'log-adjacency-changes':[3], 'passive-interface':[3,{default:[3], '*':undefined}],
+    'default-information':[9,{originate:[2]}],
+  },IOS_EXIT),
+  dhcp:Object.assign({no:[2,'self'], network:[4], 'default-router':[9], 'dns-server':[2], 'domain-name':[2], lease:[2]},IOS_EXIT),
+  dhcp6:Object.assign({no:[2,'self'], 'dns-server':[2], 'domain-name':[2], address:[3,{prefix:[2]}]},IOS_EXIT),
+  line:Object.assign({},IOS_EXIT),
+  acl:Object.assign({},IOS_EXIT),
+};
+/* One line through one mode's tree: the line with its keywords spelled out,
+   and whether every keyword position was filled by a real keyword. */
+function iosWalk(words,root){
+  const out=[]; let cur=root, ok=true;
+  for(let i=0;i<words.length;i++){
+    const t=words[i].toLowerCase();
+    if(cur===undefined){ out.push(t); continue; }
+    const ks=Object.keys(cur).filter(k=>k!=='*');
+    let kw=ks.indexOf(t)>=0?t:null;
+    if(!kw){ const c=ks.filter(k=>k.startsWith(t)&&t.length>=cur[k][0]); if(c.length===1) kw=c[0]; }
+    if(kw){ out.push(kw); const nx=cur[kw][1]; cur=nx==='self'?root:nx; continue; }
+    if('*' in cur){ out.push(t); cur=cur['*']; continue; }
+    ok=false; out.push(...words.slice(i).map(w=>w.toLowerCase())); break;
+  }
+  return {line:out.join(' '), ok};
 }
-/* Commands with the interface each was typed under ('' = global). */
-function iosScript(lines){
-  let ifc=''; const out=[];
-  lines.forEach(l=>{
-    const n=iosNorm(l);
-    if(/^interface /.test(n)){ ifc=NR.acIfNorm(n.slice(10).replace(/\s+/g,'')); return; }
-    if(n==='exit'||n==='end'){ ifc=''; return; }
-    // a global command typed in interface mode drops back to global configuration, as on IOS
-    if(/^(router |ip dhcp pool |ipv6 dhcp pool |ip access-list |ipv6 access-list |access-list |ip route |ip nat (inside source|outside source|pool) |ip dhcp excluded|hostname |ipv6 unicast-routing|line )/.test(n)) ifc='';
-    out.push({ifc, cmd:n});
+/* The mode a command leaves the console in. */
+function iosNextMode(n,mode){
+  if(/^interface /.test(n)) return 'if';
+  if(/^router rip$/.test(n)) return 'rip';
+  if(/^(router ospf|ipv6 router ospf) /.test(n)) return 'ospf';
+  if(/^ip dhcp pool /.test(n)) return 'dhcp';
+  if(/^ipv6 dhcp pool /.test(n)) return 'dhcp6';
+  if(/^line /.test(n)) return 'line';
+  if(/^(ip access-list (extended|standard)|ipv6 access-list) /.test(n)) return 'acl';
+  if(n==='exit'||n==='end') return 'global';
+  return mode;
+}
+/* A whole script, mode by mode: [{cmd, raw, mode, ifc}]. A command the
+   current mode doesn't have but global configuration does drops back to
+   global configuration first, as on IOS ("ip route ..." typed under an
+   interface). */
+function iosLines(lines,mode){
+  mode=mode||'global'; let ifc=''; const out=[];
+  lines.forEach(raw=>{
+    const words=raw.trim().split(/\s+/).filter(Boolean);
+    let r=iosWalk(words,IOS_TREE[mode]);
+    if(!r.ok&&mode!=='global'){ const g=iosWalk(words,IOS_TREE.global); if(g.ok){ r=g; mode='global'; ifc=''; } }
+    const n=r.line, was=mode;
+    mode=iosNextMode(n,mode);
+    if(mode==='if'&&/^interface /.test(n)) ifc=NR.acIfNorm(n.slice(10).replace(/\s+/g,''));
+    else if(mode!=='if') ifc='';
+    out.push({cmd:n, raw, mode:was, ifc});
   });
   return out;
+}
+/* One line, typed in the given mode (global configuration by default). */
+function iosNorm(line,mode){ return iosLines([line],mode)[0].cmd; }
+/* Commands with the interface each was typed under ('' = global). */
+function iosScript(lines){
+  return iosLines(lines).filter(o=>!/^interface /.test(o.cmd)&&o.cmd!=='exit'&&o.cmd!=='end').map(o=>({ifc:o.ifc, cmd:o.cmd, raw:o.raw}));
 }
 function hasCmd(script,ifc,cmd){ return script.some(o=>o.ifc===ifc&&o.cmd===cmd); }
 
@@ -1891,7 +1972,7 @@ function parseExtAcl(lines){
   for(const l of lines){
     const t=l.split(/\s+/), w0=t[0].toLowerCase(), w1=(t[1]||'').toLowerCase();
     if(w0==='ip'&&w1.length>=8&&'access-list'.startsWith(w1)){
-      if(!/^ex/i.test(t[2]||'')) return {err:'A named extended list starts ip access-list extended <name>.'};
+      if(!((t[2]||'').length>=2&&'extended'.startsWith((t[2]||'').toLowerCase()))) return {err:'A named extended list starts ip access-list extended <name>.'};
       if(!t[3]) return {err:'Name the list: ip access-list extended <name>.'};
       if(num!=null) return {err:'Use either a numbered list or a named one, not both.'};
       name=t[3]; continue;
@@ -2002,7 +2083,7 @@ card({id:'g3-acl6', area:'acl', tier:2, kind:'graded', src:'Q3', title:'Write an
     grade(){
       const lines=cmdLines('acl'); let aclWhy=null; const acl=NR.aclMake(name,false,6,true);
       const head=(lines[0]||'').split(/\s+/);
-      if(!/^ipv6$/i.test(head[0]||'')||!/^access-l/i.test(head[1]||'')) aclWhy='Start with ipv6 access-list '+name+'.';
+      if(!/^ipv6$/i.test(head[0]||'')||!((head[1]||'').length>=8&&'access-list'.startsWith((head[1]||'').toLowerCase()))) aclWhy='Start with ipv6 access-list '+name+'.';
       else if(head[2]!==name) aclWhy=(head[2]||'').toLowerCase()===name.toLowerCase()?'ACL names are case-sensitive: '+name+', not '+head[2]+'.':'The list should be named '+name+'.';
       else for(const l of lines.slice(1)){
         const t=l.split(/\s+/), i=0, act=(t[0]||'').toLowerCase();
@@ -2017,7 +2098,7 @@ card({id:'g3-acl6', area:'acl', tier:2, kind:'graded', src:'Q3', title:'Write an
         const want=inN(d,b)?'deny':'permit', got=NR.aclEvaluate(acl,s,false,d,pk).action;
         if(got!==want){ aclWhy=(want==='permit'?'It blocks ':'It lets through ')+pk.txt+' from '+NR.ac6Fmt(s)+' to '+NR.ac6Fmt(d)+'.'; break outer; }
       }
-      const raw=(cmdLines('apply')[0]||''), n=iosNorm(raw), m=/^ipv6 traffic-filter (\S+) (in|out|outside)$/.exec(n);
+      const raw=(cmdLines('apply')[0]||''), n=iosNorm(raw,'if'), m=/^ipv6 traffic-filter (\S+) (in|out|outside)$/.exec(n);
       let applyWhy=null;
       if(/^ip access-group/.test(n)) applyWhy='IPv6 lists are applied with ipv6 traffic-filter, not ip access-group.';
       else if(!m) applyWhy='Expected ipv6 traffic-filter '+name+' in|out.';
@@ -2278,7 +2359,7 @@ card({id:'q4d-patport', area:'nat', tier:1, kind:'flash', src:'Q4 d', title:'Two
 function natCfgCheck(P,kind,X,pool){
   const lines=cmdLines('nat'), aclLines=lines.filter(l=>/^acc/i.test(l)), rest=lines.filter(l=>!/^acc/i.test(l));
   const sc=iosScript(rest), any=re=>sc.map(o=>({o,m:re.exec(o.cmd)})).find(x=>x.m);
-  const rawOf=o=>rest.find(l=>iosNorm(l)===o.cmd)||o.cmd;
+  const rawOf=o=>o.raw||o.cmd;
   if(!hasCmd(sc,'g0/1','ip nat inside')) return 'G0/1 (the LAN side) needs ip nat inside.';
   if(!hasCmd(sc,'s0/0/1','ip nat outside')) return 'S0/0/1 (towards the ISP) needs ip nat outside.';
   if(hasCmd(sc,'g0/1','ip nat outside')||hasCmd(sc,'s0/0/1','ip nat inside')) return 'Each interface is either inside or outside, not both.';
@@ -2509,7 +2590,7 @@ card({id:'g5-relay', area:'dhcp', tier:2, kind:'graded', src:'Q5 b', title:'Conf
       '<div class="ex-apply"><span class="ex-apply-lbl">Interface:</span>'+chipsHtml(ifs)+'</div>'+fieldHtml('cmd','Command (interface configuration mode)','e.g. ip helper-address 198.51.100.5',true),
     grade(){
       const okI=Q.choice===ifs.indexOf(lanIf); markChips(ifs.indexOf(lanIf));
-      const n=iosNorm(cmdLines('cmd')[0]||''), m=/^ip helper-address (\S+)$/.exec(n);
+      const n=iosNorm(cmdLines('cmd')[0]||'','if'), m=/^ip helper-address (\S+)$/.exec(n);
       const okC=!!m&&ip2int(m[1])===srv;
       markField('cmd',okC,'ip helper-address '+int2ip(srv));
       return {ok:okI&&okC, verdict: okI&&okC?'Correct.':'ip helper-address '+int2ip(srv)+' on '+lanIf+'.', why: ul([
@@ -2570,12 +2651,12 @@ card({id:'g5-pool', area:'dhcp', tier:3, kind:'graded', src:'Q5', title:'Build a
     prompt:'Make R1 the DHCP server for <b>'+cidr(net,pfx)+'</b>: create a pool named <b>'+name+'</b> that leases addresses from that network, with default gateway <b>'+int2ip(gw)+'</b> and DNS server <b>'+int2ip(dns)+'</b>.',
     body: cmdsHtml('pool','Pool &mdash; one command per line, Ctrl+Enter submits','e.g. ip dhcp pool EXAMPLE',5),
     grade(){
-      const L=cmdLines('pool').map(iosNorm);
+      const L=iosLines(cmdLines('pool'));
       let why=null, inPoolMode=false, seen={net:false,gw:false,dns:false};
-      for(const l of L){
+      for(const {cmd:l,raw} of L){
         let m;
         if((m=/^ip dhcp pool (\S+)$/.exec(l))){
-          const typed=cmdLines('pool').find(x=>/pool/i.test(x)).split(/\s+/).pop();
+          const typed=raw.trim().split(/\s+/).pop();
           if(typed!==name){ why=typed.toLowerCase()===name.toLowerCase()?'Pool names are case-sensitive: it should be '+name+', not '+typed+'.':'The pool should be named '+name+'.'; break; }
           inPoolMode=true; continue;
         }
@@ -2695,7 +2776,7 @@ card({id:'g5-v6relay', area:'dhcp', tier:2, kind:'graded', src:'Q5', title:'Conf
       '<div class="ex-apply"><span class="ex-apply-lbl">Interface:</span>'+chipsHtml(ifs)+'</div>'+fieldHtml('cmd','Command (interface configuration mode)','e.g. ipv6 dhcp relay destination 2001:db8:ffff::5',true),
     grade(){
       const okI=Q.choice===ifs.indexOf(lanIf); markChips(ifs.indexOf(lanIf));
-      const n2=iosNorm(cmdLines('cmd')[0]||''), m=/^ipv6 dhcp relay destination (\S+)( \S+)?$/.exec(n2);
+      const n2=iosNorm(cmdLines('cmd')[0]||'','if'), m=/^ipv6 dhcp relay destination (\S+)( \S+)?$/.exec(n2);
       const okC=!!m&&NR.ac6Parse(m[1])===NR.ac6Parse(srv);
       markField('cmd',okC,'ipv6 dhcp relay destination '+srv);
       return {ok:okI&&okC, verdict: okI&&okC?'Correct.':'ipv6 dhcp relay destination '+srv+' on '+lanIf+'.', why: ul([
@@ -2718,8 +2799,8 @@ card({id:'g5-v6cfg', area:'dhcp', tier:3, kind:'graded', src:'Q5', title:'Config
     body: cmdsHtml('v6','Commands &mdash; one per line, Ctrl+Enter submits','e.g. ipv6 dhcp pool EXAMPLE',7),
     grade(){
       let why=null, mode='', seen={pool:false,dns:false,dom:false,addr:false,srv:false,flag:false};
-      for(const raw of cmdLines('v6')){
-        const l=iosNorm(raw), t=raw.trim().split(/\s+/); let m;
+      for(const {raw,cmd} of iosLines(cmdLines('v6'))){
+        const l=cmd, t=raw.trim().split(/\s+/); let m;
         if(l==='exit'||l==='end'){ mode=''; continue; }
         if(l==='ipv6 unicast-routing'){ mode=''; continue; }
         if(/^ipv6 dhcp pool \S+$/.test(l)){ if(t[3]!==name){ why=t[3].toLowerCase()===name.toLowerCase()?'Pool names are case-sensitive: '+name+', not '+t[3]+'.':'The pool should be named '+name+'.'; break; } mode='pool'; seen.pool=true; continue; }
@@ -2962,7 +3043,7 @@ function tsTable(P){
 }
 /* every "ip access-group N in|out" (and its "no" form) under one interface */
 function tsAclApplied(sc,ifc){
-  return sc.filter(o=>o.ifc===ifc).map(o=>/^(no )?ip access-g\S* (\S+)(?: (in|out))?$/.exec(o.cmd)).filter(Boolean).map(m=>({no:!!m[1], num:m[2], dir:m[3]||null}));
+  return sc.filter(o=>o.ifc===ifc).map(o=>/^(no )?ip access-group (\S+)(?: (in|out))?$/.exec(o.cmd)).filter(Boolean).map(m=>({no:!!m[1], num:m[2], dir:m[3]||null}));
 }
 const TS_SCEN={
   relay(){
@@ -3009,7 +3090,7 @@ const TS_SCEN={
       cause:'access-list 1 doesn\'t match the PCs\' addresses, so NAT never translates them',
       others:['G0/1 isn\'t marked ip nat inside','The NAT rule is missing overload','The ISP has no route to the public address','NAT needs a pool &mdash; it can\'t use the interface address'],
       check(lines){
-        const acc=lines.filter(l=>/^acc/i.test(l)), del=lines.some(l=>/^no acc\S* 1$/i.test(l.trim()));
+        const acc=lines.filter(l=>/^acc/i.test(l)), del=iosLines(lines).some(o=>o.cmd==='no access-list 1');
         const p=parseStdAcl((del?[]:[bad]).concat(acc));
         if(p.err) return acc.length?p.err:'Add an access-list 1 line that matches '+cidr(P.lan,24)+'.';
         for(const o of [2,77,254]) if(NR.aclEvaluate(p.acl,P.lan+o,false).action!=='permit') return 'access-list 1 still doesn\'t match '+int2ip(P.lan+o)+'.';
@@ -3030,7 +3111,7 @@ const TS_SCEN={
       cause:'R1\'s static route names the wrong network, so R1 has no route to LAN-B',
       others:['R2 has no route back to LAN-A','R1 S0/0/0 needs a clock rate','The static route needs an administrative distance','R2 G0/0 is shut down'],
       check(lines){
-        const ok=lines.map(iosNorm).some(l=>{ const m=/^ip ro\S* (\S+) (\S+) (\S+)(?: \d+)?$/.exec(l); return m&&ip2int(m[1])===ip2int(P.B+'.0')&&m[2]==='255.255.255.0'&&(ip2int(m[3])===P.wan+2||NR.acIfNorm(m[3])==='s0/0/0'); });
+        const ok=iosLines(lines).map(o=>o.cmd).some(l=>{ const m=/^ip route (\S+) (\S+) (\S+)(?: \d+)?$/.exec(l); return m&&ip2int(m[1])===ip2int(P.B+'.0')&&m[2]==='255.255.255.0'&&(ip2int(m[3])===P.wan+2||NR.acIfNorm(m[3])==='s0/0/0'); });
         return ok?null:'R1 needs ip route '+P.B+'.0 255.255.255.0 '+int2ip(P.wan+2)+'.'; },
       model:['no ip route '+wrongNet+' 255.255.255.0 '+int2ip(P.wan+2),'ip route '+P.B+'.0 255.255.255.0 '+int2ip(P.wan+2)],
       points:['R1 can reach R2 (the serial link works) but has [[no route]] to LAN-B, '+P.B+'.0/24, so it drops the PCs\' packets.',
@@ -3065,7 +3146,7 @@ const TS_SCEN={
       others:[fault==='timers'?'The R1–R2 link is in different areas on R1 and R2':'The hello and dead intervals on the R1–R2 link don\'t match','R2\'s network command has the wrong wildcard','R2 S0/0/0 is a passive interface','R1 and R2 have the same router ID'],
       check(lines){
         let mode='', hello=fault==='timers'?h:10, dead=null; const nets=[{a:P.wan,w:3,area:fault==='area'?ar:0},{a:ip2int(P.B+'.0'),w:255,area:0}];
-        for(const raw of lines){ const l=iosNorm(raw); let m;
+        for(const {raw,cmd} of iosLines(lines)){ const l=cmd; let m;
           if((m=/^interface (\S+)$/.exec(l))){ mode=NR.acIfNorm(m[1]); continue; }
           if(/^router ospf \d+$/.test(l)){ mode='ospf'; continue; }
           if(mode==='s0/0/0'){
@@ -3105,7 +3186,7 @@ const TS_SCEN={
       cause:'R1\'s DHCP pool gives the PCs the wrong default gateway',
       others:['R1 G0/0 needs ip helper-address','The excluded range overlaps the pool','The pool\'s network command is wrong','R1 G0/0 is shut down'],
       check(lines){ let inPool=false, gw=null;
-        for(const raw of lines){ const l=iosNorm(raw), t=raw.trim().split(/\s+/); let m;
+        for(const {raw,cmd} of iosLines(lines)){ const l=cmd, t=raw.trim().split(/\s+/); let m;
           if(/^ip dhcp pool \S+$/.test(l)){ inPool=t[3]===name; if(!inPool) return t[3].toLowerCase()===name.toLowerCase()?'Pool names are case-sensitive: '+name+', not '+t[3]+'.':'The existing pool is '+name+'.'; continue; }
           if(/^interface /.test(l)){ inPool=false; continue; }
           if(inPool&&(m=/^default-router (\S+)$/.exec(l))) gw=m[1];
