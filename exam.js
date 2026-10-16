@@ -1598,7 +1598,7 @@ card({id:'g2-drbdr', area:'ospf', tier:2, kind:'graded', src:'Q2', title:'Who be
 const NR=window.NetRouter;
 
 /* A multi-line command box. Enter adds a line (answer-keys.js only submits
-   from single-line boxes and .ex-flash); Ctrl+Enter submits. */
+   from single-line boxes); Ctrl+Enter submits. */
 function cmdsHtml(id,label,ph,rows){
   return '<div class="afield ex-wide" id="f-'+id+'"><label>'+label+'</label>'+
     '<textarea id="in-'+id+'" class="ex-cmds" rows="'+(rows||4)+'" spellcheck="false" autocomplete="off" autocapitalize="off" placeholder="'+esc(ph||'')+'"></textarea>'+
@@ -3792,10 +3792,16 @@ function loadQ(){
   if(cur.kind==='flash'){
     $('qbody').innerHTML=(Q.body||'')+
       '<div class="afield ex-flash-f" id="f-flash"><label>Your answer</label>'+
-      '<textarea id="in-flash" class="ex-flash" rows="5" spellcheck="true" placeholder="In your own words &mdash; Enter submits, Shift+Enter for a new line"></textarea></div>'+
+      '<textarea id="in-flash" class="ex-flash" rows="5" spellcheck="true" placeholder="In your own words &mdash; Ctrl+Enter submits"></textarea></div>'+
       '<div id="flash-cmp"></div>';
     $('chkbtn').disabled=true;
     $('in-flash').addEventListener('input',()=>{ $('chkbtn').disabled=!$('in-flash').value.trim(); });
+    /* A multi-line answer, like the command boxes: a plain Enter is a new
+       line (owner: one stray Enter submitted half an answer) and Ctrl+Enter
+       submits, through the page's own Ctrl+Enter handler. Stopping the plain
+       Enter here keeps it from answer-keys.js, which would submit; the box
+       stays in its answers selector so it still gets focus on a new card. */
+    $('in-flash').addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.ctrlKey&&!e.metaKey) e.stopPropagation(); });
   } else {
     $('qbody').innerHTML=Q.body+'<div class="expl-box ex-why" id="q-why"></div>';
     $('chkbtn').disabled=false;
