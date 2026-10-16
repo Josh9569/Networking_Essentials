@@ -516,10 +516,10 @@ card({id:'q1a-dynamic', area:'routing', tier:1, kind:'flash', src:'Q1 a', title:
     '<b>Dynamic:</b> routers learn and share routes automatically, so adding a network doesn\'t mean typing a route into every router &mdash; it [[scales]] to large and growing networks.',
     '<b>Dynamic:</b> it adapts when a [[link fails]] &mdash; the routers reconverge onto another path with no admin action, where a static route stays pointed at the dead link.',
   ];
-  const ask=' Decide whether it should rely on static routes or on a dynamic routing protocol. Give two reasons for your choice, using the details of this network, and describe two situations where the other option would be the better choice.';
+  const ask=' Should it use static routes or a dynamic routing protocol, and why? When would the other option be the better choice?';
   const v=pick(['why','two','grow','stub']);
   if(v==='why') return {
-    prompt:'Why would you use a dynamic routing protocol rather than static routes? Give two reasons. When would it be preferable to use static routes? Describe two kinds of network where they are the better choice.',
+    prompt:'Why would you use a dynamic routing protocol rather than static routes? When would it be preferable to use static routes?',
     points: dynWhy.concat([
       '<b>Static:</b> a [[small network#any]] with few routes that rarely change.',
       '<b>Static:</b> a [[stub network#any]] with a single way out &mdash; e.g. a default route to the ISP.',
@@ -565,9 +565,9 @@ card({id:'q1b-adpair', area:'routing', tier:1, kind:'flash', src:'Q1 b', title:'
   const [a,b]=shuffle(pair), W=PROTO[a].ad<PROTO[b].ad?a:b, L=W===a?b:a;
   const src=k=>k==='static'?'a static route':'the routing protocol '+PROTO[k].name;
   const nm=k=>k==='static'?'static':PROTO[k].name;
-  /* Key words: exam-keys.js. Which source the answer picks, and which AD
-     belongs to which source, are graded by pairing (subject~term): "RIP is
-     chosen over OSPF" or "OSPF 120, RIP 110" score nothing for OSPF. Every
+  /* Key words: exam-keys.js. Which source the answer picks is graded by
+     pairing (subject~term): "RIP is chosen over OSPF" scores nothing for
+     OSPF. AD numbers are not graded (owner's call); the model shows them. Every
      name a learner might use (KW_NAME) is a subject, the loser's included,
      which is what lets a sentence naming both be read the right way round.
      The loser named as the choice vetoes the key word ("RIP is chosen. OSPF
@@ -575,18 +575,18 @@ card({id:'q1b-adpair', area:'routing', tier:1, kind:'flash', src:'Q1 b', title:'
      An active verb in front of the name ("uses the OSPF route") is the
      router choosing; "OSPF uses cost" is not, so use/take are never paired. */
   const met=[a,b].filter(k=>k!=='static').map(k=>METRIC_NAME[k]);
-  const units='[[different units]]';
+  const units='[[metrics aren\'t compared across protocols]]';
   return {
-    prompt:'If a router has a choice between two routes to a destination, one provided by '+src(a)+' and the other by '+src(b)+', which one will the router choose? Explain why: name the value the router compares, give it for both sources, and say what that value represents. Do the two routes\' metrics play any part? Why or why not?',
+    prompt:'If a router has a choice between two routes to a destination, one provided by '+src(a)+' and the other by '+src(b)+', which one will the router choose? Why? Do the two routes\' metrics play any part?',
     points: [
-      '<b>Here:</b> [[the {nmW} route is chosen]]. The router compares the [[administrative distance]] of the two sources and the lower one wins: [[{WN} {Wad}]] against [[{LN} {Lad}]].',
-      'AD represents how [[trustworthy]] the source of a route is &mdash; the lower the number, the more it is trusted. When two sources offer the same prefix, only the one with the lowest AD is installed in the routing table.',
+      '<b>Here:</b> [[the {nmW} route is chosen]]. The router compares the [[administrative distance]] of the two sources and the lower one wins: '+PROTO[W].name+' ('+PROTO[W].ad+') is lower than '+PROTO[L].name+' ('+PROTO[L].ad+').',
+      'AD represents how trustworthy the source of a route is &mdash; the lower the number, the more it is trusted. When two sources offer the same prefix, only the one with the lowest AD is installed in the routing table.',
       met.length===2
-        ? 'The metrics play no part: '+met[0]+' and '+met[1]+' are measured in '+units+', so they can\'t be compared across sources. A metric only chooses between routes from the same source.'
-        : 'The metrics play no part: a static route has no metric (0) to set against '+met[0]+', and metrics from different sources are in '+units+' anyway, so they are never compared.',
+        ? 'The metrics play no part: '+met[0]+' and '+met[1]+' are measured in different units, so '+units+' &mdash; a metric only chooses between routes from the same protocol.'
+        : 'The metrics play no part: a static route has no metric (0) to set against '+met[0]+', and '+units+' or sources anyway &mdash; they are in different units.',
       'The '+nm(L)+' route is kept in reserve and installed only if the '+nm(W)+' route disappears.',
     ],
-    vars:{nmW:nm(W), Wn:KW_NAME[W].split('|'), Ln:KW_NAME[L].split('|'), WN:PROTO[W].name, LN:PROTO[L].name, Wad:PROTO[W].ad, Lad:PROTO[L].ad,
+    vars:{nmW:nm(W), Wn:KW_NAME[W].split('|'), Ln:KW_NAME[L].split('|'), WN:PROTO[W].name, LN:PROTO[L].name,
       NM:W==='static'||L==='static'?'{NOMETRIC}':null},
   };
 }});
@@ -598,13 +598,13 @@ card({id:'q1c-admetric', area:'routing', tier:1, kind:'flash', src:'Q1 c', title
   /* The paper's own question is general, so the rule is the answer. The
      prompt spells out every part the key words grade. */
   if(chance(.5)) return {
-    prompt:'Routing protocols use both metrics and administrative distance (AD). If there is a choice of routes to the same destination, which have different metrics and ADs, which route is chosen? Explain what AD and the metric each measure, and when the metric decides between routes. What happens if two routes have the same AD and the same metric?',
+    prompt:'Routing protocols use both metrics and administrative distance (AD). If there is a choice of routes to the same destination, which have different metrics and ADs, which route is chosen? What does each one measure, and when does the metric matter at all?',
     points: [
       '<b>Lowest AD wins:</b> of the routes to the same prefix from different sources, the one with the [[lowest administrative distance]] is installed, whatever its metric &mdash; AD is compared first.',
       '<b>AD</b> rates how [[trustworthy]] the source of a route is (connected 0, static 1, EIGRP 90, OSPF 110, RIP 120): the lower the number, the more the router believes it.',
       '<b>The metric</b> measures how good a path is &mdash; the [[cost of the path]] of reaching the network that way, worked out by the routing protocol itself (OSPF cost, RIP hop count, EIGRP bandwidth and delay).',
       '<b>When the metric decides:</b> only between routes from the [[same routing protocol]] (same AD) &mdash; e.g. two OSPF paths, the lower cost wins. Metrics from different protocols are in different units, so they are never compared.',
-      '<b>Same AD and same metric:</b> both routes are installed and traffic is [[load balanced]] across them (equal-cost multipath).',
+      '<b>Same AD and same metric:</b> both routes are installed and traffic is load balanced across them (equal-cost multipath).',
     ],
   };
   /* R1's version names the two sources, so the model says which route R1
@@ -628,7 +628,7 @@ card({id:'q1c-admetric', area:'routing', tier:1, kind:'flash', src:'Q1 c', title
   const UNIT={ospf:'cost', rip:'hop count', eigrp:'metric'};
   const USES={ospf:['cost','bandwidth'], rip:['hops','hop count','the hop count','number of hops'], eigrp:['bandwidth and delay','bandwidth','delay']};
   return {
-    prompt:'R1 has two routes to the same network: one learned by '+src(a)+', the other learned by '+src(b)+'. Which route does R1 install, and why? Do the two metrics play any part here? Explain why or why not, and say when the metric does decide between routes.',
+    prompt:'R1 has two routes to the same network: one learned by '+src(a)+', the other learned by '+src(b)+'. Which route does R1 install, and why? Do the metrics play any part, and when does the metric matter at all?',
     points: [
       '<b>Here:</b> [[R1 installs the {WN} route]] &mdash; [[{WN} has the lower AD]] ('+nm(W)+' '+ad(W)+' against '+nm(L)+' '+ad(L)+'), and AD is compared before the metric, so '+nm(L)+'\'s lower metric of '+mL+' never comes into it.',
       '<b>The metrics play no part:</b> '+METRIC_NAME[L]+' and '+METRIC_NAME[W]+' are measured in [[different units]], so '+mL+' is not &ldquo;better&rdquo; than '+mW+' &mdash; metrics are never compared across sources.',
@@ -646,7 +646,7 @@ card({id:'q1d-floating', area:'routing', tier:1, kind:'flash', src:'Q1 d', title
   const lowest='[[lowest AD wins]]';
   const higher='[[higher AD]]';
   if(chance(.5)) return {
-    prompt:'What is the purpose of a floating static route, and when does it get used? How do you make a static route a floating static route, and why does that work?',
+    prompt:'What is the purpose of a floating static route? How do you ensure that a static route is treated as a floating static route, and why does that work?',
     points: [
       'A floating static route is a [[backup]]: it stays out of the routing table while the primary route exists and is installed only if the primary [[fails]].',
       'Make it float by giving it a '+higher+' than the primary route\'s &mdash; the AD goes at the end of the <span class="mono-inl">ip route</span> command.',
@@ -654,22 +654,18 @@ card({id:'q1d-floating', area:'routing', tier:1, kind:'flash', src:'Q1 d', title
       'e.g. primary learned by '+N+' (AD '+ad+'): '+cmd+' &mdash; any AD from '+(ad+1)+' to 254 works (255 means "never install").',
     ],
   };
-  /* The scenario names the primary's protocol, so its answer is a number:
-     any AD from ad+1 to 254. "#N" matches that number standing on its own,
-     so a typed command's trailing AD or "set it to 150" counts but an
-     octet of an address in the same answer never does. Each number is
-     paired with the route it belongs to (exam-keys.js), so "OSPF is 150 and
-     the static route is 110" scores neither. */
-  const V=[]; for(let v=ad+1;v<255;v++) V.push(v);
+  /* No AD number is graded (owner: the exam doesn't need them memorised).
+     The scenario's key words are the name, giving the static route a higher
+     AD than the protocol's, and the lowest-AD rule; the numbers stay in the
+     model as plain text. */
   const site=pick(['head office','data centre','main site']), r='R'+ri(1,3);
   return {
-    prompt: r+' learns the route to its '+site+' through '+N+'. You add a static route over a backup link that should be used only if the '+N+' route is lost. What is this kind of route called? State the AD of the '+N+' route and an AD you would give the static route, and explain why that stops the static route replacing the '+N+' route.',
+    prompt: r+' learns the route to its '+site+' through '+N+'. You add a static route over a backup link that should be used only if the '+N+' route is lost. What is this route called, and how do you stop it replacing the '+N+' route? Why does that work?',
     points: [
-      '<b>Here:</b> it is a [[floating static route]]. The primary route has an [[{N} AD of {ad}]], so give the static route a higher one: a [[static AD of {eg}]] or anything from '+(ad+1)+' to 254, e.g. '+cmd+'.',
-      '<b>Why:</b> of two routes to the same network the router installs the one with the '+lowest+' AD. '+N+'\'s '+ad+' beats the static route while the '+N+' route exists, so the static stays out of the routing table and is installed only if that route is lost &mdash; that is what makes it "float".',
-      'Left at a static route\'s default AD of 1 it would beat '+N+'\'s '+ad+' and replace the '+N+' route at once. 255 means "never install", so it is no use here.',
+      '<b>Here:</b> it is a [[floating static route]]. Give the static route a '+higher+' than the '+N+' route&rsquo;s, at the end of the <span class="mono-inl">ip route</span> command &mdash; e.g. '+N+' is '+ad+', so '+cmd+' (anything from '+(ad+1)+' to 254 works).',
+      '<b>Why:</b> of two routes to the same network the router installs the one with the '+lowest+' AD. '+N+'\'s lower AD beats the static route while the '+N+' route exists, so the static stays out of the routing table and is installed only if that route is lost &mdash; that is what makes it "float".',
+      'Left at a static route\'s default AD it would beat '+N+' and replace the '+N+' route at once. 255 means "never install", so it is no use here.',
     ],
-    vars:{N, ad, eg, V},
   };
 }});
 
@@ -693,7 +689,7 @@ card({id:'g1-adpick', area:'routing', tier:1, kind:'graded', src:'Q1 b', title:'
   const ans=[rows.indexOf(win)];
   return {
     prompt:'R1 has learned <b>'+cidr(net,24)+'</b> from '+n+' sources. Which route does R1 install in its routing table?',
-    body: pickTable(['Source','Next hop','Metric'], rows.map(r=>[PROTO[r.k].name, r.nh, String(r.m)])),
+    body: pickTable(['Source','AD','Next hop','Metric'], rows.map(r=>[PROTO[r.k].name, String(PROTO[r.k].ad), r.nh, String(r.m)])),
     pick:{multi:false},
     grade(){
       const ok=sameSet(ans,Q.sel); markPicks(ans);
@@ -725,7 +721,7 @@ card({id:'g1-admetric', area:'routing', tier:2, kind:'graded', src:'Q1 c', title
   const ans=sh.map((r,i)=>r.k===W&&r.m===best?i:-1).filter(i=>i>=0);
   return {
     prompt:'R1 has these candidate routes to <b>'+cidr(netOf(net,pfx),pfx)+'</b>. Select <b>every</b> route R1 installs in its routing table &mdash; it may be one or more.',
-    body: pickTable(['Source','Next hop','Metric'], sh.map(r=>[PROTO[r.k].name, r.nh, String(r.m)])),
+    body: pickTable(['Source','AD','Next hop','Metric'], sh.map(r=>[PROTO[r.k].name, String(PROTO[r.k].ad), r.nh, String(r.m)])),
     pick:{multi:true},
     grade(){
       const ok=sameSet(ans,Q.sel); markPicks(ans);
@@ -777,7 +773,7 @@ card({id:'g1-lpm', area:'routing', tier:3, kind:'graded', src:'Q1 c', title:'Lon
   const ans=[sh.indexOf(win)];
   return {
     prompt:'R1 has learned the routes below. A packet arrives for <b>'+int2ip(dest)+'</b>. Which route does R1 use to forward it?',
-    body: pickTable(['Source','Network','Next hop'], sh.map(r=>[PROTO[r.k].name, cidr(r.net,r.p), r.nh])),
+    body: pickTable(['Source','AD','Network','Next hop'], sh.map(r=>[PROTO[r.k].name, String(PROTO[r.k].ad), cidr(r.net,r.p), r.nh])),
     pick:{multi:false},
     grade(){
       const ok=sameSet(ans,Q.sel); markPicks(ans);
@@ -811,11 +807,11 @@ card({id:'g1-float', area:'routing', tier:2, kind:'graded', src:'Q1 d', title:'W
   const net=dflt?0:netOf((rNet24()+ri(0,255))>>>0,pfx);
   const l1=rLink30(), l2=rLink30(), nh1=l1+2, nh2=l2+2;
   const what=dflt?'its <b>default route</b> to the ISP':'<b>'+cidr(net,pfx)+'</b>';
-  const how=prim==='static'?'a static route via '+int2ip(nh1):PROTO[prim].name+' (via '+int2ip(nh1)+')';
+  const how=prim==='static'?'a static route via '+int2ip(nh1)+' (AD 1)':PROTO[prim].name+' (via '+int2ip(nh1)+', AD '+A+')';
   const goodAd=Math.min(254,A+(A<10?4:10));
   const model='ip route '+int2ip(net)+' '+maskStr(pfx)+' '+int2ip(nh2)+' '+goodAd;
   return {
-    prompt:'R1 reaches '+what+' through '+how+' over its primary link. Write the <b>floating static route</b> that sends this traffic to the backup next hop <b>'+int2ip(nh2)+'</b>, used only if the primary route is lost.',
+    prompt:'R1 reaches '+what+' through '+how+' over its primary link. On <b>R1</b>, write the <b>floating static route</b> that sends this traffic to the backup next hop <b>'+int2ip(nh2)+'</b>, used only if the primary route is lost.',
     body: fieldHtml('cmd','Command (global configuration mode)','e.g. ip route 198.51.100.0 255.255.255.0 203.0.113.2',true),
     grade(){
       const r=parseIpRoute(val('cmd'));
@@ -839,7 +835,7 @@ card({id:'g1-float', area:'routing', tier:2, kind:'graded', src:'Q1 d', title:'W
 /* ═══ Q1 — RIP (the exam brief lists it under Routing) ═══════════════════ */
 card({id:'q1e-ripv2', area:'routing', tier:1, kind:'flash', src:'Q1', title:'RIPv1 vs RIPv2', gen(){
   if(chance(0.5)) return {
-    prompt: 'Compare RIPv1 and RIPv2. Explain which of them is classful and which is classless (what their updates carry about the subnet mask), how each one sends its updates, and which one can authenticate them. Then say which metric both use, and which default behaviour at classful boundaries both start with but only RIPv2 can switch off.',
+    prompt: 'Compare RIPv1 and RIPv2: explain their differences and what they have in common.',
     points: [
       '<b>Masks:</b> [[RIPv1 classful and RIPv2 classless]]: RIPv1\'s updates carry no subnet mask, so it can\'t handle VLSM or discontiguous networks, while every RIPv2 route is sent with its mask.',
       '<b>Updates:</b> [[RIPv1 broadcasts and RIPv2 multicasts]]: v1 sends to 255.255.255.255, v2 to 224.0.0.9, so hosts that don\'t run RIP aren\'t disturbed.',
@@ -848,7 +844,7 @@ card({id:'q1e-ripv2', area:'routing', tier:1, kind:'flash', src:'Q1', title:'RIP
     ],
   };
   return {
-    prompt: 'What are the differences between RIPv1 and RIPv2 that make it worth configuring '+mono('version 2')+' under '+mono('router rip')+'? For each difference, say what v1 does and what v2 does instead: how each handles subnet masks, how each sends its updates, and what each offers for security. Then say which default behaviour you would turn off once v2 is running.',
+    prompt: 'What are the differences between RIPv1 and RIPv2 that make it worth configuring '+mono('version 2')+' under '+mono('router rip')+'? Which default behaviour would you then turn off?',
     points: [
       '<b>Masks:</b> RIPv2 is [[classless]]: every route is sent with its mask (v1, being classful, sends none), so VLSM and discontiguous networks work.',
       '<b>Updates:</b> RIPv2 [[multicasts]] them to 224.0.0.9 instead of broadcasting, so hosts that don\'t run RIP aren\'t disturbed.',
@@ -863,23 +859,24 @@ card({id:'q1f-riploops', area:'routing', tier:1, kind:'flash', src:'Q1', title:'
   const inf='[[counting to infinity]]';
   const sixteen='[[16 means unreachable]]';
   if(chance(.5)) return {
-    prompt:'Why is a RIP network limited to 15 hops? Say what RIP uses as its metric, what a metric of 16 means, and what problem the limit prevents. Then explain what split horizon is and why RIP uses it.',
+    prompt:'Why is a RIP network limited to 15 hops? What is split horizon, and why does RIP use it?',
     points: [
       'RIP\'s metric is the [[hop count]]: each router adds one as it passes a route on to its neighbours (every 30 seconds).',
       'A metric of '+sixteen+', so 15 is the highest usable metric and a RIP network can be at most 15 hops across.',
       'The limit stops '+inf+': a dead route\'s metric keeps rising round the network until it reaches 16 and is dropped, instead of growing for ever.',
-      sh,
+      sh.replace('[[feeding each other]]','feeding each other'),
       'RIP uses it to avoid a '+loop+': it is a distance-vector protocol that only knows what its neighbours tell it, so split horizon is what stops the simplest two-router loops forming. Route poisoning goes further: a failed route is advertised with metric 16 so neighbours remove it straight away.',
     ],
   };
   return {
-    prompt:'A link fails in a RIP network. Describe the problem that can happen as the routers keep advertising the dead route to each other and what happens to its metric, then explain how the 16-hop limit and split horizon each stop it.',
+    prompt:'Explain how RIP maps the network, how it prevents routing loops, and how it detects routes that have gone down.',
     points: [
-      'Without protection the routers form a '+loop+': each one thinks it can reach the dead network through the other and passes the route back and forth.',
-      'Every time the route goes round, the router [[adds one hop]] to its metric, so the routers are '+inf+'.',
-      'The limit ends it: a metric of '+sixteen+', so once the count reaches 16 the route is dropped instead of growing for ever.',
-      sh,
+      'RIP is a distance-vector protocol: each router [[sends its routing table to its neighbours]] every [[30 seconds]], and its metric is the [[hop count]] &mdash; each router adds one as it passes a route on.',
+      'The maximum is 15 hops; a metric of '+sixteen+', so a RIP network can be at most 15 hops across.',
+      'The limit stops '+inf+': in a routing loop a dead route\'s metric keeps rising until it reaches 16 and is dropped.',
+      sh.replace('[[feeding each other]]','feeding each other'),
       'Route poisoning goes further: a failed route is advertised with metric 16 so neighbours remove it straight away.',
+      'A route that stops arriving in updates is [[marked invalid after 180 seconds]] (the invalid timer), held down so a bad update can\'t revive it, and flushed from the table after 240 seconds.',
     ],
   };
 }});
@@ -908,7 +905,7 @@ card({id:'q1g-autosum', area:'routing', tier:2, kind:'flash', src:'Q1', title:'R
      balancing is not "half" or "the wrong way" on their own: a routing loop
      loses half the traffic too, and that is a different diagnosis. */
   return {
-    prompt: A+'\'s LAN is '+lan(0)+' and '+B+'\'s LAN is '+lan(1)+'. Between them, '+M+' connects to both over '+link+' links. All three run RIP with the default settings, and the two LANs can\'t reliably reach each other. Explain why: what route do '+A+' and '+B+' advertise to '+M+', why, and what does '+M+' do with it? Then say what you would change, and on which routers.',
+    prompt: A+'\'s LAN is '+lan(0)+' and '+B+'\'s LAN is '+lan(1)+'. Between them, '+M+' connects to both over '+link+' links. All three run RIP with the default settings, and the two LANs can\'t reliably reach each other. Explain why, and what you would change on which routers.',
     points: [
       '<b>Here:</b> '+A+' and '+B+' each advertise their LAN only as [[{sum}]], so [[{M} learns that one route from both {A} and {B}]] and can\'t tell which side each LAN is on. Fix: [[version 2]] and [[no auto-summary]] under '+mono('router rip')+' on [[all three routers]].',
       '<b>Why:</b> RIP [[auto-summarises]] at the classful boundary by default. '+lan(0)+' and '+lan(1)+' are both in the class '+cls+' network '+sum+', so crossing into '+link+' each LAN router advertises just '+sum+'.',
@@ -998,8 +995,8 @@ card({id:'g1-riphops', area:'routing', tier:2, kind:'graded', src:'Q1', title:'R
 card({id:'q2a-rid', area:'ospf', tier:1, kind:'flash', src:'Q2 a', title:'The OSPF router ID', gen(){
   return {
     prompt: pick([
-      'How does OSPF use the router ID? Give two things it is used for. There are three ways that the value of the router ID can be determined: name them in the order the router tries them, and say when the router makes that choice.',
-      'What is an OSPF router ID used for? Give two uses, then list the order in which a Cisco router chooses its router ID and say when the choice is made.',
+      'How does OSPF use the router ID? There are three ways that the value of the router ID can be determined. In what order are they tried, and when is the choice made?',
+      'What is an OSPF router ID used for, and in what order does a Cisco router choose it? When is the choice made?',
     ]),
     points: [
 
@@ -1029,6 +1026,7 @@ function ridIfaces(nPhys,nLoop){
   const loops=Array.from({length:nLoop},(_,i)=>({name:'Loopback'+i, ip:fresh(()=>ip2int(pick(['1.1.1.','2.2.2.','10.10.10.','172.16.'+ri(0,9)+'.','192.168.'+ri(0,9)+'.','100.'+ri(1,99)+'.'+ri(0,9)+'.'])+ri(1,254))), up:true, loop:true}));
   return phys.concat(loops);
 }
+function ridDownNote(f,loop){ return f.name+' has the highest '+(loop?'loopback ':'')+'address but is administratively down, so it can\'t be the router ID.'; }
 function ridBrief(ifs){
   const rows=['Interface              IP-Address      OK? Method Status                Protocol'];
   ifs.forEach(f=>{
@@ -1057,50 +1055,70 @@ function ridCard(id,tier,title,build){
     };
   }});
 }
-ridCard('g2-rid-basic',1,'Work out the router ID',()=>{
-  const ifs=ridIfaces(ri(3,4),0), cfg=chance(.35)?ip2int(ri(1,9)+'.'+ri(1,9)+'.'+ri(1,9)+'.'+ri(1,9)):null;
+/* The three router-ID tiers stack (owner: "each difficulty should have
+   multiple answers, then stack as you proceed further up"). Every tier draws
+   its case first and then builds interfaces until they fit it, so the trick
+   a case promises is really there.
+   Easy   — every interface up; one of: a router-id command, a single loopback
+            (the highest address anyway), or no loopbacks (highest physical).
+   Medium — still all up, one trick: a router-id beating loopbacks, a
+            loopback lower than a physical interface, two loopbacks, or
+            addresses whose alphabetical order isn't their numeric order.
+   Hard   — down interfaces (only here), stacked: the highest loopback down
+            (falling back to physical when it was the only one), the highest
+            physical down, both, or a router-id typed but not yet applied /
+            applied with clear ip ospf process. */
+const ridHi=a=>a.reduce((x,f)=>f.ip>x.ip?f:x);
+const ridRandId=()=>ip2int(ri(1,9)+'.'+ri(1,9)+'.'+ri(1,9)+'.'+ri(1,9));
+function ridBuild(nP,nL,ok){ for(let t=0;t<400;t++){ const ifs=ridIfaces(nP,nL); if(!ok||ok(ifs)) return ifs; } return ridIfaces(nP,nL); }
+function ridOspfCfg(cfg){ return cliHtml('router ospf 1\n'+(cfg!=null?' router-id '+int2ip(cfg)+'\n':'')+' network 0.0.0.0 255.255.255.255 area 0','R1# show running-config | section router ospf'); }
+function ridShut(f){ f.up=false; return f; }
+function ridAnswer(ifs,cfg,extra){
+  const body=cliHtml(ridBrief(ifs),'R1# show ip interface brief')+ridOspfCfg(cfg);
+  if(cfg!=null) return {body, rid:cfg, why:['A '+mono('router-id')+' command always wins: '+int2ip(cfg)+'. The interface addresses are never looked at.'].concat(extra||[])};
   const a=ridAuto(ifs);
-  return {
-    body: cliHtml(ridBrief(ifs),'R1# show ip interface brief')+cliHtml('router ospf 1\n'+(cfg!=null?' router-id '+int2ip(cfg)+'\n':'')+' network 0.0.0.0 255.255.255.255 area 0','R1# show running-config | section router ospf'),
-    rid: cfg!=null?cfg:a.f.ip,
-    why: cfg!=null?['A '+mono('router-id')+' command always wins: '+int2ip(cfg)+'. The interface addresses are never looked at.']:
-      ['There is '+a.why+': '+a.f.name+' ('+int2ip(a.f.ip)+').','"Highest" means numerically, octet by octet &mdash; not alphabetically.'],
-  };
+  return {body, rid:a.f.ip, why:['There is '+a.why+': '+a.f.name+' ('+int2ip(a.f.ip)+').'].concat(extra||[])};
+}
+ridCard('g2-rid-basic',1,'Work out the router ID',()=>{
+  const k=pick(['cfg','loop','phys']);
+  if(k==='cfg') return ridAnswer(ridIfaces(ri(3,4),0), ridRandId());
+  if(k==='loop'){
+    const ifs=ridBuild(ri(2,3),1,x=>ridHi(x).loop);   // the loopback is also the highest address
+    return ridAnswer(ifs,null,['A loopback is preferred over any physical interface.']);
+  }
+  return ridAnswer(ridIfaces(ri(3,4),0),null,['"Highest" means numerically, octet by octet &mdash; not alphabetically.']);
 });
 ridCard('g2-rid-loop',2,'Router ID with loopbacks',()=>{
-  const ifs=ridIfaces(ri(2,3),ri(1,2)), cfg=chance(.25)?ip2int(ri(1,9)+'.'+ri(1,9)+'.'+ri(1,9)+'.'+ri(1,9)):null;
-  const a=ridAuto(ifs), hiPhys=ifs.filter(f=>!f.loop).reduce((x,f)=>f.ip>x.ip?f:x);
-  const why=cfg!=null?['A '+mono('router-id')+' command beats loopbacks and physical interfaces alike: '+int2ip(cfg)+'.']:
-    ['There is '+a.why+': '+a.f.name+' ('+int2ip(a.f.ip)+').'];
-  if(cfg==null&&hiPhys.ip>a.f.ip) why.push(hiPhys.name+' has a higher address ('+int2ip(hiPhys.ip)+') but a loopback beats any physical interface.');
-  return {
-    body: cliHtml(ridBrief(ifs),'R1# show ip interface brief')+cliHtml('router ospf 1\n'+(cfg!=null?' router-id '+int2ip(cfg)+'\n':'')+' network 0.0.0.0 255.255.255.255 area 0','R1# show running-config | section router ospf'),
-    rid: cfg!=null?cfg:a.f.ip, why,
-  };
+  const k=pick(['cfg','low','two','str']);
+  if(k==='cfg') return ridAnswer(ridIfaces(ri(2,3),ri(1,2)), ridRandId(), ['It beats loopbacks and physical interfaces alike.']);
+  if(k==='low'||k==='two'){
+    const nl=k==='two'?2:1;
+    const ifs=ridBuild(ri(2,3),nl,x=>{ const L=ridHi(x.filter(f=>f.loop)), P=ridHi(x.filter(f=>!f.loop)); return P.ip>L.ip; });
+    const P=ridHi(ifs.filter(f=>!f.loop));
+    return ridAnswer(ifs,null,[P.name+' has a higher address ('+int2ip(P.ip)+') but a loopback beats any physical interface.'].concat(k==='two'?['With two loopbacks, the higher loopback address wins.']:[]));
+  }
+  // no loopbacks; the highest address as text is not the highest as a number
+  const ifs=ridBuild(ri(3,4),0,x=>{ const byStr=x.reduce((a,f)=>int2ip(f.ip)>int2ip(a.ip)?f:a); return byStr!==ridHi(x); });
+  return ridAnswer(ifs,null,['"Highest" means numerically, octet by octet &mdash; not alphabetically: compare the first octet, then the next.']);
 });
 ridCard('g2-rid-trap',3,'Router ID traps',()=>{
-  const v=pick(['down','late','cleared']);
-  const ifs=ridIfaces(ri(3,4),v==='down'?0:(chance(.4)?1:0));
-  /* Only on the "down" variant: on the other two OSPF has been running for a
-     week, and a shutdown since start-up would leave the old ID in place. */
-  if(v==='down') ifs.filter(f=>!f.loop).sort((x,y)=>y.ip-x.ip)[0].up=false;
-  const a=ridAuto(ifs);
-  const brief=cliHtml(ridBrief(ifs),'R1# show ip interface brief');
-  const why=[];
-  const shut=ifs.find(f=>!f.up);
-  if(shut) why.push(shut.name+' has the highest address but is administratively down, so it can\'t be the router ID.');
-  if(v==='down'){
-    why.unshift('There is '+a.why+': '+a.f.name+' ('+int2ip(a.f.ip)+').');
-    return {body: brief+cliHtml('router ospf 1\n network 0.0.0.0 255.255.255.255 area 0','R1# show running-config | section router ospf'), rid:a.f.ip, why};
+  const v=pick(['downL','downP','both','late','cleared']);
+  if(v==='downL'||v==='downP'||v==='both'){
+    const nl=v==='downP'?0:ri(1,2);
+    const ifs=ridIfaces(ri(3,4),nl), notes=[];
+    if(v!=='downP'){ const L=ridShut(ridHi(ifs.filter(f=>f.loop))); notes.push(ridDownNote(L,true)+(ifs.some(f=>f.loop&&f.up)?'':' With no loopback left up, R1 falls back to its physical interfaces.')); }
+    if(v!=='downL'){ const up=ifs.filter(f=>!f.loop&&f.up); if(up.length>1) notes.push(ridDownNote(ridShut(ridHi(up)),false)); }
+    return ridAnswer(ifs,null,notes);
   }
-  const nid=ip2int(ri(1,9)+'.'+ri(1,9)+'.'+ri(1,9)+'.'+ri(1,9));
+  /* router-id typed while OSPF already runs: only on these two, OSPF has been
+     running for a week, so no interface is shut since start-up */
+  const ifs=ridIfaces(ri(3,4),chance(.4)?1:0), a=ridAuto(ifs), nid=ridRandId();
+  const brief=cliHtml(ridBrief(ifs),'R1# show ip interface brief');
   let log='R1(config)# router ospf 1\nR1(config-router)# router-id '+int2ip(nid)+'\n% OSPF: Reload or use "clear ip ospf process" command, for this to take effect\nR1(config-router)# end';
   if(v==='cleared') log+='\nR1# clear ip ospf process\nReset ALL OSPF processes? [no]: yes';
   const prompt='R1 has been running OSPF for a week with FULL neighbours. The admin then types the commands below. What router ID is OSPF using <b>now</b>?';
-  if(v==='late'){
-    why.unshift('The new '+mono('router-id')+' only takes effect when the process restarts, and it hasn\'t been &mdash; IOS says so. OSPF is still using the ID it chose at start-up: '+a.why+', '+a.f.name+' ('+int2ip(a.f.ip)+').');
-    return {prompt, body: brief+cliHtml(log,'R1 console'), rid:a.f.ip, why};
-  }
+  if(v==='late') return {prompt, body: brief+cliHtml(log,'R1 console'), rid:a.f.ip,
+    why:['The new '+mono('router-id')+' only takes effect when the process restarts, and it hasn\'t been &mdash; IOS says so. OSPF is still using the ID it chose at start-up: '+a.why+', '+a.f.name+' ('+int2ip(a.f.ip)+').']};
   return {prompt, body: brief+cliHtml(log,'R1 console'), rid:nid,
     why:[''+mono('clear ip ospf process')+' restarted OSPF, so the configured '+mono('router-id')+' ('+int2ip(nid)+') now applies &mdash; it beats every interface.']};
 });
@@ -1109,7 +1127,7 @@ card({id:'q2b-metric', area:'ospf', tier:1, kind:'flash', src:'Q2 b', title:'The
   /* Key words: exam-keys.js, shared by both variants. The prompts ask for the formula,
      the reference, which interfaces count and how they combine. */
   if(chance(.5)) return {
-    prompt:'What does OSPF use as its metric? If you do not specify the metric for a link explicitly, how does a Cisco router assign it a metric value? Give the formula and the default reference bandwidth it uses, and say how the link values combine along a path and which interfaces count.',
+    prompt:'What does OSPF use as its metric? If you do not specify the metric for a link explicitly, how does a Cisco router assign it a metric value, and how is the cost of a whole route worked out?',
     points: [
       'OSPF\'s metric is [[cost]]. A route\'s cost is the [[sum]] of the [[outgoing]] interface costs along the path; lowest total wins.',
       'Default interface cost = [[reference bandwidth]] &divide; [[interface bandwidth]]. The reference is [[100 Mbps]], the result is rounded down, and the minimum is 1.',
@@ -1141,7 +1159,7 @@ card({id:'q2b-metric', area:'ospf', tier:1, kind:'flash', src:'Q2 b', title:'The
      "FastEthernet costs 10 and Gig costs 1" and "100 for the Fa link" are
      wrong whichever link the 1 went to. */
   return {
-    prompt:'How does a Cisco router work out the OSPF cost of a route? Give the formula for one interface, and say which interfaces along the path count and how their costs combine. By default, what cost does a '+A.name+' link get, and a '+B.name+' link? Explain why they end up the same, including the default reference bandwidth and the lowest cost an interface can have.',
+    prompt:'How does a Cisco router work out the OSPF cost of a route, and why do a '+A.name+' and a '+B.name+' link end up with the same cost by default?',
     points: [
       '<b>Here:</b> by default the two links [[both cost 1]] &mdash; '+calc(A,' works out at')+', and '+calc(B,' at')+'. Equal costs, so OSPF can\'t tell the faster link from the slower one.',
       '<b>Why:</b> the default [[reference bandwidth]] is only 100 Mbps, so any link of 100 Mbps or faster divides out to 1 or less &mdash; and a cost is a whole number with a '+
@@ -1248,7 +1266,7 @@ card({id:'q2c-multiarea', area:'ospf', tier:1, kind:'flash', src:'Q2 c', title:'
     'Result: smaller LSDBs, fewer SPF runs, less flooding, faster convergence, and problems contained within one area.',
   ];
   if(Math.random()<0.5) return {
-    prompt: 'How does multi-area OSPF overcome the problems with single area operation? Explain what goes wrong in one large area (what every router has to store, flood and recalculate), describe how a multi-area design is laid out (the central area and the routers that join the others to it), and explain how it reduces the load, including where changes are flooded and what happens to the routing tables and why.',
+    prompt: 'How does multi-area OSPF overcome the problems with single-area operation? Explain why one large area causes problems, how multi-area OSPF is structured, and how that structure reduces the work each router has to do.',
     points: ['<b>Single-area problems:</b> every router holds the whole topology, so the '+LSDB+' and routing table get large; every change '+FLOOD+' to every router and makes all of them re-run '+SPF+' &mdash; heavy CPU, memory and bandwidth use.'].concat(how),
   };
   /* A scenario: the model's first point says what is wrong with THIS network
@@ -1262,7 +1280,7 @@ card({id:'q2c-multiarea', area:'ospf', tier:1, kind:'flash', src:'Q2 c', title:'
      here:'the memory goes on the '+LSDB+': every one of the '+n+' routers stores the whole topology, plus a full routing table. On top of that, any change '+FLOOD+' to all '+n+' and makes each of them re-run '+SPF+'.'},
   ]);
   return {
-    prompt: 'A single-area OSPF network has grown to '+n+' routers and '+sym.s+'. Explain what in one big area is causing this (what every router has to store, flood and recalculate), then describe how a multi-area design would be laid out (the central area and the routers that join the others to it) and how splitting it reduces the load, including where changes are flooded and what happens to the routing tables and why.',
+    prompt: 'A single-area OSPF network has grown to '+n+' routers and '+sym.s+'. Explain why having every router in one area causes this. Then explain how multi-area OSPF is structured, and how that structure reduces the work each router has to do.',
     points: ['<b>Here:</b> '+sym.here].concat(how),
   };
 }});
@@ -1272,7 +1290,7 @@ card({id:'q2d-timers', area:'ospf', tier:1, kind:'flash', src:'Q2 d', title:'Hel
   const FLAP='[[flapping]]';
   if(Math.random()<0.5){
     return {
-      prompt:'Why would you change the OSPF hello or dead timers? Give the benefit and two downsides of lowering them and the reason for raising them (and on what kind of link), say what must be true of the timers on two neighbouring routers, and say what happens to the dead timer when only the hello timer is changed.',
+      prompt:'Why would you modify the hello timer or the dead timer? What effects would the changes have, what must be true of the timers on neighbouring routers, and what happens to the dead timer if only the hello timer is changed?',
       points:[
         'Hellos discover neighbours and keep adjacencies alive. Defaults: hello 10 s and dead 40 s on Ethernet and point-to-point links (30/120 on NBMA). The dead interval is how long without a hello before the neighbour is declared down.',
         '<b>Lower them</b> to [[detect a failure]] [[faster]].',
@@ -1365,7 +1383,7 @@ card({id:'g2-adj', area:'ospf', tier:3, kind:'graded', src:'Q2 d', title:'Will t
 
 card({id:'q2e-roles', area:'ospf', tier:1, kind:'flash', src:'Q2 c', title:'OSPF router roles', gen(){
   if(Math.random()<0.5) return {
-    prompt: 'In multi-area OSPF, describe the roles of an internal router, a backbone router, an ABR and an ASBR: for each one, say which areas its interfaces are in (or what else it connects to) and what job it does.',
+    prompt: 'In multi-area OSPF, describe the roles of an internal router, a backbone router, an ABR and an ASBR.',
     points: [
       '<b>Internal router:</b> every interface in the [[same area]], so it holds one LSDB.',
       '<b>Backbone router:</b> has at least one interface in the [[backbone]]. Every other area must connect to area 0.',
@@ -1387,7 +1405,7 @@ card({id:'q2e-roles', area:'ospf', tier:1, kind:'flash', src:'Q2 c', title:'OSPF
   const cnt=n=>n===1?'one':n===2?'two':'three';
   const prompt=A+' has '+cnt(split[0])+' interface'+(split[0]>1?'s':'')+' in area 0 and '+cnt(split[1])+' in area '+x+'. '+
     B+' has all of its interfaces in area '+bArea+', and it also redistributes '+src.txt+' into OSPF. '+
-    'Name every OSPF role '+A+' and '+B+' each have and why, then explain what an ABR does and what an ASBR does.';
+    'What OSPF roles do '+A+' and '+B+' have, and what does each role do?';
   const bRoles=bInZero
     ? 'all its interfaces are in area 0, so [[{B} is an internal router]] and [[{B} is a backbone router]] too'
     : 'all its interfaces are in area '+x+', so [[{B} is an internal router]] of area '+x+' (not a backbone router)';
@@ -1415,7 +1433,7 @@ card({id:'q2f-lsa', area:'ospf', tier:2, kind:'flash', src:'Q2 c', title:'OSPF L
      Type 4 names come before Type 3's, because "ASBR summary LSA" ends on the
      same word as "summary LSA" and the earlier subject wins that tie. */
   if(chance(.5)) return {
-    prompt: 'Describe the OSPF LSA types 1 to 5. For each type, say which router originates it and how far it is flooded (inside its own area, into other areas, or across every area).',
+    prompt: 'Describe the OSPF LSA types 1, 2, 3, 4 and 5: who sends each one, and how far does it flood?',
     points: [
       '[[Type 1 Router LSAs come from every router]], each describing its own links.',
       '[[Type 2 Network LSAs come from the DR]] of a multi-access network.',
@@ -1427,7 +1445,7 @@ card({id:'q2f-lsa', area:'ospf', tier:2, kind:'flash', src:'Q2 c', title:'OSPF L
     ],
   };
   return {
-    prompt: 'Sort the OSPF LSA types 1 to 5 into these four groups, naming each group and listing the type numbers in it: stays inside the area it was created in; carries one area\'s networks into other areas; tells other areas how to reach the ASBR; brings in routes from outside OSPF.',
+    prompt: 'Which OSPF LSA types stay inside an area in multi-area OSPF, and which carry routes between areas or from outside OSPF? Say what each type is for.',
     points: [
       '[[Types 1 and 2 stay inside their own area]]: Router LSAs (from every router) and Network LSAs (from the DR) are flooded only within their own area.',
       '[[Type 3 carries networks into other areas]]: Summary LSAs, which ABRs send; they appear as '+mono('O IA')+' routes.',
@@ -1697,7 +1715,7 @@ card({id:'q3c-place', area:'acl', tier:1, kind:'flash', src:'Q3 c', title:'Where
   const extMatch='[[destination, protocol and port]]';
   const early='[[before it wastes bandwidth]]';
   if(chance(.5)) return {
-    prompt: 'Where is it best to place a standard ACL, and where is it best to place an extended ACL? For each one, say what that kind of ACL can match, explain why that decides where it goes, and say what the placement saves.',
+    prompt: 'Where is it best to place a standard ACL? What about an extended ACL? Why?',
     points: [
       'Place a [[standard ACL close to the destination]].',
       'A standard ACL '+onlySrc+' address, so placed near the source it would stop that host reaching <i>every</i> destination, not just the one intended.',
@@ -1710,8 +1728,7 @@ card({id:'q3c-place', area:'acl', tier:1, kind:'flash', src:'Q3 c', title:'Where
   const x=ri(2,250), net='192.168.'+x+'.0';
   return {
     prompt: 'R1, R2 and R3 are connected in a line (R1 &ndash; R2 &ndash; R3). Hosts on the '+A+' LAN ('+net+'/24, on '+src+') must not reach the Servers LAN on '+dst+', but must still reach the '+B+' LAN on R2. '+
-      'An admin applies a standard ACL denying '+net+' 0.0.0.255 inbound on '+src+'\'s interface facing the '+A+' LAN. Explain what else this breaks and why. Then say which router the standard ACL should be applied on instead, '+
-      'which router an extended ACL for the same job would go on, what the extended ACL can match that the standard one cannot, and why placing the extended ACL there is better for the network.',
+      'An admin applies a standard ACL denying '+net+' 0.0.0.255 inbound on '+src+'\'s interface facing the '+A+' LAN. What else does this break, and why? Where do standard and extended ACLs for this job belong, and why?',
     points: [
       '<b>Here:</b> the ACL on '+src+' drops <i>all</i> '+A+' traffic, so '+A+' [[also loses the {B} LAN]] on R2, not only the Servers LAN. '+
         'So the [[standard ACL on {dst}]] belongs outbound on the interface facing the Servers LAN, and '+
@@ -1729,8 +1746,8 @@ card({id:'q3d-established', area:'acl', tier:1, kind:'flash', src:'Q3 d', title:
      RETURN traffic. "@" keeps "does not allow new connections" from vetoing. */
   return {
     prompt: pick([
-      'What is the purpose of adding the keyword established at the end of an ACL command line? Say which protocol it matches and which flag bits it checks, which returning traffic it lets in and who must have started that connection, what it still keeps out, and give one limitation.',
-      'An inbound ACL on the Internet-facing interface ends an entry with "established". Which protocol and flag bits does that entry match? Which traffic does it let in and who must have started that connection, what does it still block, and what is its main limitation?',
+      'What is the purpose of adding the keyword established at the end of an ACL command line? How does it work, and what is its limitation?',
+      'An inbound ACL on the Internet-facing interface ends an entry with "established". What traffic does that entry let in, how does it decide, and what is its limitation?',
     ]),
     points: [
       '<b>Matches:</b> only [[TCP]] segments that belong to a session already set up &mdash; those with the [[ACK or RST]] bit set.',
@@ -1921,8 +1938,8 @@ card({id:'q3e-acl6', area:'acl', tier:1, kind:'flash', src:'Q3', title:'IPv6 ACL
   /* ND is only credited when the answer says it is permitted / keeps working, so "ND is blocked" scores nothing. */
   return {
     prompt: pick([
-      'How do IPv6 ACLs differ from IPv4 ACLs? Explain how an IPv6 list is identified (numbered or named), what each entry can match on, how addresses are written in it, which command applies it to an interface, and what the implicit entries at the end of every IPv6 ACL still permit.',
-      'What do you have to do differently when you write and apply an ACL for IPv6 traffic? Describe how the list is identified, what each entry matches on, how you write the addresses, the command that applies it to an interface, and what IPv6 traffic the implicit entries at the end still allow.']),
+      'How do IPv6 ACLs differ from IPv4 ACLs?',
+      'What do you have to do differently when you write and apply an ACL for IPv6 traffic?']),
     points: [
       'IPv6 ACLs are [[always named]] &mdash; there are no numbered or standard IPv6 lists &mdash; and each entry works like an [[extended ACL]] entry: protocol, source and destination (and ports).',
       'There are no wildcard masks: addresses are written with a [[prefix length]] (2001:db8:acad:10::/64), or host / any.',
@@ -2140,7 +2157,7 @@ card({id:'g4-count', area:'nat', tier:2, kind:'graded', src:'Q4 c', title:'How m
 
 card({id:'q4b-static', area:'nat', tier:1, kind:'flash', src:'Q4 b', title:'Why static NAT', gen(){
   if(Math.random()<0.5) return {
-    prompt:'Explain what static NAT does and why you would use it: what kind of address mapping it creates, what kind of inside device needs it, and why dynamic NAT or PAT would not work for that device.',
+    prompt:'Explain what static NAT does and why you would use it rather than dynamic NAT or PAT.',
     points: [
       'Static NAT is a permanent [[one-to-one]] mapping between one inside local and one inside global address.',
       'It is for inside devices that must be [[reachable from outside]] &mdash; typically a [[server]].',
@@ -2154,7 +2171,7 @@ card({id:'q4b-static', area:'nat', tier:1, kind:'flash', src:'Q4 b', title:'Why 
   const priv=lan.p+lan.h, pubH=ri(225,230), pub='209.165.200.'+pubH;
   const prompt='The company\'s '+srv.n+' ('+priv+') sits on the inside network and is published at '+pub+
     '; everyone else gets out through a dynamic NAT pool of 209.165.200.242 to 209.165.200.254. '+
-    'Why does the '+srv.n+' need static NAT rather than the pool? Say what kind of mapping static NAT creates and what that gives the '+srv.n+', then give two reasons a pool address would not work for it: who has to start the traffic for a pool translation to exist, and whether the address it gets stays the same.';
+    'Why does the '+srv.n+' need static NAT rather than an address from the pool?';
   return {prompt, points:[
     '<b>Here:</b> static NAT maps '+priv+' to '+pub+' [[one-to-one]], so '+srv.c+' on the Internet can always [[reach the {srvn}]] at that [[fixed public address]].',
     '<b>Why not the pool:</b> dynamic NAT only creates a translation when the inside host [[sends first]], so a connection started from outside has no translation to arrive on.',
@@ -2173,7 +2190,7 @@ card({id:'q4c-howmany', area:'nat', tier:1, kind:'flash', src:'Q4 c', title:'Pub
   if(Math.random()<0.5){
     const n=ri(30,120), m=ri(6,n-10);
     return {
-      prompt:'An office has '+n+' PCs. At the busiest time of day, at most '+m+' of them are using the Internet at once. How many public addresses does the company need with dynamic NAT, and how many with dynamic NAT with overload (PAT)? Explain why each needs that many, and say what happens with dynamic NAT if the pool is smaller than that.',
+      prompt:'An office has '+n+' PCs. At the busiest time of day, at most '+m+' of them are using the Internet at once. How many public addresses does the company need with dynamic NAT? With dynamic NAT with overload (PAT)? Explain your answer, and what happens if the dynamic NAT pool is too small.',
       points: [
         '<b>Here:</b> [[dynamic NAT needs {m}]] public addresses, and [[PAT needs only one#m]] public address. Only the peak counts: the other '+(n-m)+' PCs are not online then, so they need no address of their own.',
         '<b>Dynamic NAT:</b> each inside host online gets [[its own public address]] from the pool for as long as its translation lasts, so the pool must cover the '+m+' at the peak.',
@@ -2184,7 +2201,7 @@ card({id:'q4c-howmany', area:'nat', tier:1, kind:'flash', src:'Q4 c', title:'Pub
     };
   }
   return {
-    prompt:'How many public addresses would you need with dynamic NAT, and how many with dynamic NAT with overload (PAT)? Explain why each needs that many, and say what happens with dynamic NAT when every pool address is in use.',
+    prompt:'How many public addresses would you need with dynamic NAT? With dynamic NAT with overload (PAT)? Explain your answer, and what happens when the dynamic NAT pool runs out.',
     points: [
       '[[Dynamic NAT needs one address per host online at the same time]] &mdash; the pool must be as big as that peak.',
       'Each of those hosts is given [[its own public address#2]] from the pool while its translation lasts.',
@@ -2201,7 +2218,7 @@ card({id:'q4d-patport', area:'nat', tier:1, kind:'flash', src:'Q4 d', title:'Two
      outcome with its PC. */
   const tableKw='[[translation table]]';
   if(Math.random()<0.5) return {
-    prompt:'What happens if two internal users select the same source port number for a communication which requires PAT? Explain what the router does with each user\'s port, how it keeps the two sessions apart, and how the replies get back to the right user.',
+    prompt:'What happens if two internal users select the same port number for a communication which requires PAT? How do the replies get back to the right user?',
     points: [
       'The first session [[keeps its port]] on the public (inside global) address.',
       'That address and port are now taken, so for the second user the router [[assigns a different port]].',
@@ -2213,7 +2230,7 @@ card({id:'q4d-patport', area:'nat', tier:1, kind:'flash', src:'Q4 d', title:'Two
   const pcs=[{name:'PC-A', ip:'192.168.1.'+a},{name:'PC-B', ip:'192.168.1.'+b}];
   const firstI=ri(0,1), F=pcs[firstI], L=pcs[1-firstI];
   return {
-    prompt:'PC-A ('+pcs[0].ip+') and PC-B ('+pcs[1].ip+') both open a connection from source port '+n+' through a PAT router whose only public address is '+pub+'. '+F.name+' connects first. Which public (inside global) port does each PC end up with? Explain how the router keeps the two sessions apart and how each reply gets back to the right PC.',
+    prompt:'PC-A ('+pcs[0].ip+') and PC-B ('+pcs[1].ip+') both open a connection from source port '+n+' through a PAT router whose only public address is '+pub+'. '+F.name+' connects first. How does the router keep them apart, and how does each reply get back to the right PC?',
     points: [
       '<b>Here:</b> [[{F} keeps port {n}]] on '+pub+' (it was first, and the port was free); [[{L} gets a different port]] on '+pub+', because '+pub+':'+n+' is already in use.',
       'Each session is a separate entry in the '+tableKw+': '+F.ip+':'+n+' &rarr; '+pub+':'+n+' and '+L.ip+':'+n+' &rarr; '+pub+':&lt;new port&gt;, so the two never share an entry.',
@@ -2374,8 +2391,8 @@ rtCard('g4-rt-hard',3,'Supernets and local routes',P=>pick([
 /* ═══ Q5 — DHCPv4 ═════════════════════════════════════════════════════════ */
 card({id:'q5a-dora', area:'dhcp', tier:1, kind:'flash', src:'Q5 a', title:'How a PC gets an address', gen(){
   return {
-    prompt: pick(['Describe how a PC obtains an IPv4 address using DHCPv4. Name the four messages in order and say what each one does, say who each message is sent to when the PC has no address yet, and say how long the PC may keep the address it is given.',
-      'A PC boots with no IP address. Walk through the DHCPv4 exchange that gives it one: name each message in order and what it does, explain who the first message is sent to (the PC has no address to send from), and say how long the PC may keep the address.']),
+    prompt: pick(['Describe how a PC obtains an IPv4 address using DHCPv4.',
+      'A PC boots with no IP address. Walk through the DHCPv4 exchange that gives it one.']),
     points: [
       '<b>1. [[Discover]]</b> &mdash; the client has no address, so it [[broadcasts]] to find a DHCP server.',
       '<b>2. [[Offer]]</b> &mdash; a server offers an address (plus mask, gateway, DNS) and a lease time.',
@@ -2393,7 +2410,7 @@ card({id:'q5b-relay', area:'dhcp', tier:1, kind:'flash', src:'Q5 b', title:'Wher
   const relay='[[DHCP relay]]';
   const ucast='[[unicast]]';
   if(chance(.5)) return {
-    prompt: 'By default, where must the DHCP server for a PC be? Explain the technical reason: what kind of message is the client\'s first DHCP message, and what does a router do with that kind of message? Then explain how we overcome this restriction: name the feature and the command, and say how the router then sends the client\'s DHCP messages on to the server.',
+    prompt: 'By default, where must the DHCP server for a PC be, and what is the technical reason? How can we overcome this restriction, and how does the router then get the PC\'s DHCP messages to the server?',
     points: [
       'By default the server must be on the [[same subnet]] as the client.',
       'Why: the client has no address yet, so its Discover is a '+bcast+', and '+noFwd+' &mdash; it never reaches a server on another network.',
@@ -2404,9 +2421,9 @@ card({id:'q5b-relay', area:'dhcp', tier:1, kind:'flash', src:'Q5 b', title:'Wher
   const gw=pick(['R1','R2','R3']), ifc=pick(['G0/0','G0/1','G0/2']), n=ifc.slice(-1);
   const lan='192.168.'+ri(10,250)+'.0/24', srv='10.'+ri(1,250)+'.'+ri(1,250)+'.'+pick([10,20,50,100,200]);
   return {
-    prompt: 'PCs on '+gw+'\'s '+ifc+' LAN ('+lan+') got their addresses from a DHCP server on that LAN. The server is moved to a data-centre network two routers away, at '+srv+', and the PCs stop getting addresses. Explain why. Then give the command that fixes it, saying which router and interface it goes on, what role that router then plays, and how it sends the PCs\' DHCP messages on to the server.',
+    prompt: 'PCs on '+gw+'\'s '+ifc+' LAN ('+lan+') got their addresses from a DHCP server on that LAN. The server is moved to a data-centre network two routers away, at '+srv+', and the PCs stop getting addresses. Why, and how do you fix it? Say where the fix goes and how the server then receives the PCs\' DHCP messages.',
     points: [
-      '<b>Here:</b> the server is no longer on the PCs\' subnet. Fix it on the PCs\' gateway, [[{gw} {ifc}]], with [[ip helper-address {srv}]].',
+      '<b>Here:</b> the server is no longer on the PCs\' subnet. Fix it on the PCs\' gateway, [[{gw} {ifc}]], with [[ip helper-address]] '+srv+'.',
       'Why: the PCs have no address yet, so their Discover is a '+bcast+', and '+noFwd+' &mdash; it never leaves '+lan+' to reach '+srv+'.',
       'With the helper address, '+gw+' acts as a '+relay+': it picks up the PCs\' DHCP broadcasts on '+ifc+' and forwards them to '+srv+' as '+ucast+', then passes the server\'s replies back onto the LAN.',
     ],
@@ -2415,8 +2432,8 @@ card({id:'q5b-relay', area:'dhcp', tier:1, kind:'flash', src:'Q5 b', title:'Wher
 }});
 card({id:'q5c-exclude', area:'dhcp', tier:1, kind:'flash', src:'Q5 c', title:'Excluded addresses', gen(){
   return {
-    prompt: pick(['Why might we exclude some addresses from the range of addresses in a DHCP pool? Say which kinds of devices usually use the excluded addresses, how those devices get their addresses, and what could go wrong if they were not excluded.',
-      'What problem does <span class="mono-inl">ip dhcp excluded-address</span> protect against? Explain how the problem would arise &mdash; which kinds of devices use the excluded addresses and how they get them.']),
+    prompt: pick(['Why might we exclude some addresses from the range of addresses in a DHCP pool?',
+      'What does <span class="mono-inl">ip dhcp excluded-address</span> protect against?']),
     points: [
       'Some devices are configured with [[static]] addresses from the same subnet &mdash; the [[default gateway]] address, [[printers and servers]], and switch management addresses.',
       'If the pool could hand those out, a client could be given an address already in use: an IP address [[conflict]].',
@@ -2496,7 +2513,7 @@ card({id:'g5-exclude', area:'dhcp', tier:2, kind:'graded', src:'Q5 c', title:'Wr
   while(i<sorted.length){ let j=i; while(j+1<sorted.length&&sorted[j+1]===sorted[j]+1) j++; model.push('ip dhcp excluded-address '+H(sorted[i])+(j>i?' '+H(sorted[j]):'')); i=j+1; }
   return {
     prompt:'R1 hands out addresses in <b>'+cidr(net,24)+'</b>. These are set statically and must never be leased: the default gateway <b>'+H(gw)+'</b>, the servers <b>'+H(s)+'&ndash;'+H(e)+
-      '</b>, the printer <b>'+H(pr)+'</b>'+(mg?' and switch S1\'s management address <b>'+H(mg)+'</b>':'')+'. Write the command(s) that exclude exactly those addresses.',
+      '</b>, the printer <b>'+H(pr)+'</b>'+(mg?' and switch S1\'s management address <b>'+H(mg)+'</b>':'')+'. On R1, write the command(s) that exclude exactly those addresses.',
     body: cmdsHtml('ex','Exclusions &mdash; one command per line, Ctrl+Enter submits','e.g. ip dhcp excluded-address 198.51.100.1 198.51.100.9',3),
     grade(){
       const p=parseExclusions(cmdLines('ex'));
@@ -2561,23 +2578,23 @@ card({id:'q5d-v6', area:'dhcp', tier:1, kind:'flash', src:'Q5', title:'How an IP
      and the flags are graded by value (M = 1 / O = 1 / both 0); a flag tied
      to the wrong method ("O flag 1 means stateful") vetoes its key word.
      Key words: exam-keys.js. */
-  const OWN='[[SLAAC~builds its own address]]', SLESS='[[stateless~takes its address from SLAAC]]',
-        ASSIGN='[[stateful~DHCPv6 server assigns the address]]', TRACK='[[stateful~server keeps track of every client]]',
+  const OWN='[[SLAAC~builds its own address]]', SLESS='[[stateless~has the device generate its own address]]',
+        ASSIGN='[[DHCP server assigns the address]]',
         DNS='[[DNS server from the DHCPv6 server]]', GW='[[gateway from the RA]]', M='[[M flag set to 1]]', O='[[O flag set to 1]]';
   const FLAGS='The RA\'s flags tell the host which: '+M+' (M = 1) &rarr; stateful; '+O+' (O = 1 with M = 0) &rarr; stateless; both 0 &rarr; SLAAC only.';
   if(chance(.5)) return {
-    prompt:'Describe the three ways an IPv6 host can be given its address &mdash; SLAAC, stateless DHCPv6 and stateful DHCPv6. For each one, explain where the address comes from, what the DHCPv6 server provides (if there is one) and whether anything keeps track of the addresses. Then explain how the host knows which method to use: which two flags in the router\'s RA, and what value each has for each method.',
+    prompt:'Describe the three ways an IPv6 host can be given its address: SLAAC, stateless DHCPv6 and stateful DHCPv6. How does the host know which one to use?',
     points:[
       '<b>SLAAC:</b> no server is involved &mdash; '+OWN+' from the /64 prefix in the router\'s Router Advertisement (RA), using EUI-64 or a random interface ID. Nothing keeps track of which addresses are used.',
-      '<b>Stateless DHCPv6:</b> the address is made exactly as above &mdash; '+SLESS+' &mdash; but a DHCPv6 server also provides other information; the host gets the '+DNS+'. The server keeps no record of addresses.',
-      '<b>Stateful DHCPv6:</b> the address comes from a server: the '+ASSIGN+' (and the other information, like DNS), the same job as DHCPv4. The '+TRACK+', so it knows which addresses are in use.',
+      '<b>Stateless DHCPv6:</b> just like SLAAC, '+SLESS+' from the RA\'s prefix &mdash; but a DHCPv6 server also provides other information; the host gets the DNS server from the DHCPv6 server. The server keeps no record of addresses.',
+      '<b>Stateful DHCPv6:</b> the '+ASSIGN+' (and the other information, like DNS), the same job as DHCPv4. The server keeps track of every client, so it knows which addresses are in use.',
       FLAGS,
     ],
   };
   return {
-    prompt:'Compare SLAAC, stateless DHCPv6 and stateful DHCPv6. For each one, explain where the host gets its address, its DNS server and its default gateway. Then say which two flags in the router\'s RA tell the host which method to use, and what value each has for each method.',
+    prompt:'Compare SLAAC, stateless DHCPv6 and stateful DHCPv6. Where does the host get its address, its DNS server and its default gateway in each, and how does it know which one to use?',
     points:[
-      '<b>Address:</b> '+OWN+' from the /64 prefix in the router\'s RA (EUI-64 or a random interface ID); '+SLESS+' in the same way; and the '+ASSIGN+' and keeps track of it, like DHCPv4.',
+      '<b>Address:</b> '+OWN+' from the /64 prefix in the router\'s RA (EUI-64 or a random interface ID); '+SLESS+' in the same way; and with stateful, the '+ASSIGN+' and keeps track of it, like DHCPv4.',
       '<b>DNS server:</b> SLAAC alone gets none from DHCPv6 (only from the RA, if the router includes it); in stateless and stateful DHCPv6 the host gets the '+DNS+'.',
       '<b>Default gateway:</b> the same in all three &mdash; the host takes the '+GW+', which is the router\'s link-local address (e.g. fe80::1). DHCPv6 never hands out a gateway.',
       FLAGS,
@@ -2732,7 +2749,7 @@ function q6Config(P,fault){
   return {r1, s1};
 }
 function q6Topo(P){
-  return '<svg class="ex-topo ex-q6fig" viewBox="0 0 260 250" role="img" aria-label="R1 trunked to S1, H1 and H2 below">'+
+  return '<svg class="ex-topo ex-q6fig" viewBox="0 0 260 264" role="img" aria-label="R1 trunked to S1, H1 and H2 below">'+
     '<path class="ln" d="M130 52 V104 M110 134 L70 186 M150 134 L190 186"/>'+
     '<rect class="rt" x="90" y="10" width="80" height="42" rx="10"/><text class="rt-name" x="130" y="36" text-anchor="middle">R1</text>'+
     '<rect class="rt" x="90" y="104" width="80" height="30" rx="6"/><text class="rt-name" x="130" y="124" text-anchor="middle">S1</text>'+
@@ -2740,31 +2757,66 @@ function q6Topo(P){
     '<text class="t-sub" x="80" y="160" text-anchor="end">Fa0/1</text><text class="t-sub" x="180" y="160">Fa0/2</text>'+
     '<rect class="rt" x="40" y="186" width="60" height="28" rx="6"/><text class="rt-name" x="70" y="205" text-anchor="middle">H1</text>'+
     '<rect class="rt" x="160" y="186" width="60" height="28" rx="6"/><text class="rt-name" x="190" y="205" text-anchor="middle">H2</text>'+
-    '<text x="70" y="234" text-anchor="middle">VLAN '+P.x+'</text><text x="190" y="234" text-anchor="middle">VLAN '+P.y+'</text></svg>';
+    '<text x="70" y="234" text-anchor="middle">VLAN '+P.x+'</text><text x="190" y="234" text-anchor="middle">VLAN '+P.y+'</text>'+
+    '<text class="t-sub" x="70" y="252" text-anchor="middle">192.168.'+P.x+'.'+P.h1+'</text><text class="t-sub" x="190" y="252" text-anchor="middle">192.168.'+P.y+'.'+P.h2+'</text></svg>';
 }
 function q6Body(P,cfg,hosts){
   return '<div class="ex-q6"><div class="ex-topo-wrap">'+q6Topo(P)+'</div><div>'+cliHtml(cfg.r1.join('\n'))+cliHtml(cfg.s1.join('\n'))+'</div></div>'+
     (hosts?'<div class="ex-scroll"><table class="rt-table ex-table"><thead><tr><th>Host</th><th>VLAN</th><th>Address</th><th>Gateway</th></tr></thead><tbody>'+
       '<tr><td>H1</td><td>'+P.x+'</td><td>192.168.'+P.x+'.'+P.h1+'/24</td><td>192.168.'+P.x+'.1</td></tr>'+
-      '<tr><td>H2</td><td>'+P.y+'</td><td>192.168.'+P.y+'.'+P.h2+'/24</td><td>192.168.'+P.y+'.1</td></tr></tbody></table></div>':'');
+      '<tr><td>H2</td><td>'+P.y+'</td><td>192.168.'+P.y+'.'+P.h2+'/24</td><td>'+(P.gw2||'192.168.'+P.y+'.1')+'</td></tr></tbody></table></div>':'');
 }
 
 card({id:'q6-roas', area:'ts', tier:1, kind:'flash', src:'Q6', title:'Router-on-a-stick: what\'s wrong?', gen(){
-  const P=chance(.6)?{x:10,y:20,h1:10,h2:10}:q6Plan();
-  /* Key words: exam-keys.js. "Fa0/1 goes in VLAN x" is graded by fixed-order phrases, never by subject
-     pairing, so an answer that swaps the two ports' VLANs scores neither:
-     "switchport access vlan <y> on fa0/1 and ... <x> on fa0/2" contains no
-     phrase that joins fa0/2 to <y> or fa0/1 to <x> the wrong way round. */
-  return {
-    prompt:'In the figure, host H1 cannot communicate with host H2. Clearly identify, describe and explain the cause of the problem &mdash; say which VLAN the hosts\' frames end up in and why R1 can\'t route them. What modifications do you need to make to fix it? Give the S1 commands.',
-    body: q6Body(P,q6Config(P,'access'),false),
-    points: [
+  /* One fault per draw, from the same planted configurations as the graded
+     g6-fault cards, plus a wrong default gateway on H2 (owner: the answer
+     should rotate). The figure shows each host's address and the table its
+     gateway, so a correct host is visibly correct. Key words: exam-keys.js. */
+  const P=chance(.4)?{x:10,y:20,h1:10,h2:10}:q6Plan();
+  const fault=pick(['access','trunk','shut','tag','ip','swap','hgw']);
+  const cfg=q6Config(P,fault==='hgw'?'none':fault);
+  const tags=cfg.r1.map(l=>/encapsulation dot1q (\d+)/.exec(l)).filter(Boolean), z=tags.length>1?+tags[1][1]:P.y;
+  const bad=fault==='hgw'?'192.168.'+P.y+'.'+pick([254,100,2].filter(v=>v!==P.h2)):null;
+  if(bad) P.gw2=bad;
+  const gw1='192.168.'+P.x+'.1', gw2='192.168.'+P.y+'.1', w=P.y+1;
+  const sub='Gi0/0.'+P.y;
+  const reach='[[can\'t reach its gateway]]';
+  const pts={
+    access:[
       '<b>Here:</b> S1 makes Fa0/1 (H1) and Fa0/2 (H2) access ports but never assigns them a VLAN, so both stay in the [[default VLAN 1]] instead of VLAN '+P.x+' and VLAN '+P.y+'.',
-      'Why it breaks: their frames cross the trunk untagged (VLAN 1), but R1 only has subinterfaces for VLANs '+P.x+' and '+P.y+' &mdash; [[no subinterface for VLAN 1]] &mdash; so neither host can reach its default gateway. H1 and H2 are in different subnets, so they need the router.',
+      'Why it breaks: their frames cross the trunk untagged (VLAN 1), but R1 only has subinterfaces for VLANs '+P.x+' and '+P.y+' &mdash; [[no subinterface for VLAN 1]] &mdash; so neither host can reach its default gateway. H1 and H2 are in different subnets, so they need R1 to talk.',
       'Fix on S1: put [[Fa0/1 in VLAN {x}]] and [[Fa0/2 in VLAN {y}]] with [[switchport access vlan]] under each interface.',
-      'e.g. '+mono('interface fa0/1')+' '+mono('switchport access vlan '+P.x)+', then '+mono('interface fa0/2')+' '+mono('switchport access vlan '+P.y)+' (and '+mono('vlan '+P.x)+' / '+mono('vlan '+P.y)+' if the VLANs don\'t exist yet).',
-    ],
-    vars:{x:P.x, y:P.y},
+      'e.g. '+mono('interface fa0/1')+' '+mono('switchport access vlan '+P.x)+', then '+mono('interface fa0/2')+' '+mono('switchport access vlan '+P.y)+' (and '+mono('vlan '+P.x)+' / '+mono('vlan '+P.y)+' if the VLANs don\'t exist yet).'],
+    trunk:[
+      '<b>Here:</b> S1 Gi0/1, the link to R1, is set to '+mono('switchport mode access')+': [[Gi0/1 is not a trunk]].',
+      'An access port [[only carries one VLAN]] (VLAN 1, untagged), so the VLAN '+P.x+' and '+P.y+' frames never reach R1&rsquo;s subinterfaces and neither host '+reach+'. H1 and H2 are in different subnets, so they need R1 to talk.',
+      'Fix on S1: '+mono('interface gi0/1')+' then [[switchport mode trunk]].'],
+    shut:[
+      '<b>Here:</b> R1&rsquo;s configuration never enables Gi0/0 &mdash; there is no '+mono('no shutdown')+' under it, so [[Gi0/0 is shut down]].',
+      'Router interfaces start shut down, and the [[subinterfaces go down with it]] (Gi0/0.'+P.x+' and Gi0/0.'+P.y+'), so neither host '+reach+' and nothing is routed between the VLANs.',
+      'Fix on R1: '+mono('interface gi0/0')+' then [[no shutdown]].'],
+    tag:[
+      '<b>Here:</b> R1 '+sub+' has '+mono('encapsulation dot1q '+z)+': [[the subinterface tags the wrong VLAN]] &mdash; it should be VLAN '+P.y+'.',
+      'It only sends and accepts VLAN '+z+' frames, so H2 (VLAN '+P.y+') '+reach+' ('+gw2+'), and H1 can\'t reach H2 through R1.',
+      'Fix on R1: '+mono('interface gi0/0.'+P.y)+' then [[encapsulation dot1q {y}]].'],
+    ip:[
+      '<b>Here:</b> R1 '+sub+' has '+mono('ip address 192.168.'+w+'.1')+': [[the subinterface is in the wrong subnet]] &mdash; it should be 192.168.'+P.y+'.1.',
+      'H2&rsquo;s gateway '+gw2+' doesn\'t exist, so H2 '+reach+', and R1 has no interface in 192.168.'+P.y+'.0/24 to route H1\'s traffic to H2.',
+      'Fix on R1: '+mono('interface gi0/0.'+P.y)+' then [[ip address 192.168.{y}.1 255.255.255.0]].'],
+    swap:[
+      '<b>Here:</b> S1 has [[the ports in each other\'s VLANs]]: Fa0/1 (H1) is in VLAN '+P.y+' and Fa0/2 (H2) is in VLAN '+P.x+'.',
+      'H1 is addressed for VLAN '+P.x+' and H2 for VLAN '+P.y+', so in the wrong VLAN each host '+reach+' &mdash; its gateway is on the other subinterface.',
+      'Fix on S1: '+mono('interface fa0/1')+' [[switchport access vlan {x}#s1]], then '+mono('interface fa0/2')+' [[switchport access vlan {y}#s2]].'],
+    hgw:[
+      '<b>Here:</b> the switch and router are correct, but [[H2\'s default gateway is wrong]]: it is set to '+bad+' instead of R1&rsquo;s '+gw2+'.',
+      'H1 and H2 are in different subnets, so H2 sends its replies to the gateway, and [[there is no router at {bad}]] &mdash; they go nowhere. H1 can reach R1, but H2 can\'t answer.',
+      'Fix on H2: [[set the default gateway to 192.168.{y}.1]].'],
+  }[fault];
+  return {
+    prompt:'In the figure, host H1 cannot communicate with host H2. Clearly identify, describe and explain the cause of the problem. What modifications do you need to make to fix it?',
+    body: q6Body(P,cfg,true),
+    points: pts,
+    vars:{x:P.x, y:P.y, z, w, bad:bad||'', sub},
   };
 }});
 
@@ -2826,7 +2878,7 @@ card({id:'g6-subif', area:'ts', tier:2, kind:'graded', src:'Q6', title:'Add a VL
   const v=pick([30,40,50,60,70,99,110,150]), native=chance(.3), gwo=pick([1,1,254]);
   const model=['interface gi0/0.'+v,' encapsulation dot1q '+v+(native?' native':''),' ip address 192.168.'+v+'.'+gwo+' 255.255.255.0'];
   return {
-    prompt:'R1 Gi0/0 is trunked to S1 (router-on-a-stick). Add routing for <b>VLAN '+v+'</b>, network 192.168.'+v+'.0/24, with R1 as the gateway <b>192.168.'+v+'.'+gwo+'</b>'+
+    prompt:'R1 Gi0/0 is trunked to S1 (router-on-a-stick). On <b>R1</b>, add routing for <b>VLAN '+v+'</b>, network 192.168.'+v+'.0/24, with R1 as the gateway <b>192.168.'+v+'.'+gwo+'</b>'+
       (native?'. VLAN '+v+' is the trunk\'s <b>native VLAN</b>.':'.')+' Write the commands.',
     body: cmdsHtml('sub','Commands &mdash; one per line, Ctrl+Enter submits','e.g. interface gi0/0.5',3),
     grade(){
@@ -3082,7 +3134,7 @@ function q6tsPoints(s){
     const remF=wr?Q6('relay.no-helper-address-wr',{wr,srv}).concat(
         [].concat(...GI00.map(g=>[g+' no ip helper-address '+wr,g+' no helper-address '+wr,g+' r1 config if no ip helper-address '+wr]))):[];
     return [
-      '<b>Here:</b> '+K(wr?"R1's G0/0 ip helper-address is wrong":"R1's G0/0 has no ip helper-address",decoy(['R2','G0/1','Gi0/1','LAN-B']).concat(pair(R1,wr?wrongT:missing)))+
+      '<b>Here:</b> '+K(wr?"R1's G0/0 ip helper-address is wrong":"R1's G0/0 has no ip helper-address",decoy(['R2','G0/1','Gi0/1','LAN-B']).concat(pair(R1,wr?wrongT:missing),wr?[]:missing))+
         (wr?' &mdash; it relays to '+wr+' instead of the DHCP server '+srv:'')+', so the PCs\' DHCP requests never reach '+srv+'.',
       'The 169.254.x.x addresses mean DHCP failed. A DHCPDISCOVER is a '+K('broadcast',['broadcasts','broadcasted','broadcasting'])+', and a router '+K('does not forward them',NF)+' onto other networks &mdash; an ip helper-address on the clients\' interface is what turns it into a unicast to the server.',
       'Fix: interface g0/0'+(wr?', '+K('no ip helper-address '+wr,remF)+', then ':', ')+K('add ip helper-address '+srv,addF)+'.'];
@@ -3135,7 +3187,7 @@ function q6tsPoints(s){
     const A=Q6('acldir.A',{n});
     const fixO=Q6('acldir.fixO');
     return [
-      '<b>Here:</b> '+K('R2\'s ACL '+n+' is applied inbound on G0/0',decoy(['R1','Router 1','G0/1','Gi0/1','Gig0/1','GigabitEthernet0/1','LAN-A']).concat(noIn,pair(R2,A)))+' &mdash; it should be outbound.',
+      '<b>Here:</b> '+K('R2\'s ACL '+n+' is applied inbound on G0/0',decoy(['R1','Router 1','G0/1','Gi0/1','Gig0/1','GigabitEthernet0/1','LAN-A']).concat(noIn,pair(R2,A),A))+' &mdash; it should be outbound.',
       'A standard ACL checks only the '+K('source address',Q6('acldir.source-addresses'))+'. Inbound on G0/0 it '+K('only sees traffic from LAN-B',Q6('acldir.only-sees-traffic-from-lan-b'))+', whose source is never LAN-C, so its deny never matches and LAN-C traffic going the other way passes untested.',
       'Applied outbound on the same interface (near the destination, LAN-B) it checks every packet entering LAN-B. Fix: interface g0/0, '+K('no ip access-group '+n+' in',Q6('acldir.no-access-group-n-in',{n}))+', then '+K('apply ip access-group '+n+' out',Q6('acldir.in-ip-access-group-n-out',{n}).concat(pair(R2,fixO),pair(['ip access-group'],[n+' out'])))+'.'];
   }
@@ -3172,7 +3224,7 @@ function q6tsPoints(s){
 card({id:'q6-ts', area:'ts', tier:2, kind:'flash', src:'Q6', title:'Troubleshoot it in writing', gen(){
   const s=tsBuild(pick(Object.keys(TS_SCEN)));
   return {
-    prompt:s.symptom+' Identify the cause (which device, and which interface or line, is wrong), explain why it produces exactly this symptom, and give the commands that fix it.',
+    prompt:s.symptom+' Clearly identify, describe and explain the cause of the problem. What modifications do you need to make to fix it?',
     body:s.body, points:q6tsPoints(s),
   };
 }});

@@ -272,6 +272,17 @@ const EXAM_KEYS={
       "different for every protocol", "different between protocols", "different in each protocol",
       "metrics are different", "different metrics"
     ],
+    "XP": [
+      "only within a protocol", "only within the same protocol", "within a protocol", "within one protocol",
+      "within the same protocol", "inside a protocol", "inside one protocol", "not between protocols",
+      "not across protocols", "between protocols", "across protocols", "compare only within",
+      "only compare within", "only compared within", "not compared between", "aren t compared between",
+      "are not compared between", "never compared between", "don t compare across", "do not compare across",
+      "can t compare across", "cannot compare across", "don t compare between", "do not compare between",
+      "can t be compared between", "cannot be compared between", "no effect", "not have any effect",
+      "not have any affect", "don t have any effect", "doesn t have any effect", "have no effect",
+      "has no effect", "no affect", "don t matter here", "does not matter here", "doesn t matter here"
+    ],
     "NOMETRIC": [
       "no metric", "metric of 0", "metric 0", "metric is 0", "metric of zero", "zero metric",
       "t have a metric"
@@ -281,9 +292,7 @@ const EXAM_KEYS={
     "@{Wn}~{CHOSEN}", "@{Wn}~{LOWER}", "@{TAKE} {Wn}", "@{Wn} {USED}", "@{Wn} {WINS}", "^{Wn}",
     "^{Wn} route", "^{Wn} routes", "@!{Ln}~{VETO}"
   ],
-  "{WN} {Wad}": [">{Wn}~{Wad}"],
-  "{LN} {Lad}": [">{Ln}~{Lad}"],
-  "different units": ["{UNITS}", "{NM}"],
+  "metrics aren't compared across protocols": ["different units", "{UNITS}", "{XP}", "{NM}"],
   "administrative distance": ["AD", "admin distance"],
   "trustworthy": [
     "trust", "trusts", "trusted", "trustworthiness", "reliable", "reliability", "believable",
@@ -345,7 +354,9 @@ const EXAM_KEYS={
       "metric is not looked at", "get a say", "gets a say", "no say", "not the same type",
       "aren t the same type", "arent the same type", "isn t the same type", "wouldn t matter",
       "would not matter", "doesn t matter", "does not matter", "don t matter", "do not matter",
-      "not relevant here", "irrelevant here"
+      "not relevant here", "irrelevant here", "not between protocols", "not across protocols", "only compare within",
+      "compare only within", "not compared between", "never compared between", "not have any effect",
+      "not have any affect", "have no effect", "has no effect"
     ],
     "LOW": [
       "{LOWERAD}", "better administrative distance", "better admin distance", "better AD",
@@ -420,15 +431,6 @@ const EXAM_KEYS={
   ],
 },
 "q1d-floating": {
-  _lists: {
-    "ST": [
-      "static", "static route", "floating static", "floating static route", "floating route", "backup",
-      "backup route", "backup link", "floating"
-    ],
-    "PR": ["{N}", "{N} route", "primary", "primary route", "dynamic route"],
-  },
-  "{N} AD of {ad}": [">{PR}~{ad}"],
-  "static AD of {eg}": [">{ST}~{V}"],
   "lowest AD wins": [
     "lowest wins", "lowest one wins", "lowest AD is installed", "lowest is installed",
     "lowest AD is preferred", "lowest is preferred", "lowest AD is chosen", "installs the lowest",
@@ -450,6 +452,14 @@ const EXAM_KEYS={
   "floating static route": ["floating static", "floating route", "floating"],
 },
 "q1e-ripv2": {
+  _lists: {
+    "V1N": ["RIPv1", "RIP v1", "v1", "version 1", "RIP version 1"],
+    "AV": [
+      "auth", "authentication", "authenticate", "MD5", "supports auth", "supports authentication",
+      "has auth", "has authentication", "uses authentication", "can authenticate", "offers authentication",
+      "provides authentication", "does authentication", "allows authentication"
+    ],
+  },
   "RIPv1 classful and RIPv2 classless": [
     "RIPv1~classful", "RIPv1~classfull", "RIPv1~no mask", "RIPv1~no masks", "RIPv1~no subnet mask",
     "RIPv1~no subnet masks", "RIPv1~without mask", "RIPv1~without masks", "RIPv1~without a mask",
@@ -630,13 +640,15 @@ const EXAM_KEYS={
     "RIP version 2~224.0.0.9", "RIP version 2~multicast address"
   ],
   "RIPv2 can authenticate": [
-    "RIPv2~authenticate", "RIPv2~authenticates", "RIPv2~authentication", "RIPv2~authenticated",
+    "RIPv2~authenticate", "RIPv2~auth", "RIP v2~auth", "v2~auth", "version 2~auth", "RIP version 2~auth", "RIPv2~authenticates", "RIPv2~authentication", "RIPv2~authenticated",
     "RIPv2~MD5", "RIP v2~authenticate", "RIP v2~authenticates", "RIP v2~authentication",
     "RIP v2~authenticated", "RIP v2~MD5", "v2~authenticate", "v2~authenticates", "v2~authentication",
     "v2~authenticated", "v2~MD5", "version 2~authenticate", "version 2~authenticates",
     "version 2~authentication", "version 2~authenticated", "version 2~MD5",
     "RIP version 2~authenticate", "RIP version 2~authenticates", "RIP version 2~authentication",
-    "RIP version 2~authenticated", "RIP version 2~MD5"
+    "RIP version 2~authenticated", "RIP version 2~MD5",
+    "auth", "authenticate", "authenticates", "authentication", "authenticated", "MD5",
+    "@!{V1N}~{AV}"
   ],
   "hop count": ["hops", "hop"],
   "auto-summarise": [
@@ -702,6 +714,22 @@ const EXAM_KEYS={
     "sixteen~forever", "sixteen~dead", "sixteen~removed", "sixteen~infinite"
   ],
   "hop count": ["hop counts", "hops", "number of routers"],
+  "sends its routing table to its neighbours": [
+    "sends its routing table", "send its routing table", "sends their routing table", "send their routing tables",
+    "sends routing tables", "shares its routing table", "share their routing tables", "whole routing table",
+    "full routing table", "entire routing table", "routing table to its neighbours", "routing updates",
+    "periodic updates", "sends updates", "send updates", "advertises its routes", "advertise their routes",
+    "advertise routes", "advertises routes", "advertise the route", "advertises the route",
+    "learns from its neighbours", "learn from its neighbours", "learn from neighbours",
+    "what its neighbours tell it", "routing by rumour", "distance vector", "distance-vector"
+  ],
+  "30 seconds": ["30 s", "30 sec", "30 secs", "30secs", "every 30"],
+  "marked invalid after 180 seconds": [
+    "180 seconds", "180 s", "180 sec", "#180", "invalid timer", "marked invalid", "marked as invalid",
+    "marks it invalid", "marks it as invalid", "timer runs out", "timer expires", "times out", "timed out",
+    "stops hearing", "no longer hears", "not heard", "stops receiving updates", "holddown", "hold-down",
+    "hold down timer", "flush timer", "flushed", "240 seconds", "#240"
+  ],
   "adds one hop": [
     "add one hop", "adds a hop", "add a hop", "adds one", "add one", "plus one", "increases by one",
     "increase by one", "increments", "incremented", "goes up by one", "going up by one",
@@ -991,7 +1019,12 @@ const EXAM_KEYS={
   ],
   "when the OSPF process starts": [
     "process starts", "process start", "ospf starts", "ospf start", "startup", "start up", "boot",
-    "boots", "reload", "restart", "clear ip ospf process", "first configured", "process is started"
+    "boots", "reload", "restart", "clear ip ospf process", "first configured", "process is started",
+    "ospf first starts", "ospf first start", "first starts", "first started", "process first starts",
+    "ospf is started", "ospf is first started", "ospf starts up", "ospf is enabled", "ospf is first enabled",
+    "ospf is turned on", "ospf is first turned on", "ospf begins", "process begins", "ospf is first configured",
+    "ospf is configured", "router ospf is configured", "router ospf is entered", "process initialises",
+    "ospf initialises", "on startup", "at startup", "at start up"
   ],
 },
 "q2b-metric": {
@@ -1047,7 +1080,9 @@ const EXAM_KEYS={
     "that one area", "its own area", "own area", "limited to that area", "limited to that one area",
     "only routers in that area", "only routers in the area", "only the routers in that area",
     "only flooded inside", "only flooded within", "only affects that area", "only affects the area",
-    "doesn t leave the area", "does not leave the area", "never leaves the area", "kept local"
+    "doesn t leave the area", "does not leave the area", "never leaves the area", "kept local",
+    "what is in their area", "what is in its area", "in their own area", "within their area",
+    "within its area", "only their area", "only its area", "only their own area"
   ],
   "summarise": ["summary", "summarisation", "summarization", "summarize", "aggregate"],
   "smaller routing tables": [
@@ -1096,7 +1131,11 @@ const EXAM_KEYS={
     "detect", "detection", "reconverge", "converge", "convergence", "failover", "notice", "notices",
     "noticed", "spot", "spots", "spotted", "find out", "finds out", "found out", "find a dead",
     "finds a dead", "realise", "realises", "realised", "discover", "discovers", "discovered", "react",
-    "reacts", "recover", "recovers", "declared down", "declare it down"
+    "reacts", "recover", "recovers", "declared down", "declare it down", "identify", "identifies",
+    "identified", "tell when", "tells when", "know when", "knows when", "neighbour goes down",
+    "neighbor goes down", "neighbour went down", "neighbour is down", "neighbor is down", "neighbour dies",
+    "neighbour has failed", "neighbour fails", "neighbor fails", "router goes down", "link goes down",
+    "link is down", "when it goes down"
   ],
   "faster": ["quicker", "quickly", "sooner", "speed", "speeds"],
   "slow links": [
@@ -1123,7 +1162,8 @@ const EXAM_KEYS={
     "another routing protocol", "other routing protocols", "another routing domain", "the Internet",
     "ISP"
   ],
-  "redistributes": ["redistribute", "redistribution", "injects", "default-information originate"],
+  "redistributes": ["redistribute", "redistribution", "injects", "default-information originate",
+    "advertise the external route", "advertise external routes", "advertise the external routes", "advertise outside routes", "advertise the outside route", "advertise routes from outside", "advertise them into OSPF", "advertise it into OSPF", "advertise into OSPF", "advertise those routes into OSPF", "advertise the external network", "advertise external networks"],
   "{B} is an internal router": ["{B}~internal"],
   "{B} is a backbone router": ["{B}~backbone"],
   "{A} is a backbone router": ["{A}~backbone"],
@@ -1133,6 +1173,7 @@ const EXAM_KEYS={
     "between the areas", "connects areas", "connects the areas", "joins areas"
   ],
   "redistributes#2": [
+    "advertise the external route", "advertise external routes", "advertise the external routes", "advertise outside routes", "advertise the outside route", "advertise routes from outside", "advertise them into OSPF", "advertise it into OSPF", "advertise into OSPF", "advertise those routes into OSPF", "advertise the external network", "advertise external networks",
     "redistribute", "redistribution", "injects", "imports", "brings in",
     "default-information originate"
   ],
@@ -1256,7 +1297,11 @@ const EXAM_KEYS={
     "wastes bandwidth", "wasting bandwidth", "waste bandwidth", "wasted bandwidth", "saves bandwidth",
     "save bandwidth", "saving bandwidth", "before it crosses the network", "before it crosses",
     "before it travels", "before it reaches the rest of the network", "before it uses",
-    "unnecessary traffic", "unwanted traffic is dropped early", "dropped before it"
+    "unnecessary traffic", "unwanted traffic is dropped early", "dropped before it",
+    "reduces network traffic", "reduce network traffic", "reducing network traffic", "less network traffic",
+    "reduces traffic", "reduce traffic", "reducing traffic", "less traffic", "lowers traffic",
+    "cuts down traffic", "cuts down on traffic", "saves traffic", "reduces the load", "reduces load",
+    "reduces congestion", "less congestion", "bandwidth"
   ],
 },
 "q3d-established": {
@@ -1303,7 +1348,9 @@ const EXAM_KEYS={
   ],
   "not stateful": [
     "stateless", "not a stateful", "no state", "does not track", "doesn't track", "not track",
-    "not a firewall", "faked", "forged ACK", "spoofed ACK", "faked ACK", "fake ACK", "crafted ACK"
+    "not a firewall", "faked", "forged ACK", "spoofed ACK", "faked ACK", "fake ACK", "crafted ACK",
+    "spoof", "spoofed", "spoofing", "spoofable", "forged", "forge", "forging", "can be faked", "fake the flag",
+    "fake the ACK", "set the ACK bit", "sets the ACK bit"
   ],
   "return traffic#dir": [
     "replies", "reply", "returning", "responses", "response", "return packets", "back in", "respond",
@@ -1418,7 +1465,7 @@ const EXAM_KEYS={
       "address", "public address", "ip", "public ip", "ip address", "public ip address"
     ],
     "PREPS": ["with", "for", "using", "via"],
-    "DYNS": ["dynamic NAT", "dynamic", "NAT", "NAT pool", "pool"],
+    "DYNS": ["dynamic NAT", "DNAT", "dynamic", "NAT", "NAT pool", "pool"],
     "PERHOST": [
       "needs one address per host", "needs one per host", "needs an address per host",
       "needs one address for each host", "needs one for each host", "one address per host",
@@ -1428,7 +1475,13 @@ const EXAM_KEYS={
     "DV": ["needs", "need", "requires", "require", "uses", "is", "would need", "will need"],
     "DT": ["", "addresses ", "public addresses ", "ip addresses "],
     "DPR": ["for", "with", "in"],
-    "DNS": ["dynamic NAT", "dynamic", "NAT"],
+    "DN": ["DNAT", "dynamic NAT"],
+    "DH": [
+      "per host", "each host", "every host", "for each", "same time", "simultaneous", "at once",
+      "concurrent", "as many", "active devices", "active hosts", "devices online", "hosts online",
+      "online at once", "in use at once", "per device", "each device", "every device", "per active"
+    ],
+    "DNS": ["dynamic NAT", "DNAT", "dynamic", "NAT"],
   },
   "port number": ["port numbers", "ports", "port"],
   "can't": [
@@ -1441,7 +1494,7 @@ const EXAM_KEYS={
   "Dynamic NAT needs one address per host online at the same time": [
     "dynamic NAT~per host", "dynamic NAT~each host", "dynamic NAT~every host", "dynamic NAT~for each",
     "dynamic NAT~same time", "dynamic NAT~simultaneous", "dynamic NAT~at once",
-    "dynamic NAT~concurrent", "dynamic NAT~as many"
+    "dynamic NAT~concurrent", "dynamic NAT~as many", "{DN}~{DH}"
   ],
   "its own public address#2": [
     "own public address", "own address", "own public ip", "own ip", "one-to-one", "one to one", "1:1",
@@ -1475,28 +1528,38 @@ const EXAM_KEYS={
   ],
   "keeps its port": [
     "first keeps", "first one keeps", "first user keeps", "first host keeps", "first connection keeps",
-    "first session keeps", "keeps the port", "keeps its original port", "keeps its source port"
+    "first session keeps", "keeps the port", "keeps its original port", "keeps its source port",
+    "gets the port", "gets its port", "gets to keep"
   ],
   "assigns a different port": [
     "different port", "new port", "another port", "next available port", "unique port",
-    "changes the port", "translates the port", "other port", "free port", "port is changed",
+    "changes the port", "translates the port to", "translates the source port to", "other port", "free port", "port is changed",
     "port translation"
   ],
   "translates them back": [
     "translate back", "translated back", "translates the reply back", "translates replies back",
     "translates it back", "maps back", "maps it back", "changes it back", "reverse translation",
-    "back to the original port", "back to its original port"
+    "back to the original port", "back to its original port",
+    "translates the port back", "translates the source port back", "translates the ports back",
+    "translates the address back", "port back to"
   ],
   "{F} keeps port {n}": ["{FS}~{KEEP}"],
   "{L} gets a different port": ["{LS}~{MOVE}"],
   "translates it back": [
     "translate back", "translated back", "translates the reply back", "translates replies back",
     "translates them back", "maps back", "maps it back", "changes it back", "reverse translation",
-    "back to port {n}", "back to the original port", "back to its original port"
+    "back to port {n}", "back to the original port", "back to its original port",
+    "translates the port back", "translates the source port back", "translates the ports back",
+    "translates the address back", "port back to"
   ],
 },
 "q5a-dora": {
-  "Discover": ["DHCPDISCOVER"],
+  "Discover": [
+    "DHCPDISCOVER", "find the DHCP server", "find a DHCP server", "find DHCP server", "find the server",
+    "find a server", "finds the DHCP server", "finds a DHCP server", "to find the DHCP", "to find a DHCP",
+    "looking for a DHCP server", "looking for the DHCP server", "looks for a DHCP server",
+    "search for a DHCP server", "searches for a DHCP server", "locate a DHCP server", "locate the DHCP server"
+  ],
   "broadcasts": [
     "broadcast", "broadcasted", "255.255.255.255", "all-ones address", "sent to everyone",
     "to every device on the LAN", "to all devices on the LAN", "to all hosts"
@@ -1511,7 +1574,7 @@ const EXAM_KEYS={
   ],
   "Discover, Offer, Request, Acknowledgement": [
     "DORA",
-    "<discover/dhcpdiscover..offer/dhcpoffer..request/dhcprequest..acknowledgement/acknowledgment/acknowledge/acknowledges/ack/dhcpack"
+    "<discover/dhcpdiscover/find/locate/look/search..offer/dhcpoffer..request/dhcprequest..acknowledgement/acknowledgment/acknowledge/acknowledges/ack/dhcpack"
   ],
 },
 "q5b-relay": {
@@ -1520,10 +1583,6 @@ const EXAM_KEYS={
       "G0/{n}", "Gi0/{n}", "Gig0/{n}", "GigabitEthernet0/{n}", "GigabitEthernet 0/{n}", "LAN interface",
       "interface facing the PCs", "PC-facing interface", "client-facing interface",
       "interface facing the clients"
-    ],
-    "HELP": [
-      "helper-address", "helper address", "ip helper", "helper-address pointing to",
-      "helper-address set to", "helper-address of"
     ],
   },
   "broadcast": ["broadcasts", "broadcasted", "broadcasting"],
@@ -1548,7 +1607,6 @@ const EXAM_KEYS={
   ],
   "ip helper-address": ["helper-address", "helper address", "ip helper", "helper"],
   "{gw} {ifc}": ["{gw}~{IFF}", "{OTHERS}~"],
-  "ip helper-address {srv}": ["{HELP} {srv}"],
 },
 "q5c-exclude": {
   "static": [
@@ -1586,8 +1644,18 @@ const EXAM_KEYS={
     "PS2": [
       "Fa0/2", "F0/2", "Fa 0/2", "FastEthernet0/2", "FastEthernet 0/2", "H2", "port 2"
     ],
+    "AP": [
+      "access vlan", "access vlans", "assign vlan", "assign vlans", "assigned vlan", "assigned vlans",
+      "assign them to vlan", "assign them to vlans", "assigned to vlan", "assigned to vlans", "put in vlan",
+      "put in vlans", "put them in vlan", "put them in vlans", "ports in vlan", "ports in vlans",
+      "hosts in vlan", "hosts in vlans", "ports to vlan", "ports to vlans", "interfaces in vlan",
+      "interfaces to vlan"
+    ],
+    "AV": ["VLAN ", ""],
   },
   "Fa0/1 in VLAN {x}": [
+    "<access vlan {x}..access vlan {y}", "<vlan {x} to..vlan {y} to",
+    "{AP} {x} and {AV}{y}",
     "{PS1} {LINK} VLAN {x}", "{PS1} {LINK} vlan{x}", "{PS1} switchport access vlan {x}",
     "{PS1} vlan {x}", "VLAN {x} on {PS1}", "VLAN {x} for {PS1}", "VLAN {x} to {PS1}",
     "switchport access vlan {x} on {PS1}", "!{PS1} {VLINK} VLAN {y}", "!VLAN {y} on {PS1}",
@@ -1595,6 +1663,8 @@ const EXAM_KEYS={
     "!{PS1} switchport access vlan {y}"
   ],
   "Fa0/2 in VLAN {y}": [
+    "<access vlan {x}..access vlan {y}", "<vlan {x} to..vlan {y} to",
+    "{AP} {x} and {AV}{y}",
     "{PS2} {LINK} VLAN {y}", "{PS2} {LINK} vlan{y}", "{PS2} switchport access vlan {y}",
     "{PS2} vlan {y}", "VLAN {y} on {PS2}", "VLAN {y} for {PS2}", "VLAN {y} to {PS2}",
     "switchport access vlan {y} on {PS2}", "!{PS2} {VLINK} VLAN {x}", "!VLAN {x} on {PS2}",
@@ -1616,6 +1686,81 @@ const EXAM_KEYS={
     "no interface for VLAN 1", "no gateway for VLAN 1", "no router interface for VLAN 1",
     "VLAN 1 is not configured on the router", "VLAN 1 isn't configured on the router",
     "doesn't know about VLAN 1", "does not know about VLAN 1"
+  ],
+  "can't reach its gateway": [
+    "can t reach its gateway", "cannot reach its gateway", "can not reach its gateway", "can t reach the gateway",
+    "cannot reach the gateway", "can t reach their gateway", "cannot reach their gateway", "can t reach the default gateway",
+    "cannot reach the default gateway", "can t get to the gateway", "can t get to its gateway", "no way to reach the gateway",
+    "gateway is unreachable", "gateway unreachable", "can t reach R1", "cannot reach R1", "can t reach the router",
+    "cannot reach the router", "never reach R1", "never reaches R1", "never reach the router", "don t reach R1",
+    "doesn t reach R1", "can t be routed", "cannot be routed", "can t route", "cannot route", "isn t routed", "not routed"
+  ],
+  "Gi0/1 is not a trunk": [
+    "not a trunk", "isn t a trunk", "is not a trunk", "not trunking", "isn t trunking", "not set to trunk",
+    "not set as a trunk", "not in trunk mode", "should be a trunk", "needs to be a trunk", "should be trunk",
+    "should be trunked", "needs to be trunked", "no trunk", "trunk is missing", "missing trunk", "missing the trunk",
+    "is an access port", "set to access", "set as access", "mode access on gi0/1", "gi0/1 is access",
+    "gi0/1 is in access mode", "access instead of trunk", "access mode instead of trunk"
+  ],
+  "only carries one VLAN": [
+    "one VLAN", "single VLAN", "only VLAN 1", "only carries VLAN 1", "untagged", "doesn t carry", "can t carry",
+    "won t carry", "does not carry", "cannot carry", "only one vlan", "tags are dropped", "tagged frames",
+    "drops the tags", "drops tagged", "can t pass", "won t pass", "doesn t pass", "only passes"
+  ],
+  "switchport mode trunk": ["mode trunk", "make it a trunk", "set it to trunk", "change it to trunk", "trunk mode", "set gi0/1 to trunk"],
+  "Gi0/0 is shut down": [
+    "shut down", "shutdown", "is shut", "is down", "administratively down", "admin down", "not enabled",
+    "never enabled", "isn t enabled", "never brought up", "not brought up", "no no shutdown", "missing no shutdown",
+    "missing the no shutdown", "forgot no shutdown", "disabled", "turned off", "not turned on", "never turned on"
+  ],
+  "subinterfaces go down with it": [
+    "subinterfaces are down", "subinterfaces go down", "subinterfaces down", "subinterfaces stay down",
+    "sub-interfaces are down", "sub interfaces are down", "subinterfaces can t come up", "subinterfaces won t come up",
+    "subinterfaces don t work", "subinterfaces won t work", "subinterfaces are also down", "subinterfaces depend",
+    "subinterfaces need", "subinterfaces rely", "all the subinterfaces", "both subinterfaces"
+  ],
+  "no shutdown": ["no shut", "bring it up", "enable gi0/0", "enable the interface", "turn it on"],
+  "the subinterface tags the wrong VLAN": [
+    "dot1q {z}", "encapsulation dot1q {z}", "wrong tag", "wrong vlan tag", "wrong encapsulation", "wrong dot1q",
+    "tagged {z}", "tags {z}", "tags vlan {z}", "vlan {z} instead of", "{z} instead of {y}", "tag should be {y}",
+    "should be dot1q {y}", "wrong vlan number", "mismatched vlan", "vlan mismatch", "encapsulation is wrong",
+    "encapsulation is incorrect", "wrong vlan on the subinterface", "subinterface has the wrong vlan"
+  ],
+  "encapsulation dot1q {y}": ["dot1q {y}", "encapsulation dot1q {y}", "encapsulation dot1Q {y}", "change the tag to {y}", "tag {y}"],
+  "the subinterface is in the wrong subnet": [
+    "wrong subnet", "wrong ip", "wrong ip address", "wrong address", "192.168.{w}.1", "{w}.1", "different subnet",
+    "wrong network", "should be 192.168.{y}.1", "incorrect ip", "incorrect address", "ip is wrong", "address is wrong",
+    "ip address is wrong", "ip address is incorrect", "not in 192.168.{y}"
+  ],
+  "ip address 192.168.{y}.1 255.255.255.0": [
+    "ip address 192.168.{y}.1", "192.168.{y}.1 255.255.255.0", "change the ip to 192.168.{y}.1",
+    "change it to 192.168.{y}.1", "set it to 192.168.{y}.1", "readdress", "re-address"
+  ],
+  "the ports in each other's VLANs": [
+    "swapped", "switched around", "swapped around", "the wrong way round", "the wrong way around", "wrong way round",
+    "wrong way around", "each other s VLAN", "each other s VLANs", "each others VLAN", "each others VLANs", "reversed",
+    "mixed up", "back to front", "the other way round", "the other way around", "fa0/1 is in vlan {y}",
+    "fa0/2 is in vlan {x}", "h1 is in vlan {y}", "h2 is in vlan {x}", "wrong vlans", "in the wrong vlan",
+    "opposite vlans", "opposite vlan"
+  ],
+  "switchport access vlan {x}#s1": ["access vlan {x}", "fa0/1 to vlan {x}", "fa0/1 in vlan {x}", "h1 in vlan {x}", "h1 to vlan {x}", "fa0/1 into vlan {x}"],
+  "switchport access vlan {y}#s2": ["access vlan {y}", "fa0/2 to vlan {y}", "fa0/2 in vlan {y}", "h2 in vlan {y}", "h2 to vlan {y}", "fa0/2 into vlan {y}"],
+  "H2's default gateway is wrong": [
+    "wrong gateway", "wrong default gateway", "gateway is wrong", "gateway is incorrect", "incorrect gateway",
+    "incorrect default gateway", "gateway should be", "gateway is {bad}", "gateway of {bad}", "gateway set to {bad}",
+    "{bad}", "default gateway is wrong", "default gateway is incorrect", "bad gateway", "wrong default-gateway",
+    "gateway is set wrong", "gateway isn t", "gateway is not"
+  ],
+  "there is no router at {bad}": [
+    "not a router", "isn t a router", "is not a router", "no router", "doesn t exist", "does not exist",
+    "nothing at", "not R1", "isn t R1", "no device", "nobody", "no one", "goes nowhere", "go nowhere",
+    "isn t the router", "is not the router", "wrong place", "never reach R1", "never reaches R1",
+    "can t reach R1", "cannot reach R1", "can t reach the router", "can t send", "can t reply", "cannot reply"
+  ],
+  "set the default gateway to 192.168.{y}.1": [
+    "gateway to 192.168.{y}.1", "gateway 192.168.{y}.1", "192.168.{y}.1", "gateway should be 192.168.{y}.1",
+    "change the gateway", "change the default gateway", "set the gateway", "set the default gateway",
+    "fix the gateway", "correct the gateway", "update the gateway"
   ],
   "switchport access vlan": [
     "access vlan", "switchport access", "assign the VLAN", "assign VLANs", "assign the ports",
@@ -1751,10 +1896,6 @@ const EXAM_KEYS={
       "from the DHCPv6 server", "from DHCPv6", "from the server", "from a DHCPv6 server",
       "by the DHCPv6 server", "by the server", "DHCPv6 server"
     ],
-    "TRK": [
-      "track", "tracks", "record", "records", "log", "logs", "DUID", "database", "binding", "bindings",
-      "table", "remembers", "remember", "keeps a list"
-    ],
     "DX3": ["DNS", "DNS server", "DNS information"],
     "DVF": [
       "from", "comes from", "is from", "provided by", "is provided by", "supplied by", "is supplied by",
@@ -1798,10 +1939,9 @@ const EXAM_KEYS={
     ],
     "BADO": ["stateful", "SLAAC"],
   },
-  "SLAAC~builds its own address": ["SLAAC~{OWNT}"],
-  "stateless~takes its address from SLAAC": ["stateless~{SLT}"],
-  "stateful~DHCPv6 server assigns the address": ["stateful~{AST}"],
-  "stateful~server keeps track of every client": ["@stateful~{TRK}"],
+  "SLAAC~builds its own address": ["SLAAC~{OWNT}", "@SLAAC~{OWNT}"],
+  "stateless~has the device generate its own address": ["stateless~{SLT}", "@stateless~{SLT}"],
+  "DHCP server assigns the address": ["stateful~{AST}", "@stateful~{AST}"],
   "DNS server from the DHCPv6 server": [
     "{DX3} {DVF} {DS}", "DNS and other information from DHCP", "DNS and other information from DHCPv6",
     "DNS DHCP", "DNS DHCPv6", "DNS server DHCP", "DNS server DHCPv6", "{SS} {VS} {XS}",
