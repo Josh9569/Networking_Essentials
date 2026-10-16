@@ -3779,19 +3779,29 @@ function pool(){ return CARDS.filter(inPool); }
    at least every NEW_EVERY-th card is a new one even if reviews are due.
    Without that, a learner who keeps answering wrong never gets past the
    first three cards — each Again card is due again two cards later, so
-   there is always a review waiting. */
-const NEW_EVERY=3;
+   there is always a review waiting.
+
+   LEARN_CAP (owner: 11) is the most cards that can be in Learning at once,
+   counted over the cards in play: once it is reached no new card starts,
+   and the Learning pile is worked down first — the soonest-due seen card
+   comes up even if nothing is due yet. A new card starts again once
+   Learning is below the cap. A save that is already over it (from before
+   the cap existed) gets no new cards until its Learning pile is worked
+   back under 11 — nothing is moved or reset to get there. */
+const NEW_EVERY=3, LEARN_CAP=11;
 let lastId=null;
 function pickNext(){
   let p=pool(); if(!p.length) return null;
+  const learning=p.filter(c=>cardStatus(c.id)==='learn').length;
   if(p.length>1) p=p.filter(c=>c.id!==lastId);
   const rec=c=>S.cards[c.id];
   const due=p.filter(c=>rec(c)&&rec(c).due<=S.step);
-  const fresh=p.filter(c=>!rec(c));
+  const fresh=learning<LEARN_CAP?p.filter(c=>!rec(c)):[];
   const newTurn=S.lastNew==null||S.step-S.lastNew>=NEW_EVERY;
   if(fresh.length&&(!due.length||newTurn)) return pick(fresh);
   if(due.length){ const m=Math.min(...due.map(c=>rec(c).due)); return pick(due.filter(c=>rec(c).due===m)); }
-  const m=Math.min(...p.map(c=>rec(c).due)); return pick(p.filter(c=>rec(c).due===m));
+  const seen=p.filter(c=>rec(c)); if(!seen.length) return pick(p);
+  const m=Math.min(...seen.map(c=>rec(c).due)); return pick(seen.filter(c=>rec(c).due===m));
 }
 
 /* ═══ Round flow ══════════════════════════════════════════════════════════ */
