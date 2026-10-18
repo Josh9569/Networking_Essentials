@@ -1281,7 +1281,9 @@ const EXAM_KEYS={
     "only see where it came from", "only where traffic came from", "only where it came from",
     "only know where traffic came from", "only knows where traffic came from", "not where it is going",
     "not where it s going", "not where traffic is going", "not where the traffic is going",
-    "not where it goes", "not where it is headed", "no idea where it is going"
+    "not where it goes", "not where it is headed", "no idea where it is going", "only includes the source",
+    "only include the source", "only contains the source", "only contain the source", "only has the source",
+    "only have the source", "only covers the source", "only cover the source", "only holds the source"
   ],
   "destination, protocol and port": [
     "source, destination, protocol", "destination and port", "destination and protocol",
@@ -1297,7 +1299,11 @@ const EXAM_KEYS={
     "reduces network traffic", "reduce network traffic", "reducing network traffic", "less network traffic",
     "reduces traffic", "reduce traffic", "reducing traffic", "less traffic", "lowers traffic",
     "cuts down traffic", "cuts down on traffic", "saves traffic", "reduces the load", "reduces load",
-    "reduces congestion", "less congestion", "bandwidth"
+    "reduces congestion", "less congestion", "bandwidth", "going onto the network", "go onto the network",
+    "goes onto the network", "getting onto the network", "get onto the network", "gets onto the network",
+    "entering the network", "enter the network", "enters the network", "before it goes onto",
+    "before it gets onto", "before it enters", "keeps it off the network", "kept off the network",
+    "onto the network in the first place", "before it travels across", "crossing the network"
   ],
 },
 "q3d-established": {
