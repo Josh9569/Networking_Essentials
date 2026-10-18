@@ -131,14 +131,14 @@ mark.ex-kw.miss { color: var(--err-text); box-shadow: inset 0 -2px 0 var(--err-t
 .ex-if.ok text { fill: var(--ok-text); font-weight: 600; }
 .ex-if.bad rect, .ex-topo.pickable .ex-if.bad:hover rect { fill: var(--err-bg); stroke: var(--err-text); stroke-width: 1.5; }
 .ex-if.bad text { fill: var(--err-text); }
-/* Custom theme: --surface and --info-bg are translucent there, so a pill
-   sitting on its cable let the line show through its text. Mix the accent
-   into the theme's opaque base colour instead, so the pill is solid and
-   tinted blue. :not(.ok/.bad) leaves the marked colours (opaque in every
-   theme) in charge after Submit. */
-:root[data-theme="custom"] .ex-if:not(.ok):not(.bad) rect { fill: color-mix(in srgb, var(--info-text) 24%, var(--bg)); stroke: var(--info-bdr); }
-:root[data-theme="custom"] .ex-if.sel:not(.ok):not(.bad) rect,
-:root[data-theme="custom"] .ex-topo.pickable .ex-if:not(.ok):not(.bad):hover rect { fill: color-mix(in srgb, var(--info-text) 42%, var(--bg)); stroke: var(--info-text); }
+/* Custom theme: the pills' fill is translucent there, so what is under them
+   shows through. frostedPills() draws the cables and router boxes a second
+   time, clipped to the pill shapes; this blurs that copy (with the theme's
+   floored blur, as the hint popups use, so it never drops to nothing) and the
+   sharp copy has the pill shapes cut out. Other themes have opaque pills, so
+   the copy stays hidden there. */
+.ex-frost { display: none; }
+:root[data-theme="custom"] .ex-frost { display: inline; filter: var(--custom-blur-tip, blur(2px)); }
 .ex-apply      { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; }
 .ex-apply-lbl  { font-size: 13px; color: var(--text-s); }
 .ex-apply-if   { font-family: var(--mono); font-size: 13px; font-weight: 500; color: var(--text-t); margin-right: 8px; }
