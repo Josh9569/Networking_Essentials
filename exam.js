@@ -1859,24 +1859,42 @@ function q3Plan(){
   while(lans.length<4){ const x=ri(1,250); if(used.has(x)) continue; used.add(x); lans.push(tenStyle?ip2int('10.'+sec+'.'+x+'.0'):ip2int('192.168.'+x+'.0')); }
   return {lans, wan:ip2int('172.16.'+ri(0,255)+'.'+(ri(0,63)*4))};
 }
+/* The pills sit on cables and router edges, and in the Custom theme their fill
+   is translucent, so the lines showed through the labels. SVG shapes can't
+   blur what is behind them (Chrome ignores backdrop-filter there), so the
+   figure does it itself: the cables and router boxes (base) are drawn once
+   with the pill shapes cut out, and once more blurred and clipped to the pill
+   shapes (.ex-frost, shown only in the Custom theme — elsewhere the pills are
+   opaque and nothing shows through). pills are [id, name, x, y] as ifPill
+   takes them; the shapes here match ifPill's rect. */
+function frostedPills(key,vb,base,pills){
+  const shapes=pills.map(p=>{ const w=p[1].length*7.4+14; return '<rect x="'+(p[2]-w/2)+'" y="'+(p[3]-11)+'" width="'+w+'" height="20" rx="6"'; });
+  const area=' maskUnits="userSpaceOnUse" x="'+vb[0]+'" y="'+vb[1]+'" width="'+vb[2]+'" height="'+vb[3]+'"';
+  return '<defs><mask id="'+key+'-out"'+area+'><rect x="'+vb[0]+'" y="'+vb[1]+'" width="'+vb[2]+'" height="'+vb[3]+'" fill="#fff"/>'+shapes.map(r=>r+' fill="#000"/>').join('')+'</mask>'+
+    '<mask id="'+key+'-in"'+area+'>'+shapes.map(r=>r+' fill="#fff"/>').join('')+'</mask></defs>'+
+    '<g mask="url(#'+key+'-out)">'+base+'</g><g class="ex-frost" mask="url(#'+key+'-in)">'+base+'</g>';
+}
 function q3Topo(P,pick,lab){
   const L=i=>lab?lab.lans[i]:cidr(P.lans[i],24);
   let s='<svg class="ex-topo'+(pick?' pickable':'')+'" viewBox="0 100 800 164" role="img" aria-label="R1 and R2 with four LANs">';
   /* the side links leave the routers 6px above their middle, so the pills on
      them keep clear of the G0/1 pills at the corners */
-  s+='<path class="cable" d="M230 126 H172 M172 110 V142"/><path class="cable" d="M275 154 V214 M242 214 H308"/>'+
+  /* Each pill sits where its cable meets its router (owner: on the cable and
+     on the router's border), so it reads as that router's port. ifPill's rect
+     runs y-11..y+9, so a pill centred on a point at height Y is passed Y+1. */
+  const pills=[['R1 G0/0','G0/0',230,127],['R1 G0/1','G0/1',275,155],['R1 S0/0/0','S0/0/0',320,127],
+    ['R2 S0/0/0','S0/0/0',490,127],['R2 G0/0','G0/0',580,127],['R2 G0/1','G0/1',535,155]];
+  let base='<path class="cable" d="M230 126 H172 M172 110 V142"/><path class="cable" d="M275 154 V214 M242 214 H308"/>'+
      '<path class="cable serial" d="M320 126 H490"/><path class="cable" d="M580 126 H628 M628 110 V142"/><path class="cable" d="M535 154 V214 M502 214 H568"/>';
-  [['R1',230],['R2',490]].forEach(r=>{ s+='<rect class="rt" x="'+r[1]+'" y="110" width="90" height="44" rx="10"/><text class="rt-name" x="'+(r[1]+45)+'" y="134" text-anchor="middle">'+r[0]+'</text>'; });
+  [['R1',230],['R2',490]].forEach(r=>{ base+='<rect class="rt" x="'+r[1]+'" y="110" width="90" height="44" rx="10"/>'; });
+  s+=frostedPills('pmw',[0,100,800,164],base,pills);
+  [['R1',230],['R2',490]].forEach(r=>{ s+='<text class="rt-name" x="'+(r[1]+45)+'" y="134" text-anchor="middle">'+r[0]+'</text>'; });
   s+='<text x="162" y="122" text-anchor="end">'+L(0)+'</text><text class="t-sub" x="162" y="139" text-anchor="end">LAN1</text>'+
      '<text x="275" y="236" text-anchor="middle">'+L(1)+'</text><text class="t-sub" x="275" y="253" text-anchor="middle">LAN2</text>'+
      '<text x="638" y="122">'+L(2)+'</text><text class="t-sub" x="638" y="139">LAN3</text>'+
      '<text x="535" y="236" text-anchor="middle">'+L(3)+'</text><text class="t-sub" x="535" y="253" text-anchor="middle">LAN4</text>'+
      '<text class="t-sub" x="405" y="152" text-anchor="middle">'+(lab?lab.wan:cidr(P.wan,30))+'</text>';
-  /* Each pill sits where its cable meets its router (owner: on the cable and
-     on the router's border), so it reads as that router's port. ifPill's rect
-     runs y-11..y+9, so a pill centred on a point at height Y is passed Y+1. */
-  s+=ifPill('R1 G0/0','G0/0',230,127,pick)+ifPill('R1 G0/1','G0/1',275,155,pick)+ifPill('R1 S0/0/0','S0/0/0',320,127,pick)+
-     ifPill('R2 S0/0/0','S0/0/0',490,127,pick)+ifPill('R2 G0/0','G0/0',580,127,pick)+ifPill('R2 G0/1','G0/1',535,155,pick);
+  s+=pills.map(p=>ifPill(p[0],p[1],p[2],p[3],pick)).join('');
   return '<div class="ex-topo-wrap">'+s.replace('class="ex-topo','class="ex-topo ex-topo-wide')+'</svg>'+q3TopoNarrow(P,pick,lab)+'</div>';
 }
 /* The same network stacked for a phone — R1 above R2, LANs either side — so
@@ -1887,16 +1905,19 @@ function q3TopoNarrow(P,pick,lab){
   let s='<svg class="ex-topo ex-topo-narrow'+(pick?' pickable':'')+'" viewBox="0 78 340 236" role="img" aria-label="R1 and R2 with four LANs">';
   /* the LAN links leave R1 6px above its middle and R2 6px below, so their
      pills keep clear of the serial link's pills at the inner corners */
-  s+='<path class="cable" d="M125 124 H70 M70 108 V140"/><path class="cable" d="M215 124 H270 M270 108 V140"/>'+
+  const pills=[['R1 G0/0','G0/0',125,125],['R1 G0/1','G0/1',215,125],['R1 S0/0/0','S0/0/0',170,151],
+    ['R2 S0/0/0','S0/0/0',170,231],['R2 G0/0','G0/0',215,257],['R2 G0/1','G0/1',125,257]];
+  let base='<path class="cable" d="M125 124 H70 M70 108 V140"/><path class="cable" d="M215 124 H270 M270 108 V140"/>'+
      '<path class="cable serial" d="M170 150 V230"/><path class="cable" d="M215 256 H270 M270 240 V272"/><path class="cable" d="M125 256 H70 M70 240 V272"/>';
-  [['R1',110,22],['R2',230,29]].forEach(r=>{ s+='<rect class="rt" x="125" y="'+r[1]+'" width="90" height="40" rx="10"/><text class="rt-name" x="170" y="'+(r[1]+r[2])+'" text-anchor="middle">'+r[0]+'</text>'; });   // names sit away from the serial link's pills
+  [['R1',110],['R2',230]].forEach(r=>{ base+='<rect class="rt" x="125" y="'+r[1]+'" width="90" height="40" rx="10"/>'; });
+  s+=frostedPills('pmn',[0,78,340,236],base,pills);
+  [['R1',110,22],['R2',230,29]].forEach(r=>{ s+='<text class="rt-name" x="170" y="'+(r[1]+r[2])+'" text-anchor="middle">'+r[0]+'</text>'; });   // names sit away from the serial link's pills
   s+='<text'+v6+' x="70" y="90" text-anchor="middle">'+L(0)+'</text><text class="t-sub" x="70" y="104" text-anchor="middle">LAN1</text>'+
      '<text'+v6+' x="270" y="90" text-anchor="middle">'+L(1)+'</text><text class="t-sub" x="270" y="104" text-anchor="middle">LAN2</text>'+
      '<text'+v6+' x="270" y="290" text-anchor="middle">'+L(2)+'</text><text class="t-sub" x="270" y="304" text-anchor="middle">LAN3</text>'+
      '<text'+v6+' x="70" y="290" text-anchor="middle">'+L(3)+'</text><text class="t-sub" x="70" y="304" text-anchor="middle">LAN4</text>'+
      '<text class="t-sub'+(lab?' t-v6':'')+'" x="210" y="194">'+(lab?lab.wan:cidr(P.wan,30))+'</text>';
-  s+=ifPill('R1 G0/0','G0/0',125,125,pick)+ifPill('R1 G0/1','G0/1',215,125,pick)+ifPill('R1 S0/0/0','S0/0/0',170,151,pick)+
-     ifPill('R2 S0/0/0','S0/0/0',170,231,pick)+ifPill('R2 G0/0','G0/0',215,257,pick)+ifPill('R2 G0/1','G0/1',125,257,pick);
+  s+=pills.map(p=>ifPill(p[0],p[1],p[2],p[3],pick)).join('');
   return s+'</svg>';
 }
 function applyHtml(noDir){
