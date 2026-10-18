@@ -1862,19 +1862,21 @@ function q3Plan(){
 function q3Topo(P,pick,lab){
   const L=i=>lab?lab.lans[i]:cidr(P.lans[i],24);
   let s='<svg class="ex-topo'+(pick?' pickable':'')+'" viewBox="0 100 800 164" role="img" aria-label="R1 and R2 with four LANs">';
-  s+='<path class="cable" d="M230 132 H172 M172 110 V154"/><path class="cable" d="M275 154 V214 M242 214 H308"/>'+
-     '<path class="cable serial" d="M320 132 H490"/><path class="cable" d="M580 132 H628 M628 110 V154"/><path class="cable" d="M535 154 V214 M502 214 H568"/>';
-  [['R1',230],['R2',490]].forEach(r=>{ s+='<rect class="rt" x="'+r[1]+'" y="110" width="90" height="44" rx="10"/><text class="rt-name" x="'+(r[1]+45)+'" y="137" text-anchor="middle">'+r[0]+'</text>'; });
-  s+='<text x="162" y="128" text-anchor="end">'+L(0)+'</text><text class="t-sub" x="162" y="145" text-anchor="end">LAN1</text>'+
+  /* the side links leave the routers 6px above their middle, so the pills on
+     them keep clear of the G0/1 pills at the corners */
+  s+='<path class="cable" d="M230 126 H172 M172 110 V142"/><path class="cable" d="M275 154 V214 M242 214 H308"/>'+
+     '<path class="cable serial" d="M320 126 H490"/><path class="cable" d="M580 126 H628 M628 110 V142"/><path class="cable" d="M535 154 V214 M502 214 H568"/>';
+  [['R1',230],['R2',490]].forEach(r=>{ s+='<rect class="rt" x="'+r[1]+'" y="110" width="90" height="44" rx="10"/><text class="rt-name" x="'+(r[1]+45)+'" y="134" text-anchor="middle">'+r[0]+'</text>'; });
+  s+='<text x="162" y="122" text-anchor="end">'+L(0)+'</text><text class="t-sub" x="162" y="139" text-anchor="end">LAN1</text>'+
      '<text x="275" y="236" text-anchor="middle">'+L(1)+'</text><text class="t-sub" x="275" y="253" text-anchor="middle">LAN2</text>'+
-     '<text x="638" y="128">'+L(2)+'</text><text class="t-sub" x="638" y="145">LAN3</text>'+
+     '<text x="638" y="122">'+L(2)+'</text><text class="t-sub" x="638" y="139">LAN3</text>'+
      '<text x="535" y="236" text-anchor="middle">'+L(3)+'</text><text class="t-sub" x="535" y="253" text-anchor="middle">LAN4</text>'+
-     '<text class="t-sub" x="405" y="156" text-anchor="middle">'+(lab?lab.wan:cidr(P.wan,30))+'</text>';
-  /* Each pill sits against the router that owns the port, beside its link
-     rather than on it, so it reads as the router's interface and every cable
-     shows end to end. */
-  s+=ifPill('R1 G0/0','G0/0',206,120,pick)+ifPill('R1 G0/1','G0/1',300,166,pick)+ifPill('R1 S0/0/0','S0/0/0',351,120,pick)+
-     ifPill('R2 S0/0/0','S0/0/0',459,120,pick)+ifPill('R2 G0/0','G0/0',604,120,pick)+ifPill('R2 G0/1','G0/1',560,166,pick);
+     '<text class="t-sub" x="405" y="152" text-anchor="middle">'+(lab?lab.wan:cidr(P.wan,30))+'</text>';
+  /* Each pill sits where its cable meets its router (owner: on the cable and
+     on the router's border), so it reads as that router's port. ifPill's rect
+     runs y-11..y+9, so a pill centred on a point at height Y is passed Y+1. */
+  s+=ifPill('R1 G0/0','G0/0',230,127,pick)+ifPill('R1 G0/1','G0/1',275,155,pick)+ifPill('R1 S0/0/0','S0/0/0',320,127,pick)+
+     ifPill('R2 S0/0/0','S0/0/0',490,127,pick)+ifPill('R2 G0/0','G0/0',580,127,pick)+ifPill('R2 G0/1','G0/1',535,155,pick);
   return '<div class="ex-topo-wrap">'+s.replace('class="ex-topo','class="ex-topo ex-topo-wide')+'</svg>'+q3TopoNarrow(P,pick,lab)+'</div>';
 }
 /* The same network stacked for a phone — R1 above R2, LANs either side — so
@@ -1883,16 +1885,18 @@ function q3Topo(P,pick,lab){
 function q3TopoNarrow(P,pick,lab){
   const L=i=>lab?lab.lans[i]:cidr(P.lans[i],24), v6=lab?' class="t-v6"':'';   // IPv6 prefixes need the smaller type to fit
   let s='<svg class="ex-topo ex-topo-narrow'+(pick?' pickable':'')+'" viewBox="0 78 340 236" role="img" aria-label="R1 and R2 with four LANs">';
-  s+='<path class="cable" d="M125 130 H70 M70 110 V150"/><path class="cable" d="M215 130 H270 M270 110 V150"/>'+
-     '<path class="cable serial" d="M170 150 V230"/><path class="cable" d="M215 250 H270 M270 230 V270"/><path class="cable" d="M125 250 H70 M70 230 V270"/>';
-  [['R1',110],['R2',230]].forEach(r=>{ s+='<rect class="rt" x="125" y="'+r[1]+'" width="90" height="40" rx="10"/><text class="rt-name" x="170" y="'+(r[1]+25)+'" text-anchor="middle">'+r[0]+'</text>'; });
+  /* the LAN links leave R1 6px above its middle and R2 6px below, so their
+     pills keep clear of the serial link's pills at the inner corners */
+  s+='<path class="cable" d="M125 124 H70 M70 108 V140"/><path class="cable" d="M215 124 H270 M270 108 V140"/>'+
+     '<path class="cable serial" d="M170 150 V230"/><path class="cable" d="M215 256 H270 M270 240 V272"/><path class="cable" d="M125 256 H70 M70 240 V272"/>';
+  [['R1',110,22],['R2',230,29]].forEach(r=>{ s+='<rect class="rt" x="125" y="'+r[1]+'" width="90" height="40" rx="10"/><text class="rt-name" x="170" y="'+(r[1]+r[2])+'" text-anchor="middle">'+r[0]+'</text>'; });   // names sit away from the serial link's pills
   s+='<text'+v6+' x="70" y="90" text-anchor="middle">'+L(0)+'</text><text class="t-sub" x="70" y="104" text-anchor="middle">LAN1</text>'+
      '<text'+v6+' x="270" y="90" text-anchor="middle">'+L(1)+'</text><text class="t-sub" x="270" y="104" text-anchor="middle">LAN2</text>'+
      '<text'+v6+' x="270" y="290" text-anchor="middle">'+L(2)+'</text><text class="t-sub" x="270" y="304" text-anchor="middle">LAN3</text>'+
      '<text'+v6+' x="70" y="290" text-anchor="middle">'+L(3)+'</text><text class="t-sub" x="70" y="304" text-anchor="middle">LAN4</text>'+
      '<text class="t-sub'+(lab?' t-v6':'')+'" x="210" y="194">'+(lab?lab.wan:cidr(P.wan,30))+'</text>';
-  s+=ifPill('R1 G0/0','G0/0',101,143,pick)+ifPill('R1 G0/1','G0/1',239,143,pick)+ifPill('R1 S0/0/0','S0/0/0',137,163,pick)+
-     ifPill('R2 S0/0/0','S0/0/0',137,217,pick)+ifPill('R2 G0/0','G0/0',239,238,pick)+ifPill('R2 G0/1','G0/1',101,238,pick);
+  s+=ifPill('R1 G0/0','G0/0',125,125,pick)+ifPill('R1 G0/1','G0/1',215,125,pick)+ifPill('R1 S0/0/0','S0/0/0',170,151,pick)+
+     ifPill('R2 S0/0/0','S0/0/0',170,231,pick)+ifPill('R2 G0/0','G0/0',215,257,pick)+ifPill('R2 G0/1','G0/1',125,257,pick);
   return s+'</svg>';
 }
 function applyHtml(noDir){
