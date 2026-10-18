@@ -1025,7 +1025,8 @@ const EXAM_KEYS={
     "divided by bandwidth", "divide by the bandwidth", "divide by bandwidth",
     "divided by its bandwidth", "divided by the link", "divided by the speed", "over the bandwidth",
     "over bandwidth", "over the link", "by its bandwidth", "by the bandwidth", "by bandwidth",
-    "by the interface", "by the link speed"
+    "by the interface", "by the link speed", "100mbps bandwidth", "100 mbps bandwidth", "100 bandwidth",
+    "100mbps over", "100mbps divided by"
   ],
   "sum": [
     "total", "add", "added", "adding", "adds", "summed", "cumulative", "accumulated", "accumulate",
@@ -1038,8 +1039,12 @@ const EXAM_KEYS={
     "{AN} is 1 and {BN} is 1", "{GB}~{ONE}", "1 for {Bal}", "one for {Bal}", "1 on {Bal}",
     "{Aal}~no value of its own", ">!{ABal}~{NV}{NOT}"
   ],
-  "reference bandwidth": ["reference", "ref", "ref bw", "10^8", "100000000"],
-  "100 Mbps": ["100"],
+  "reference bandwidth": [
+    "reference", "ref", "ref bw", "10^8", "100000000", "100mbps bandwidth", "100 mbps bandwidth",
+    "100 bandwidth", "100mbps over", "100 mbps over", "100mbps divided by", "100 mbps divided by",
+    "100 divided by"
+  ],
+  "100 Mbps": ["100", "100mbps", "100mb", "100mbit", "100 megabits", "100 megabit", "100 meg"],
   "minimum of 1": [
     "minimum", "lowest possible", "lowest it can", "lowest cost", "below 1", "less than 1",
     "lower than 1", "smaller than 1", "at least 1", "no lower than", "no less than", "round up",
