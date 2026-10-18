@@ -1870,11 +1870,12 @@ function q3Topo(P,pick,lab){
      '<text x="638" y="128">'+L(2)+'</text><text class="t-sub" x="638" y="145">LAN3</text>'+
      '<text x="535" y="236" text-anchor="middle">'+L(3)+'</text><text class="t-sub" x="535" y="253" text-anchor="middle">LAN4</text>'+
      '<text class="t-sub" x="405" y="156" text-anchor="middle">'+(lab?lab.wan:cidr(P.wan,30))+'</text>';
-  /* Each pill sits against the router that owns the port, beside its link
-     rather than on it, so it reads as the router's interface and every cable
-     shows end to end. */
-  s+=ifPill('R1 G0/0','G0/0',206,120,pick)+ifPill('R1 G0/1','G0/1',300,166,pick)+ifPill('R1 S0/0/0','S0/0/0',351,120,pick)+
-     ifPill('R2 S0/0/0','S0/0/0',459,120,pick)+ifPill('R2 G0/0','G0/0',604,120,pick)+ifPill('R2 G0/1','G0/1',560,166,pick);
+  /* Each pill is centred on its router's outline (owner: "on the line of the
+     border of the routers"), on the side its link leaves from, and just off
+     the cable so every cable still shows end to end. ifPill's rect runs
+     y-11..y+9, so a pill on a horizontal edge at Y is passed Y+1. */
+  s+=ifPill('R1 G0/0','G0/0',230,118,pick)+ifPill('R1 G0/1','G0/1',299,155,pick)+ifPill('R1 S0/0/0','S0/0/0',320,118,pick)+
+     ifPill('R2 S0/0/0','S0/0/0',490,118,pick)+ifPill('R2 G0/0','G0/0',580,118,pick)+ifPill('R2 G0/1','G0/1',559,155,pick);
   return '<div class="ex-topo-wrap">'+s.replace('class="ex-topo','class="ex-topo ex-topo-wide')+'</svg>'+q3TopoNarrow(P,pick,lab)+'</div>';
 }
 /* The same network stacked for a phone — R1 above R2, LANs either side — so
@@ -1891,8 +1892,8 @@ function q3TopoNarrow(P,pick,lab){
      '<text'+v6+' x="270" y="290" text-anchor="middle">'+L(2)+'</text><text class="t-sub" x="270" y="304" text-anchor="middle">LAN3</text>'+
      '<text'+v6+' x="70" y="290" text-anchor="middle">'+L(3)+'</text><text class="t-sub" x="70" y="304" text-anchor="middle">LAN4</text>'+
      '<text class="t-sub'+(lab?' t-v6':'')+'" x="210" y="194">'+(lab?lab.wan:cidr(P.wan,30))+'</text>';
-  s+=ifPill('R1 G0/0','G0/0',101,143,pick)+ifPill('R1 G0/1','G0/1',239,143,pick)+ifPill('R1 S0/0/0','S0/0/0',137,163,pick)+
-     ifPill('R2 S0/0/0','S0/0/0',137,217,pick)+ifPill('R2 G0/0','G0/0',239,238,pick)+ifPill('R2 G0/1','G0/1',101,238,pick);
+  s+=ifPill('R1 G0/0','G0/0',125,118,pick)+ifPill('R1 G0/1','G0/1',215,118,pick)+ifPill('R1 S0/0/0','S0/0/0',137,151,pick)+
+     ifPill('R2 S0/0/0','S0/0/0',137,231,pick)+ifPill('R2 G0/0','G0/0',215,263,pick)+ifPill('R2 G0/1','G0/1',125,263,pick);
   return s+'</svg>';
 }
 function applyHtml(noDir){
