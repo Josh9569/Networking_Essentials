@@ -2973,14 +2973,17 @@ card({id:'g5-v6cfg', area:'dhcp', tier:3, kind:'graded', src:'Q5', title:'Config
 
 /* ═══ Q6 — Router-on-a-stick ══════════════════════════════════════════════ */
 function q6Plan(){ const v=pick([[10,20],[30,40],[15,25],[100,200],[50,60],[11,22]]); return {x:v[0], y:v[1], h1:ri(10,99), h2:ri(10,99)}; }
+/* The device at fault is its own question (owner: the causes named it), so
+   the causes never say which device or port. */
 const Q6_CAUSE={
-  access:'Fa0/1 and Fa0/2 were never put in their VLANs',
-  trunk:'S1 Gi0/1 is not a trunk',
-  shut:'R1 Gi0/0 is still shut down',
-  tag:'An R1 subinterface tags the wrong VLAN',
-  ip:'An R1 subinterface is in the wrong subnet',
-  swap:'H1 and H2\'s ports are in each other\'s VLANs',
+  access:'Two ports were never put in their VLANs',
+  trunk:'A link that has to carry several VLANs isn\'t a trunk',
+  shut:'An interface is still shut down',
+  tag:'An interface tags the wrong VLAN',
+  ip:'An interface is in the wrong subnet',
+  swap:'Two ports are in each other\'s VLANs',
 };
+const Q6_DEV={access:'S1', trunk:'S1', shut:'R1', tag:'R1', ip:'R1', swap:'S1'}, Q6_DEVS=['R1','S1','H1','H2'];
 /* The configuration the practice exam shows, with one fault planted. */
 function q6Config(P,fault){
   const z=fault==='tag'?pick([P.y+10,P.y+1,P.y-1].filter(v=>v!==P.x&&v>1)):P.y;
@@ -3104,10 +3107,12 @@ function q6FaultCard(id,tier,title,faults){
     /* the VLAN the planted tag fault really uses, read back from the config shown */
     const tags=cfg.r1.map(l=>/encapsulation dot1q (\d+)/.exec(l)).filter(Boolean), z=tags.length>1?+tags[1][1]:P.y;
     return {
-      prompt:'Host H1 cannot communicate with host H2. Pick the cause, then type the commands that fix it (interface lines included).',
-      body: q6Body(P,cfg,true)+chipsHtml(causes.map(k=>Q6_CAUSE[k]))+
+      prompt:'Host H1 cannot communicate with host H2. Pick the device at fault and the cause, then type the commands that fix it (interface lines included).',
+      body: q6Body(P,cfg,true)+'<div class="ex-apply"><span class="ex-apply-lbl">Device:</span>'+devChipsHtml(Q6_DEVS)+'</div>'+
+        '<div class="ex-apply-lbl ex-cause-lbl">Cause:</div>'+chipsHtml(causes.map(k=>Q6_CAUSE[k]))+
         cmdsHtml('fix','Fix &mdash; one command per line, Ctrl+Enter submits','Type the commands that fix it, interface lines included',4),
       grade(){
+        const dAns=Q6_DEVS.indexOf(Q6_DEV[fault]), okD=Q.dev===dAns; markDevChips(dAns);
         const okC=Q.choice===ans; markChips(ans);
         const sc=iosScript(cmdLines('fix')), need=q6Fix(P,fault), miss=need.filter(n=>!(/^switchport trunk allowed vlan /.test(n[1])?q6TrunkAllows(sc,n[0],[P.x,P.y]):hasCmd(sc,n[0],n[1])));
         const okF=!miss.length;
@@ -3128,7 +3133,7 @@ function q6FaultCard(id,tier,title,faults){
           ip:['<b>Here:</b> R1 Gi0/0.'+P.y+' has '+mono('ip address 192.168.'+(P.y+1)+'.1')+' &mdash; it should be '+mono('192.168.'+P.y+'.1 255.255.255.0')+'.',
             'H2\'s gateway 192.168.'+P.y+'.1 doesn\'t exist, and R1 has no interface in 192.168.'+P.y+'.0/24, so H1\'s traffic can\'t be routed to H2 either.'],
         }[fault];
-        return {ok:okC&&okF, verdict: okC&&okF?'Correct.':Q6_CAUSE[fault]+'.', why: ul(expl.concat(['Fix:<br>'+q6ModelText(P,fault).split('\n').map(l=>mono(l.trim())).join('<br>')]))};
+        return {ok:okD&&okC&&okF, verdict: okD&&okC&&okF?'Correct.':'On '+Q6_DEV[fault]+': '+Q6_CAUSE[fault]+'.', why: ul(expl.concat(['Fix:<br>'+q6ModelText(P,fault).split('\n').map(l=>mono(l.trim())).join('<br>')]))};
       },
     };
   }});
