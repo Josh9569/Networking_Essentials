@@ -1195,7 +1195,8 @@ const EXAM_KEYS={
       "should be applied to ", "should be placed on ", "should be placed at ", "should be put on ",
       "would be applied on ", "would be placed on ", "is applied at ", "goes onto ", "apply it on ",
       "apply it to ", "put it on ", "place it on ", "it goes on ", "it should go on ", "it belongs on ",
-      "it should be on ", "it goes at ", "it should go at "
+      "it should be on ", "it goes at ", "it should go at ", "set on ", "is set on ", "set at ",
+      "configured on ", "is configured on ", "used on ", "is used on "
     ],
     "PVR": [
       "on", "at", "in", "onto", "to", "goes on", "go on", "goes at", "goes to", "should be on",
@@ -1209,7 +1210,8 @@ const EXAM_KEYS={
       "should be placed at", "should be put on", "would be applied on", "would be placed on",
       "is applied at", "goes onto", "apply it on", "apply it to", "put it on", "place it on",
       "it goes on", "it should go on", "it belongs on", "it should be on", "it goes at",
-      "it should go at"
+      "it should go at", "set on", "is set on", "set at", "configured on", "is configured on",
+      "used on", "is used on"
     ],
     "STDN": [
       "standard", "standard ACL", "standard ACLs", "standard one", "standard list",
@@ -1241,7 +1243,10 @@ const EXAM_KEYS={
       "loses", "lose", "lost", "loses access to", "lose access to", "cannot reach", "can't reach",
       "can not reach", "unable to reach", "blocked from", "blocks", "also blocks", "is blocked from",
       "denied access to", "no access to", "no longer reach", "no longer reaches", "can no longer get to",
-      "no longer get to", "no longer gets to", "can t get to", "cannot get to", "can not get to", "from"
+      "no longer get to", "no longer gets to", "can t get to", "cannot get to", "can not get to", "from",
+      "cannot access", "can t access", "can not access", "unable to access", "can no longer access",
+      "no longer access", "no longer accesses", "loses access", "lose access", "lost access",
+      "is blocked from accessing", "blocked from accessing", "cannot connect to", "can t connect to"
     ],
     "LOSTW": [
       "every destination", "all destinations", "every other network", "all other networks",
@@ -1270,7 +1275,13 @@ const EXAM_KEYS={
     "only filter traffic based on the source", "only filter based on the source",
     "source address only", "source ip only", "can not check the destination",
     "cannot check the destination", "can't check the destination", "cannot see the destination",
-    "can't see the destination"
+    "can't see the destination", "only support source", "only supports source", "only support the source",
+    "only supports the source", "only work on the source", "only works on the source", "only know the source",
+    "only knows the source", "only see where traffic came from", "only see where the traffic came from",
+    "only see where it came from", "only where traffic came from", "only where it came from",
+    "only know where traffic came from", "only knows where traffic came from", "not where it is going",
+    "not where it s going", "not where traffic is going", "not where the traffic is going",
+    "not where it goes", "not where it is headed", "no idea where it is going"
   ],
   "destination, protocol and port": [
     "source, destination, protocol", "destination and port", "destination and protocol",
