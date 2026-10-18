@@ -1366,7 +1366,9 @@ const EXAM_KEYS={
     "named instead of numbered", "not numbered", "no numbered", "given a name", "identified by name",
     "use a name", "use names", "^named", "named only", "only names", "named yes",
     "names rather than numbers", "names not numbers", "names instead of numbers",
-    "name rather than a number", "name not a number"
+    "name rather than a number", "name not a number", "has to be named", "have to be named",
+    "needs to be named", "need to be named", "needs a name", "need a name", "has to have a name",
+    "must have a name", "required to be named", "always has a name", "always have a name"
   ],
   "extended ACL": [
     "extended style", "like extended", "source and destination", "source destination",
