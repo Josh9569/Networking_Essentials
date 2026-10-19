@@ -104,11 +104,23 @@ const TIER_NAME={1:'Easy',2:'Medium',3:'Hard'};
 const FAMS=[{id:'4', name:'IPv4'}, {id:'6', name:'IPv6'}];
 const FAM_V6=['q3e-acl6','g3-acl6','q5d-v6','g5-v6flags','g5-v6msgs','g5-v6relay','g5-v6cfg'];
 const FAM_BOTH=['q1a-dynamic','q1b-adpair','q1c-admetric','q2a-rid','q2b-metric','q2c-multiarea','q2d-timers','q2e-roles','q2f-lsa','q3c-place'];
-const CARDS=[];
+const CARDS=[], CARD_BY={};
+/* A card's variants are the branches of its generator that ask a different
+   question or need different reasoning: a flashcard's prompts with their own
+   points, a fault, a NAT kind, a router-ID case. Random numbers, names,
+   addresses and distractors are not variants. `variants` lists them, a name
+   repeated to weight it as the old pick() did; gen(v) builds that one, and
+   gen() with no (or an unknown) name draws one by those weights. The
+   scheduler (variantFor) hands it the next variant still to be done; a card
+   can't be Comfortable until every variant has been answered right. */
 function card(def){
   def.fam=FAM_V6.indexOf(def.id)>=0?['6']:FAM_BOTH.indexOf(def.id)>=0?['4','6']:['4'];
+  if(def.variants){
+    const g0=def.gen; def.vlist=[...new Set(def.variants)];
+    def.gen=function(v){ if(def.vlist.indexOf(v)<0) v=pick(def.variants); const g=g0.call(this,v); if(g) g.variant=v; return g; };
+  }
   if(def.kind==='flash'){ const gen=def.gen; def.gen=function(){ const g=gen.apply(this,arguments); if(g&&g.points) g.points=kwResolve(def.id,g.points,g.vars); return g; }; }
-  CARDS.push(def);
+  CARDS.push(def); CARD_BY[def.id]=def;
 }
 
 /* ═══ Key words from exam-keys.js ══════════════════════════════════════════
@@ -519,7 +531,7 @@ function kwCheck(text,keys){
      "Dynamic." or the question's own option names score nothing: they cannot
      be told apart from copying the prompt. */
 /* Its lists and pairings are in exam-keys.js under 'q1a-dynamic'. */
-card({id:'q1a-dynamic', area:'routing', tier:1, kind:'flash', src:'Q1 a', title:'Static vs dynamic routing', gen(){
+card({id:'q1a-dynamic', area:'routing', tier:1, kind:'flash', src:'Q1 a', title:'Static vs dynamic routing', variants:['why','two','grow','stub'], gen(v){
   /* Key words: exam-keys.js. None of them is a word a prompt uses ("growing",
      "redundant", "ISP" ...), and none is a bare "default route", "every
      router" or "manual": those are what an answer about anything says. */
@@ -528,12 +540,12 @@ card({id:'q1a-dynamic', area:'routing', tier:1, kind:'flash', src:'Q1 a', title:
     '<b>Dynamic:</b> it adapts when a [[link fails]] &mdash; the routers reconverge onto another path with no admin action, where a static route stays pointed at the dead link.',
   ];
   const ask=' Should it use static routes or a dynamic routing protocol, and why? When would the other option be the better choice?';
-  const v=pick(['why','two','grow','stub']);
   if(v==='why') return {
     prompt:'Why would you use a dynamic routing protocol rather than static routes? When would it be preferable to use static routes?',
     points: dynWhy.concat([
       '<b>Static:</b> a [[small network#any]] with few routes that rarely change.',
       '<b>Static:</b> a [[stub network#any]] with a single way out &mdash; e.g. a default route to the ISP.',
+      '<b>Static:</b> when the admin wants to [[set the exact path]] a particular flow of traffic takes, whatever a protocol would choose.',
       'Static routes also send no routing updates (more secure, no CPU, memory or bandwidth spent) and can back up a dynamic route (a floating static route). Dynamic routing costs those resources and is more complex to configure and secure.',
     ]),
   };
@@ -601,14 +613,14 @@ card({id:'q1b-adpair', area:'routing', tier:1, kind:'flash', src:'Q1 b', title:'
       NM:W==='static'||L==='static'?'{NOMETRIC}':null},
   };
 }});
-card({id:'q1c-admetric', area:'routing', tier:1, kind:'flash', src:'Q1 c', title:'Metric vs administrative distance', gen(){
+card({id:'q1c-admetric', area:'routing', tier:1, kind:'flash', src:'Q1 c', title:'Metric vs administrative distance', variants:['rule','r1'], gen(v){
   /* Key words: exam-keys.js. "Lowest AD wins" is the verdict on the paper's
      general question and the reason on R1's. Neither prompt asks when the
      metric decides (owner), so "same routing protocol" is plain text in the
      model, not a key word. */
   /* The paper's own question is general, so the rule is the answer. The
      prompt spells out every part the key words grade. */
-  if(chance(.5)) return {
+  if(v==='rule') return {
     prompt:'Routing protocols use both metrics and administrative distance (AD). If there is a choice of routes to the same destination, which have different metrics and ADs, which route is chosen? What does each one measure?',
     points: [
       '<b>Lowest AD wins:</b> of the routes to the same prefix from different sources, the one with the [[lowest administrative distance]] is installed, whatever its metric &mdash; AD is compared first.',
@@ -649,14 +661,14 @@ card({id:'q1c-admetric', area:'routing', tier:1, kind:'flash', src:'Q1 c', title
   };
 }});
 
-card({id:'q1d-floating', area:'routing', tier:1, kind:'flash', src:'Q1 d', title:'Floating static routes', gen(){
+card({id:'q1d-floating', area:'routing', tier:1, kind:'flash', src:'Q1 d', title:'Floating static routes', variants:['rule','scenario'], gen(v){
   const p=pick(['ospf','eigrp','rip']), N=PROTO[p].name, ad=PROTO[p].ad, eg=ad+10;
   const cmd=mono('ip route 10.1.1.0 255.255.255.0 10.2.2.2 '+eg);
   /* The rule, not the word: the stemmer folds "lower" into "lowest", and
      "give the static a lower AD" is the mistake this card is about. */
   const lowest='[[lowest AD wins]]';
   const higher='[[higher AD]]';
-  if(chance(.5)) return {
+  if(v==='rule') return {
     prompt:'What is the purpose of a floating static route? How do you ensure that a static route is treated as a floating static route, and why does that work?',
     points: [
       'A floating static route is a [[backup]]: it stays out of the routing table while the primary route exists and is installed only if the primary [[fails]].',
@@ -714,14 +726,22 @@ card({id:'g1-adpick', area:'routing', tier:1, kind:'graded', src:'Q1 b', title:'
 
 /* Several candidates, one protocol twice: AD picks the source, then the
    metric picks within it; a tie installs both. */
-card({id:'g1-admetric', area:'routing', tier:2, kind:'graded', src:'Q1 c', title:'AD, then metric', gen(){
+card({id:'g1-admetric', area:'routing', tier:2, kind:'graded', src:'Q1 c', title:'AD, then metric', variants:['metric','metric','ecmp','single'], gen(v){
   const net=rNet24(), pfx=pick([24,24,23,26]);
-  let keys=shuffle(chance(.3)?['eigrp','ospf','rip','isis','static']:['eigrp','ospf','rip','isis']).slice(0,ri(2,3));
-  const dynamic=keys.filter(k=>k!=='static');
-  if(!dynamic.length){ keys.push('ospf'); dynamic.push('ospf'); }
-  const lowest=keys.reduce((a,k)=>PROTO[k].ad<PROTO[a].ad?k:a);
-  const dup=chance(.7)&&lowest!=='static'?lowest:pick(dynamic);
-  const ecmp=chance(.35);
+  /* the variant decides what the second route of one source does: it is
+     the winner's, with a different metric (metric) or the same one (ecmp),
+     or it belongs to a source that loses on AD anyway (single) */
+  let keys, dynamic, lowest, dup;
+  for(;;){
+    keys=shuffle(chance(.3)?['eigrp','ospf','rip','isis','static']:['eigrp','ospf','rip','isis']).slice(0,ri(2,3));
+    dynamic=keys.filter(k=>k!=='static');
+    if(!dynamic.length){ keys.push('ospf'); dynamic.push('ospf'); }
+    lowest=keys.reduce((a,k)=>PROTO[k].ad<PROTO[a].ad?k:a);
+    if(v==='single'){ const o=dynamic.filter(k=>k!==lowest); if(!o.length) continue; dup=pick(o); }
+    else { if(lowest==='static') continue; dup=lowest; }
+    break;
+  }
+  const ecmp=v==='ecmp';
   const rows=keys.map(k=>({k, m:rMetric(k)}));
   const first=rows.find(r=>r.k===dup);
   let m2=rMetric(dup); while(m2===first.m) m2=rMetric(dup);
@@ -844,8 +864,8 @@ card({id:'g1-float', area:'routing', tier:2, kind:'graded', src:'Q1 d', title:'W
 }});
 
 /* ═══ Q1 — RIP (the exam brief lists it under Routing) ═══════════════════ */
-card({id:'q1e-ripv2', area:'routing', tier:1, kind:'flash', src:'Q1', title:'RIPv1 vs RIPv2', gen(){
-  if(chance(0.5)) return {
+card({id:'q1e-ripv2', area:'routing', tier:1, kind:'flash', src:'Q1', title:'RIPv1 vs RIPv2', variants:['compare','v2'], gen(v){
+  if(v==='compare') return {
     prompt: 'Compare RIPv1 and RIPv2: explain their differences and what they have in common.',
     points: [
       '<b>Masks:</b> [[RIPv1 classful and RIPv2 classless]]: RIPv1\'s updates carry no subnet mask, so it can\'t handle VLSM or discontiguous networks, while every RIPv2 route is sent with its mask.',
@@ -864,12 +884,12 @@ card({id:'q1e-ripv2', area:'routing', tier:1, kind:'flash', src:'Q1', title:'RIP
     ],
   };
 }});
-card({id:'q1f-riploops', area:'routing', tier:1, kind:'flash', src:'Q1', title:'RIP hop limit and split horizon', gen(){
+card({id:'q1f-riploops', area:'routing', tier:1, kind:'flash', src:'Q1', title:'RIP hop limit and split horizon', variants:['limit','maps'], gen(v){
   const sh='<b>Split horizon:</b> a router doesn\'t [[advertise a route back out the interface it was learned on]], so two neighbours can\'t keep [[feeding each other]] a route that has gone.';
   const loop='[[routing loop]]';
   const inf='[[counting to infinity]]';
   const sixteen='[[16 means unreachable]]';
-  if(chance(.5)) return {
+  if(v==='limit') return {
     prompt:'Why is a RIP network limited to 15 hops? What is split horizon, and why does RIP use it?',
     points: [
       'RIP\'s metric is the [[hop count]]: each router adds one as it passes a route on to its neighbours (every 30 seconds).',
@@ -940,8 +960,8 @@ function ripSubnet(cls,pfx){
    they are on. On RIPv1 no major network holds two different masks, since v1
    carries none; on RIPv2 a LAN may share its major network with a link, so
    one network statement covers both. */
-card({id:'g1-rip', area:'routing', tier:2, kind:'graded', src:'Q1', title:'Configure RIP', gen(){
-  const ver=pick([1,2,2]), noAutoAsk=ver===2&&chance(.6);
+card({id:'g1-rip', area:'routing', tier:2, kind:'graded', src:'Q1', title:'Configure RIP', variants:['v1','v2','v2na'], gen(v){
+  const ver=v==='v1'?1:2, noAutoAsk=v==='v2na';
   const kit=pick([{eth:['G0/0','G0/1','G0/2'], ser:['S0/0/0','S0/0/1']}, {eth:['G0/0','G0/1'], ser:['S0/0/0','S0/0/1']}, {eth:['Fa0/0','Fa0/1'], ser:['S0/0/0','S0/0/1']}]);
   const nLan=chance(.6)?2:1, nWan=chance(.5)?2:1;
   let ifs;
@@ -1010,8 +1030,8 @@ card({id:'g1-rip', area:'routing', tier:2, kind:'graded', src:'Q1', title:'Confi
   };
 }});
 
-card({id:'g1-riphops', area:'routing', tier:2, kind:'graded', src:'Q1', title:'RIP hop count along a chain', gen(){
-  const net=rNet24(), unreach=chance(.45);
+card({id:'g1-riphops', area:'routing', tier:2, kind:'graded', src:'Q1', title:'RIP hop count along a chain', variants:['reach','unreach'], gen(v){
+  const net=rNet24(), unreach=v==='unreach';
   let m, k;
   do{ m=ri(1,14); k=ri(1,5); }while((m+k>15)!==unreach);
   const far='R'+(2+k), hop=m+k, link=int2ip(rLink30()+1);
@@ -1043,6 +1063,7 @@ card({id:'q2a-rid', area:'ospf', tier:1, kind:'flash', src:'Q2 a', title:'The OS
     points: [
 
       'The router ID is a 32-bit value written like an IPv4 address that [[uniquely identifies]] the router in the OSPF domain: neighbours and the LSAs it originates are tracked by it, and it breaks ties in the [[DR/BDR election]] (highest priority, then highest router ID).',
+      'When two neighbours [[synchronise their databases]], the one with the higher router ID becomes the master (decided in the ExStart state) and sends its database description (DBD) packets first.',
       '<b>1.</b> The <span class="mono-inl">[[router-id]]</span> command under <span class="mono-inl">router ospf</span>.',
       '<b>2.</b> If there is none: the [[highest]] IPv4 address on any [[loopback]] interface.',
       '<b>3.</b> If there are no loopbacks: the highest IPv4 address on an [[active]] (up) physical interface.',
@@ -1083,9 +1104,9 @@ function ridAuto(ifs){
   return L.length?{f:best(L), why:'no '+mono('router-id')+' command, so the highest loopback address'}:
                   {f:best(P), why:'no '+mono('router-id')+' command and no loopbacks, so the highest address on an up physical interface'};
 }
-function ridCard(id,tier,title,build){
-  card({id, area:'ospf', tier, kind:'graded', src:'Q2 a', title, gen(){
-    const r=build();
+function ridCard(id,tier,title,variants,build){
+  card({id, area:'ospf', tier, kind:'graded', src:'Q2 a', title, variants, gen(v){
+    const r=build(v);
     return {
       prompt:r.prompt||'Using the output below, what router ID is OSPF process 1 on R1 using?',
       body: r.body+fieldHtml('rid','Router ID','e.g. 198.51.100.1'),
@@ -1121,8 +1142,7 @@ function ridAnswer(ifs,cfg,extra){
   const a=ridAuto(ifs);
   return {body, rid:a.f.ip, why:['There is '+a.why+': '+a.f.name+' ('+int2ip(a.f.ip)+').'].concat(extra||[])};
 }
-ridCard('g2-rid-basic',1,'Work out the router ID',()=>{
-  const k=pick(['cfg','loop','phys']);
+ridCard('g2-rid-basic',1,'Work out the router ID',['cfg','loop','phys'],k=>{
   if(k==='cfg') return ridAnswer(ridIfaces(ri(3,4),0), ridRandId());
   if(k==='loop'){
     const ifs=ridBuild(ri(2,3),1,x=>ridHi(x).loop);   // the loopback is also the highest address
@@ -1130,8 +1150,7 @@ ridCard('g2-rid-basic',1,'Work out the router ID',()=>{
   }
   return ridAnswer(ridIfaces(ri(3,4),0),null,['"Highest" means numerically, octet by octet &mdash; not alphabetically.']);
 });
-ridCard('g2-rid-loop',2,'Router ID with loopbacks',()=>{
-  const k=pick(['cfg','low','two','str']);
+ridCard('g2-rid-loop',2,'Router ID with loopbacks',['cfg','low','two','str'],k=>{
   if(k==='cfg') return ridAnswer(ridIfaces(ri(2,3),ri(1,2)), ridRandId(), ['It beats loopbacks and physical interfaces alike.']);
   if(k==='low'||k==='two'){
     const nl=k==='two'?2:1;
@@ -1143,8 +1162,7 @@ ridCard('g2-rid-loop',2,'Router ID with loopbacks',()=>{
   const ifs=ridBuild(ri(3,4),0,x=>{ const byStr=x.reduce((a,f)=>int2ip(f.ip)>int2ip(a.ip)?f:a); return byStr!==ridHi(x); });
   return ridAnswer(ifs,null,['"Highest" means numerically, octet by octet &mdash; not alphabetically: compare the first octet, then the next.']);
 });
-ridCard('g2-rid-trap',3,'Router ID traps',()=>{
-  const v=pick(['downL','downP','both','late','cleared']);
+ridCard('g2-rid-trap',3,'Router ID traps',['downL','downP','both','late','cleared'],v=>{
   if(v==='downL'||v==='downP'||v==='both'){
     const nl=v==='downP'?0:ri(1,2);
     const ifs=ridIfaces(ri(3,4),nl), notes=[];
@@ -1165,10 +1183,10 @@ ridCard('g2-rid-trap',3,'Router ID traps',()=>{
     why:[''+mono('clear ip ospf process')+' restarted OSPF, so the configured '+mono('router-id')+' ('+int2ip(nid)+') now applies &mdash; it beats every interface.']};
 });
 
-card({id:'q2b-metric', area:'ospf', tier:1, kind:'flash', src:'Q2 b', title:'The OSPF metric', gen(){
+card({id:'q2b-metric', area:'ospf', tier:1, kind:'flash', src:'Q2 b', title:'The OSPF metric', variants:['formula','links'], gen(v){
   /* Key words: exam-keys.js, shared by both variants. The prompts ask for the formula,
      the reference, which interfaces count and how they combine. */
-  if(chance(.5)) return {
+  if(v==='formula') return {
     prompt:'What does OSPF use as its metric? If you do not specify the metric for a link explicitly, how does a Cisco router assign it a metric value, and how is the cost of a whole route worked out?',
     points: [
       'OSPF\'s metric is [[cost]]. A route\'s cost is the [[sum]] of the [[outgoing]] interface costs along the path; lowest total wins.',
@@ -1297,7 +1315,7 @@ card({id:'g2-best-path', area:'ospf', tier:2, kind:'graded', src:'Q2 b', title:'
   };
 }});
 
-card({id:'q2c-multiarea', area:'ospf', tier:1, kind:'flash', src:'Q2 c', title:'Why multi-area OSPF', gen(){
+card({id:'q2c-multiarea', area:'ospf', tier:1, kind:'flash', src:'Q2 c', title:'Why multi-area OSPF', variants:['generic','scenario'], gen(v){
   const LSDB='[[LSDB]]',
         FLOOD='[[floods]]',
         SPF='[[SPF]]';
@@ -1307,7 +1325,7 @@ card({id:'q2c-multiarea', area:'ospf', tier:1, kind:'flash', src:'Q2 c', title:'
     'ABRs pass a summary of each area to the others (type 3 LSAs) and can [[summarise]] routes, giving [[smaller routing tables]].',
     'Result: smaller LSDBs, fewer SPF runs, less flooding, faster convergence, and problems contained within one area.',
   ];
-  if(Math.random()<0.5) return {
+  if(v==='generic') return {
     prompt: 'How does multi-area OSPF overcome the problems with single-area operation? Explain why one large area causes problems, how multi-area OSPF is structured, and how that structure reduces the work each router has to do.',
     points: ['<b>Single-area problems:</b> every router holds the whole topology, so the '+LSDB+' and routing table get large; every change '+FLOOD+' to every router and makes all of them re-run '+SPF+' &mdash; heavy CPU, memory and bandwidth use.'].concat(how),
   };
@@ -1327,10 +1345,10 @@ card({id:'q2c-multiarea', area:'ospf', tier:1, kind:'flash', src:'Q2 c', title:'
   };
 }});
 
-card({id:'q2d-timers', area:'ospf', tier:1, kind:'flash', src:'Q2 d', title:'Hello and dead timers', gen(){
+card({id:'q2d-timers', area:'ospf', tier:1, kind:'flash', src:'Q2 d', title:'Hello and dead timers', variants:['generic','scenario'], gen(v){
   const OVERHEAD='[[more overhead]]';
   const FLAP='[[flapping]]';
-  if(Math.random()<0.5){
+  if(v==='generic'){
     return {
       prompt:'Why would you modify the hello timer or the dead timer? What effects would the changes have, what must be true of the timers on neighbouring routers, and what happens to the dead timer if only the hello timer is changed?',
       points:[
@@ -1360,8 +1378,7 @@ card({id:'q2d-timers', area:'ospf', tier:1, kind:'flash', src:'Q2 d', title:'Hel
   };
 }});
 
-card({id:'g2-dead', area:'ospf', tier:2, kind:'graded', src:'Q2 d', title:'Hello and dead intervals', gen(){
-  const v=pick(['hello','hello','dead','both','none']);
+card({id:'g2-dead', area:'ospf', tier:2, kind:'graded', src:'Q2 d', title:'Hello and dead intervals', variants:['hello','hello','dead','both','none'], gen(v){
   const ifn=pick(['GigabitEthernet0/0','GigabitEthernet0/1','Serial0/0/0']), ip=int2ip(rLink30()+1);
   let hello=10, dead=40; const lines=[];
   if(v==='hello'||v==='both'){ hello=pick([1,2,3,4,5,6,15,20,30]); dead=hello*4; lines.push(' ip ospf hello-interval '+hello); }
@@ -1384,9 +1401,9 @@ card({id:'g2-dead', area:'ospf', tier:2, kind:'graded', src:'Q2 d', title:'Hello
   };
 }});
 
-card({id:'g2-adj', area:'ospf', tier:3, kind:'graded', src:'Q2 d', title:'Will they become neighbours?', gen(){
+card({id:'g2-adj', area:'ospf', tier:3, kind:'graded', src:'Q2 d', title:'Will they become neighbours?', variants:['none','none','timers','timers','area','subnet','passive'], gen(v){
   const OPTS=['Yes &mdash; they become FULL neighbours','No &mdash; the hello/dead timers don\'t match','No &mdash; the interfaces are in different areas','No &mdash; the interfaces are in different subnets','No &mdash; one interface is passive'];
-  const fault=pick(['none','none','timers','timers','area','subnet','passive']);
+  const fault=v;
   const net=rLink30(), area=pick([0,0,1,2,10]);
   const R1={ifn:'GigabitEthernet0/0', ip:net+1, net, t:[], area:String(area), passive:null};
   const R2={ifn:'GigabitEthernet0/1', ip:net+2, net, t:[], area:String(area), passive:null};
@@ -1423,8 +1440,8 @@ card({id:'g2-adj', area:'ospf', tier:3, kind:'graded', src:'Q2 d', title:'Will t
   };
 }});
 
-card({id:'q2e-roles', area:'ospf', tier:1, kind:'flash', src:'Q2 c', title:'OSPF router roles', gen(){
-  if(Math.random()<0.5) return {
+card({id:'q2e-roles', area:'ospf', tier:1, kind:'flash', src:'Q2 c', title:'OSPF router roles', variants:['generic','scenario'], gen(v){
+  if(v==='generic') return {
     prompt: 'In multi-area OSPF, describe the roles of an internal router, a backbone router, an ABR and an ASBR.',
     points: [
       '<b>Internal router:</b> every interface in the [[same area]], so it holds one LSDB.',
@@ -1463,7 +1480,7 @@ card({id:'q2e-roles', area:'ospf', tier:1, kind:'flash', src:'Q2 c', title:'OSPF
   return {prompt, points, vars:{A, B, OTHER:names.slice(2), EXT:src.ext.split('|')}};
 }});
 
-card({id:'q2f-lsa', area:'ospf', tier:2, kind:'flash', src:'Q2 c', title:'OSPF LSA types', gen(){
+card({id:'q2f-lsa', area:'ospf', tier:2, kind:'flash', src:'Q2 c', title:'OSPF LSA types', variants:['senders','groups'], gen(v){
   /* Key words: exam-keys.js. Both variants are definitions, so the definitions are the answer. Each
      key word is PAIRED with the type it belongs to ("subject~term"), so a
      right phrase attached to the wrong type scores nothing: senders and
@@ -1474,7 +1491,7 @@ card({id:'q2f-lsa', area:'ospf', tier:2, kind:'flash', src:'Q2 c', title:'OSPF L
      local" gives the phrase to the nearest type only. In a form list the
      Type 4 names come before Type 3's, because "ASBR summary LSA" ends on the
      same word as "summary LSA" and the earlier subject wins that tie. */
-  if(chance(.5)) return {
+  if(v==='senders') return {
     prompt: 'Describe the OSPF LSA types 1, 2, 3, 4 and 5: who sends each one, and how far does it flood?',
     points: [
       '[[Type 1 Router LSAs come from every router]], each describing its own links.',
@@ -1569,9 +1586,9 @@ card({id:'g2-net', area:'ospf', tier:2, kind:'graded', src:'Q2', title:'Write th
 /* DR/BDR election on one multi-access segment: highest priority, then
    highest router ID; priority 0 never stands. "Highest router ID wins" is
    only right about half the time. */
-card({id:'g2-drbdr', area:'ospf', tier:2, kind:'graded', src:'Q2', title:'Who becomes DR and BDR?', gen(){
+card({id:'g2-drbdr', area:'ospf', tier:2, kind:'graded', src:'Q2', title:'Who becomes DR and BDR?', variants:['pri','pri','pri','rid','rid'], gen(v){
   let rs, dr, bdr;
-  const ridWins=chance(.4);
+  const ridWins=v==='rid';
   for(let t=0;t<500;t++){
     const n=ri(3,4), used=new Set();
     rs=Array.from({length:n},(_,i)=>{ let id; do{ id=ip2int(pick([ri(1,9)+'.'+ri(1,9)+'.'+ri(1,9)+'.'+ri(1,9), '10.'+ri(0,9)+'.'+ri(0,9)+'.'+ri(1,9), '192.168.'+ri(1,99)+'.'+ri(1,9)])); }while(used.has(id)); used.add(id);
@@ -1947,7 +1964,7 @@ function parseStdAcl(lines){
   return {acl};
 }
 
-card({id:'q3c-place', area:'acl', tier:1, kind:'flash', src:'Q3 c', title:'Where ACLs go', gen(){
+card({id:'q3c-place', area:'acl', tier:1, kind:'flash', src:'Q3 c', title:'Where ACLs go', variants:['generic','scenario'], gen(v){
   /* Key words: exam-keys.js. Placement is tied to the ACL type, so a swapped answer scores neither.
      Generic variant: "standard~near the destination" pairing. Scenario variant:
      enumerated phrases ("standard ACL on R3", "R3 should have the standard")
@@ -1957,7 +1974,7 @@ card({id:'q3c-place', area:'acl', tier:1, kind:'flash', src:'Q3 c', title:'Where
   const onlySrc='[[only matches the source]]';
   const extMatch='[[destination, protocol and port]]';
   const early='[[before it wastes bandwidth]]';
-  if(chance(.5)) return {
+  if(v==='generic') return {
     prompt: 'Where is it best to place a standard ACL? What about an extended ACL? Why?',
     points: [
       'Place a [[standard ACL close to the destination]].',
@@ -2064,8 +2081,8 @@ card({id:'g3-acl', area:'acl', tier:2, kind:'graded', src:'Q3 b', title:'Write a
   };
 }});
 
-card({id:'g3-place', area:'acl', tier:3, kind:'graded', src:'Q3 c', title:'Where does this ACL go?', gen(){
-  const P=q3Plan(), kind=pick(['std','std','web','icmp']), a=ri(0,3), b=pick([0,1,2,3].filter(i=>i!==a));
+card({id:'g3-place', area:'acl', tier:3, kind:'graded', src:'Q3 c', title:'Where does this ACL go?', variants:['std','std','web','icmp'], gen(v){
+  const P=q3Plan(), kind=v, a=ri(0,3), b=pick([0,1,2,3].filter(i=>i!==a));
   const L=i=>int2ip(P.lans[i]);
   let lines, policy, ans;
   if(kind==='std'){
@@ -2134,9 +2151,9 @@ const ACL_PKTS=[
   {proto:'udp', sport:50005, dport:53, txt:'DNS (udp 53)'},{proto:'icmp', icmpType:'echo', txt:'a ping (ICMP echo)'},
   {proto:'icmp', icmpType:'echo-reply', txt:'a ping reply (ICMP echo-reply)'},
 ];
-card({id:'g3-ext', area:'acl', tier:3, kind:'graded', src:'Q3', title:'Write and place an extended ACL', gen(){
+card({id:'g3-ext', area:'acl', tier:3, kind:'graded', src:'Q3', title:'Write and place an extended ACL', variants:['web','ping','ssh'], gen(v){
   const P=q3Plan(), a=ri(0,3), b=pick([0,1,2,3].filter(i=>i!==a)), c=pick([0,1,2,3].filter(i=>i!==a&&i!==b));
-  const L=i=>P.lans[i], kind=pick(['web','ping','ssh']);
+  const L=i=>P.lans[i], kind=v;
   const srv=(L(b)+ri(10,250))>>>0, H=(L(a)+ri(10,250))>>>0;
   const inA=ip=>inNet(ip,L(a),24), inB=ip=>inNet(ip,L(b),24);
   let policy, deny, model;
@@ -2337,8 +2354,8 @@ const NAT_KIND_TEXT={
   patpool:'Overload on a pool shares the first pool address between every host (they\'re told apart by port)',
 };
 
-card({id:'g4-nat', area:'nat', tier:1, kind:'graded', src:'Q4 a', title:'Addresses before and after NAT', gen(){
-  const P=natPlan(), kind=pick(['dyn','dyn','static','pat']), sender=kind==='static'?0:1, S=P.pcs[sender], sc=natScenario(P,kind,sender);
+card({id:'g4-nat', area:'nat', tier:1, kind:'graded', src:'Q4 a', title:'Addresses before and after NAT', variants:['dyn','dyn','static','pat'], gen(v){
+  const P=natPlan(), kind=v, sender=kind==='static'?0:1, S=P.pcs[sender], sc=natScenario(P,kind,sender);
   return {
     prompt:'<b>'+S.name+'</b> pings the ISP\'s Lo0 interface. What are the source and destination IP addresses of <b>Packet 1</b> (as it leaves '+S.name+') and <b>Packet 2</b> (as it leaves the Gateway towards the ISP)?',
     body: natBody(P,sc,true)+pktFields('p1','p2'),
@@ -2358,8 +2375,8 @@ card({id:'g4-nat', area:'nat', tier:1, kind:'graded', src:'Q4 a', title:'Address
    it; otherwise other hosts are bound and it takes the next free address,
    or a static mapping beats the pool. So neither "the first row" nor "the
    first pool address" is a shortcut. */
-card({id:'g4-nat-held', area:'nat', tier:2, kind:'graded', src:'Q4 a', title:'Already in the translation table?', gen(){
-  const P=natPlan(), kind=pick(['dynhas','dynhas','dyn','staticwins']), sender=kind==='staticwins'?0:ri(0,2), S=P.pcs[sender], sc=natScenario(P,kind,sender,true);
+card({id:'g4-nat-held', area:'nat', tier:2, kind:'graded', src:'Q4 a', title:'Already in the translation table?', variants:['dynhas','dynhas','dyn','staticwins'], gen(v){
+  const P=natPlan(), kind=v, sender=kind==='staticwins'?0:ri(0,2), S=P.pcs[sender], sc=natScenario(P,kind,sender,true);
   const why=kind==='dynhas'?S.name+' ('+int2ip(S.ip)+') already has a row in the translation table, so the Gateway reuses it: inside global <b>'+int2ip(sc.global)+'</b>. A new address is only taken for a host with no binding.':
     kind==='dyn'?S.name+' ('+int2ip(S.ip)+') has no row yet. The pool addresses already in the table are taken, so it gets the next free one: <b>'+int2ip(sc.global)+'</b>.':
     S.name+' has a static mapping to <b>'+int2ip(sc.global)+'</b>, and a static mapping is used before the dynamic pool is looked at.';
@@ -2377,8 +2394,8 @@ card({id:'g4-nat-held', area:'nat', tier:2, kind:'graded', src:'Q4 a', title:'Al
   };
 }});
 
-card({id:'g4-nat-reply', area:'nat', tier:2, kind:'graded', src:'Q4 a', title:'The reply, back through NAT', gen(){
-  const P=natPlan(), kind=pick(['dyn','dynhas','patpool','static']), sender=kind==='static'?0:ri(1,2), S=P.pcs[sender], sc=natScenario(P,kind,sender);
+card({id:'g4-nat-reply', area:'nat', tier:2, kind:'graded', src:'Q4 a', title:'The reply, back through NAT', variants:['dyn','dynhas','patpool','static'], gen(v){
+  const P=natPlan(), kind=v, sender=kind==='static'?0:ri(1,2), S=P.pcs[sender], sc=natScenario(P,kind,sender);
   return {
     prompt:'<b>'+S.name+'</b> pings the ISP\'s Lo0 interface and the ISP replies. What are the addresses of <b>Packet 3</b> (the reply, arriving at the Gateway from the ISP) and <b>Packet 4</b> (the reply, leaving the Gateway towards '+S.name+')?',
     body: natBody(P,sc,true)+pktFields('p3','p4'),
@@ -2393,8 +2410,8 @@ card({id:'g4-nat-reply', area:'nat', tier:2, kind:'graded', src:'Q4 a', title:'T
   };
 }});
 
-card({id:'g4-nat-trap', area:'nat', tier:3, kind:'graded', src:'Q4 a', title:'Is it translated at all?', gen(){
-  const P=natPlan(), kind=pick(['acl','acl','staticwins','patpool']), sender=kind==='staticwins'?0:ri(1,2), S=P.pcs[sender], sc=natScenario(P,kind,sender);
+card({id:'g4-nat-trap', area:'nat', tier:3, kind:'graded', src:'Q4 a', title:'Is it translated at all?', variants:['acl','acl','staticwins','patpool'], gen(v){
+  const P=natPlan(), kind=v, sender=kind==='staticwins'?0:ri(1,2), S=P.pcs[sender], sc=natScenario(P,kind,sender);
   const src=sc.global==null?S.ip:sc.global, works=sc.global!=null;
   return {
     prompt:'<b>'+S.name+'</b> pings the ISP\'s Lo0 interface. What is the source address of <b>Packet 2</b> as it leaves the Gateway &mdash; and does the ping succeed?',
@@ -2411,8 +2428,8 @@ card({id:'g4-nat-trap', area:'nat', tier:3, kind:'graded', src:'Q4 a', title:'Is
   };
 }});
 
-card({id:'g4-count', area:'nat', tier:2, kind:'graded', src:'Q4 c', title:'How many public addresses?', gen(){
-  const N=pick([24,30,45,60,80,120,200,250]), M=ri(5,Math.min(N-1,60)), stat=chance(.35);
+card({id:'g4-count', area:'nat', tier:2, kind:'graded', src:'Q4 c', title:'How many public addresses?', variants:['pair','pair','static'], gen(v){
+  const N=pick([24,30,45,60,80,120,200,250]), M=ri(5,Math.min(N-1,60)), stat=v==='static';
   return {
     prompt:'A site has <b>'+N+'</b> hosts that need Internet access, but never more than <b>'+M+'</b> are online at the same time. How many public IPv4 addresses does the Gateway need for&hellip;',
     body:'<div class="ex-grid">'+fieldHtml('dyn','(a) Dynamic NAT, every online host out at once','e.g. 12')+fieldHtml('pat','(b) Dynamic NAT with overload (PAT)','e.g. 12')+
@@ -2428,12 +2445,12 @@ card({id:'g4-count', area:'nat', tier:2, kind:'graded', src:'Q4 c', title:'How m
   };
 }});
 
-card({id:'q4b-static', area:'nat', tier:1, kind:'flash', src:'Q4 b', title:'Why static NAT', gen(){
-  if(Math.random()<0.5) return {
+card({id:'q4b-static', area:'nat', tier:1, kind:'flash', src:'Q4 b', title:'Why static NAT', variants:['generic','scenario'], gen(v){
+  if(v==='generic') return {
     prompt:'Explain what static NAT does and why you would use it rather than dynamic NAT or PAT.',
     points: [
       'Static NAT is a permanent [[one-to-one]] mapping between one inside local and one inside global address.',
-      'It is for inside devices that must be [[reachable from outside]] &mdash; typically a [[server]].',
+      'It is for inside devices that must be [[reachable from outside]] &mdash; typically a [[server]] offering a service on the Internet (web, mail or FTP), or a device that admins outside need to reach to manage it remotely.',
       'Outside hosts need a fixed public address to start a connection to; dynamic NAT and PAT only create a translation when the inside host [[sends first]].',
     ],
   };
@@ -2451,7 +2468,7 @@ card({id:'q4b-static', area:'nat', tier:1, kind:'flash', src:'Q4 b', title:'Why 
     'And a pool address is only lent while the translation lasts &mdash; it [[times out]], so the '+srv.n+' could come back on a different one and nobody outside would know which.',
   ], vars:{srvn:srv.n}};
 }});
-card({id:'q4c-howmany', area:'nat', tier:1, kind:'flash', src:'Q4 c', title:'Public addresses for NAT and PAT', gen(){
+card({id:'q4c-howmany', area:'nat', tier:1, kind:'flash', src:'Q4 c', title:'Public addresses for NAT and PAT', variants:['scenario','generic'], gen(v){
   /* Key words: exam-keys.js. PAT's answer is "one", said many ways. The unpaired forms are built from
      number x address-word x with/for x PAT/overload, so "a single public
      address for overload" and "1 public address with PAT" count wherever they
@@ -2460,7 +2477,7 @@ card({id:'q4c-howmany', area:'nat', tier:1, kind:'flash', src:'Q4 c', title:'Pub
      is left out on purpose: it would also match that wrong answer. */
   const PORT='PAT tells the sessions apart by [[port number]], so many inside hosts share one inside global address.';
   const RUNOUT='When every pool address is in use, the next host [[can\'t]] get out until a translation times out.';
-  if(Math.random()<0.5){
+  if(v==='scenario'){
     const n=ri(30,120), m=ri(6,n-10);
     return {
       prompt:'An office has '+n+' PCs. At the busiest time of day, at most '+m+' of them are using the Internet at once. How many public addresses does the company need with dynamic NAT? With dynamic NAT with overload (PAT)? Explain your answer, and what happens if the dynamic NAT pool is too small.',
@@ -2481,20 +2498,21 @@ card({id:'q4c-howmany', area:'nat', tier:1, kind:'flash', src:'Q4 c', title:'Pub
       RUNOUT,
       '<b>Overload (PAT):</b> [[PAT needs only one]] public address for all of them.',
       PORT,
+      'That one address only lasts [[until its ports run out]]: every session takes a port number of its own, and an address has only 65,536 of them.',
     ],
   };
 }});
-card({id:'q4d-patport', area:'nat', tier:1, kind:'flash', src:'Q4 d', title:'Two hosts, same source port', gen(){
+card({id:'q4d-patport', area:'nat', tier:1, kind:'flash', src:'Q4 d', title:'Two hosts, same source port', variants:['generic','scenario'], gen(v){
   /* Generic: the rule itself. Scenario: two named PCs, one port, one public
      address, and which PC connects first is drawn — the model says which PC
      keeps the port and which one is moved, and the key words pair each
      outcome with its PC. */
   const tableKw='[[translation table]]';
-  if(Math.random()<0.5) return {
+  if(v==='generic') return {
     prompt:'What happens if two internal users select the same port number for a communication which requires PAT? How do the replies get back to the right user?',
     points: [
       'The first session [[keeps its port]] on the public (inside global) address.',
-      'That address and port are now taken, so for the second user the router [[assigns a different port]].',
+      'That address and port are now taken, so for the second user the router [[assigns a different port]]: the [[first free port in its port group]], counting up from the start of the group the original port was in (0&ndash;511, 512&ndash;1023 or 1024&ndash;65535).',
       'Each session is a separate entry in the '+tableKw+': inside address and port mapped to the public address and its own port, so no two sessions share an entry.',
       'Replies come back to that public port, and the router [[translates them back]] to the right inside host and its original port.',
     ],
@@ -2505,8 +2523,8 @@ card({id:'q4d-patport', area:'nat', tier:1, kind:'flash', src:'Q4 d', title:'Two
   return {
     prompt:'PC-A ('+pcs[0].ip+') and PC-B ('+pcs[1].ip+') both open a connection from source port '+n+' through a PAT router whose only public address is '+pub+'. '+F.name+' connects first. How does the router keep them apart, and how does each reply get back to the right PC?',
     points: [
-      '<b>Here:</b> [[{F} keeps port {n}]] on '+pub+' (it was first, and the port was free); [[{L} gets a different port]] on '+pub+', because '+pub+':'+n+' is already in use.',
-      'Each session is a separate entry in the '+tableKw+': '+F.ip+':'+n+' &rarr; '+pub+':'+n+' and '+L.ip+':'+n+' &rarr; '+pub+':&lt;new port&gt;, so the two never share an entry.',
+      '<b>Here:</b> [[{F} keeps port {n}]] on '+pub+' (it was first, and the port was free); [[{L} gets a different port]] on '+pub+', because '+pub+':'+n+' is already in use &mdash; the [[first free port in its port group]], counting up from 1024, since port '+n+' is in the 1024&ndash;65535 group.',
+      'Each session is a separate entry in the '+tableKw+': '+F.ip+':'+n+' &rarr; '+pub+':'+n+' and '+L.ip+':'+n+' &rarr; '+pub+':1024 (if no other session already holds 1024), so the two never share an entry.',
       'A reply arrives addressed to '+pub+' and one of those two ports; the router looks the port up and [[translates it back]] to the right PC\'s address and port '+n+'.',
     ],
     vars:{n, n1:n+1, F:F.name, L:L.name, FS:[F.name, F.name.replace('-',''), 'first'], LS:[L.name, L.name.replace('-',''), 'second']},
@@ -2566,8 +2584,8 @@ function natCfgModel(P,kind,X,pool){
   return m.concat(['interface g0/1',' ip nat inside','interface s0/0/1',' ip nat outside']);
 }
 function natCfgCard(id,tier,title,kinds){
-  card({id, area:'nat', tier, kind:'graded', src:'Q4', title, gen(){
-    const P=natPlan(), kind=pick(kinds), X=P.pub+ri(2,12), pool={name:pick(['PUBLIC','NAT-POOL','Pool1','INTERNET']), first:P.pub+ri(14,18), last:P.pub+30};
+  card({id, area:'nat', tier, kind:'graded', src:'Q4', title, variants:kinds, gen(v){
+    const P=natPlan(), kind=v, X=P.pub+ri(2,12), pool={name:pick(['PUBLIC','NAT-POOL','Pool1','INTERNET']), first:P.pub+ri(14,18), last:P.pub+30};
     const task={
       pat:'Configure <b>PAT</b> on the Gateway so every host on '+cidr(P.lan,24)+' shares the address of <b>S0/0/1</b>.',
       pool:'Configure <b>dynamic NAT</b> (no overload) on the Gateway: hosts on '+cidr(P.lan,24)+' are translated to public addresses from a pool named <b>'+pool.name+'</b>, '+int2ip(pool.first)+' to '+int2ip(pool.last)+' (from the /27 public block).',
@@ -2620,9 +2638,9 @@ function rtBest(routes,dest){
   const m=routes.filter(r=>inNet(dest,r.net,r.pfx));
   return m.reduce((a,r)=>r.pfx>a.pfx?r:a);
 }
-function rtCard(id,tier,title,pickDest){
-  card({id, area:'routing', tier, kind:'graded', src:'Q4 e', title, gen(){
-    const P=rtPlan(), dest=pickDest(P)>>>0, best=rtBest(P.routes,dest);
+function rtCard(id,tier,title,pickDest,variants){
+  card({id, area:'routing', tier, kind:'graded', src:'Q4 e', title, variants, gen(v){
+    const P=rtPlan(), dest=pickDest(P,v)>>>0, best=rtBest(P.routes,dest);
     const routeRows=P.rows.filter(r=>!r.hdr), ans=[routeRows.indexOf(best)];
     let i=0;
     const body='<div class="ex-scroll"><table class="rt-table ex-table ex-rtab"><tbody>'+P.rows.map(r=>r.hdr?
@@ -2645,21 +2663,20 @@ function rtCard(id,tier,title,pickDest){
 }
 rtCard('g4-rt-basic',1,'Read the routing table',P=>pick([
   ()=>P.rN+ri(1,254), ()=>P.oN+ri(1,(1<<(32-P.oP))-2), ()=>P.lan+2, ()=>P.c1+1, ()=>P.c2+2])());
-rtCard('g4-rt-trap',2,'Inside the major network, but no subnet',P=>{
+/* major: in the major network, in no subnet of it; near: in the O route's
+   /24 but outside its /26–/28; edge: the O subnet's last host */
+rtCard('g4-rt-trap',2,'Inside the major network, but no subnet',(P,v)=>{
   const used=new Set(P.th);
-  return pick([
-    ()=>{ let t; do t=ri(1,254); while(used.has(t)); return P.M+t*256+ri(1,254); },
-    ()=>{ let t; do t=ri(1,254); while(used.has(t)); return P.M+t*256+ri(1,254); },
-    ()=>{ const size=1<<(32-P.oP); let d; do d=netOf(P.oN,24)+ri(1,254); while(inNet(d,P.oN,P.oP)); return d; },
-    ()=>P.oN+(1<<(32-P.oP))-2,
-  ])();
-});
+  if(v==='major'){ let t; do t=ri(1,254); while(used.has(t)); return P.M+t*256+ri(1,254); }
+  if(v==='near'){ let d; do d=netOf(P.oN,24)+ri(1,254); while(inNet(d,P.oN,P.oP)); return d; }
+  return P.oN+(1<<(32-P.oP))-2;
+},['major','major','near','edge']);
 /* a third each: inside the static supernet (but not its first /24), just
    past it, and one of the router's own addresses */
-rtCard('g4-rt-hard',3,'Supernets and local routes',P=>pick([
-  ()=>P.sN+ri(1,(1<<(32-P.sP))/256-1)*256+ri(1,254),
-  ()=>((P.sN+(1<<(32-P.sP)))>>>0)+ri(0,255)*256+ri(1,254),
-  ()=>pick([P.c1+2,P.c2+1,P.lan+1])])());
+rtCard('g4-rt-hard',3,'Supernets and local routes',(P,v)=>
+  v==='super'?P.sN+ri(1,(1<<(32-P.sP))/256-1)*256+ri(1,254):
+  v==='past'?((P.sN+(1<<(32-P.sP)))>>>0)+ri(0,255)*256+ri(1,254):
+  pick([P.c1+2,P.c2+1,P.lan+1]),['super','past','local']);
 
 /* ═══ Q5 — DHCPv4 ═════════════════════════════════════════════════════════ */
 card({id:'q5a-dora', area:'dhcp', tier:1, kind:'flash', src:'Q5 a', title:'How a PC gets an address', gen(){
@@ -2675,14 +2692,14 @@ card({id:'q5a-dora', area:'dhcp', tier:1, kind:'flash', src:'Q5 a', title:'How a
     ],
   };
 }});
-card({id:'q5b-relay', area:'dhcp', tier:1, kind:'flash', src:'Q5 b', title:'Where the DHCP server must be', gen(){
+card({id:'q5b-relay', area:'dhcp', tier:1, kind:'flash', src:'Q5 b', title:'Where the DHCP server must be', variants:['generic','scenario'], gen(v){
   /* Shared key words: why the Discover never reaches a remote server, and
      what a relay does about it. */
   const bcast='[[broadcast]]';
   const noFwd='[[routers do not forward broadcasts]]';
   const relay='[[DHCP relay]]';
   const ucast='[[unicast]]';
-  if(chance(.5)) return {
+  if(v==='generic') return {
     prompt: 'By default, where must the DHCP server for a PC be, and what is the technical reason? How can we overcome this restriction, and how does the router then get the PC\'s DHCP messages to the server?',
     points: [
       'By default the server must be on the [[same subnet]] as the client.',
@@ -2844,7 +2861,7 @@ card({id:'g5-pool', area:'dhcp', tier:3, kind:'graded', src:'Q5', title:'Build a
 }});
 
 /* ═══ Q5 — DHCPv6 ═════════════════════════════════════════════════════════ */
-card({id:'q5d-v6', area:'dhcp', tier:1, kind:'flash', src:'Q5', title:'How an IPv6 host gets an address', gen(){
+card({id:'q5d-v6', area:'dhcp', tier:1, kind:'flash', src:'Q5', title:'How an IPv6 host gets an address', variants:['methods','compare'], gen(v){
   /* Both variants are general (no scenario). Each prompt asks for exactly what
      its key words grade. Key words that say WHICH method does a thing are
      "method~term" pairings, so a bare list of the three names scores nothing,
@@ -2855,7 +2872,7 @@ card({id:'q5d-v6', area:'dhcp', tier:1, kind:'flash', src:'Q5', title:'How an IP
         ASSIGN='[[DHCP server assigns the address]]',
         DNS='[[DNS server from the DHCPv6 server]]', GW='[[gateway from the RA]]', M='[[M flag set to 1]]', O='[[O flag set to 1]]';
   const FLAGS='The RA\'s flags tell the host which: '+M+' (M = 1) &rarr; stateful; '+O+' (O = 1 with M = 0) &rarr; stateless; both 0 &rarr; SLAAC only.';
-  if(chance(.5)) return {
+  if(v==='methods') return {
     prompt:'Describe the three ways an IPv6 host can be given its address: SLAAC, stateless DHCPv6 and stateful DHCPv6. How does the host know which one to use?',
     points:[
       '<b>SLAAC:</b> no server is involved &mdash; '+OWN+' from the /64 prefix in the router\'s Router Advertisement (RA), using EUI-64 or a random interface ID. Nothing keeps track of which addresses are used.',
@@ -2876,8 +2893,8 @@ card({id:'q5d-v6', area:'dhcp', tier:1, kind:'flash', src:'Q5', title:'How an IP
 }});
 
 const V6_METHOD=['SLAAC only','SLAAC + stateless DHCPv6','Stateful DHCPv6'];
-card({id:'g5-v6flags', area:'dhcp', tier:1, kind:'graded', src:'Q5', title:'Which IPv6 method do the hosts use?', gen(){
-  const n=ri(10,99), k=pick([0,1,1,2,2]), extra=k===2&&chance(.4);
+card({id:'g5-v6flags', area:'dhcp', tier:1, kind:'graded', src:'Q5', title:'Which IPv6 method do the hosts use?', variants:['slaac','stateless','stateless','stateful','stateful'], gen(v){
+  const n=ri(10,99), k={slaac:0,stateless:1,stateful:2}[v], extra=k===2&&chance(.4);
   const cfg=['interface GigabitEthernet0/1',' ipv6 address 2001:db8:acad:'+n+'::1/64',' ipv6 address fe80::1 link-local'];
   if(k===1) cfg.push(' ipv6 nd other-config-flag',' ipv6 dhcp server LAN'+n);
   if(k===2) cfg.push(' ipv6 nd managed-config-flag'+(extra?'\n ipv6 nd prefix default no-autoconfig':''),' ipv6 dhcp server LAN'+n);
@@ -2898,8 +2915,8 @@ card({id:'g5-v6flags', area:'dhcp', tier:1, kind:'graded', src:'Q5', title:'Whic
   };
 }});
 
-card({id:'g5-v6msgs', area:'dhcp', tier:2, kind:'graded', src:'Q5', title:'DHCPv6 messages in order', gen(){
-  const stateful=chance(.65);
+card({id:'g5-v6msgs', area:'dhcp', tier:2, kind:'graded', src:'Q5', title:'DHCPv6 messages in order', variants:['stateful','stateful','stateless'], gen(v){
+  const stateful=v==='stateful';
   const seq=stateful?['SOLICIT','ADVERTISE','REQUEST','REPLY']:['INFORMATION-REQUEST','REPLY'];
   const dist=shuffle(['DHCPDISCOVER','DHCPOFFER','DHCPACK','ROUTER SOLICITATION'].concat(stateful?['INFORMATION-REQUEST']:['SOLICIT','ADVERTISE'])).slice(0,stateful?2:3);
   const opts=shuffle(seq.concat(dist)), want=seq.map(m=>opts.indexOf(m));
@@ -2949,8 +2966,8 @@ card({id:'g5-v6relay', area:'dhcp', tier:2, kind:'graded', src:'Q5', title:'Conf
 
 /* Stateless or stateful DHCPv6 server on R1, graded by mode: pool lines
    under "ipv6 dhcp pool", the rest under the LAN interface. */
-card({id:'g5-v6cfg', area:'dhcp', tier:3, kind:'graded', src:'Q5', title:'Configure a DHCPv6 server', gen(){
-  const stateful=chance(.5), n=ri(10,99), name=pick(['IPV6-STATELESS','IPV6-STATEFUL','LAN'+n,'R1-POOL']).replace('STATELESS',stateful?'STATEFUL':'STATELESS');
+card({id:'g5-v6cfg', area:'dhcp', tier:3, kind:'graded', src:'Q5', title:'Configure a DHCPv6 server', variants:['stateful','stateless'], gen(v){
+  const stateful=v==='stateful', n=ri(10,99), name=pick(['IPV6-STATELESS','IPV6-STATEFUL','LAN'+n,'R1-POOL']).replace('STATELESS',stateful?'STATEFUL':'STATELESS');
   const dns='2001:db8:acad:'+pick([1,2,3,100])+'::'+pick(['53','5','254']), dom=pick(['ccna-lab.com','example.net','branch.local','netacad.com']);
   const pfx='2001:db8:acad:'+n+'::';
   const model=['ipv6 dhcp pool '+name].concat(stateful?[' address prefix '+pfx+'/64']:[]).concat([' dns-server '+dns,' domain-name '+dom,'interface g0/1',' ipv6 dhcp server '+name,' ipv6 nd '+(stateful?'managed':'other')+'-config-flag']);
@@ -3043,13 +3060,13 @@ function q6Body(P,cfg,hosts){
       '<tr><td>H2</td><td>'+P.y+'</td><td>192.168.'+P.y+'.'+P.h2+'/24</td><td>'+(P.gw2||'192.168.'+P.y+'.1')+'</td></tr></tbody></table></div>':'');
 }
 
-card({id:'q6-roas', area:'ts', tier:1, kind:'flash', src:'Q6', title:'Router-on-a-stick: what\'s wrong?', gen(){
+card({id:'q6-roas', area:'ts', tier:1, kind:'flash', src:'Q6', title:'Router-on-a-stick: what\'s wrong?', variants:['access','trunk','shut','tag','ip','swap','hgw'], gen(v){
   /* One fault per draw, from the same planted configurations as the graded
      g6-fault cards, plus a wrong default gateway on H2 (owner: the answer
      should rotate). The figure shows each host's address and the table its
      gateway, so a correct host is visibly correct. Key words: exam-keys.js. */
   const P=chance(.4)?{x:10,y:20,h1:10,h2:10}:q6Plan();
-  const fault=pick(['access','trunk','shut','tag','ip','swap','hgw']);
+  const fault=v;
   const cfg=q6Config(P,fault==='hgw'?'none':fault);
   const tags=cfg.r1.map(l=>/encapsulation dot1q (\d+)/.exec(l)).filter(Boolean), z=tags.length>1?+tags[1][1]:P.y;
   const bad=fault==='hgw'?'192.168.'+P.y+'.'+pick([254,100,2].filter(v=>v!==P.h2)):null;
@@ -3127,8 +3144,8 @@ function q6TrunkAllows(script,ifc,want){
   return want.every(v=>got.has(v));
 }
 function q6FaultCard(id,tier,title,faults){
-  card({id, area:'ts', tier, kind:'graded', src:'Q6', title, gen(){
-    const P=q6Plan(), fault=pick(faults), causes=Object.keys(Q6_CAUSE), ans=causes.indexOf(fault), cfg=q6Config(P,fault);
+  card({id, area:'ts', tier, kind:'graded', src:'Q6', title, variants:faults, gen(v){
+    const P=q6Plan(), fault=v, causes=Object.keys(Q6_CAUSE), ans=causes.indexOf(fault), cfg=q6Config(P,fault);
     /* the VLAN the planted tag fault really uses, read back from the config shown */
     const tags=cfg.r1.map(l=>/encapsulation dot1q (\d+)/.exec(l)).filter(Boolean), z=tags.length>1?+tags[1][1]:P.y;
     return {
@@ -3166,8 +3183,8 @@ function q6FaultCard(id,tier,title,faults){
 q6FaultCard('g6-fault',2,'Router-on-a-stick fault',['access','trunk','shut']);
 q6FaultCard('g6-fault-hard',3,'Router-on-a-stick: subtler faults',['tag','ip','swap']);
 
-card({id:'g6-subif', area:'ts', tier:2, kind:'graded', src:'Q6', title:'Add a VLAN to the router', gen(){
-  const v=pick([30,40,50,60,70,99,110,150]), native=chance(.3), gwo=pick([1,1,254]);
+card({id:'g6-subif', area:'ts', tier:2, kind:'graded', src:'Q6', title:'Add a VLAN to the router', variants:['tagged','tagged','native'], gen(form){
+  const v=pick([30,40,50,60,70,99,110,150]), native=form==='native', gwo=pick([1,1,254]);
   const model=['interface gi0/0.'+v,' encapsulation dot1q '+v+(native?' native':''),' ip address 192.168.'+v+'.'+gwo+' 255.255.255.0'];
   return {
     prompt:'R1 Gi0/0 is trunked to S1 (router-on-a-stick). On <b>R1</b>, add routing for <b>VLAN '+v+'</b>, network 192.168.'+v+'.0/24, with R1 as the gateway <b>192.168.'+v+'.'+gwo+'</b>'+
@@ -3387,8 +3404,8 @@ function tsBuild(id,o){
   const s=TS_SCEN[id](o), opts=shuffle([s.cause].concat(s.others)); s.id=id; s.opts=opts; s.ans=opts.indexOf(s.cause); return s;
 }
 function tsCard(id,tier,title,scen){
-  card({id, area:'ts', tier, kind:'graded', src:'Q6', title, gen(){
-    const s=tsBuild(pick(scen),{mirror:chance(.5)});
+  card({id, area:'ts', tier, kind:'graded', src:'Q6', title, variants:scen, gen(v){
+    const s=tsBuild(v,{mirror:chance(.5)});
     return {
       prompt:s.symptom+' Pick the device at fault and the cause, then type the commands that fix it (interface or mode lines included).',
       body: s.body+'<div class="ex-apply"><span class="ex-apply-lbl">Device:</span>'+devChipsHtml(s.devs)+'</div>'+
@@ -3534,8 +3551,8 @@ function q6tsPoints(s){
   }
   return s.points;
 }
-card({id:'q6-ts', area:'ts', tier:2, kind:'flash', src:'Q6', title:'Troubleshoot it in writing', gen(){
-  const s=tsBuild(pick(Object.keys(TS_SCEN)));
+card({id:'q6-ts', area:'ts', tier:2, kind:'flash', src:'Q6', title:'Troubleshoot it in writing', variants:Object.keys(TS_SCEN), gen(v){
+  const s=tsBuild(v);
   return {
     prompt:s.symptom+' Clearly identify, describe and explain the cause of the problem. What modifications do you need to make to fix it?',
     body:s.body, points:q6tsPoints(s),
@@ -3754,7 +3771,7 @@ document.addEventListener('keydown',e=>{
 
 /* ═══ Scheduler and persistence ═══════════════════════════════════════════ */
 const KEY='ne-exam-v1', COMFORT=20;
-function freshState(){ return {step:0, diff:1, off:[], foff:[], cards:{}, answered:0, correct:0, lastNew:null}; }
+function freshState(){ return {step:0, diff:1, off:[], foff:[], cards:{}, answered:0, correct:0, lastNew:null, vmig:1}; }
 function loadState(){
   try{
     const s=JSON.parse(localStorage.getItem(KEY));
@@ -3763,6 +3780,13 @@ function loadState(){
          as "every other area unticked". */
       if(s.area!=null&&!Array.isArray(s.off)) s.off=s.area==='all'?[]:AREAS.map(a=>a.id).filter(id=>id!==s.area);
       delete s.area;
+      /* Saved before variants had to be done (owner): a card that was already
+         Comfortable stays so, and is exempt from the rule from then on
+         (vall). Runs once; every other card starts with no variants done. */
+      if(!s.vmig){
+        Object.keys(s.cards).forEach(id=>{ const c=s.cards[id]; if(c&&c.last!=='again'&&c.ivl>=COMFORT) c.vall=true; });
+        s.vmig=1;
+      }
       return Object.assign(freshState(),s);
     }
   }catch(e){}
@@ -3786,15 +3810,41 @@ function nextIvls(c){
   return {again:2, hard, good, easy};
 }
 function nextIvl(c,r){ return nextIvls(c)[r]; }
-function applyRating(id,r){
+/* Variants (owner): a card is Comfortable only once every one of its
+   variants has been answered right. c.vd lists the ones done; a right answer
+   (any rating but Again) adds the variant shown, a wrong one keeps it as
+   c.vnext so the same variant comes back. While some are still to do the
+   interval stops short of COMFORT, so the card keeps returning to work
+   through them instead of drifting out for dozens of cards; the rating that
+   finishes the last one lifts that cap. Cards with one variant, and cards
+   that were Comfortable before the rule (c.vall), are never held back. */
+function hasVariants(def){ return !!(def&&def.vlist&&def.vlist.length>1); }
+function variantsLeft(id){
+  const def=CARD_BY[id], c=S.cards[id];
+  if(!hasVariants(def)||(c&&c.vall)) return [];
+  const done=(c&&c.vd)||[];
+  return def.vlist.filter(v=>done.indexOf(v)<0);
+}
+function variantFor(def){
+  const left=variantsLeft(def.id), c=S.cards[def.id];
+  if(!left.length) return undefined;   // all done: gen() draws by weight
+  return c&&left.indexOf(c.vnext)>=0?c.vnext:pick(left);
+}
+function applyRating(id,r,v){
   const c=S.cards[id]||(S.cards[id]={reps:0, ivl:0, ease:2.5, lapses:0, seen:0});
-  const ivl=Math.min(400,nextIvl(c,r));
+  if(v!=null&&hasVariants(CARD_BY[id])&&!c.vall){
+    c.vd=c.vd||[];
+    if(r==='again') c.vnext=v;
+    else { if(c.vd.indexOf(v)<0) c.vd.push(v); delete c.vnext; }
+  }
+  let ivl=Math.min(400,nextIvl(c,r));
+  if(r!=='again'&&variantsLeft(id).length) ivl=Math.min(ivl,COMFORT-1);
   if(r==='again'){ c.reps=0; c.lapses++; c.ease=Math.max(1.3,c.ease-0.2); }
   else { c.reps++; if(r==='hard') c.ease=Math.max(1.3,c.ease-0.15); if(r==='easy') c.ease=Math.min(3.5,c.ease+0.15); }
   c.ivl=ivl; c.seen++; c.last=r;
   S.step++; c.due=S.step+ivl;
 }
-function cardStatus(id){ const c=S.cards[id]; if(!c) return 'new'; return c.last!=='again'&&c.ivl>=COMFORT?'comf':'learn'; }
+function cardStatus(id){ const c=S.cards[id]; if(!c) return 'new'; return c.last!=='again'&&c.ivl>=COMFORT&&!variantsLeft(id).length?'comf':'learn'; }
 /* Unticked areas are stored, not ticked ones, so an area added later (the
    second pass) starts ticked. */
 function inTier(c){ return c.tier<=S.diff; }
@@ -3854,7 +3904,7 @@ function loadQ(){
   }
   lastId=cur.id;
   if(!S.cards[cur.id]) S.lastNew=S.step;
-  Q=cur.gen(); Q.sel=new Set(); Q.choice=null; Q.dev=null; Q.order=[]; Q.ifSel=null;
+  Q=cur.gen(variantFor(cur)); Q.sel=new Set(); Q.choice=null; Q.dev=null; Q.order=[]; Q.ifSel=null;
   const area=AREAS.find(a=>a.id===cur.area);
   $('q-tag').textContent=cur.src+' · '+area.name+' · '+(cur.kind==='flash'?'Flashcard':'Auto-marked')+' · '+TIER_NAME[cur.tier];
   const st=cardStatus(cur.id);
@@ -3915,10 +3965,14 @@ function selfMark(ok){
 function finish(ok,msg){
   S.answered++; if(ok) S.correct++; saveState();
   phase='rate'; show('chkbtn',false); show('skipbtn',false);
-  const c=S.cards[cur.id];
+  /* how many of the card's variants this answer leaves done */
+  const left=variantsLeft(cur.id), n=hasVariants(cur)?cur.vlist.length:0;
+  const still=left.filter(v=>v!==Q.variant).length;
+  const vnote=!left.length||!ok?'':still?' That&rsquo;s '+(n-still)+' of this card&rsquo;s '+n+' variants done &mdash; it can only become Comfortable once you&rsquo;ve done all '+n+'.':
+    ' That&rsquo;s '+(n===2?'both':'all '+n)+' of this card&rsquo;s variants done.';
   if(ok){
     forced=null;
-    banner('ok',msg+' How comfortable are you with it?');
+    banner('ok',msg+' How comfortable are you with it?'+vnote);
     /* just the rating: how many cards each one puts between you and the
        card again is the scheduler's business, not the learner's (owner's ask) */
     $('rate-hard').innerHTML='Hard <kbd>1</kbd>';
@@ -3927,7 +3981,7 @@ function finish(ok,msg){
     show('rate-hard',true); show('rate-easy',true);
   } else {
     forced='again';
-    banner('err',msg+' Counts as <b>Again</b> &mdash; it comes back after 2 cards.');
+    banner('err',msg+' Counts as <b>Again</b> &mdash; it comes back after 2 cards'+(left.length?', as this same variant.':'.'));
     $('nxtbtn').innerHTML='Next &rarr;';
   }
   $('nxtbtn').style.display=''; // answer-keys.js focuses it, so Enter takes the default
@@ -3937,7 +3991,7 @@ function finish(ok,msg){
 function rate(r){
   if(phase!=='rate'||!cur) return;
   if(forced) r=forced;
-  applyRating(cur.id,r); saveState(); loadQ();
+  applyRating(cur.id,r,Q&&Q.variant); saveState(); loadQ();
 }
 function nextQ(){ rate(forced||'good'); }
 
