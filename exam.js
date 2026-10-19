@@ -2501,7 +2501,7 @@ card({id:'q4b-static', area:'nat', tier:1, kind:'flash', src:'Q4 b', title:'Why 
     'And a pool address is only lent while the translation lasts &mdash; it [[times out]], so the '+srv.n+' could come back on a different one and nobody outside would know which.',
   ], vars:{srvn:srv.n}};
 }});
-card({id:'q4c-howmany', area:'nat', tier:1, kind:'flash', src:'Q4 c', title:'Public addresses for NAT and PAT', variants:['scenario','generic'], gen(v){
+card({id:'q4c-howmany', area:'nat', tier:1, kind:'flash', src:'Q4 c', title:'Public addresses for NAT and PAT', variants:['generic','scenario'], gen(v){
   /* Key words: exam-keys.js. PAT's answer is "one", said many ways. The unpaired forms are built from
      number x address-word x with/for x PAT/overload, so "a single public
      address for overload" and "1 public address with PAT" count wherever they
@@ -3865,8 +3865,14 @@ function variantFor(def){
   if(!left.length) return undefined;   // all done: gen() draws by weight
   return c&&left.indexOf(c.vnext)>=0?c.vnext:pick(left);
 }
+/* Has the learner answered this variant of the card before (right or
+   wrong)? c.vs records every variant answered, from any status, so a
+   Comfortable card can still turn up a version never seen (owner). Before
+   c.vs existed only c.vd/c.vnext were kept, so those count too. */
+function seenVariant(c,v){ return !!c&&((c.vs||[]).indexOf(v)>=0||(c.vd||[]).indexOf(v)>=0||c.vnext===v); }
 function applyRating(id,r,v){
   const c=S.cards[id]||(S.cards[id]={reps:0, ivl:0, ease:2.5, lapses:0, seen:0});
+  if(v!=null&&hasVariants(CARD_BY[id])){ c.vs=c.vs||[]; if(c.vs.indexOf(v)<0) c.vs.push(v); }
   if(v!=null&&hasVariants(CARD_BY[id])&&!c.vall){
     c.vd=c.vd||[];
     if(r==='again') c.vnext=v;
@@ -3944,6 +3950,13 @@ function loadQ(){
   const st=cardStatus(cur.id);
   $('q-pill').textContent={new:'New',learn:'Learning',comf:'Comfortable'}[st];
   $('q-pill').className='ex-pill ex-'+st; $('q-pill').removeAttribute('title');
+  /* a card already met, showing a version of it not answered yet: a second
+     "New" pill beside its status (a new card's own pill already says New).
+     The base version (the first variant a card lists) is never "New" on a
+     Comfortable card (owner): an old save can't say which versions it saw,
+     but it certainly saw the base one, and "New" there reads as a mistake. */
+  const fresh=st!=='new'&&hasVariants(cur)&&!seenVariant(S.cards[cur.id],Q.variant)&&!(st==='comf'&&Q.variant===cur.vlist[0]);
+  $('q-pill2').textContent=fresh?'New':''; $('q-pill2').title=fresh?'A version of this card you have not answered before':'';
   renderSide();
 }
 /* The card's prompt and body, ready to answer (cur and Q set): the
@@ -4175,6 +4188,7 @@ function exUnarm(){ clearTimeout(subArmed); subArmed=null; $('ex-submit').classL
 /* Which buttons a stage shows: 'flash' (the flashcards set their own), 'home',
    'answer', 'mark', 'done'. */
 function exActs(st){
+  $('q-pill2').textContent='';
   show('self-row',false); show('rate-hard',false); show('rate-easy',false); show('rate-lbl',false); $('nxtbtn').style.display='none';
   show('chkbtn',false); show('skipbtn',false);
   show('ex-prev',st==='answer'); show('ex-next',st==='answer'); show('ex-submit',st==='answer'||st==='mark');
