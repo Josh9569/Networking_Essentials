@@ -25,6 +25,8 @@
 /* ── Card header: where it's from, and how comfortable you are with it ──── */
 .ex-pill       { font-size: 11px; letter-spacing: .05em; text-transform: uppercase; padding: 2px 9px; border-radius: 999px; border: 1px solid transparent; white-space: nowrap; }
 .ex-pill:empty { display: none; }
+/* status pill, with "New" beside it when a known card shows an unseen variant */
+.ex-pills      { display: inline-flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
 .ex-pill.ex-new   { background: var(--info-bg); border-color: var(--info-bdr); color: var(--info-text); }
 .ex-pill.ex-learn { background: var(--warn-bg); border-color: var(--warn-bdr); color: var(--warn-text); }
 .ex-pill.ex-comf  { background: var(--ok-bg);   border-color: var(--ok-bdr);   color: var(--ok-text); }
