@@ -28,6 +28,7 @@
 .ex-pill.ex-new   { background: var(--info-bg); border-color: var(--info-bdr); color: var(--info-text); }
 .ex-pill.ex-learn { background: var(--warn-bg); border-color: var(--warn-bdr); color: var(--warn-text); }
 .ex-pill.ex-comf  { background: var(--ok-bg);   border-color: var(--ok-bdr);   color: var(--ok-text); }
+.ex-pill.ex-bad   { background: var(--err-bg);  border-color: var(--err-bdr);  color: var(--err-text); }
 .qcard .q-prompt { margin-top: .5rem; }
 
 /* ── Card body ────────────────────────────────────────────────────────────── */
@@ -168,7 +169,7 @@ mark.ex-kw.miss { color: var(--err-text); box-shadow: inset 0 -2px 0 var(--err-t
 .ex-block-hdr  { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: .6rem; }
 .ex-block-hdr .tool-block-title { margin-bottom: 0; }
 .ex-hdr-btn    { padding: 4px 12px; font-size: 12.5px; }
-.ex-hdr-btn.ex-armed { background: var(--err-bg); }
+.ex-armed     { background: var(--err-bg); }
 .ex-prog td:nth-child(n+2):not(.ex-bar-cell), .ex-prog th:nth-child(n+2) { text-align: right; width: 1%; white-space: nowrap; }
 .ex-prog tr.ex-off td { opacity: .4; }
 /* Total: the sum of the rows above, set off like the header row */
@@ -190,6 +191,20 @@ mark.ex-kw.miss { color: var(--err-text); box-shadow: inset 0 -2px 0 var(--err-t
 @media (prefers-reduced-motion: reduce) { .ex-bar span { transition: none; } .ex-bar.ex-full .ex-b-comf, .ex-bar.ex-flare .ex-b-comf { animation: none; box-shadow: 0 0 8px 1px var(--ok-text); } }
 .ex-prog-note  { margin-top: .7rem; }
 
+/* ── Exam mode: the start table, the review of every part, Past exams ───── */
+.ex-xplan td:last-child, .ex-xplan th:last-child, .ex-hist td:nth-child(n+2), .ex-hist th:nth-child(n+2) { text-align: right; white-space: nowrap; width: 1%; }
+.ex-xplan tfoot td { background: var(--surface-s); border-top: 1px solid var(--border-m); font-weight: 600; }
+.ex-rv         { border-top: 1px solid var(--border); padding-top: 14px; }
+#qbody > .ex-rv, #qbody > .ex-rv-end { margin-top: 20px; }
+.ex-rv > * + * { margin-top: 10px; }
+.ex-rv-hdr     { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.ex-rv-hdr .qlbl { margin: 0; }
+.ex-rv .q-prompt { margin-top: 8px; }
+.ex-rv-body > * + * { margin-top: 12px; }
+.ex-rv-body .ex-cli-lbl + .ex-cli { margin-top: 0; }
+.ex-rv-na      { font-size: 13px; color: var(--text-t); }
+.ex-rv-marks   { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; }
+
 /* ── Dictionary: the reference cards come from styles.css (.ref-*); this
    adds the in-text links and the flash on the card a link lands on. ── */
 /* Dictionary terms are bold and clickable; key words are bold AND
@@ -204,7 +219,7 @@ mark.ex-kw.miss { color: var(--err-text); box-shadow: inset 0 -2px 0 var(--err-t
 /* Bold now means "a dictionary term", so a model answer's or explanation's
    own emphasis (lead-ins like "Static:", "AD first:", the winning route) is
    set in italics instead of competing with it. */
-.ex-model b, .ex-model strong, #q-why b, #q-why strong { font-weight: inherit; font-style: italic; }
+.ex-model b, .ex-model strong, .ex-why b, .ex-why strong { font-weight: inherit; font-style: italic; }
 /* cross-links inside the dictionary stay quiet: normal weight, a dotted underline */
 .ref-card-desc .ex-term { font-weight: inherit; text-decoration: underline dotted; text-decoration-color: var(--text-t); text-decoration-thickness: 1.5px; text-underline-offset: 3px; }
 .ex-dict-note  { margin: -.25rem 0 .25rem; }
