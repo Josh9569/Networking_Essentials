@@ -1994,7 +1994,10 @@ const EXAM_KEYS={
   "DNS server from the DHCPv6 server": [
     "{DX3} {DVF} {DS}", "DNS and other information from DHCP", "DNS and other information from DHCPv6",
     "DNS DHCP", "DNS DHCPv6", "DNS server DHCP", "DNS server DHCPv6", "{SS} {VS} {XS}",
-    "{SSV} which {VS} {XS}", "{SSV} that {VS} {XS}"
+    "{SSV} which {VS} {XS}", "{SSV} that {VS} {XS}", "{SS} such as DNS", "{SS} like DNS", "{SS} for DNS",
+    "DNS from {SS}", "DNS from the {SS}", "other details from {SS}", "other details from the {SS}",
+    "other information from {SS}", "other information from the {SS}", "other info from the {SS}",
+    "extra details from the {SS}", "extra information from the {SS}"
   ],
   "gateway from the RA": [
     "{GS} {GV} {RS}", "{RS} {RW} {GG}", "gateway RA", "gateway the RA", "gateway router advertisement",

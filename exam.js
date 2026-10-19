@@ -486,7 +486,11 @@ function kwFind(words,k,subjects){
         const w1=sp>=0&&words[sp].sent===words[own.s].sent?words[sp].w.toLowerCase():'', w0=sp>=1&&words[sp-1].sent===words[own.s].sent?words[sp-1].w.toLowerCase():'';
         if(w1==='unlike'||(w1==='of'&&w0==='instead')||(w1==='than'&&w0==='rather')) continue;
       }
-      if(veto){ if(linked&&own&&own.id===subj) vetoed=true; continue; }   // a veto needs the term right next to its subject
+      /* A veto needs the term right after its subject ("O flag means
+         stateful"), or the ">" reading ("10 for the Fa link"). A term that
+         only has a subject AFTER it belongs to the clause before: in "m=1
+         means stateful o is 1 too" the "means stateful" is M's, not O's. */
+      if(veto){ if(linked&&own&&own.id===subj&&(own.e<ts||/^\s*(?:for|from|of)\b/i.test(kwBetween(words,te,own.s)))) vetoed=true; continue; }
       if(own&&(own.id===subj||(own.not&&!mine.has(own.not)))){ for(let x=ts;x<=te;x++) hits.push(x); if(own.s>=0&&words[own.s].sent===sent) for(let x=own.s;x<=own.e;x++) hits.push(x); }
     }
   });
