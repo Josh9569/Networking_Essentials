@@ -202,10 +202,18 @@ const EXAM_KEYS={
     "single connection", "only one connection", "no other path", "{STA}~{ISPW}"
   ],
   "small network#any": [
-    "small networks", "small", "few routers", "few routes", "few networks", "handful",
+    "small networks", "small", "few routers", "few routes", "few networks", "handful of",
     "simple network", "simple topology", "tiny", "rarely change", "rarely changes", "seldom change",
     "does not change", "doesn't change", "not change", "never change", "won't change",
     "will not change", "stable"
+  ],
+  "set the exact path": [
+    "exact path", "specific path", "particular path", "explicitly define the path", "explicitly define",
+    "explicitly set", "define the path", "defines the path", "choose the path", "chooses the path",
+    "control the path", "controls the path", "control over the path", "control which path", "force the path",
+    "forces the path", "force traffic", "forces traffic", "set the path", "sets the path", "exact route",
+    "path the admin chose", "path you choose", "path you want", "decide the path", "decides the path",
+    "pick the path", "manually define the path", "manually set the path", "traffic engineering"
   ],
   "should move to a dynamic routing protocol": [
     "{DYN}~{MOVE}", "{PROTO}~{USE}", "{DYN}~{D_GOOD}", "{DYN}~{D_DOES}", "{STA}~{S_BAD}",
@@ -988,6 +996,15 @@ const EXAM_KEYS={
     "unique", "uniquely", "identify", "identifies", "identifier", "identification", "identity"
   ],
   "DR/BDR election": ["DR", "BDR", "designated router", "election"],
+  "synchronise their databases": [
+    "database exchange", "exchange databases", "exchanging databases", "exchange their databases",
+    "exchange the LSDB", "exchanging the LSDB", "exchange LSDBs", "database description", "DBD", "DBDs",
+    "master", "master and slave", "slave", "ExStart", "exchange state", "synchronise the database",
+    "synchronise databases", "synchronise the LSDB", "synchronise LSDBs", "database synchronisation",
+    "LSDB synchronisation", "synchronisation of the database", "synchronisation of databases",
+    "synchronise", "sync the database", "sync databases", "sync the LSDB", "database sync", "LSDB sync", "sync",
+    "syncing"
+  ],
   "router-id": ["router id"],
   "highest": ["largest", "biggest"],
   "loopback": ["loopbacks"],
@@ -1430,9 +1447,15 @@ const EXAM_KEYS={
     "reachable from outside", "reachable from the internet", "accessible from outside",
     "accessible from the internet", "from the internet", "from outside", "connect to",
     "people outside", "outside users", "outside hosts", "external users", "inbound", "can reach",
-    "reach it", "access it"
+    "reach it", "access it", "external devices", "outside devices", "external hosts", "internet users",
+    "on the internet", "remotely access"
   ],
-  "server": ["servers", "web server", "mail server"],
+  "server": [
+    "servers", "web server", "mail server", "ftp server", "file server", "remote access", "remotely access",
+    "access it remotely", "access them remotely", "remote management", "manage remotely", "remotely manage",
+    "managed remotely", "manage it remotely", "manage them remotely", "remote admin", "remote administration",
+    "remotely administer", "remotely"
+  ],
   "sends first": [
     "sends traffic first", "sends traffic out first", "sends out first", "goes out first",
     "traffic goes out first", "starts traffic", "starts conversation", "starts connection",
@@ -1488,6 +1511,14 @@ const EXAM_KEYS={
     "DNS": ["dynamic NAT", "DNAT", "dynamic", "NAT"],
   },
   "port number": ["port numbers", "ports", "port"],
+  "until its ports run out": [
+    "ports run out", "port numbers run out", "run out of ports", "runs out of ports", "running out of ports",
+    "run out of port numbers", "out of ports", "ports are exhausted", "ports exhausted", "port exhaustion",
+    "exhausted", "exhaust", "until the ports", "no free ports", "no more ports", "no ports left",
+    "ports are used up", "used up", "limited number of ports", "limited by the number of ports",
+    "number of ports", "number of available ports", "available ports", "65535", "65,535", "65536",
+    "65,536", "64000", "64,000", "64k", "65k", "65000", "65,000", "port limit", "limit of ports"
+  ],
   "can't": [
     "cannot", "fail", "denied", "dropped", "wait", "unable", "blocked", "no translation"
   ],
@@ -1523,7 +1554,8 @@ const EXAM_KEYS={
     "KEEP": ["keeps", "stays", "retains", "unchanged", "{n}"],
     "MOVE": [
       "different port", "new port", "another port", "next available port", "other port", "unique port",
-      "free port", "changed", "changes", "translated port", "{n1}", "1024"
+      "free port", "changed", "changes", "translated port", "{n1}", "1024", "first available port",
+      "first free port"
     ],
   },
   "translation table": [
@@ -1533,12 +1565,17 @@ const EXAM_KEYS={
   "keeps its port": [
     "first keeps", "first one keeps", "first user keeps", "first host keeps", "first connection keeps",
     "first session keeps", "keeps the port", "keeps its original port", "keeps its source port",
-    "gets the port", "gets its port", "gets to keep"
+    "gets the port", "gets its port", "gets to keep", "first user will use the port", "first user uses the port",
+    "first one will use the port", "first one uses the port", "first host uses the port",
+    "first session uses the port", "first connection uses the port", "first user gets the port",
+    "first uses the port", "first will use the port"
   ],
   "assigns a different port": [
     "different port", "new port", "another port", "next available port", "unique port",
     "changes the port", "translates the port to", "translates the source port to", "other port", "free port", "port is changed",
-    "port translation"
+    "port translation", "first available port", "first free port", "second user will be assigned",
+    "second user is assigned", "second one is assigned", "second one will be assigned", "second is assigned",
+    "second gets assigned", "second user gets assigned"
   ],
   "translates them back": [
     "translate back", "translated back", "translates the reply back", "translates replies back",
@@ -1546,6 +1583,14 @@ const EXAM_KEYS={
     "back to the original port", "back to its original port",
     "translates the port back", "translates the source port back", "translates the ports back",
     "translates the address back", "port back to"
+  ],
+  "first free port in its port group": [
+    "port group", "port groups", "port range", "group of ports", "range of ports", "first available port",
+    "first free port", "first unused port", "first open port", "lowest available port", "lowest free port",
+    "first available", "first free", "lowest available", "start of the group", "start of the range",
+    "beginning of the group", "beginning of the range", "counting up from", "starting at 1024",
+    "starting from 1024", "starts at 1024", "from 1024", "1024 upwards", "1024 up", "#1024",
+    "1024-65535", "0-511", "512-1023"
   ],
   "{F} keeps port {n}": ["{FS}~{KEEP}"],
   "{L} gets a different port": ["{LS}~{MOVE}"],
