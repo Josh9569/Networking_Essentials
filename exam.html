@@ -11,7 +11,7 @@
 <link rel="stylesheet" href="styles.css">
 <!-- ?v= is bumped whenever exam.js / exam.css change, so a browser holding
      the old copy fetches the new one (a removed card kept showing). -->
-<link rel="stylesheet" href="exam.css?v=132">
+<link rel="stylesheet" href="exam.css?v=133">
 <script src="theme.js"></script>
 <script src="custom-theme.js"></script>
 <script src="answer-keys.js"></script>
@@ -80,6 +80,9 @@
     <span class="ex-pool" id="pool-note"></span>
   </div>
 
+  <!-- Exam mode: one button per question (answered parts / marks), above it. -->
+  <div class="cls-row ex-nav" id="ex-nav" style="display:none"></div>
+
   <div class="qcard">
     <div class="qcard-hdr">
       <div class="qlbl" id="q-tag">Loading&hellip;</div>
@@ -94,8 +97,11 @@
   <div class="actrow">
     <button class="btn btn-p" id="chkbtn" onclick="checkAll()">Submit</button>
     <button class="btn btn-s" id="skipbtn" onclick="skipQ()" title="Put this card back without rating it">Skip</button>
-    <!-- Exam mode only: two clicks end it; what is left counts as not answered. -->
-    <button class="btn btn-d" id="ex-end" onclick="examEnd()" style="display:none" title="The part on screen and the rest count as not answered">End exam</button>
+    <!-- Exam mode only: move between questions, and hand the whole exam in
+         (then, "See results" once the written answers are marked). -->
+    <button class="btn btn-s" id="ex-prev" onclick="examGo(EX.qi-1,true)" style="display:none">&larr; Previous question</button>
+    <button class="btn btn-s" id="ex-next" onclick="examGo(EX.qi+1,true)" style="display:none">Next question &rarr;</button>
+    <button class="btn btn-p" id="ex-submit" onclick="examSubmitAll()" style="display:none">Submit exam</button>
 
     <!-- Flashcards only: after the model answer is shown, mark yourself. -->
     <span class="ex-self" id="self-row" style="display:none">
@@ -144,7 +150,7 @@
 
 </div>
 
-<script src="exam-keys.js?v=132"></script>
-<script src="exam.js?v=132"></script>
+<script src="exam-keys.js?v=133"></script>
+<script src="exam.js?v=133"></script>
 </body>
 </html>

@@ -164,6 +164,15 @@ function kwResolve(id,points,vars){
   }));
 }
 
+/* Where the card being answered or marked lives. A flashcard is alone in
+   #qbody; an exam page holds a question's parts together, each in its own
+   .ex-part, and QROOT is set to that part while it is graded — so every
+   card's fixed ids (in-first, in-acl, if-pick …) and chips are found inside
+   its own part. Card code reaches the page only through these. */
+let QROOT=null;
+function qroot(){ return QROOT||$('qbody'); }
+function qel(id){ return qroot().querySelector('#'+id); }
+
 /* Typed answer box. Values are kept on a wrong answer: the hint says what
    was typed and what was wanted (access_control's convention). */
 function fieldHtml(id,label,ph,wide){
@@ -171,9 +180,9 @@ function fieldHtml(id,label,ph,wide){
     '<input id="in-'+id+'" autocomplete="off" spellcheck="false" placeholder="'+esc(ph||'')+'">'+
     '<div class="ahint" id="h-'+id+'"></div></div>';
 }
-function val(id){ const el=document.getElementById('in-'+id); return el?el.value.trim():''; }
+function val(id){ const el=qel('in-'+id); return el?el.value.trim():''; }
 function markField(id,ok,correct){
-  const f=document.getElementById('f-'+id), inp=document.getElementById('in-'+id), h=document.getElementById('h-'+id);
+  const f=qel('f-'+id), inp=qel('in-'+id), h=qel('h-'+id);
   if(!f) return;
   const typed=inp.value.trim(); inp.readOnly=true;
   if(ok){ f.className=f.className.replace(/\s(ok|bad|show)\b/g,'')+' ok'; h.textContent='Correct'; }
@@ -189,7 +198,7 @@ function pickTable(head,rows){
     '</tbody></table></div>';
 }
 function markPicks(answer){
-  document.querySelectorAll('#qbody .rt-row.pick').forEach(tr=>{
+  qroot().querySelectorAll('.rt-row.pick').forEach(tr=>{
     const i=+tr.dataset.i; tr.classList.remove('sel','pick');
     if(answer.indexOf(i)>=0) tr.classList.add('correct');
     else if(Q.sel.has(i)) tr.classList.add('wrong');
@@ -207,13 +216,13 @@ function devChipsHtml(opts){
   return '<div class="ex-chips">'+opts.map((o,i)=>'<button type="button" class="cbtn ex-dchip" data-d="'+i+'">'+o+'</button>').join('')+'</div>';
 }
 function markDevChips(answer){
-  document.querySelectorAll('#qbody .ex-dchip').forEach(b=>{
+  qroot().querySelectorAll('.ex-dchip').forEach(b=>{
     const i=+b.dataset.d; b.disabled=true; b.classList.remove('on');
     if(i===answer) b.classList.add('ex-ok'); else if(i===Q.dev) b.classList.add('ex-bad');
   });
 }
 function markChips(answer){
-  document.querySelectorAll('#qbody .ex-chip').forEach(b=>{
+  qroot().querySelectorAll('.ex-chip').forEach(b=>{
     const i=+b.dataset.c; b.disabled=true; b.classList.remove('on');
     if(i===answer) b.classList.add('ex-ok'); else if(i===Q.choice) b.classList.add('ex-bad');
   });
@@ -1642,9 +1651,9 @@ function cmdLines(id){
    answer went wrong. eq(typed, model) is a card's own "same line" test (it
    returns true/false, or undefined to leave it to cmdSame). */
 function markCmds(id,ok,model,why,eq){
-  const f=document.getElementById('f-'+id), ta=document.getElementById('in-'+id), h=document.getElementById('h-'+id);
+  const f=qel('f-'+id), ta=qel('in-'+id), h=qel('h-'+id);
   ta.readOnly=true; f.classList.remove('ok','bad','show');
-  const old=document.getElementById('ln-'+id); if(old) old.remove();
+  const old=qel('ln-'+id); if(old) old.remove();
   if(!ta.value.trim()){ f.classList.add('show'); ta.value=model; h.textContent='Revealed'; return; }
   const m=cmdMarks(cmdLines(id),model.split('\n').map(l=>l.trim()).filter(Boolean),eq,ok,why);
   f.classList.add(ok?'ok':'bad');
@@ -1850,7 +1859,7 @@ function hasCmd(script,ifc,cmd){ return script.some(o=>o.ifc===ifc&&o.cmd===cmd)
 
 /* Clickable interfaces on a diagram. */
 function markIfs(ans){
-  document.querySelectorAll('#qbody .ex-if').forEach(g=>{
+  qroot().querySelectorAll('.ex-if').forEach(g=>{
     g.classList.remove('sel');
     if(g.dataset.if===ans) g.classList.add('ok'); else if(g.dataset.if===Q.ifSel) g.classList.add('bad');
   });
@@ -2741,7 +2750,7 @@ card({id:'g5-dora', area:'dhcp', tier:1, kind:'graded', src:'Q5 a', title:'DHCP 
     body: ordHtml(opts),
     grade(){
       const ok=Q.order.length===4&&Q.order.every((v,i)=>v===want[i]);
-      document.querySelectorAll('#qbody .ex-ord').forEach(b=>{
+      qroot().querySelectorAll('.ex-ord').forEach(b=>{
         const i=+b.dataset.o, pos=want.indexOf(i), mine=Q.order.indexOf(i); b.disabled=true; b.classList.remove('on');
         b.querySelector('.ex-ord-n').textContent=pos>=0?pos+1:'✕';
         if(pos>=0&&mine===pos) b.classList.add('ex-ok'); else if(mine>=0||pos>=0) b.classList.add('ex-bad');
@@ -2925,7 +2934,7 @@ card({id:'g5-v6msgs', area:'dhcp', tier:2, kind:'graded', src:'Q5', title:'DHCPv
     body: ordHtml(opts),
     grade(){
       const ok=Q.order.length===seq.length&&Q.order.every((v,i)=>v===want[i]);
-      document.querySelectorAll('#qbody .ex-ord').forEach(b=>{
+      qroot().querySelectorAll('.ex-ord').forEach(b=>{
         const i=+b.dataset.o, pos=want.indexOf(i), mine=Q.order.indexOf(i); b.disabled=true; b.classList.remove('on');
         b.querySelector('.ex-ord-n').textContent=pos>=0?pos+1:'✕';
         if(pos>=0&&mine===pos) b.classList.add('ex-ok'); else if(mine>=0||pos>=0) b.classList.add('ex-bad');
@@ -3950,7 +3959,7 @@ function flashCmp(points,text){
   return {el, n, all, cov, missing};
 }
 function checkAll(){
-  if(S.mode==='exam'){ examSubmit(false); return; }
+  if(S.mode==='exam') return;
   if(phase!=='answer'||!Q) return;
   if(cur.kind==='flash'){
     const ta=$('in-flash'), text=ta.value.trim();
@@ -4009,7 +4018,7 @@ function rate(r){
 function nextQ(){ rate(forced||'good'); }
 
 function skipQ(){
-  if(S.mode==='exam'){ examSubmit(true); return; }
+  if(S.mode==='exam') return;
   if(phase!=='answer'||!cur) return;
   const c=S.cards[cur.id]; if(c) c.due=S.step+3;
   saveState(); loadQ();
@@ -4017,32 +4026,28 @@ function skipQ(){
 
 /* Row and chip picks. */
 $('qbody').addEventListener('click',e=>{
-  if(phase==='review'){ const m=e.target.closest('.ex-rvm'); if(m) examSelf(+m.closest('.ex-rv').dataset.k,m.dataset.v==='1'); return; }
-  if(phase!=='answer'||!Q) return;
-  const row=e.target.closest('.rt-row.pick');
-  if(row&&Q.pick){
+  if(phase==='mark'){ const m=e.target.closest('.ex-rvm'); if(m) examSelf(+m.closest('.ex-rv').dataset.k,m.dataset.v==='1'); return; }
+  /* an exam part has its own Q and its own copy of the card's ids */
+  const part=e.target.closest('.ex-part'), q=part?EX.parts[+part.dataset.k].Q:Q, root=part||$('qbody');
+  if(phase!=='answer'||!q) return;
+  const row=e.target.closest('.rt-row.pick'), dchip=e.target.closest('.ex-dchip'), chip=e.target.closest('.ex-chip'),
+        ifg=e.target.closest('.ex-topo.pickable .ex-if'), ord=e.target.closest('.ex-ord');
+  if(row&&q.pick){
     const i=+row.dataset.i;
-    if(Q.pick.multi){ if(Q.sel.has(i)) Q.sel.delete(i); else Q.sel.add(i); } else Q.sel=new Set([i]);
-    $('qbody').querySelectorAll('.rt-row.pick').forEach(tr=>tr.classList.toggle('sel',Q.sel.has(+tr.dataset.i)));
-    return;
-  }
-  const dchip=e.target.closest('.ex-dchip');
-  if(dchip){ Q.dev=+dchip.dataset.d; $('qbody').querySelectorAll('.ex-dchip').forEach(b=>b.classList.toggle('on',+b.dataset.d===Q.dev)); return; }
-  const chip=e.target.closest('.ex-chip');
-  if(chip){ Q.choice=+chip.dataset.c; $('qbody').querySelectorAll('.ex-chip').forEach(b=>b.classList.toggle('on',+b.dataset.c===Q.choice)); return; }
-  const ifg=e.target.closest('.ex-topo.pickable .ex-if');
-  if(ifg){
-    Q.ifSel=ifg.dataset.if;
-    $('qbody').querySelectorAll('.ex-if').forEach(g=>g.classList.toggle('sel',g.dataset.if===Q.ifSel));
-    const lbl=$('if-pick'); if(lbl){ lbl.textContent=Q.ifSel; lbl.classList.add('on'); }
-    return;
-  }
-  const ord=e.target.closest('.ex-ord');
-  if(ord){
-    const i=+ord.dataset.o, at=Q.order.indexOf(i);
-    if(at>=0) Q.order=Q.order.slice(0,at); else Q.order.push(i);
-    $('qbody').querySelectorAll('.ex-ord').forEach(b=>{ const n=Q.order.indexOf(+b.dataset.o); b.classList.toggle('on',n>=0); b.querySelector('.ex-ord-n').textContent=n>=0?n+1:''; });
-  }
+    if(q.pick.multi){ if(q.sel.has(i)) q.sel.delete(i); else q.sel.add(i); } else q.sel=new Set([i]);
+    root.querySelectorAll('.rt-row.pick').forEach(tr=>tr.classList.toggle('sel',q.sel.has(+tr.dataset.i)));
+  } else if(dchip){ q.dev=+dchip.dataset.d; root.querySelectorAll('.ex-dchip').forEach(b=>b.classList.toggle('on',+b.dataset.d===q.dev)); }
+  else if(chip){ q.choice=+chip.dataset.c; root.querySelectorAll('.ex-chip').forEach(b=>b.classList.toggle('on',+b.dataset.c===q.choice)); }
+  else if(ifg){
+    q.ifSel=ifg.dataset.if;
+    root.querySelectorAll('.ex-if').forEach(g=>g.classList.toggle('sel',g.dataset.if===q.ifSel));
+    const lbl=root.querySelector('#if-pick'); if(lbl){ lbl.textContent=q.ifSel; lbl.classList.add('on'); }
+  } else if(ord){
+    const i=+ord.dataset.o, at=q.order.indexOf(i);
+    if(at>=0) q.order=q.order.slice(0,at); else q.order.push(i);
+    root.querySelectorAll('.ex-ord').forEach(b=>{ const n=q.order.indexOf(+b.dataset.o); b.classList.toggle('on',n>=0); b.querySelector('.ex-ord-n').textContent=n>=0?n+1:''; });
+  } else return;
+  if(part) examNavPaint();
 });
 
 /* Keys: Y/N to self-mark, 1/2/3 to rate, Enter to submit a pick-only card.
@@ -4078,12 +4083,17 @@ document.addEventListener('keydown',e=>{
    per question from the rest of the course (33). A part is one card, drawn
    from the cards whose src names that part of the paper ('Q4 e'); a Hard
    extra is any unused card under that question ('Q4', 'Q4 a' …).
-   Nothing is marked until the end, as in the exam: Submit grades the part
-   out of sight and moves on, keeping its graded body (detached, so its ids
-   never clash with the next part's) for the review. Written parts are shown
-   beside their model answer at the end and the learner marks them. An exam
-   never touches the flashcard scheduler; each finished one is saved in
-   S.exams for the Past exams list. */
+   It runs like the exam (owner): a question's parts are all on one page,
+   the buttons above it and Previous / Next move between questions, and any
+   answer can change until Submit hands the whole exam in. Nothing is marked
+   before that. Then the written answers are marked by the learner against
+   the model answers (all of them, before the results), and the results are
+   one page: the score, then every part with the learner's answer on the
+   left and the correct one on the right. Each part renders into its own
+   .ex-part with its own Q, and QROOT points the cards' lookups at it, so the
+   cards' fixed ids (in-first, in-acl …) never collide. An exam never
+   touches the flashcard scheduler; each finished one is saved in S.exams
+   for the Past exams list. */
 const EXAM_Q=[
   {q:1, topic:'Routing',                parts:['a','b','c','d']},
   {q:2, topic:'OSPF',                   parts:['a','b','c','d']},
@@ -4098,8 +4108,8 @@ const EXAM_INTRO={
   2:'The practice paper&rsquo;s own layout: 21 parts &mdash; Q1 a&ndash;d, Q2 a&ndash;d, Q3 a&ndash;d, Q4 a&ndash;e, Q5 a&ndash;c and Q6 &mdash; each drawn from the Easy and Medium cards for that part.',
   3:'Longer and harder: the paper&rsquo;s 21 parts with the hardest card each one has, then two more parts per question from the rest of the course &mdash; RIP, OSPF network commands and DR/BDR, extended and IPv6 ACLs, NAT configuration, DHCPv6 and troubleshooting tickets.',
 };
-const EXAM_HOW='Nothing is marked until you finish, as in the exam. Then every part is marked, your written answers are shown beside the model answers for you to mark, and the score is saved under Past exams.';
-let EX=null, exNext=null, exTick=null, endArmed=null;
+const EXAM_HOW='Each question&rsquo;s parts are on one page. Move between questions with the buttons above it or Previous / Next, and change any answer until you submit the exam &mdash; nothing is marked before that. Then you mark your written answers against the model answers, and the results show every part with your answer beside the correct one. The score is saved under Past exams.';
+let EX=null, exNext=null, exTick=null, subArmed=null;
 /* g6-subif builds router-on-a-stick rather than troubleshooting it, so it can
    be a Hard extra but never stands in for the paper's Q6 itself. */
 const EXAM_EXTRA_ONLY=['g6-subif'];
@@ -4135,12 +4145,19 @@ function exClock(s){ s=Math.max(0,Math.round(s)); return Math.floor(s/60)+':'+St
 function exElapsed(){ return ((EX.t1||Date.now())-EX.t0)/1000; }
 function exWhen(t){ try{ return new Date(t).toLocaleString(undefined,{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}); }catch(e){ return ''; } }
 function exStopTick(){ clearInterval(exTick); exTick=null; }
+function exUnarm(){ clearTimeout(subArmed); subArmed=null; $('ex-submit').classList.remove('ex-armed'); }
+/* Which buttons a stage shows: 'flash' (the flashcards set their own), 'home',
+   'answer', 'mark', 'done'. */
 function exActs(st){
   show('self-row',false); show('rate-hard',false); show('rate-easy',false); show('rate-lbl',false); $('nxtbtn').style.display='none';
-  show('chkbtn',st==='part'); show('skipbtn',st==='part'); show('ex-end',st==='part');
-  $('skipbtn').title=st==='part'?'Leave this part blank and move on':'Put this card back without rating it';
+  show('chkbtn',false); show('skipbtn',false);
+  show('ex-prev',st==='answer'); show('ex-next',st==='answer'); show('ex-submit',st==='answer'||st==='mark');
+  show('ex-nav',st==='answer'||st==='done');
+  exUnarm(); $('ex-submit').disabled=false; $('ex-submit').textContent=st==='mark'?'See results':'Submit exam';
 }
-function examView(){ if(!EX) examHome(); else if(EX.done) examResults(); else examShow(); }
+function examView(){ if(!EX) examHome(); else if(EX.stage==='answer') examGo(EX.qi); else if(EX.stage==='mark') examMarkView(); else examResults(); }
+function exQpill(secs,title){ $('q-pill').className='ex-pill ex-new'; $('q-pill').textContent=exClock(secs); $('q-pill').title=title; }
+function exToTop(){ const qc=$('q-tag').closest('.qcard'); if(qc.getBoundingClientRect().top<0) qc.scrollIntoView({block:'start', behavior:SMOOTH()}); }
 
 /* The start screen: what this difficulty's exam holds, question by question. */
 function examHome(focus){
@@ -4156,141 +4173,216 @@ function examHome(focus){
   syncControls(); renderSide();
   if(focus) $('ex-start').focus({preventScroll:true});
 }
+/* Every part is built up front, one page per question, so answers survive
+   moving between questions. A part's picks live on its own Q. */
 function examStart(){
-  EX={diff:S.ediff, parts:exNext||examPlan(S.ediff), i:0, t0:Date.now(), done:false}; exNext=null;
-  exStopTick(); exTick=setInterval(()=>{ if(EX&&!EX.done&&phase==='answer') $('q-pill').textContent=exClock(exElapsed()); },1000);
-  syncControls(); examShow();
+  const parts=exNext||examPlan(S.ediff); exNext=null;
+  EX={diff:S.ediff, parts, qs:[...new Set(parts.map(p=>p.q))], qi:0, t0:Date.now(), stage:'answer', done:false};
+  const qb=$('qbody'), pages={}; qb.innerHTML='';
+  EX.qs.forEach(q=>{ const pg=document.createElement('div'); pg.className='ex-qpage'; pg.dataset.q=q; pg.style.display='none'; qb.appendChild(pg); pages[q]=pg; });
+  parts.forEach((p,i)=>{
+    cur=p.card; Q=cur.gen(); Q.sel=new Set(); Q.choice=null; Q.dev=null; Q.order=[]; Q.ifSel=null; p.Q=Q;
+    const flash=cur.kind==='flash', lbl=[p.letter?'Part ('+p.letter+')':'', flash?'Written answer':''].filter(Boolean).join(' &middot; ');
+    const el=document.createElement('section'); el.className='ex-part'; el.dataset.k=i;
+    el.innerHTML=(lbl?'<div class="qlbl ex-part-lbl">'+lbl+'</div>':'')+'<div class="q-prompt">'+Q.prompt+'</div><div class="ex-part-body">'+
+      (flash?(Q.body||'')+'<div class="afield ex-flash-f"><label>Your answer &mdash; in your own words; Enter starts a new line</label>'+
+        '<textarea id="in-flash" class="ex-flash" rows="5" spellcheck="true" placeholder="In your own words"></textarea></div>':Q.body)+'</div>';
+    pages[p.q].appendChild(el); p.el=el;
+    /* a plain Enter is a new line here, as in the flashcards */
+    if(flash) el.querySelector('textarea.ex-flash').addEventListener('keydown',e=>{ if(e.key==='Enter'&&!e.ctrlKey&&!e.metaKey) e.stopPropagation(); });
+  });
+  cur=null; Q=null; phase='answer';
+  exStopTick(); exTick=setInterval(()=>{ if(EX&&EX.stage==='answer') $('q-pill').textContent=exClock(exElapsed()); },1000);
+  syncControls(); examGo(0,true);
 }
-/* One part, ready to answer. The pill is the clock. */
-function examShow(){
-  const p=EX.parts[EX.i];
-  cur=p.card; phase='answer'; forced=null; hideBanner(); exActs('part');
-  Q=cur.gen(); renderQ();
-  $('q-tag').textContent='Exam · '+exLabel(p)+' · '+(EX.i+1)+' of '+EX.parts.length;
-  $('q-pill').className='ex-pill ex-new'; $('q-pill').textContent=exClock(exElapsed()); $('q-pill').title='Time so far';
-  const qc=$('q-tag').closest('.qcard'); if(qc.getBoundingClientRect().top<0) qc.scrollIntoView({block:'start', behavior:SMOOTH()});
-  const box=$('qbody').querySelector('.afield input:not([disabled]), textarea'); if(box) box.focus({preventScroll:true});
+/* Show one question's page. */
+function examGo(qi,focus){
+  if(!EX||EX.stage!=='answer') return;
+  EX.qi=Math.max(0,Math.min(EX.qs.length-1,qi));
+  const q=EX.qs[EX.qi], x=EXAM_Q.find(e=>e.q===q), n=EX.parts.filter(p=>p.q===q).length;
+  phase='answer'; exActs('answer'); hideBanner();
+  document.querySelectorAll('#qbody .ex-qpage').forEach(pg=>pg.style.display=+pg.dataset.q===q?'':'none');
+  $('q-tag').textContent='Exam · '+TIER_NAME[EX.diff]+' · Question '+(EX.qi+1)+' of '+EX.qs.length;
+  exQpill(exElapsed(),'Time so far');
+  $('q-prompt').innerHTML='Question '+q+' &middot; '+x.topic+' <span class="ex-sub">'+n+' part'+(n===1?'':'s')+'</span>';
+  $('ex-prev').disabled=EX.qi===0; $('ex-next').disabled=EX.qi===EX.qs.length-1;
+  examNavPaint(); exToTop();
+  if(focus){ const b=document.querySelector('#qbody .ex-qpage[data-q="'+q+'"] input:not([disabled]), #qbody .ex-qpage[data-q="'+q+'"] textarea'); if(b) b.focus({preventScroll:true}); }
   renderSide();
 }
-/* Submit (or Skip): grade the part now, out of sight, and keep it for the
-   review. A written part keeps the answer for the review's side-by-side. */
-function examSubmit(skip){
-  if(!EX||EX.done||phase!=='answer') return;
-  const p=EX.parts[EX.i];
-  if(cur.kind==='flash'){
-    const text=skip?'':$('in-flash').value.trim();
-    if(!skip&&!text){ banner('warn','Type your answer first, or Skip to leave this part blank.'); $('in-flash').focus(); return; }
-    p.text=text; if(!text) p.self=false;
-  } else {
-    const r=Q.grade(); p.ok=!skip&&r.ok; p.verdict=r.verdict; p.why=r.why;
-  }
-  p.skipped=skip; p.prompt=$('q-prompt').innerHTML; p.Q=Q;
-  const box=document.createElement('div'), qb=$('qbody'); while(qb.firstChild) box.appendChild(qb.firstChild); p.node=box;
-  EX.i++;
-  if(EX.i<EX.parts.length) examShow(); else examFinish();
+/* Has the learner put anything into this part yet? */
+function exAnswered(p){
+  if(p.card.kind==='flash'){ const t=p.el.querySelector('textarea.ex-flash'); return !!t&&!!t.value.trim(); }
+  const q=p.Q; if(q.sel.size||q.choice!=null||q.dev!=null||q.order.length||q.ifSel!=null) return true;
+  return [...p.el.querySelectorAll('input, textarea')].some(i=>i.value.trim());
 }
-/* Two clicks, like Reset: the part on screen and every later one count as
-   not answered. */
-function examEnd(){
-  const b=$('ex-end');
-  if(!endArmed){
-    b.textContent='Click again to end'; b.classList.add('ex-armed');
-    endArmed=setTimeout(()=>{ endArmed=null; b.textContent='End exam'; b.classList.remove('ex-armed'); },3000);
+/* The question buttons: while answering, how many parts of each have an
+   answer; in the results, the marks, and they jump to that question. */
+function examNavPaint(){
+  const nav=$('ex-nav'), res=EX.stage==='done';
+  nav.innerHTML='<span>Questions:</span>'+EX.qs.map((q,i)=>{
+    const ps=EX.parts.filter(p=>p.q===q), a=ps.filter(p=>res?exState(p)[1]==='ex-comf':exAnswered(p)).length;
+    const cls=(!res&&i===EX.qi?' on':'')+(a===ps.length?' ex-full':a?' ex-some':'');
+    const tip=res?a+' of '+ps.length+' parts right':a+' of '+ps.length+' parts answered';
+    return '<button type="button" class="cbtn ex-navb'+cls+'" data-qi="'+i+'" title="'+tip+'">Q'+q+' <span class="ex-nav-n">'+a+'/'+ps.length+'</span></button>';
+  }).join('');
+}
+$('ex-nav').addEventListener('click',e=>{
+  const b=e.target.closest('.ex-navb'); if(!b||!EX) return;
+  const qi=+b.dataset.qi;
+  if(EX.stage==='answer') examGo(qi,true);
+  else { const sec=$('exr-q'+EX.qs[qi]); if(sec) sec.scrollIntoView({block:'start', behavior:SMOOTH()}); }
+});
+/* Submit hands the whole exam in. Unanswered parts make it ask once more. */
+function examSubmitAll(){
+  if(!EX) return;
+  if(EX.stage==='mark'){ if(!exPending()) examResults(); return; }
+  if(EX.stage!=='answer') return;
+  const left=EX.parts.filter(p=>!exAnswered(p)), b=$('ex-submit');
+  if(left.length&&!subArmed){
+    banner('warn','<b>'+left.length+' part'+(left.length>1?'s are':' is')+' not answered</b> ('+left.map(p=>'Q'+p.q+(p.letter?' '+p.letter:'')).join(', ')+
+      ') and will count as wrong. Click <b>Submit anyway</b> to hand the exam in, or keep going.');
+    b.textContent='Submit anyway'; b.classList.add('ex-armed');
+    subArmed=setTimeout(()=>{ subArmed=null; if(EX&&EX.stage==='answer'){ b.textContent='Submit exam'; b.classList.remove('ex-armed'); } },8000);
     return;
   }
-  clearTimeout(endArmed); endArmed=null; b.textContent='End exam'; b.classList.remove('ex-armed');
-  for(let i=EX.i;i<EX.parts.length;i++){ const p=EX.parts[i]; p.na=true; p.ok=false; }
-  $('qbody').innerHTML='';
-  examFinish();
+  exUnarm(); examGradeAll();
 }
-function examFinish(){
-  EX.done=true; EX.t1=Date.now(); exStopTick();
-  EX.rec={at:EX.t0, diff:EX.diff, total:EX.parts.length, secs:Math.round(exElapsed()), score:0, pending:0};
-  S.exams=(S.exams||[]).concat([EX.rec]).slice(-20);
-  examResults();
-  const qc=$('q-tag').closest('.qcard'); if(qc.getBoundingClientRect().top<0) qc.scrollIntoView({block:'start', behavior:SMOOTH()});
-}
-/* The score so far: a written part counts once the learner has marked it. */
-function exScore(){
-  let s=0, pend=0;
+/* Mark every auto-marked part with its own grader, inside its own part, out
+   of sight; keep each written answer for the learner to mark. */
+function examGradeAll(){
+  EX.t1=Date.now(); exStopTick(); EX.secs=Math.round(exElapsed());
   EX.parts.forEach(p=>{
-    if(p.card.kind==='flash'&&!p.na&&p.text){ if(p.self==null) pend++; else if(p.self) s++; }
-    else if(p.ok) s++;
+    p.answered=exAnswered(p);
+    if(p.card.kind==='flash'){ p.text=p.el.querySelector('textarea.ex-flash').value.trim(); if(!p.text) p.self=false; return; }
+    QROOT=p.el; Q=p.Q; cur=p.card;
+    const r=Q.grade(); p.ok=r.ok; p.verdict=r.verdict; p.why=r.why;
+    QROOT=null;
   });
-  EX.rec.score=s; EX.rec.pending=pend;
-  return {s, pend};
+  Q=null; cur=null;
+  EX.parts.forEach(p=>p.el.remove());
+  $('qbody').innerHTML='';
+  if(exPending()) examMarkView(); else examResults();
 }
+function exPending(){ return EX.parts.filter(p=>p.card.kind==='flash'&&p.text&&p.self==null).length; }
 function exState(p){
-  if(p.na) return ['Not answered','ex-bad'];
   if(p.card.kind==='flash'){
-    if(!p.text) return ['Left blank','ex-bad'];
+    if(!p.text) return ['Not answered','ex-bad'];
     return p.self==null?['Mark it','ex-learn']:p.self?['Right','ex-comf']:['Wrong','ex-bad'];
   }
-  return p.ok?['Correct','ex-comf']:p.skipped?['Skipped','ex-bad']:['Wrong','ex-bad'];
+  if(!p.answered) return ['Not answered','ex-bad'];
+  return p.ok?['Correct','ex-comf']:['Wrong','ex-bad'];
 }
-/* One part in the review: its prompt, the answer as it was marked, and the
-   explanation, or for a written part the answer beside the model answer and
-   the learner's own mark. The answer itself is inert. */
-function exReviewItem(p,i){
-  const it=document.createElement('div'); it.className='ex-rv'; it.dataset.k=i;
-  const area=AREAS.find(a=>a.id===p.card.area).name;
-  it.innerHTML='<div class="ex-rv-hdr"><span class="qlbl">'+exLabel(p)+' &middot; '+area+' &middot; '+(p.card.kind==='flash'?'Written':'Auto-marked')+'</span><span class="ex-pill"></span></div>';
-  if(p.na){ it.insertAdjacentHTML('beforeend','<p class="ex-rv-na">Not answered &mdash; the exam was ended before this part.</p>'); return it; }
-  it.insertAdjacentHTML('beforeend','<div class="q-prompt">'+p.prompt+'</div>');
-  const body=p.node; body.className='ex-rv-body'; body.inert=true;
-  body.querySelectorAll('.ex-flash-f, #flash-cmp, .ex-why').forEach(e=>e.remove());
-  if(body.childNodes.length) it.appendChild(body);
-  if(p.card.kind==='flash'){
-    const c=flashCmp(p.Q.points,p.text||''); it.appendChild(c.el);
-    if(!p.text) c.el.querySelector('.ex-yours').innerHTML='<i>Left blank.</i>';
-    dictLink(c.el.querySelector('.ex-model'));
-    if(p.text) it.insertAdjacentHTML('beforeend','<div class="ex-rv-marks"><span class="ex-apply-lbl">Mark it against the model answer:</span>'+
-      '<span class="ex-chips"><button class="cbtn ex-rvm" data-v="1">I got it right</button><button class="cbtn ex-rvm" data-v="0">I got it wrong</button></span></div>');
-  } else {
-    const w=document.createElement('div'); w.className='expl-box ex-why open';
-    w.innerHTML=(p.skipped?'<p>Skipped.</p>':'')+'<p><b>'+p.verdict+'</b></p>'+(p.why||'');
-    it.appendChild(w); dictLink(w);
-  }
-  return it;
+function exScore(){
+  const s=EX.parts.filter(p=>exState(p)[1]==='ex-comf').length;
+  if(EX.rec) EX.rec.score=s;
+  return s;
 }
-function examResults(){
-  phase='review'; cur=null; Q=null; forced=null; exActs('done'); hideBanner();
-  $('q-tag').textContent='Exam results · '+TIER_NAME[EX.diff];
-  $('q-pill').className='ex-pill ex-new'; $('q-pill').textContent=exClock(EX.rec.secs); $('q-pill').title='Time taken';
-  $('q-prompt').innerHTML='<div id="ex-score"></div>';
-  const qb=$('qbody'); qb.innerHTML='<div id="ex-sum"></div>';
-  EX.parts.forEach((p,i)=>qb.appendChild(exReviewItem(p,i)));
-  qb.insertAdjacentHTML('beforeend','<div class="ex-rv-end"><button class="btn btn-p" onclick="examHome(true)">New exam</button></div>');
-  exPaint(); syncControls();
+/* A written part's own figure or config (its body without the answer box),
+   for the marking and the results. */
+function exContext(p,clone){
+  const b=p.el.querySelector('.ex-part-body'), c=clone?b.cloneNode(true):b;
+  c.querySelectorAll('.ex-flash-f').forEach(e=>e.remove());
+  if(!c.childNodes.length) return null;
+  c.className='ex-rv-body'; c.inert=true; return c;
 }
-/* Score, the per-question table and each part's pill, from the marks as
-   they stand; run again whenever a written part is marked. */
-function exPaint(){
-  const {s,pend}=exScore(), n=EX.parts.length;
-  $('ex-score').innerHTML='<b>'+s+' / '+n+'</b> ('+Math.round(100*s/n)+'%)'+
-    (pend?' so far &mdash; mark your '+pend+' written answer'+(pend>1?'s':'')+' below to finish the score.':' &mdash; every part is marked.');
-  const rows=EXAM_Q.map(x=>{
-    const ps=EX.parts.filter(p=>p.q===x.q); if(!ps.length) return '';
-    const got=ps.filter(p=>exState(p)[1]==='ex-comf').length, todo=ps.filter(p=>exState(p)[0]==='Mark it').length;
-    return '<tr><td>Question '+x.q+'</td><td>'+x.topic+'</td><td>'+got+' / '+ps.length+(todo?' <span class="ex-sub">&middot; '+todo+' to mark</span>':'')+'</td></tr>';
+function exPartHdr(p,head){
+  return '<div class="ex-rv-hdr"><span class="qlbl">'+head+'</span><span class="ex-pill"></span></div>';
+}
+/* Before the results: every written answer beside its model answer, marked
+   right or wrong by the learner. See results waits until all are. */
+function examMarkView(){
+  EX.stage='mark'; phase='mark'; exActs('mark'); hideBanner();
+  const ws=EX.parts.map((p,i)=>[p,i]).filter(([p])=>p.card.kind==='flash'&&p.text);
+  $('q-tag').textContent='Exam · '+TIER_NAME[EX.diff]+' · Mark your written answers';
+  exQpill(EX.secs,'Time taken');
+  $('q-prompt').innerHTML=ws.length===1?'Mark your written answer against the model answer. Your results come once it is marked.':
+    'Mark each written answer against the model answer. Your results come once all '+ws.length+' are marked.';
+  const qb=$('qbody'); qb.innerHTML='';
+  ws.forEach(([p,i])=>{
+    const it=document.createElement('section'); it.className='ex-rv'; it.dataset.k=i;
+    it.innerHTML=exPartHdr(p,exLabel(p)+' &middot; '+AREAS.find(a=>a.id===p.card.area).name)+'<div class="q-prompt">'+p.Q.prompt+'</div>';
+    const ctx=exContext(p,true); if(ctx) it.appendChild(ctx);
+    const c=flashCmp(p.Q.points,p.text); it.appendChild(c.el); dictLink(c.el.querySelector('.ex-model'));
+    it.insertAdjacentHTML('beforeend','<div class="ex-rv-marks"><span class="ex-apply-lbl">Your mark:</span><span class="ex-chips">'+
+      '<button type="button" class="cbtn ex-rvm" data-v="1">I got it right</button><button type="button" class="cbtn ex-rvm" data-v="0">I got it wrong</button></span></div>');
+    qb.appendChild(it);
   });
-  $('ex-sum').innerHTML='<div class="ex-scroll"><table class="rt-table ex-table ex-xplan"><thead><tr><th>Question</th><th>Topic</th><th>Mark</th></tr></thead><tbody>'+rows.join('')+
-    '</tbody><tfoot><tr><td>Total</td><td></td><td>'+s+' / '+n+'</td></tr></tfoot></table></div>';
+  examMarkPaint(); syncControls(); renderSide(); exToTop();
+}
+function examMarkPaint(){
+  const left=exPending();
+  $('ex-submit').disabled=left>0; $('ex-submit').textContent=left?'See results ('+left+' still to mark)':'See results';
   document.querySelectorAll('#qbody .ex-rv').forEach(it=>{
     const p=EX.parts[+it.dataset.k], st=exState(p), pill=it.querySelector('.ex-rv-hdr .ex-pill');
     pill.textContent=st[0]; pill.className='ex-pill '+st[1];
     it.querySelectorAll('.ex-rvm').forEach(b=>{ const v=b.dataset.v==='1'; b.classList.toggle('ex-ok',p.self===true&&v); b.classList.toggle('ex-bad',p.self===false&&!v); });
   });
-  saveState(); renderSide();
 }
-function examSelf(i,v){ if(!EX||!EX.done) return; EX.parts[i].self=v; exPaint(); }
+function examSelf(i,v){ if(!EX||EX.stage!=='mark') return; EX.parts[i].self=v; examMarkPaint(); }
+/* One part in the results: the learner's answer on the left, the correct one
+   on the right. An auto-marked part's left side is the part as it was
+   marked; a side by side too wide for that (a figure, a routing table) is
+   stacked instead (examResults measures it). A written part shows its own
+   figure above the two answers. */
+function exResultItem(p){
+  const it=document.createElement('section'); it.className='ex-rv';
+  const flash=p.card.kind==='flash';
+  it.innerHTML=exPartHdr(p,(p.letter?'Part ('+p.letter+') &middot; ':'')+(flash?'Written answer':'Auto-marked'))+'<div class="q-prompt">'+p.Q.prompt+'</div>';
+  const st=exState(p), pill=it.querySelector('.ex-rv-hdr .ex-pill'); pill.textContent=st[0]; pill.className='ex-pill '+st[1];
+  if(flash){
+    const ctx=exContext(p,false); if(ctx) it.appendChild(ctx);
+    const c=flashCmp(p.Q.points,p.text||''); it.appendChild(c.el);
+    if(!p.text) c.el.querySelector('.ex-yours').innerHTML='<i>Not answered.</i>';
+    c.el.querySelector('.ex-model .qlbl').firstChild.textContent='Correct answer ';
+    dictLink(c.el.querySelector('.ex-model'));
+    if(p.text) it.insertAdjacentHTML('beforeend','<p class="ex-rv-note">You marked this '+(p.self?'right':'wrong')+'.</p>');
+    return it;
+  }
+  const grid=document.createElement('div'); grid.className='ex-rv-grid';
+  const mine=document.createElement('div'); mine.className='ex-pane ex-rv-mine'; mine.innerHTML='<div class="qlbl">Your answer'+(p.answered?'':' &mdash; not answered')+'</div>';
+  const body=p.el.querySelector('.ex-part-body'); body.className='ex-rv-body'; body.inert=true; mine.appendChild(body);
+  const right=document.createElement('div'); right.className='ex-pane ex-model ex-kw-'+(st[1]==='ex-comf'?'all':'none');
+  right.innerHTML='<div class="qlbl">Correct answer</div><p><b>'+p.verdict+'</b></p>'+(p.why||'');
+  dictLink(right);
+  grid.appendChild(mine); grid.appendChild(right); it.appendChild(grid);
+  return it;
+}
+function examResults(){
+  EX.stage='done'; EX.done=true; phase='review'; cur=null; Q=null; forced=null; exActs('done'); hideBanner();
+  if(!EX.rec){ EX.rec={at:EX.t0, diff:EX.diff, total:EX.parts.length, secs:EX.secs, score:0}; exScore(); S.exams=(S.exams||[]).concat([EX.rec]).slice(-20); saveState(); }
+  const s=exScore(), n=EX.parts.length;
+  $('q-tag').textContent='Exam results · '+TIER_NAME[EX.diff];
+  exQpill(EX.secs,'Time taken');
+  $('q-prompt').innerHTML='<b>'+s+' / '+n+'</b> ('+Math.round(100*s/n)+'%)';
+  const rows=EXAM_Q.filter(x=>EX.qs.indexOf(x.q)>=0).map(x=>{
+    const ps=EX.parts.filter(p=>p.q===x.q), got=ps.filter(p=>exState(p)[1]==='ex-comf').length;
+    return '<tr><td>Question '+x.q+'</td><td>'+x.topic+'</td><td>'+got+' / '+ps.length+'</td></tr>';
+  });
+  const qb=$('qbody');
+  qb.innerHTML='<div class="ex-scroll"><table class="rt-table ex-table ex-xplan"><thead><tr><th>Question</th><th>Topic</th><th>Mark</th></tr></thead><tbody>'+rows.join('')+
+    '</tbody><tfoot><tr><td>Total</td><td></td><td>'+s+' / '+n+'</td></tr></tfoot></table></div>';
+  EX.qs.forEach(q=>{
+    const x=EXAM_Q.find(e=>e.q===q), ps=EX.parts.filter(p=>p.q===q), got=ps.filter(p=>exState(p)[1]==='ex-comf').length;
+    const sec=document.createElement('div'); sec.className='ex-rq'; sec.id='exr-q'+q;
+    sec.innerHTML='<div class="ex-rq-hdr">Question '+q+' &middot; '+x.topic+' <span class="ex-sub">'+got+' / '+ps.length+'</span></div>';
+    ps.forEach(p=>sec.appendChild(exResultItem(p)));
+    qb.appendChild(sec);
+  });
+  qb.insertAdjacentHTML('beforeend','<div class="ex-rv-end"><button class="btn btn-p" onclick="examHome(true)">New exam</button></div>');
+  /* side by side only where the answer fits its column */
+  qb.querySelectorAll('.ex-rv-grid').forEach(g=>{
+    const L=g.firstChild;
+    if(L.scrollWidth>L.clientWidth+1||[...L.querySelectorAll('.ex-scroll, .ex-topo-wrap, .cli-block')].some(e=>e.scrollWidth>e.clientWidth+1)) g.classList.add('ex-stack');
+  });
+  examNavPaint(); syncControls(); renderSide(); exToTop();
+}
 /* Past exams, newest first. */
 function renderExamHist(){
   const list=(S.exams||[]).slice().reverse().slice(0,8), b=$('exhist-body');
   if(!list.length){ b.innerHTML='<p class="tool-note">No exams yet &mdash; your score and time are saved here when you finish one.</p>'; return; }
   b.innerHTML='<div class="ex-scroll"><table class="rt-table ex-table ex-hist"><thead><tr><th>Finished</th><th>Difficulty</th><th>Score</th><th>Time</th></tr></thead><tbody>'+
-    list.map(r=>'<tr><td>'+exWhen(r.at)+'</td><td>'+TIER_NAME[r.diff]+'</td><td>'+r.score+' / '+r.total+' ('+Math.round(100*r.score/r.total)+'%)'+
-      (r.pending?' <span class="ex-sub">&middot; '+r.pending+' to mark</span>':'')+'</td><td>'+exClock(r.secs)+'</td></tr>').join('')+'</tbody></table></div>';
+    list.map(r=>'<tr><td>'+exWhen(r.at)+'</td><td>'+TIER_NAME[r.diff]+'</td><td>'+r.score+' / '+r.total+' ('+Math.round(100*r.score/r.total)+'%)</td><td>'+exClock(r.secs)+'</td></tr>').join('')+'</tbody></table></div>';
 }
 function setMode(m){
   if(S.mode===m||(EX&&!EX.done)) return;
@@ -4298,6 +4390,19 @@ function setMode(m){
   if(m==='exam') { if(EX) examView(); else examHome(true); }
   else { lastId=null; loadQ(); }
 }
+/* In an exam Enter moves to the part's next box, and from the page's last
+   box to Next question (or Submit) — it never hands the exam in. A command
+   box or written answer keeps Enter for a new line; Ctrl+Enter moves on. */
+$('qbody').addEventListener('keydown',e=>{
+  if(S.mode!=='exam'||!EX||EX.stage!=='answer'||e.key!=='Enter'||e.shiftKey||e.altKey) return;
+  const t=e.target, ctl=e.ctrlKey||e.metaKey;
+  if(t.tagName!=='INPUT'&&t.tagName!=='TEXTAREA') return;
+  if(t.tagName==='TEXTAREA'&&!ctl) return;
+  e.preventDefault(); e.stopPropagation();
+  const page=t.closest('.ex-qpage'), list=[...page.querySelectorAll('input:not([disabled]), textarea')], nx=list[list.indexOf(t)+1];
+  if(nx) nx.focus(); else (!$('ex-next').disabled?$('ex-next'):$('ex-submit')).focus();
+},true);
+$('qbody').addEventListener('input',()=>{ if(S.mode==='exam'&&EX&&EX.stage==='answer') examNavPaint(); });
 /* Leaving mid-exam loses it (a card can't be rebuilt as it was), so ask. */
 window.addEventListener('beforeunload',e=>{ if(S.mode==='exam'&&EX&&!EX.done){ e.preventDefault(); e.returnValue=''; } });
 

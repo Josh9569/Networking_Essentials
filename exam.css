@@ -195,14 +195,37 @@ mark.ex-kw.miss { color: var(--err-text); box-shadow: inset 0 -2px 0 var(--err-t
 .ex-xplan td:last-child, .ex-xplan th:last-child, .ex-hist td:nth-child(n+2), .ex-hist th:nth-child(n+2) { text-align: right; white-space: nowrap; width: 1%; }
 .ex-xplan tfoot td { background: var(--surface-s); border-top: 1px solid var(--border-m); font-weight: 600; }
 .ex-rv         { border-top: 1px solid var(--border); padding-top: 14px; }
-#qbody > .ex-rv, #qbody > .ex-rv-end { margin-top: 20px; }
+#qbody > .ex-rv, #qbody > .ex-rv-end, .ex-rq > .ex-rv { margin-top: 20px; }
 .ex-rv > * + * { margin-top: 10px; }
 .ex-rv-hdr     { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .ex-rv-hdr .qlbl { margin: 0; }
 .ex-rv .q-prompt { margin-top: 8px; }
 .ex-rv-body > * + * { margin-top: 12px; }
 .ex-rv-body .ex-cli-lbl + .ex-cli { margin-top: 0; }
-.ex-rv-na      { font-size: 13px; color: var(--text-t); }
+.ex-rv-note    { font-size: 13px; color: var(--text-s); }
+/* The question buttons above the card: answered parts (then marks) per
+   question, the current one in .cbtn.on's colours. */
+.ex-nav        { margin-bottom: .75rem; }
+.ex-nav-n      { font-family: var(--mono); font-size: 11px; margin-left: 3px; opacity: .8; }
+.ex-navb.ex-full { border-color: var(--ok-bdr); color: var(--ok-text); }
+.ex-navb.ex-some { border-color: var(--warn-bdr); color: var(--warn-text); }
+.ex-navb.on    { background: var(--info-bg); border-color: var(--info-bdr); color: var(--info-text); }
+#ex-submit     { margin-left: auto; }
+/* A question page: its parts one under another. */
+.ex-qpage > .ex-part + .ex-part { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--border); }
+.ex-part > * + * { margin-top: 10px; }
+.ex-part-lbl   { margin: 0; }
+.ex-part .q-prompt { margin-top: 6px; }
+.ex-part-body > * + * { margin-top: 12px; }
+.ex-part-body .ex-cli-lbl + .ex-cli { margin-top: 0; }
+/* Results: each question under a heading, each part with the learner's
+   answer on the left and the correct one on the right, stacked where the
+   answer is too wide to sit beside it. */
+.ex-rq         { margin-top: 30px; }
+.ex-rq-hdr     { font-size: 16px; font-weight: 600; padding-bottom: 6px; border-bottom: 2px solid var(--border-m); }
+.ex-rv-grid    { display: grid; grid-template-columns: minmax(0,1.3fr) minmax(0,1fr); gap: 12px; align-items: start; }
+.ex-rv-grid.ex-stack { grid-template-columns: minmax(0,1fr); }
+.ex-rv-grid .ex-pane > .qlbl { margin-bottom: 8px; }
 .ex-rv-marks   { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; }
 
 /* ── Dictionary: the reference cards come from styles.css (.ref-*); this
@@ -228,7 +251,7 @@ mark.ex-kw.miss { color: var(--err-text); box-shadow: inset 0 -2px 0 var(--err-t
 @media (prefers-reduced-motion: reduce) { .ref-card.ex-flash { animation: none; border-color: var(--info-bdr); } }
 
 @media (max-width: 640px) {
-  .ex-grid, .ex-cmp, .ex-q6 { grid-template-columns: 1fr; }
+  .ex-grid, .ex-cmp, .ex-q6, .ex-rv-grid { grid-template-columns: 1fr; }
   .ex-topo-wide { display: none; }
   .ex-topo-narrow { display: block; }
   .ex-q6fig { max-width: 240px; margin: 0 auto; }
