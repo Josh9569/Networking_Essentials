@@ -1955,24 +1955,38 @@ function applyHtml(noDir){
     (noDir?'':'<span class="ex-apply-lbl">Direction:</span>'+chipsHtml(['In','Out']))+'</div>';
 }
 /* A typed numbered standard ACL, parsed by the labs' engine. */
-function parseStdAcl(lines){
-  let num=null; const aces=[];
+/* A standard ACL, numbered (access-list N …) or named (ip access-list
+   standard NAME, then permit/deny lines, optionally sequence-numbered).
+   want is the list the question asked for: {num} or {name}. */
+function parseStdAcl(lines,want){
+  let num=null, name=null; const aces=[];
   for(const l of lines){
-    const t=l.split(/\s+/), w0=t[0].toLowerCase();
-    if(w0!=='access-list'&&!(w0.length>=8&&'access-list'.startsWith(w0))) return {err:'Each line starts with access-list ("'+l+'").'};
-    const n=+t[1];
-    if(!/^\d+$/.test(t[1]||'')||NR.aclNumKind(n)!=='std') return {err:'A standard ACL is numbered 1–99 or 1300–1999 — '+(t[1]||'no number')+' isn\'t.'};
-    if(num!=null&&n!==num) return {err:'Every line must use the same ACL number.'};
-    num=n;
-    const act=(t[2]||'').toLowerCase();
+    const t=l.split(/\s+/), w0=t[0].toLowerCase(), w1=(t[1]||'').toLowerCase();
+    if(w0==='ip'&&w1.length>=8&&'access-list'.startsWith(w1)){
+      if(!((t[2]||'').length>=3&&'standard'.startsWith((t[2]||'').toLowerCase()))) return {err:'A named standard list starts ip access-list standard <name> ("'+l+'").'};
+      if(!t[3]) return {err:'Name the list: ip access-list standard <name>.'};
+      if(num!=null) return {err:'Use either a numbered list or a named one, not both.'};
+      name=t[3]; continue;
+    }
+    let act, rest;
+    if(w0==='access-list'||(w0.length>=8&&'access-list'.startsWith(w0))){
+      if(name) return {err:'Inside a named list the entries start with permit or deny ("'+l+'").'};
+      const n=+t[1];
+      if(!/^\d+$/.test(t[1]||'')||NR.aclNumKind(n)!=='std') return {err:'A standard ACL is numbered 1–99 or 1300–1999 — '+(t[1]||'no number')+' isn\'t.'};
+      if(num!=null&&n!==num) return {err:'Every line must use the same ACL number.'};
+      num=n; act=(t[2]||'').toLowerCase(); rest=t.slice(3);
+    } else if(name){ const i=/^\d+$/.test(t[0])?1:0; act=(t[i]||'').toLowerCase(); rest=t.slice(i+1); }
+    else return {err:'Each line starts with access-list (or use ip access-list standard <name>) ("'+l+'").'};
     if(act==='remark') continue;
-    if(act!=='permit'&&act!=='deny') return {err:'Expected permit or deny after the number ("'+l+'").'};
-    const r=NR.acParseAce(act,t.slice(3).map(x=>x.toLowerCase()));
+    if(act!=='permit'&&act!=='deny') return {err:'Expected permit or deny ("'+l+'").'};
+    const r=NR.acParseAce(act,rest.map(x=>x.toLowerCase()));
     if(r.err) return {err:r.err.replace(/^%\s*/,'')+' ("'+l+'").'};
     aces.push(r.ace);
   }
   if(!aces.length) return {err:'There are no permit or deny lines.'};
-  const acl=NR.aclMake(String(num),true,4,false);
+  if(want&&want.num!=null&&num!==want.num) return {err:'The question asks for access list number '+want.num+(name?' — not a named list.':', not '+num+'.')};
+  if(want&&want.name!=null&&name!==want.name) return {err:'The question asks for a named list called '+want.name+(name?' (names are case-sensitive), not '+name+'.':' — not a numbered one.')};
+  const acl=NR.aclMake(String(num!=null?num:name),num!=null,4,false);
   aces.forEach((a,i)=>{ a.seq=(i+1)*10; acl.aces.push(a); });
   return {acl};
 }
@@ -2058,9 +2072,13 @@ function wcCard(id,tier,title,cross){
 wcCard('g3-wild',1,'Which addresses does the ACE match?',false);
 wcCard('g3-wild-x',2,'Wildcard across an octet',true);
 
-card({id:'g3-acl', area:'acl', tier:2, kind:'graded', src:'Q3 b', title:'Write and place a standard ACL', gen(){
+/* The question names the list it wants (owner): a number on one variant, a
+   name on the other, so the model's number is never made up. */
+card({id:'g3-acl', area:'acl', tier:2, kind:'graded', src:'Q3 b', title:'Write and place a standard ACL', variants:['num','name'], gen(v){
   const P=q3Plan(), t=ri(0,3), others=shuffle([0,1,2,3].filter(i=>i!==t)), hl=others[0], nl=others[1];
-  const host=(P.lans[hl]+ri(2,254))>>>0, num=ri(1,99);
+  const host=(P.lans[hl]+ri(2,254))>>>0, num=v==='num'?ri(1,99):null;
+  const name=v==='name'?pick(['LAN'+(t+1)+'-IN','PROTECT-LAN'+(t+1),'LAN'+(t+1)+'-ACCESS','ALLOW-LAN'+(nl+1)]):null;
+  const id=num!=null?String(num):name;
   const tests=[];
   P.lans.forEach((net,i)=>{
     if(i===t) return;
@@ -2069,14 +2087,15 @@ card({id:'g3-acl', area:'acl', tier:2, kind:'graded', src:'Q3 b', title:'Write a
     offs.forEach(o=>{ const ip=(net+o)>>>0; tests.push({ip, want:(i===nl||ip===host)?'permit':'deny', what:ip===host?'the permitted host':'LAN'+(i+1)}); });
   });
   tests.push({ip:P.wan+1, want:'deny', what:'the R1–R2 link'},{ip:P.wan+2, want:'deny', what:'the R1–R2 link'},{ip:ip2int('8.8.8.8'), want:'deny', what:'an outside network'});
-  const model=['access-list '+num+' permit host '+int2ip(host),'access-list '+num+' permit '+int2ip(P.lans[nl])+' 0.0.0.255'];
+  const model=num!=null?['access-list '+num+' permit host '+int2ip(host),'access-list '+num+' permit '+int2ip(P.lans[nl])+' 0.0.0.255']:
+    ['ip access-list standard '+name,' permit host '+int2ip(host),' permit '+int2ip(P.lans[nl])+' 0.0.0.255'];
   const tgt=Q3_IF[t];
   return {
     prompt:'Write a <b>standard ACL</b> that controls access into <b>LAN'+(t+1)+'</b> ('+cidr(P.lans[t],24)+'). Host <b>'+int2ip(host)+'</b> and all hosts in <b>LAN'+(nl+1)+
-      '</b> are permitted; all other networks are not. Then say which router interface it goes on, and in which direction.',
+      '</b> are permitted; all other networks are not. '+(num!=null?'Use access list number <b>'+num+'</b>.':'Make it a named list called <b>'+name+'</b>.')+' Then say which router interface it goes on, and in which direction.',
     body: q3Topo(P,true)+cmdsHtml('acl','Standard ACL &mdash; one command per line, Ctrl+Enter submits','Type the ACL, one entry per line',3)+applyHtml(),
     grade(){
-      const p=parseStdAcl(cmdLines('acl'));
+      const p=parseStdAcl(cmdLines('acl'),num!=null?{num}:{name});
       let aclWhy=p.err||null;
       if(!aclWhy) for(const s of tests){
         const got=NR.aclEvaluate(p.acl,s.ip,false).action;
@@ -2084,8 +2103,9 @@ card({id:'g3-acl', area:'acl', tier:2, kind:'graded', src:'Q3 b', title:'Write a
       }
       const okAcl=!aclWhy, okIf=Q.ifSel===tgt, okDir=Q.choice===1;
       markCmds('acl',okAcl,model.join('\n'),aclWhy); markIfs(tgt); markChips(1);
-      const why=['The correct commands to run:<br>'+model.map(mono).join('<br>')+' &mdash; the implicit <b>deny any</b> at the end blocks everyone else.',
-        'A standard ACL matches only the source, so it goes as close to the destination as possible: <b>'+tgt+' outbound</b>, on the interface facing LAN'+(t+1)+'.'];
+      const why=['The correct commands to run:<br>'+model.map(l=>mono(l.trim())).join('<br>')+' &mdash; the implicit <b>deny any</b> at the end blocks everyone else.',
+        'A standard ACL matches only the source, so it goes as close to the destination as possible: <b>'+tgt+' outbound</b>, on the interface facing LAN'+(t+1)+
+          ' ('+mono('ip access-group '+id+' out')+' under it).'];
       if(Q.ifSel===tgt&&!okDir) why.push('Inbound on that interface would filter traffic <i>leaving</i> LAN'+(t+1)+', not entering it.');
       else if(Q.ifSel&&!okIf) why.push('On '+Q.ifSel+' it would also filter traffic that isn\'t going to LAN'+(t+1)+'.');
       return {ok:okAcl&&okIf&&okDir, verdict: okAcl&&okIf&&okDir?'Correct.':
@@ -3784,7 +3804,7 @@ document.addEventListener('keydown',e=>{
 
 /* ═══ Scheduler and persistence ═══════════════════════════════════════════ */
 const KEY='ne-exam-v1', COMFORT=20;
-function freshState(){ return {step:0, diff:1, off:[], foff:[], cards:{}, answered:0, correct:0, lastNew:null, vmig:1, mode:'flash', ediff:2, exams:[]}; }
+function freshState(){ return {step:0, diff:1, off:[], foff:[], cards:{}, answered:0, correct:0, lastNew:null, vmig:2, mode:'flash', ediff:2, exams:[]}; }
 function loadState(){
   try{
     const s=JSON.parse(localStorage.getItem(KEY));
@@ -3796,9 +3816,11 @@ function loadState(){
       /* Saved before variants had to be done (owner): a card that was already
          Comfortable stays so, and is exempt from the rule from then on
          (vall). Runs once; every other card starts with no variants done. */
-      if(!s.vmig){
+      /* vmig 2: g3-acl gained its number/name variants; again, whatever is
+         Comfortable now stays so. Bump it whenever a card gains variants. */
+      if((s.vmig||0)<2){
         Object.keys(s.cards).forEach(id=>{ const c=s.cards[id]; if(c&&c.last!=='again'&&c.ivl>=COMFORT) c.vall=true; });
-        s.vmig=1;
+        s.vmig=2;
       }
       return Object.assign(freshState(),s);
     }
