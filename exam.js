@@ -4466,6 +4466,8 @@ function syncControls(){
   document.querySelectorAll('#mode-row .cbtn').forEach(b=>{ b.classList.toggle('on',b.dataset.m===S.mode); b.disabled=busy&&b.dataset.m!==S.mode; });
   document.querySelectorAll('#diff-row .cbtn').forEach(b=>{ b.classList.toggle('on',+b.dataset.d===(ex?S.ediff:S.diff)); b.disabled=busy; b.title=busy?'Finish or end the exam to change this':''; });
   show('area-dd',!ex); show('fam-dd',!ex); show('hdr-chips',!ex); show('prog',!ex); show('exhist',ex);
+  /* the dictionary would answer the questions: hidden from Start until the results */
+  show('dict',!busy);
   $('hdr-sub').textContent=ex?'3001ICT · the practice paper as an exam, marked when you finish':'3001ICT · rate how comfortable you are and the cards you find hard come back sooner';
   if(ex){ const n=(EX?EX.parts:exNext||[]).length; $('pool-note').textContent=n?n+' parts':''; return; }
   const live=liveAreas();
