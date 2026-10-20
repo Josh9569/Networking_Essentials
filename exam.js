@@ -2210,9 +2210,11 @@ function wcCard(id,tier,title,cross){
 wcCard('g3-wild',1,'Which addresses does the ACE match?',false);
 wcCard('g3-wild-x',2,'Wildcard across an octet',true);
 
-/* The question names the list it wants (owner): a number on one variant, a
-   name on the other, so the model's number is never made up. */
-card({id:'g3-acl', area:'acl', tier:2, kind:'graded', src:'Q3 b', title:'Write and place a standard ACL', variants:['num','name'], gen(v){
+/* The question names the list it wants (owner): a number or a name, at
+   random, so the model's number is never made up. Not variants (owner): the
+   ACL is the same either way, only how the list is named differs. */
+card({id:'g3-acl', area:'acl', tier:2, kind:'graded', src:'Q3 b', title:'Write and place a standard ACL', gen(){
+  const v=pick(['num','name']);
   const P=q3Plan(), t=ri(0,3), others=shuffle([0,1,2,3].filter(i=>i!==t)), hl=others[0], nl=others[1];
   const host=(P.lans[hl]+ri(2,254))>>>0, num=v==='num'?ri(1,99):null;
   const name=v==='name'?pick(['LAN'+(t+1)+'-IN','PROTECT-LAN'+(t+1),'LAN'+(t+1)+'-ACCESS','ALLOW-LAN'+(nl+1)]):null;
@@ -2630,7 +2632,10 @@ card({id:'g4-nat-trap', area:'nat', tier:3, kind:'graded', src:'Q4 a', title:'Is
   };
 }});
 
-card({id:'g4-count', area:'nat', tier:2, kind:'graded', src:'Q4 c', title:'How many public addresses?', variants:['pair','pair','static'], gen(v){
+/* A third of the time it also asks about static NAT — a version of the
+   card, not a variant (owner): the reasoning is the same. */
+card({id:'g4-count', area:'nat', tier:2, kind:'graded', src:'Q4 c', title:'How many public addresses?', gen(){
+  const v=pick(['pair','pair','static']);
   const N=pick([24,30,45,60,80,120,200,250]), M=ri(5,Math.min(N-1,60)), stat=v==='static';
   return {
     prompt:'A site has <b>'+N+'</b> hosts that need Internet access, but never more than <b>'+M+'</b> are online at the same time. How many public IPv4 addresses does the Gateway need for&hellip;',
@@ -2956,7 +2961,8 @@ card({id:'g5-dora', area:'dhcp', tier:1, kind:'graded', src:'Q5 a', title:'DHCP 
    only the table says so; prefix — the clients are named by their subnet,
    two /26s of one /24, and the table gives R1's address on each, so the
    interface comes from working out which /26 is which (on paper). */
-card({id:'g5-relay', area:'dhcp', tier:2, kind:'graded', src:'Q5 b', title:'Configure a DHCP relay', variants:['given','find','local','prefix'], gen(v){
+card({id:'g5-relay', area:'dhcp', tier:2, kind:'graded', src:'Q5 b', title:'Configure a DHCP relay', variants:['given','local','prefix'], gen(v){
+  if(v==='given'&&chance(.5)) v='find';   // the same answer, so one variant (owner): sometimes the address is only in the table
   const lanIf=pick(['G0/0','G0/1']), other=lanIf==='G0/0'?'G0/1':'G0/0', remote=v==='local'?false:v==='given'?chance(.5):true;
   const cl=ip2int('192.168.'+ri(0,254)+'.0'), sn=ip2int('10.'+ri(1,254)+'.'+ri(0,255)+'.0'), srv=sn+ri(2,250);
   const sw=shuffle(['S1','S2']), q=shuffle([0,1,2,3]), cN=cl+q[0]*64, oN=cl+q[1]*64;   // prefix: two /26s of one /24
@@ -3155,7 +3161,8 @@ card({id:'g5-v6msgs', area:'dhcp', tier:2, kind:'graded', src:'Q5', title:'DHCPv
    table; local — the server sits on R1's other LAN, so the relay still goes
    on the clients' side, not the server's; prefix — the clients' LAN is named
    by its prefix, so the interface comes from matching it to an address. */
-card({id:'g5-v6relay', area:'dhcp', tier:2, kind:'graded', src:'Q5', title:'Configure a DHCPv6 relay', variants:['given','find','local','prefix'], gen(v){
+card({id:'g5-v6relay', area:'dhcp', tier:2, kind:'graded', src:'Q5', title:'Configure a DHCPv6 relay', variants:['given','local','prefix'], gen(v){
+  if(v==='given'&&chance(.5)) v='find';   // the same answer, so one variant (owner): sometimes the address is only in the table
   const lanIf=pick(['G0/0','G0/1']), other=lanIf==='G0/0'?'G0/1':'G0/0', n=ri(10,59), sn=v==='local'?n+60:n+ri(1,40), srv='2001:db8:acad:'+sn+'::'+pick(['5','10','53','100','a']);
   const ifs=['G0/0','G0/1','S0/0/0'], lanPfx='2001:db8:acad:'+n+'::/64';
   const sw=shuffle(['S1','S2']);
@@ -4220,10 +4227,12 @@ function selfMark(ok){
 function finish(ok,msg){
   S.answered++; if(ok) S.correct++; saveState();
   phase='rate'; show('chkbtn',false); show('skipbtn',false);
-  /* how many of the card's variants this answer leaves done */
+  /* How many of the card's variants this answer leaves done. The owner
+     wanted the count kept but not the "can only become Comfortable once…"
+     clause; the rule itself still holds. */
   const left=variantsLeft(cur.id), n=hasVariants(cur)?cur.vlist.length:0;
   const still=left.filter(v=>v!==Q.variant).length;
-  const vnote=!left.length||!ok?'':still?' That&rsquo;s '+(n-still)+' of this card&rsquo;s '+n+' variants done &mdash; it can only become Comfortable once you&rsquo;ve done all '+n+'.':
+  const vnote=!left.length||!ok?'':still?' That&rsquo;s '+(n-still)+' of this card&rsquo;s '+n+' variants done.':
     ' That&rsquo;s '+(n===2?'both':'all '+n)+' of this card&rsquo;s variants done.';
   if(ok){
     forced=null;
