@@ -1911,6 +1911,33 @@ function ifPill(id,name,x,y,pick){
 function ordHtml(opts){
   return '<div class="ex-chips">'+opts.map((o,i)=>'<button type="button" class="cbtn ex-ord" data-o="'+i+'"><span class="ex-ord-n"></span>'+o+'</button>').join('')+'</div>';
 }
+/* Mark an ordering answer out of its number of steps (owner: "out of 4, so
+   one mark is a correct step in the correct order"): a mark per pick that is
+   in the right order relative to the others (the longest run of the correct
+   order the learner's sequence contains, not position by position — one
+   stray message at the front shouldn't cost all four), less one per message
+   that isn't part of it, so clicking everything doesn't pay. Each chip keeps the
+   learner's own number: green in order, red out of order or not part of it,
+   amber "+" for a message they left out. want is the option indexes in the
+   correct order. */
+function markOrder(want){
+  const mine=Q.order, n=want.length, m=mine.length;
+  const L=Array.from({length:m+1},()=>new Array(n+1).fill(0));
+  for(let i=m-1;i>=0;i--) for(let j=n-1;j>=0;j--) L[i][j]=mine[i]===want[j]?L[i+1][j+1]+1:Math.max(L[i+1][j],L[i][j+1]);
+  const inOrder=new Set(); for(let i=0,j=0;i<m&&j<n;){ if(mine[i]===want[j]){ inOrder.add(mine[i]); i++; j++; } else if(L[i+1][j]>=L[i][j+1]) i++; else j++; }
+  const extra=mine.filter(i=>want.indexOf(i)<0).length, right=inOrder.size;
+  const ok=m===n&&mine.every((v,i)=>v===want[i]);
+  const got=ok?n:Math.max(0,right-extra);
+  qroot().querySelectorAll('.ex-ord').forEach(b=>{
+    const i=+b.dataset.o, k=mine.indexOf(i), need=want.indexOf(i)>=0; b.disabled=true; b.classList.remove('on');
+    b.querySelector('.ex-ord-n').textContent=k>=0?k+1:need?'+':'✕';
+    if(k>=0) b.classList.add(inOrder.has(i)?'ex-ok':'ex-bad'); else if(need){ b.classList.add('ex-miss'); b.title='Left out — it is message '+(want.indexOf(i)+1); }
+  });
+  const left=n-(m-extra);
+  const note=ok?'':right+' of '+n+' in the right order'+(extra?', '+extra+' not part of it':'')+(left?', '+left+' left out':'')+
+    ' &mdash; '+got+' / '+n+' marks';
+  return {ok, got, of:n, note};
+}
 
 /* ═══ Q3 — ACLs ═══════════════════════════════════════════════════════════ */
 /* The practice exam's two-router network: R1 with LAN1 (G0/0) and LAN2
@@ -2915,13 +2942,8 @@ card({id:'g5-dora', area:'dhcp', tier:1, kind:'graded', src:'Q5 a', title:'DHCP 
     prompt:'A PC boots with no IP address. Click the DHCPv4 messages in the order they are exchanged'+(opts.length>4?' &mdash; one of them isn\'t part of it':'')+'. Click a chosen message again to undo it.',
     body: ordHtml(opts),
     grade(){
-      const ok=Q.order.length===4&&Q.order.every((v,i)=>v===want[i]);
-      qroot().querySelectorAll('.ex-ord').forEach(b=>{
-        const i=+b.dataset.o, pos=want.indexOf(i), mine=Q.order.indexOf(i); b.disabled=true; b.classList.remove('on');
-        b.querySelector('.ex-ord-n').textContent=pos>=0?pos+1:'✕';
-        if(pos>=0&&mine===pos) b.classList.add('ex-ok'); else if(mine>=0||pos>=0) b.classList.add('ex-bad');
-      });
-      return {ok, verdict: ok?'Correct.':'Discover, Offer, Request, Acknowledgement.', why: ul([
+      const {ok, got, of, note}=markOrder(want);
+      return {ok, got, of, verdict: ok?'Correct.':'Discover, Offer, Request, Acknowledgement. You had '+note+'.', why: ul([
         '<b>D</b>iscover (client broadcast) &rarr; <b>O</b>ffer (server) &rarr; <b>R</b>equest (client) &rarr; <b>A</b>ck (server): "DORA".',
         ...(opts.length>4?[opts.find(o=>seq.indexOf(o)<0)+' isn\'t part of getting an address: '+({DHCPNAK:'a server refuses a Request with it',DHCPRELEASE:'a client gives its address back with it',DHCPDECLINE:'a client rejects an offered address that is already in use'})[opts.find(o=>seq.indexOf(o)<0)]+'.']:[])])};
     },
@@ -3115,13 +3137,8 @@ card({id:'g5-v6msgs', area:'dhcp', tier:2, kind:'graded', src:'Q5', title:'DHCPv
     prompt:'A PC uses <b>'+(stateful?'stateful':'stateless')+' DHCPv6</b>. It has already received the router\'s RA. Click the DHCPv6 messages it exchanges with the server, in order &mdash; some of these aren\'t part of it. Click a chosen message again to undo it.',
     body: ordHtml(opts),
     grade(){
-      const ok=Q.order.length===seq.length&&Q.order.every((v,i)=>v===want[i]);
-      qroot().querySelectorAll('.ex-ord').forEach(b=>{
-        const i=+b.dataset.o, pos=want.indexOf(i), mine=Q.order.indexOf(i); b.disabled=true; b.classList.remove('on');
-        b.querySelector('.ex-ord-n').textContent=pos>=0?pos+1:'✕';
-        if(pos>=0&&mine===pos) b.classList.add('ex-ok'); else if(mine>=0||pos>=0) b.classList.add('ex-bad');
-      });
-      return {ok, verdict: ok?'Correct.':seq.join(', ')+'.', why: ul([
+      const {ok, got, of, note}=markOrder(want);
+      return {ok, got, of, verdict: ok?'Correct.':seq.join(', ')+'. You had '+note+'.', why: ul([
         stateful?'Stateful DHCPv6 is four messages, like DORA: <b>SOLICIT</b> (client, to the all-DHCP-servers multicast ff02::1:2) &rarr; <b>ADVERTISE</b> &rarr; <b>REQUEST</b> &rarr; <b>REPLY</b>.':
           'Stateless DHCPv6 is just <b>INFORMATION-REQUEST</b> &rarr; <b>REPLY</b>: the client already has its SLAAC address and only asks for the other information (DNS, domain).',
         'Not part of it: '+dist.map(d=>({DHCPDISCOVER:'DHCPDISCOVER is DHCPv4 (DHCPv6 starts with SOLICIT)',DHCPOFFER:'DHCPOFFER is DHCPv4 (the DHCPv6 equivalent is ADVERTISE)',DHCPACK:'DHCPACK is DHCPv4 (DHCPv6 confirms with REPLY)',
@@ -4438,10 +4455,10 @@ function exAnswered(p){
 function examNavPaint(){
   const nav=$('ex-nav'), res=EX.stage==='done';
   nav.innerHTML='<span>Questions:</span>'+EX.qs.map((q,i)=>{
-    const ps=EX.parts.filter(p=>p.q===q), a=ps.filter(p=>res?exState(p)[1]==='ex-comf':exAnswered(p)).length;
-    const cls=(!res&&i===EX.qi?' on':'')+(a===ps.length?' ex-full':a?' ex-some':'');
-    const tip=res?a+' of '+ps.length+' parts right':a+' of '+ps.length+' parts answered';
-    return '<button type="button" class="cbtn ex-navb'+cls+'" data-qi="'+i+'" title="'+tip+'">Q'+q+' <span class="ex-nav-n">'+a+'/'+ps.length+'</span></button>';
+    const ps=EX.parts.filter(p=>p.q===q), a=res?exSum(ps):ps.filter(p=>exAnswered(p)).length, of=res?exOf(ps):ps.length;
+    const cls=(!res&&i===EX.qi?' on':'')+(a===of?' ex-full':a?' ex-some':'');
+    const tip=res?a+' of '+of+' marks':a+' of '+of+' parts answered';
+    return '<button type="button" class="cbtn ex-navb'+cls+'" data-qi="'+i+'" title="'+tip+'">Q'+q+' <span class="ex-nav-n">'+a+'/'+of+'</span></button>';
   }).join('');
 }
 $('ex-nav').addEventListener('click',e=>{
@@ -4473,7 +4490,7 @@ function examGradeAll(){
     p.answered=exAnswered(p);
     if(p.card.kind==='flash'){ p.text=p.el.querySelector('textarea.ex-flash').value.trim(); if(!p.text) p.self=false; return; }
     QROOT=p.el; Q=p.Q; cur=p.card;
-    const r=Q.grade(); p.ok=r.ok; p.verdict=r.verdict; p.why=r.why;
+    const r=Q.grade(); p.ok=r.ok; p.of=r.of||1; p.got=r.ok?p.of:(r.got||0); p.verdict=r.verdict; p.why=r.why;
     QROOT=null;
   });
   Q=null; cur=null;
@@ -4488,10 +4505,21 @@ function exState(p){
     return p.self==null?['Mark it','ex-learn']:p.self?['Right','ex-comf']:['Wrong','ex-bad'];
   }
   if(!p.answered) return ['Not answered','ex-bad'];
-  return p.ok?['Correct','ex-comf']:['Wrong','ex-bad'];
+  const of=p.of||1;
+  return p.ok?['Correct'+(of>1?' · '+of+' / '+of:''),'ex-comf']:p.got>0?['Some marks · '+p.got+' / '+of,'ex-learn']:['Wrong'+(of>1?' · 0 / '+of:''),'ex-bad'];
 }
+/* What a part scores, and out of how many: most parts are worth 1; an
+   ordering card is worth a mark per step (4 for DORA), and scores one per
+   step in the right order. */
+function exMax(p){ return p.card.kind==='flash'?1:(p.of||1); }
+function exPts(p){
+  if(p.card.kind==='flash') return p.text&&p.self?1:0;
+  return !p.answered?0:p.ok?exMax(p):(p.got||0);
+}
+function exSum(ps){ return ps.reduce((t,p)=>t+exPts(p),0); }
+function exOf(ps){ return ps.reduce((t,p)=>t+exMax(p),0); }
 function exScore(){
-  const s=EX.parts.filter(p=>exState(p)[1]==='ex-comf').length;
+  const s=exSum(EX.parts);
   if(EX.rec) EX.rec.score=s;
   return s;
 }
@@ -4567,22 +4595,22 @@ function exResultItem(p){
 }
 function examResults(){
   EX.stage='done'; EX.done=true; phase='review'; cur=null; Q=null; forced=null; exActs('done'); hideBanner();
-  if(!EX.rec){ EX.rec={at:EX.t0, diff:EX.diff, total:EX.parts.length, secs:EX.secs, score:0}; exScore(); S.exams=(S.exams||[]).concat([EX.rec]).slice(-20); saveState(); }
-  const s=exScore(), n=EX.parts.length;
+  if(!EX.rec){ EX.rec={at:EX.t0, diff:EX.diff, total:exOf(EX.parts), secs:EX.secs, score:0}; exScore(); S.exams=(S.exams||[]).concat([EX.rec]).slice(-20); saveState(); }
+  const s=exScore(), n=exOf(EX.parts);
   $('q-tag').textContent='Exam results · '+TIER_NAME[EX.diff];
   exQpill(EX.secs,'Time taken');
   $('q-prompt').innerHTML='<b>'+s+' / '+n+'</b> ('+Math.round(100*s/n)+'%)';
   const rows=EXAM_Q.filter(x=>EX.qs.indexOf(x.q)>=0).map(x=>{
-    const ps=EX.parts.filter(p=>p.q===x.q), got=ps.filter(p=>exState(p)[1]==='ex-comf').length;
-    return '<tr><td>Question '+x.q+'</td><td>'+x.topic+'</td><td>'+got+' / '+ps.length+'</td></tr>';
+    const ps=EX.parts.filter(p=>p.q===x.q), got=exSum(ps);
+    return '<tr><td>Question '+x.q+'</td><td>'+x.topic+'</td><td>'+got+' / '+exOf(ps)+'</td></tr>';
   });
   const qb=$('qbody');
   qb.innerHTML='<div class="ex-scroll"><table class="rt-table ex-table ex-xplan"><thead><tr><th>Question</th><th>Topic</th><th>Mark</th></tr></thead><tbody>'+rows.join('')+
     '</tbody><tfoot><tr><td>Total</td><td></td><td>'+s+' / '+n+'</td></tr></tfoot></table></div>';
   EX.qs.forEach(q=>{
-    const x=EXAM_Q.find(e=>e.q===q), ps=EX.parts.filter(p=>p.q===q), got=ps.filter(p=>exState(p)[1]==='ex-comf').length;
+    const x=EXAM_Q.find(e=>e.q===q), ps=EX.parts.filter(p=>p.q===q), got=exSum(ps);
     const sec=document.createElement('div'); sec.className='ex-rq'; sec.id='exr-q'+q;
-    sec.innerHTML='<div class="ex-rq-hdr">Question '+q+' &middot; '+x.topic+' <span class="ex-sub">'+got+' / '+ps.length+'</span></div>';
+    sec.innerHTML='<div class="ex-rq-hdr">Question '+q+' &middot; '+x.topic+' <span class="ex-sub">'+got+' / '+exOf(ps)+'</span></div>';
     ps.forEach(p=>sec.appendChild(exResultItem(p)));
     qb.appendChild(sec);
   });
