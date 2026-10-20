@@ -172,6 +172,11 @@ function kwResolve(id,points,vars){
 let QROOT=null;
 function qroot(){ return QROOT||$('qbody'); }
 function qel(id){ return qroot().querySelector('#'+id); }
+/* The difficulty the card is being built for: the flashcards' own, or the
+   exam's. A card reads it to make a round harder only on Hard — typed ACL
+   placement, and arithmetic that would need a calculator (owner: Easy and
+   Medium must be doable in your head or on paper). */
+function roundDiff(){ return S.mode==='exam'?S.ediff:S.diff; }
 
 /* Typed answer box. Values are kept on a wrong answer: the hint says what
    was typed and what was wanted (access_control's convention). */
@@ -1664,10 +1669,10 @@ function markCmds(id,ok,model,why,eq){
   const row=(cls,mark,o,note)=>'<div class="ex-ln '+cls+(o.mode!=='global'?' sub':'')+'"><span class="ex-ln-m">'+mark+'</span><span class="ex-ln-t">'+esc(o.raw.trim())+'</span>'+(note?'<span class="ex-ln-n">'+esc(note)+'</span>':'')+'</div>';
   const list=document.createElement('div'); list.id='ln-'+id; list.className='ex-lines';
   list.innerHTML=m.typed.map(t=>t.skip?row('skip','&middot;',t.o):t.other?row('skip','&middot;',t.o,t.note):row(t.ok?'ok':'bad',t.ok?'&#10003;':'&#10007;',t.o,t.note)).join('')+
-    m.missing.map(o=>row('miss','+',o,'missing')).join('');
+    m.missing.map(o=>row('miss','+',o,o.fix?'should be':'missing')).join('');
   ta.style.display='none'; ta.insertAdjacentElement('afterend',list);
   h.textContent=ok?'Correct \u2014 '+m.total+'/'+m.total+' lines':
-    m.right+'/'+m.total+' lines correct'+(m.extra?' \u00b7 '+m.extra+' line'+(m.extra>1?'s':'')+' not needed':'')+(why?' \u2014 '+decodeEnt(why):'');
+    m.right+'/'+m.total+' lines correct'+(m.wrong?' · '+m.wrong+' wrong':'')+(m.extra?' \u00b7 '+m.extra+' line'+(m.extra>1?'s':'')+' not needed':'')+(why?' \u2014 '+decodeEnt(why).replace(/<\/?[ib]>/g,''):'');
 }
 /* Pair typed lines with the model's, in any order, each in its own mode and
    interface. */
@@ -1686,9 +1691,37 @@ function cmdMarks(lines,model,eq,ok,why){
     if(ok&&hit<0) return {o, other:true, note:'not in the model answer'};
     return {o, ok:hit>=0&&!named, note:named||hit>=0?'':'not needed'};
   });
+  /* The wrong interface: an unmatched "interface X" stands for the model's
+     unmatched interface, and a right line under it is ticked — the
+     interface line is the one that's wrong. */
+  if(!ok){
+    const mIf=M.map((mo,j)=>j).filter(j=>!used.has(j)&&/^interface /.test(M[j].cmd));
+    typed.forEach(t=>{
+      if(t.skip||t.ok||t.note!=='not needed'||!/^interface /.test(t.o.cmd)||!mIf.length) return;
+      const ifc=M[mIf.shift()].ifc;
+      typed.forEach(u=>{
+        if(u.skip||u.ok||u.note!=='not needed'||u.o.mode!=='if'||u.o.ifc!==t.o.ifc) return;
+        const as=Object.assign({},u.o,{ifc});
+        const j=M.findIndex((mo,k)=>!used.has(k)&&cmdSame(as,mo,eq));
+        if(j>=0){ used.add(j); u.ok=true; u.note=''; }
+      });
+    });
+  }
   const missing=ok?[]:M.filter((mo,j)=>!used.has(j)&&mo.cmd!=='exit'&&mo.cmd!=='end');
+  /* A crossed line that is the same command as a missing one, in the same
+     place (its first two words: "ip access-group", "deny tcp", "access-list
+     110"; "interface" alone), is that line typed wrong, not a line the
+     answer didn't need. */
+  const head=o=>/^interface /.test(o.cmd)?'interface':cmdCanon(o).split(' ').slice(0,2).join(' '), claimed=new Set();
+  typed.forEach(t=>{
+    if(t.skip||t.other||t.ok||t.note!=='not needed') return;
+    const j=missing.findIndex((mo,k)=>!claimed.has(k)&&cmdCtx(mo)===cmdCtx(t.o)&&head(mo)===head(t.o));
+    if(j>=0){ claimed.add(j); t.note='wrong'; }
+  });
+  missing.forEach((mo,k)=>{ mo.fix=claimed.has(k); });
   const total=M.filter(mo=>mo.cmd!=='exit'&&mo.cmd!=='end').length;
-  return {typed, missing, total, right:ok?total:typed.filter(t=>t.ok).length, extra:ok?0:typed.filter(t=>!t.skip&&!t.other&&!t.ok).length};
+  return {typed, missing, total, right:ok?total:typed.filter(t=>t.ok).length,
+    extra:ok?0:typed.filter(t=>!t.skip&&!t.other&&!t.ok&&t.note!=='wrong').length, wrong:ok?0:typed.filter(t=>t.note==='wrong').length};
 }
 /* A line's own context: the interface it was typed under, else its mode. */
 function cmdCtx(o){ return o.mode==='if'?'if:'+o.ifc:o.mode; }
@@ -1954,6 +1987,82 @@ function applyHtml(noDir){
   return '<div class="ex-apply"><span class="ex-apply-lbl">Apply on:</span> <b id="if-pick" class="ex-apply-if">click an interface on the diagram</b>'+
     (noDir?'':'<span class="ex-apply-lbl">Direction:</span>'+chipsHtml(['In','Out']))+'</div>';
 }
+/* On Hard the ACL cards drop the interface and direction picks (owner): the
+   box takes the lines that apply the list as well, and the only pick left is
+   which router they are typed on, because both routers have a G0/0. */
+function aclTyped(){ return roundDiff()===3; }
+function routerPickHtml(){
+  return '<div class="ex-apply"><span class="ex-apply-lbl">Typed on:</span>'+chipsHtml(['R1','R2'])+'</div>';
+}
+/* An ACL box, split the way a router reads it: the list's own lines, and
+   every "ip access-group L in|out" / "ipv6 traffic-filter L in|out" with the
+   interface it was typed under. Other interface commands (no shutdown …)
+   are left out; an entry typed under an interface is an error, as on IOS. */
+function aclSplit(lines){
+  const list=[], applies=[]; let err=null;
+  iosLines(lines).forEach(o=>{
+    if(/^interface /.test(o.cmd)||o.cmd==='exit'||o.cmd==='end') return;
+    const m=/^(ip access-group|ipv6 traffic-filter)( |$)/.exec(o.cmd);
+    if(m){ const w=o.words; applies.push({v6:m[1]==='ipv6 traffic-filter', ifc:o.mode==='if'?o.ifc:'', list:w[2]||'', dir:/^(in|out)$/i.test(w[3]||'')?w[3].toLowerCase():null, raw:o.raw.trim()}); return; }
+    if(o.mode==='if'){
+      if(!err&&/^(\d+\s+)?(permit|deny|remark)\b/i.test(o.raw.trim())) err='"'+o.raw.trim()+'" is typed under an interface &mdash; a list\'s entries go under the list.';
+      return;
+    }
+    list.push(o.raw);
+  });
+  return {list, applies, err};
+}
+/* Where the list was put. Typed (Hard): the router chip and the box's own
+   apply lines. Picked: the interface and direction chips — and any apply
+   lines typed in the box anyway must name the list and agree with the
+   answer. o = {id, v6, tgt:'R1 G0/0', dir:'in'|'out'}. */
+function aclPlaced(typed,sp,o){
+  const kw=o.v6?'ipv6 traffic-filter':'ip access-group', port=NR.acIfNorm(o.tgt.split(' ')[1]);
+  let why=null, off=null;
+  for(const a of sp.applies){
+    if(a.v6!==!!o.v6) why=o.v6?'IPv6 lists are applied with ipv6 traffic-filter, not ip access-group.':'ipv6 traffic-filter is for IPv6 lists; an IPv4 list is applied with ip access-group.';
+    else if(!a.ifc) why=kw+' goes under the interface: type interface &lt;name&gt; first.';
+    else if(a.list!==o.id) why=kw+' names the list it applies: '+o.id+(a.list.toLowerCase()===o.id.toLowerCase()?' (names are case-sensitive)':'')+', not '+(a.list||'nothing')+'.';
+    else if(!a.dir) why='Say which way it filters: '+kw+' '+o.id+' in or out.';
+    if(why) break;
+    if(!off&&(NR.acIfNorm(a.ifc)!==port||a.dir!==o.dir)) off=a;
+  }
+  if(!typed){
+    if(!why&&off) why='The box applies it to '+off.ifc.toUpperCase()+' '+off.dir+'bound &mdash; that is not where it goes.';
+    return {at:Q.ifSel||null, dir:Q.choice==null?null:['in','out'][Q.choice], why};
+  }
+  const r=Q.choice==null?null:['R1','R2'][Q.choice], a=off||sp.applies[0];
+  if(!why&&!a) why='Apply the list: type the interface, then '+kw+' '+o.id+' in or out under it.';
+  if(!why&&!r) why='Say which router the commands are typed on.';
+  if(!why&&r!==o.tgt.split(' ')[0]) why='These commands belong on '+o.tgt.split(' ')[0]+', not '+r+'.';
+  return {at:r&&a&&a.ifc?r+' '+a.ifc.toUpperCase():null, dir:a?a.dir:null, why};
+}
+/* The lines that apply the list, for the model answer. */
+function aclApplyModel(o){
+  return ['interface '+o.tgt.split(' ')[1],' '+(o.v6?'ipv6 traffic-filter':'ip access-group')+' '+o.id+' '+o.dir];
+}
+/* The model answer in the learner's own numbering, so a right entry in a
+   named list (or under another valid number) is ticked rather than marked
+   "not needed" against the model's access-list 110. kind is 'std' or 'ext';
+   anything unusable as a list id of that kind leaves the model as it is. */
+function aclModelAs(model,lines,kind){
+  let id=null, named=false;
+  for(const o of iosLines(lines)){
+    let m;
+    if((m=/^ip access-list (standard|extended) /.exec(o.cmd))&&o.words[3]&&(m[1]==='extended')===(kind==='ext')){ id=o.words[3]; named=true; break; }
+    if((m=/^access-list (\d+) /.exec(o.cmd))&&NR.aclNumKind(+m[1])===kind){ id=m[1]; break; }
+  }
+  if(id==null) return {model, id:null};
+  const out=[]; let head=false;
+  model.forEach(l=>{
+    const m=/^access-list \d+ (.*)$/.exec(l);
+    if(!m){ out.push(l); return; }
+    if(!named){ out.push('access-list '+id+' '+m[1]); return; }
+    if(!head){ out.push('ip access-list '+(kind==='ext'?'extended':'standard')+' '+id); head=true; }
+    out.push(' '+m[1]);
+  });
+  return {model:out, id};
+}
 /* A typed numbered standard ACL, parsed by the labs' engine. */
 /* A standard ACL, numbered (access-list N …) or named (ip access-list
    standard NAME, then permit/deny lines, optionally sequence-numbered).
@@ -2048,7 +2157,9 @@ card({id:'q3d-established', area:'acl', tier:1, kind:'flash', src:'Q3 d', title:
 
 function wcCard(id,tier,title,cross){
   card({id, area:'acl', tier, kind:'graded', src:'Q3 a', title, gen(){
-    const pfx=cross?pick([17,18,19,20,21,22,23,12,13,14]):pick([8,16,24,24,25,26,27,28,29,30]);
+    /* No calculator below Hard (owner): a block of 2^16 = 65,536 or fewer is
+       head-or-paper arithmetic; /12–/15 (up to 1,048,576) only on Hard. */
+    const pfx=cross?pick([16,17,18,19,20,21,22,23].concat(roundDiff()===3?[12,13,14,15]:[])):pick([8,16,24,24,25,26,27,28,29,30]);
     const wc=(~pfxMask(pfx))>>>0;
     let base=netOf(rNet24()+ri(0,255),pfx);
     if(cross&&chance(.75)) base=(base|(Math.floor(Math.random()*wc)&wc))>>>0;     // address bits under the wildcard: the practice exam's trap (not always, or it's a pattern)
@@ -2089,25 +2200,31 @@ card({id:'g3-acl', area:'acl', tier:2, kind:'graded', src:'Q3 b', title:'Write a
   tests.push({ip:P.wan+1, want:'deny', what:'the R1–R2 link'},{ip:P.wan+2, want:'deny', what:'the R1–R2 link'},{ip:ip2int('8.8.8.8'), want:'deny', what:'an outside network'});
   const model=num!=null?['access-list '+num+' permit host '+int2ip(host),'access-list '+num+' permit '+int2ip(P.lans[nl])+' 0.0.0.255']:
     ['ip access-list standard '+name,' permit host '+int2ip(host),' permit '+int2ip(P.lans[nl])+' 0.0.0.255'];
-  const tgt=Q3_IF[t];
+  const tgt=Q3_IF[t], typed=aclTyped(), at={id, tgt, dir:'out'};
   return {
     prompt:'Write a <b>standard ACL</b> that controls access into <b>LAN'+(t+1)+'</b> ('+cidr(P.lans[t],24)+'). Host <b>'+int2ip(host)+'</b> and all hosts in <b>LAN'+(nl+1)+
-      '</b> are permitted; all other networks are not. '+(num!=null?'Use access list number <b>'+num+'</b>.':'Make it a named list called <b>'+name+'</b>.')+' Then say which router interface it goes on, and in which direction.',
-    body: q3Topo(P,true)+cmdsHtml('acl','Standard ACL &mdash; one command per line, Ctrl+Enter submits','Type the ACL, one entry per line',3)+applyHtml(),
+      '</b> are permitted; all other networks are not. '+(num!=null?'Use access list number <b>'+num+'</b>.':'Make it a named list called <b>'+name+'</b>.')+
+      (typed?' Then apply it: add the commands that put it on the right interface, and say which router you are typing on.':' Then say which router interface it goes on, and in which direction.'),
+    body: q3Topo(P,!typed)+(typed?cmdsHtml('acl','Standard ACL and where it is applied &mdash; one command per line, Ctrl+Enter submits','Type the ACL, then the commands that apply it',5)+routerPickHtml():
+      cmdsHtml('acl','Standard ACL &mdash; one command per line, Ctrl+Enter submits','Type the ACL, one entry per line',3)+applyHtml()),
     grade(){
-      const p=parseStdAcl(cmdLines('acl'),num!=null?{num}:{name});
-      let aclWhy=p.err||null;
+      const sp=aclSplit(cmdLines('acl')), p=parseStdAcl(sp.list,num!=null?{num}:{name});
+      let aclWhy=sp.err||p.err||null;
       if(!aclWhy) for(const s of tests){
         const got=NR.aclEvaluate(p.acl,s.ip,false).action;
         if(got!==s.want){ aclWhy=(s.want==='permit'?'It blocks ':'It lets in ')+int2ip(s.ip)+' ('+s.what+').'; break; }
       }
-      const okAcl=!aclWhy, okIf=Q.ifSel===tgt, okDir=Q.choice===1;
-      markCmds('acl',okAcl,model.join('\n'),aclWhy); markIfs(tgt); markChips(1);
-      const why=['The correct commands to run:<br>'+model.map(l=>mono(l.trim())).join('<br>')+' &mdash; the implicit <b>deny any</b> at the end blocks everyone else.',
+      const pl=aclPlaced(typed,sp,at), okAcl=!aclWhy, okDir=pl.dir==='out';
+      let okIf=pl.at===tgt; const okPl=okIf&&okDir&&!pl.why;
+      const mk=typed||sp.applies.length?model.concat(aclApplyModel(at)):model;
+      const pw=pl.why||(okIf&&!okDir?'Inbound on that interface would filter traffic <i>leaving</i> LAN'+(t+1)+', not entering it.':
+        pl.at&&!okIf?'On '+pl.at+' it would also filter traffic that isn\'t going to LAN'+(t+1)+'.':null);
+      markCmds('acl',okAcl&&(!sp.applies.length&&!typed||okPl),mk.join('\n'),aclWhy||pw); markIfs(tgt); markChips(typed?+(tgt[1]==='2'):1);
+      const why=['The correct commands to run:<br>'+model.concat(typed?aclApplyModel(at):[]).map(l=>mono(l.trim())).join('<br>')+' &mdash; the implicit <b>deny any</b> at the end blocks everyone else.',
         'A standard ACL matches only the source, so it goes as close to the destination as possible: <b>'+tgt+' outbound</b>, on the interface facing LAN'+(t+1)+
           ' ('+mono('ip access-group '+id+' out')+' under it).'];
-      if(Q.ifSel===tgt&&!okDir) why.push('Inbound on that interface would filter traffic <i>leaving</i> LAN'+(t+1)+', not entering it.');
-      else if(Q.ifSel&&!okIf) why.push('On '+Q.ifSel+' it would also filter traffic that isn\'t going to LAN'+(t+1)+'.');
+      if(pw) why.push(pw);
+      okIf=okPl;
       return {ok:okAcl&&okIf&&okDir, verdict: okAcl&&okIf&&okDir?'Correct.':
         'Check '+[okAcl?null:'the ACL', okIf&&okDir?null:'where it goes'].filter(Boolean).join(' and ')+'.', why: ul(why)};
     },
@@ -2206,22 +2323,30 @@ card({id:'g3-ext', area:'acl', tier:3, kind:'graded', src:'Q3', title:'Write and
   // it sits inbound on LAN a's interface, so it only ever sees traffic from LAN a
   const srcs=[2,9,100,129,254].map(o=>(L(a)+o)>>>0).concat(kind==='ssh'?[H,H-1,H+1].filter(x=>inA(x)):[]);
   const dsts=[srv,(srv+1)>>>0,(L(b)+(srv-L(b)>100?3:200))>>>0,(L(c)+20)>>>0,ip2int('8.8.8.8')];
-  const tgt=Q3_IF[a];
+  const tgt=Q3_IF[a], typed=aclTyped();
   return {
-    prompt:policy+' Write an <b>extended ACL</b> for this, then say which interface it goes on and in which direction.',
-    body: q3Topo(P,true)+cmdsHtml('acl','Extended ACL &mdash; one command per line, Ctrl+Enter submits','Type the ACL, one entry per line',3)+applyHtml(),
+    prompt:policy+' Write an <b>extended ACL</b> for this, then '+(typed?'add the commands that apply it to the right interface, and say which router you are typing on.':'say which interface it goes on and in which direction.'),
+    body: q3Topo(P,!typed)+(typed?cmdsHtml('acl','Extended ACL and where it is applied &mdash; one command per line, Ctrl+Enter submits','Type the ACL, then the commands that apply it',5)+routerPickHtml():
+      cmdsHtml('acl','Extended ACL &mdash; one command per line, Ctrl+Enter submits','Type the ACL, one entry per line',3)+applyHtml()),
     grade(){
-      const p=parseExtAcl(cmdLines('acl'));
-      let aclWhy=p.err||null;
+      const lines=cmdLines('acl'), sp=aclSplit(lines), p=parseExtAcl(sp.list);
+      let aclWhy=sp.err||p.err||null;
       if(!aclWhy) outer: for(const s of srcs) for(const d of dsts) for(const pk of ACL_PKTS){
         const want=deny(s,d,pk)?'deny':'permit', got=NR.aclEvaluate(p.acl,s,false,d,pk).action;
         if(got!==want){ aclWhy=(want==='permit'?'It blocks ':'It lets through ')+pk.txt+' from '+int2ip(s)+' to '+int2ip(d)+'.'; break outer; }
       }
-      const okAcl=!aclWhy, okIf=Q.ifSel===tgt, okDir=Q.choice===0;
-      markCmds('acl',okAcl,model.join('\n'),aclWhy); markIfs(tgt); markChips(0);
-      const why=['The correct commands to run:<br>'+model.map(mono).join('<br>')+(kind==='ssh'?' &mdash; the permit for '+int2ip(H)+' has to come <b>before</b> the deny, because the first match wins.':' &mdash; without the final '+mono('permit ip any any')+' the implicit deny would block everything else.'),
+      /* the learner names or numbers the list themselves, so it is marked in their form */
+      const own=aclModelAs(model,sp.list,'ext'), at={id:own.id||model[0].split(' ')[1], tgt, dir:'in'};
+      const pl=aclPlaced(typed,sp,at), okAcl=!aclWhy, okDir=pl.dir==='in';
+      const okIf=pl.at===tgt&&okDir&&!pl.why;
+      const mk=typed||sp.applies.length?own.model.concat(aclApplyModel(at)):own.model;
+      const pw=pl.why||(pl.at===tgt&&!okDir?'Outbound on that interface it would filter traffic going <i>into</i> LAN'+(a+1)+', not the traffic leaving it.':
+        pl.at&&pl.at!==tgt?'On '+pl.at+' it is not where LAN'+(a+1)+'\'s traffic enters the network.':null);
+      markCmds('acl',okAcl&&(!sp.applies.length&&!typed||okIf),mk.join('\n'),aclWhy||pw); markIfs(tgt); markChips(typed?+(tgt[1]==='2'):0);
+      const why=['The correct commands to run:<br>'+own.model.concat(typed?aclApplyModel(at):[]).map(l=>mono(l.trim())).join('<br>')+(kind==='ssh'?' &mdash; the permit for '+int2ip(H)+' has to come <b>before</b> the deny, because the first match wins.':' &mdash; without the final '+mono('permit ip any any')+' the implicit deny would block everything else.'),
         'An extended ACL names the destination too, so it goes as close to the <b>source</b> as possible: <b>'+tgt+' inbound</b>, so the unwanted traffic never crosses the network.'];
       if(kind==='ping') why.push('The '+mono('echo')+' keyword matters: without it the entry would also drop LAN'+(a+1)+'\'s <i>replies</i> when LAN'+(b+1)+' pings it.');
+      if(pw) why.push(pw);
       return {ok:okAcl&&okIf&&okDir, verdict: okAcl&&okIf&&okDir?'Correct.':'Check '+[okAcl?null:'the ACL', okIf&&okDir?null:'where it goes'].filter(Boolean).join(' and ')+'.', why: ul(why)};
     },
   };
@@ -2256,15 +2381,18 @@ card({id:'g3-acl6', area:'acl', tier:2, kind:'graded', src:'Q3', title:'Write an
   const dsts=['0:0:0:5','0:0:0:99','ffff:ffff:ffff:fffe'].map(h=>host(b,h)).concat([host(c,'0:0:0:20'),K('2001:db8:cafe::1')]);
   const pkts=[ACL_PKTS[0],ACL_PKTS[4],ACL_PKTS[5]];
   const model=['ipv6 access-list '+name,' deny ipv6 2001:db8:acad:'+P6.ns[a]+'::/64 2001:db8:acad:'+P6.ns[b]+'::/64',' permit ipv6 any any'];
-  const tgt=Q3_IF[a];
+  const tgt=Q3_IF[a], typed=aclTyped(), at={id:name, v6:true, tgt, dir:'in'};
   return {
-    prompt:'The network now runs IPv6. Hosts in <b>LAN'+(a+1)+'</b> must not reach anything in <b>LAN'+(b+1)+'</b>; all other IPv6 traffic is allowed. Write an IPv6 ACL named <b>'+name+'</b>, the command that applies it, and click the interface it goes on.',
-    body: q3Topo(P,true,{lans:P6.lans, wan:P6.wan})+cmdsHtml('acl','IPv6 ACL &mdash; one command per line, Ctrl+Enter submits','Type the ACL, one command per line',3)+
-      fieldHtml('apply','Command that applies it (interface configuration mode)','Type the command that puts the list on the interface',true)+applyHtml(true),
+    prompt:'The network now runs IPv6. Hosts in <b>LAN'+(a+1)+'</b> must not reach anything in <b>LAN'+(b+1)+'</b>; all other IPv6 traffic is allowed. Write an IPv6 ACL named <b>'+name+'</b>, '+
+      (typed?'then add the commands that apply it to the right interface, and say which router you are typing on.':'the command that applies it, and click the interface it goes on.'),
+    body: q3Topo(P,!typed,{lans:P6.lans, wan:P6.wan})+(typed?cmdsHtml('acl','IPv6 ACL and where it is applied &mdash; one command per line, Ctrl+Enter submits','Type the ACL, then the commands that apply it',5)+routerPickHtml():
+      cmdsHtml('acl','IPv6 ACL &mdash; one command per line, Ctrl+Enter submits','Type the ACL, one command per line',3)+
+      fieldHtml('apply','Command that applies it (interface configuration mode)','Type the command that puts the list on the interface',true)+applyHtml(true)),
     grade(){
-      const lines=cmdLines('acl'); let aclWhy=null; const acl=NR.aclMake(name,false,6,true);
+      const sp=aclSplit(cmdLines('acl')), lines=sp.list; let aclWhy=sp.err||null; const acl=NR.aclMake(name,false,6,true);
       const head=(lines[0]||'').split(/\s+/);
-      if(!/^ipv6$/i.test(head[0]||'')||!((head[1]||'').length>=8&&'access-list'.startsWith((head[1]||'').toLowerCase()))) aclWhy='Start with ipv6 access-list '+name+'.';
+      if(aclWhy){ /* an entry under an interface */ }
+      else if(!/^ipv6$/i.test(head[0]||'')||!((head[1]||'').length>=8&&'access-list'.startsWith((head[1]||'').toLowerCase()))) aclWhy='Start with ipv6 access-list '+name+'.';
       else if(head[2]!==name) aclWhy=(head[2]||'').toLowerCase()===name.toLowerCase()?'ACL names are case-sensitive: '+name+', not '+head[2]+'.':'The list should be named '+name+'.';
       else for(const l of lines.slice(1)){
         const t=l.split(/\s+/), i=0, act=(t[0]||'').toLowerCase();
@@ -2279,14 +2407,28 @@ card({id:'g3-acl6', area:'acl', tier:2, kind:'graded', src:'Q3', title:'Write an
         const want=inN(d,b)?'deny':'permit', got=NR.aclEvaluate(acl,s,false,d,pk).action;
         if(got!==want){ aclWhy=(want==='permit'?'It blocks ':'It lets through ')+pk.txt+' from '+NR.ac6Fmt(s)+' to '+NR.ac6Fmt(d)+'.'; break outer; }
       }
-      const raw=(cmdLines('apply')[0]||''), n=iosNorm(raw,'if'), m=/^ipv6 traffic-filter (\S+) (in|out|outside)$/.exec(n);
-      let applyWhy=null;
-      if(/^ip access-group/.test(n)) applyWhy='IPv6 lists are applied with ipv6 traffic-filter, not ip access-group.';
-      else if(!m) applyWhy='Expected ipv6 traffic-filter '+name+' in|out.';
-      else if(raw.split(/\s+/)[2]!==name) applyWhy='Apply the list by its name, '+name+'.';
-      else if(m[2]!=='in') applyWhy='Outbound on the interface facing LAN'+(a+1)+' it would only filter traffic going <i>into</i> LAN'+(a+1)+'.';
-      const okAcl=!aclWhy, okApply=!applyWhy, okIf=Q.ifSel===tgt;
-      markCmds('acl',okAcl,model.join('\n'),aclWhy); markField('apply',okApply,'ipv6 traffic-filter '+name+' in'); markIfs(tgt);
+      const outIn='Outbound on the interface facing LAN'+(a+1)+' it would only filter traffic going <i>into</i> LAN'+(a+1)+'.';
+      const pl=aclPlaced(typed,sp,at);
+      let applyWhy=null, okIf;
+      if(typed){
+        applyWhy=pl.why||(pl.at===tgt&&pl.dir!=='in'?outIn:null);
+        okIf=pl.at===tgt;
+        if(!applyWhy&&!okIf) applyWhy='On '+pl.at+' it is not where LAN'+(a+1)+'\'s traffic enters the network.';
+      } else {
+        /* the apply field, or the box's own apply line when the field is empty */
+        const box=sp.applies[0], raw=(cmdLines('apply')[0]||(box?box.raw:'')), n=iosNorm(raw,'if'), m=/^ipv6 traffic-filter (\S+) (in|out)$/.exec(n);
+        if(/^ip access-group/.test(n)) applyWhy='IPv6 lists are applied with ipv6 traffic-filter, not ip access-group.';
+        else if(!m) applyWhy='Expected ipv6 traffic-filter '+name+' in|out.';
+        else if(raw.split(/\s+/)[2]!==name) applyWhy='Apply the list by its name, '+name+'.';
+        else if(m[2]!=='in') applyWhy=outIn;
+        else if(pl.why) applyWhy=pl.why;
+        okIf=Q.ifSel===tgt;
+      }
+      const okAcl=!aclWhy, okApply=!applyWhy;
+      const mk=typed||sp.applies.length?model.concat(aclApplyModel(at)):model;
+      markCmds('acl',okAcl&&(!sp.applies.length&&!typed||okApply&&okIf),mk.join('\n'),aclWhy||applyWhy);
+      if(!typed) markField('apply',okApply,'ipv6 traffic-filter '+name+' in');
+      markIfs(tgt); if(typed) markChips(+(tgt[1]==='2'));
       return {ok:okAcl&&okApply&&okIf, verdict: okAcl&&okApply&&okIf?'Correct.':'Check '+[okAcl?null:'the ACL', okApply?null:'the apply command', okIf?null:'the interface'].filter(Boolean).join(', ')+'.',
         why: ul(['It goes on <b>'+tgt+' inbound</b>, the interface facing LAN'+(a+1)+' (the source). The correct commands to run:<br>'+model.map(l=>mono(l.trim())).join('<br>')+'<br>then on '+tgt.split(' ')[0]+': '+mono('interface '+tgt.split(' ')[1].toLowerCase())+', '+mono('ipv6 traffic-filter '+name+' in'),
           ...(applyWhy?[applyWhy]:[]),
