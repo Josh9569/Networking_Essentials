@@ -4506,17 +4506,17 @@ function exState(p){
   }
   if(!p.answered) return ['Not answered','ex-bad'];
   const of=p.of||1;
-  return p.ok?['Correct'+(of>1?' · '+of+' / '+of:''),'ex-comf']:p.got>0?['Some marks · '+p.got+' / '+of,'ex-learn']:['Wrong'+(of>1?' · 0 / '+of:''),'ex-bad'];
+  return p.ok?['Correct','ex-comf']:p.got>0?['Some marks · '+p.got+' / '+of+' steps = '+exFmt(p.got/of),'ex-learn']:['Wrong','ex-bad'];
 }
-/* What a part scores, and out of how many: most parts are worth 1; an
-   ordering card is worth a mark per step (4 for DORA), and scores one per
-   step in the right order. */
-function exMax(p){ return p.card.kind==='flash'?1:(p.of||1); }
+/* What a part scores. Every part is worth 1 (owner); an ordering card
+   marked out of its steps scores its share, so 3 of 4 steps is 0.75. */
+function exMax(p){ return 1; }
 function exPts(p){
   if(p.card.kind==='flash') return p.text&&p.self?1:0;
-  return !p.answered?0:p.ok?exMax(p):(p.got||0);
+  return !p.answered?0:p.ok?1:(p.got||0)/(p.of||1);
 }
-function exSum(ps){ return ps.reduce((t,p)=>t+exPts(p),0); }
+function exFmt(x){ return String(Math.round(x*100)/100); }
+function exSum(ps){ return Math.round(ps.reduce((t,p)=>t+exPts(p),0)*100)/100; }
 function exOf(ps){ return ps.reduce((t,p)=>t+exMax(p),0); }
 function exScore(){
   const s=exSum(EX.parts);
