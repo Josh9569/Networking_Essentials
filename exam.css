@@ -60,6 +60,9 @@
 .ex-ord-n:not(:empty) { display: inline-block; min-width: 17px; margin-right: 7px; padding: 0 4px; border-radius: 4px; background: var(--info-text); color: var(--surface); font-family: var(--mono); font-size: 11px; text-align: center; }
 .ex-ord.ex-ok .ex-ord-n  { background: var(--ok-text); }
 .ex-ord.ex-bad .ex-ord-n { background: var(--err-text); }
+/* A message the answer needed but the learner left out. */
+.ex-chips .cbtn.ex-miss, .ex-chips .cbtn.ex-miss:hover { opacity: 1; background: var(--warn-bg); border-color: var(--warn-bdr); border-style: dashed; color: var(--warn-text); }
+.ex-ord.ex-miss .ex-ord-n { background: var(--warn-text); }
 /* Custom theme: --surface is translucent there, so a chip lettered in it
    loses its number. Letter it in --bg instead, the theme's base colour,
    which custom-theme.js always sets opaque. */
