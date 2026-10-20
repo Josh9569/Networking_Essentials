@@ -4227,12 +4227,16 @@ function selfMark(ok){
 function finish(ok,msg){
   S.answered++; if(ok) S.correct++; saveState();
   phase='rate'; show('chkbtn',false); show('skipbtn',false);
-  /* The variant rule still holds (a card can't be Comfortable with variants
-     left), but the banner doesn't count them out (owner). */
-  const left=variantsLeft(cur.id);
+  /* How many of the card's variants this answer leaves done. The owner
+     wanted the count kept but not the "can only become Comfortable once…"
+     clause; the rule itself still holds. */
+  const left=variantsLeft(cur.id), n=hasVariants(cur)?cur.vlist.length:0;
+  const still=left.filter(v=>v!==Q.variant).length;
+  const vnote=!left.length||!ok?'':still?' That&rsquo;s '+(n-still)+' of this card&rsquo;s '+n+' variants done.':
+    ' That&rsquo;s '+(n===2?'both':'all '+n)+' of this card&rsquo;s variants done.';
   if(ok){
     forced=null;
-    banner('ok',msg+' How comfortable are you with it?');
+    banner('ok',msg+' How comfortable are you with it?'+vnote);
     /* just the rating: how many cards each one puts between you and the
        card again is the scheduler's business, not the learner's (owner's ask) */
     $('rate-hard').innerHTML='Hard <kbd>1</kbd>';
