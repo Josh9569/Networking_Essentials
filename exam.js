@@ -3117,13 +3117,28 @@ card({id:'g5-v6msgs', area:'dhcp', tier:2, kind:'graded', src:'Q5', title:'DHCPv
   };
 }});
 
-card({id:'g5-v6relay', area:'dhcp', tier:2, kind:'graded', src:'Q5', title:'Configure a DHCPv6 relay', gen(){
-  const lanIf=pick(['G0/0','G0/1']), other=lanIf==='G0/0'?'G0/1':'G0/0', n=ri(10,59), sn=n+ri(1,40), srv='2001:db8:acad:'+sn+'::'+pick(['5','10','53','100','a']);
-  const ifs=['G0/0','G0/1','S0/0/0'];
-  const rows=[[lanIf,'2001:db8:acad:'+n+'::1/64','the PCs'],[other,'2001:db8:acad:'+(n+60)+'::1/64','printers (no DHCPv6 server)'],['S0/0/0','2001:db8:acad:1::1/64','R2, whose LAN 2001:db8:acad:'+sn+'::/64 holds the DHCPv6 server '+srv]]
+/* Variants (owner: "a few variations"): given — the paper's shape, the
+   prompt names the server; find — the server's address is only in the
+   table; local — the server sits on R1's other LAN, so the relay still goes
+   on the clients' side, not the server's; prefix — the clients' LAN is named
+   by its prefix, so the interface comes from matching it to an address. */
+card({id:'g5-v6relay', area:'dhcp', tier:2, kind:'graded', src:'Q5', title:'Configure a DHCPv6 relay', variants:['given','find','local','prefix'], gen(v){
+  const lanIf=pick(['G0/0','G0/1']), other=lanIf==='G0/0'?'G0/1':'G0/0', n=ri(10,59), sn=v==='local'?n+60:n+ri(1,40), srv='2001:db8:acad:'+sn+'::'+pick(['5','10','53','100','a']);
+  const ifs=['G0/0','G0/1','S0/0/0'], lanPfx='2001:db8:acad:'+n+'::/64';
+  const sw=shuffle(['S1','S2']);
+  const rows=[
+    [lanIf,'2001:db8:acad:'+n+'::1/64',v==='prefix'?'a LAN through switch '+sw[0]:'the PCs'],
+    [other,'2001:db8:acad:'+(n+60)+'::1/64',v==='local'?'the servers, including the DHCPv6 server '+srv:v==='prefix'?'a LAN through switch '+sw[1]+' (no DHCPv6 server)':'printers (no DHCPv6 server)'],
+    ['S0/0/0','2001:db8:acad:1::1/64',v==='local'?'R2 (no DHCPv6 server beyond it)':'R2, whose LAN 2001:db8:acad:'+sn+'::/64 holds the DHCPv6 server '+srv]]
     .sort((a,b)=>a[0]<b[0]?-1:1);
+  const prompt={
+    given:'The PCs on R1\'s <b>'+lanIf+'</b> LAN must get their IPv6 settings from the DHCPv6 server <b>'+srv+'</b>, on another network.',
+    find:'The PCs on R1\'s <b>'+lanIf+'</b> LAN must get their IPv6 settings from the company\'s DHCPv6 server, which is on another network.',
+    local:'The PCs on R1\'s <b>'+lanIf+'</b> LAN must get their IPv6 settings from the company\'s DHCPv6 server, which is on another network.',
+    prefix:'The hosts in <b>'+lanPfx+'</b> must get their IPv6 settings from the DHCPv6 server <b>'+srv+'</b>, on another network.',
+  }[v];
   return {
-    prompt:'The PCs on R1\'s <b>'+lanIf+'</b> LAN must get their IPv6 settings from the DHCPv6 server <b>'+srv+'</b>, on another network. Which R1 interface needs configuring, and what command goes on it?',
+    prompt:prompt+' Which R1 interface needs configuring, and what command goes on it?',
     body:'<div class="ex-scroll"><table class="rt-table ex-table"><thead><tr><th>R1 interface</th><th>Address</th><th>Connects to</th></tr></thead><tbody>'+
       rows.map(r=>'<tr><td>'+r[0]+'</td><td>'+r[1]+'</td><td style="font-family:var(--font)">'+r[2]+'</td></tr>').join('')+'</tbody></table></div>'+
       '<div class="ex-apply"><span class="ex-apply-lbl">Interface:</span>'+chipsHtml(ifs)+'</div>'+fieldHtml('cmd','Command (interface configuration mode)','Type the command that gets the PCs\' DHCPv6 requests to the server',true),
@@ -3134,6 +3149,9 @@ card({id:'g5-v6relay', area:'dhcp', tier:2, kind:'graded', src:'Q5', title:'Conf
       markField('cmd',okC,'ipv6 dhcp relay destination '+srv);
       return {ok:okI&&okC, verdict: okI&&okC?'Correct.':'ipv6 dhcp relay destination '+srv+' on '+lanIf+'.', why: ul([
         /ip helper/.test(n2)?mono('ip helper-address')+' only relays DHCPv4. For DHCPv6 it is '+mono('ipv6 dhcp relay destination')+'.':'The relay goes on the interface that <b>hears the clients</b>: '+lanIf+'.',
+        ...(v==='prefix'?[lanPfx+' is the network on <b>'+lanIf+'</b> (R1\'s address there is 2001:db8:acad:'+n+'::1/64), so that is where the clients are.']:[]),
+        ...(v==='find'?['The server\'s address is in the table: the '+mono('S0/0/0')+' row says R2\'s LAN holds the DHCPv6 server <b>'+srv+'</b>.']:[]),
+        ...(v==='local'?['The server is on R1\'s own '+other+' LAN, but it is still on a different network from the PCs, so their multicasts never reach it: the relay goes on '+lanIf+', the clients\' side, never on '+other+'.']:[]),
         mono('ipv6 dhcp relay destination '+srv)+' makes R1 forward the clients\' DHCPv6 multicasts (to ff02::1:2) to the server as unicasts.'])};
     },
   };
@@ -3946,7 +3964,7 @@ document.addEventListener('keydown',e=>{
 
 /* ═══ Scheduler and persistence ═══════════════════════════════════════════ */
 const KEY='ne-exam-v1', COMFORT=20;
-function freshState(){ return {step:0, diff:1, off:[], foff:[], cards:{}, answered:0, correct:0, lastNew:null, vmig:2, mode:'flash', ediff:2, exams:[]}; }
+function freshState(){ return {step:0, diff:1, off:[], foff:[], cards:{}, answered:0, correct:0, lastNew:null, vmig:3, mode:'flash', ediff:2, exams:[]}; }
 function loadState(){
   try{
     const s=JSON.parse(localStorage.getItem(KEY));
@@ -3959,10 +3977,11 @@ function loadState(){
          Comfortable stays so, and is exempt from the rule from then on
          (vall). Runs once; every other card starts with no variants done. */
       /* vmig 2: g3-acl gained its number/name variants; again, whatever is
-         Comfortable now stays so. Bump it whenever a card gains variants. */
-      if((s.vmig||0)<2){
+         Comfortable now stays so. Bump it whenever a card gains variants.
+         vmig 3: g5-v6relay gained given/find/local/prefix. */
+      if((s.vmig||0)<3){
         Object.keys(s.cards).forEach(id=>{ const c=s.cards[id]; if(c&&c.last!=='again'&&c.ivl>=COMFORT) c.vall=true; });
-        s.vmig=2;
+        s.vmig=3;
       }
       return Object.assign(freshState(),s);
     }
