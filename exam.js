@@ -1758,20 +1758,23 @@ function cmdSame(t,m,eq){
 }
 function cmdAce(o){
   /* what an entry matches, not how it was written: "host X" and "X 0.0.0.0"
-     are one entry, and address bits under the wildcard don't count */
+     are one entry, address bits under the wildcard don't count, and nor
+     does log */
   const norm=v=>{ if(!v||typeof v!=='object') return v; const c={};
-    Object.keys(v).sort().forEach(k=>{ if(k!=='kind'&&k!=='seq'&&k!=='matches') c[k]=norm(v[k]); });
+    Object.keys(v).sort().forEach(k=>{ if(k!=='kind'&&k!=='seq'&&k!=='matches'&&k!=='log') c[k]=norm(v[k]); });
     if(typeof c.ipInt==='number'&&typeof c.wcInt==='number') c.ipInt=(c.ipInt&~c.wcInt)>>>0;
     return c; };
   const w=o.words, strip=a=>JSON.stringify(norm(a));
   let num=null, act, rest;
-  if(o.mode==='global'&&/^access-list \d+ (permit|deny)( |$)/.test(o.cmd)){ num=w[1]; act=w[2].toLowerCase(); rest=w.slice(3); }
-  else if(o.mode==='acl'&&/^(\d+ )?(permit|deny)( |$)/i.test(o.raw.trim())){ const i=/^\d+$/.test(w[0])?1:0; act=w[i].toLowerCase(); rest=w.slice(i+1); }
+  /* the action as IOS reads it, shortened or not (stdAceAct) */
+  if(o.mode==='global'&&/^access-list \d+ \S/.test(o.cmd)){ num=w[1]; act=stdAceAct(w[2],false); rest=w.slice(3); }
+  else if(o.mode==='acl'&&w.length){ const i=/^\d+$/.test(w[0])?1:0; act=stdAceAct(w[i],true); rest=w.slice(i+1); }
   else return null;
+  if(act!=='permit'&&act!=='deny') return null;
   rest=rest.map(x=>x.toLowerCase());
   const v6=rest[0]==='ipv6'||rest.some(x=>x.indexOf(':')>=0);
   const kind=num!=null?NR.aclNumKind(+num):(v6?'v6':['ip','tcp','udp','icmp'].indexOf(rest[0])>=0?'ext':'std');
-  const r=kind==='v6'?NR.ac6ParseAce(act,rest):kind==='ext'?NR.acxParseAce(act,rest):NR.acParseAce(act,rest);
+  const r=kind==='v6'?NR.ac6ParseAce(act,rest):kind==='ext'?NR.acxParseAce(act,rest):NR.acParseAce(act,stdAceArgs(rest));
   return r&&r.ace?(num!=null?num+':':'')+strip(r.ace):null;
 }
 /* The reasons are written with HTML entities (&mdash;) like the rest of the
@@ -1864,7 +1867,10 @@ function iosNextMode(n,mode){
   if(/^ip dhcp pool /.test(n)) return 'dhcp';
   if(/^ipv6 dhcp pool /.test(n)) return 'dhcp6';
   if(/^line /.test(n)) return 'line';
-  if(/^(ip access-list (extended|standard)|ipv6 access-list) /.test(n)) return 'acl';
+  /* any "ip access-list ..." counts as opening a list, even a malformed one
+     ("ip access-list NAME standard"), so the entries under it are still
+     marked as entries rather than as stray global commands */
+  if(/^(ip access-list \S+|ipv6 access-list) /.test(n)) return 'acl';
   if(n==='exit'||n==='end') return 'global';
   return mode;
 }
@@ -2071,8 +2077,10 @@ function aclApplyModel(o){
 /* The model answer in the learner's own numbering, so a right entry in a
    named list (or under another valid number) is ticked rather than marked
    "not needed" against the model's access-list 110. kind is 'std' or 'ext';
-   anything unusable as a list id of that kind leaves the model as it is. */
-function aclModelAs(model,lines,kind){
+   anything unusable as a list id of that kind leaves the model as it is.
+   fixedId: the question names the list, so only the form follows the
+   learner (access-list 10 … or ip access-list standard 10), never the id. */
+function aclModelAs(model,lines,kind,fixedId){
   let id=null, named=false;
   for(const o of iosLines(lines)){
     let m;
@@ -2080,6 +2088,7 @@ function aclModelAs(model,lines,kind){
     if((m=/^access-list (\d+) /.exec(o.cmd))&&NR.aclNumKind(+m[1])===kind){ id=m[1]; break; }
   }
   if(id==null) return {model, id:null};
+  if(fixedId!=null) id=fixedId;
   const out=[]; let head=false;
   model.forEach(l=>{
     const m=/^access-list \d+ (.*)$/.exec(l);
@@ -2094,36 +2103,81 @@ function aclModelAs(model,lines,kind){
 /* A standard ACL, numbered (access-list N …) or named (ip access-list
    standard NAME, then permit/deny lines, optionally sequence-numbered).
    want is the list the question asked for: {num} or {name}. */
+/* Every way IOS 15 takes a standard list is accepted (owner), nothing it
+   refuses:
+   - numbered "access-list N …" (1–99, 1300–1999), or the list opened by
+     "ip access-list standard <name>" — or "ip access-list standard N", which
+     edits numbered list N the same way;
+   - keywords shortened as far as IOS allows: permit/deny/remark after the
+     number (p, d, r), and in the list's own mode p, den (default also starts
+     "de"), r; any, host and log from their first letter;
+   - a source of any, host X, X alone (a host) or X with a wildcard, and log;
+   - in the list's mode, sequence numbers ("20 permit …", kept in number order
+     as IOS keeps them, the rest numbered on in tens) and "no 20";
+   - remarks. */
+function stdAceAct(w,named){
+  w=(w||'').toLowerCase(); if(!w) return '';
+  if('permit'.startsWith(w)) return 'permit';
+  if('deny'.startsWith(w)&&w.length>=(named?3:1)) return 'deny';
+  if('remark'.startsWith(w)) return 'remark';
+  return w;
+}
+function stdAceArgs(rest){
+  const k=(w,kw)=>!!w&&kw.startsWith(w);
+  const r=rest.map(x=>x.toLowerCase()), out=[]; let i;
+  if(k(r[0],'any')){ out.push('any'); i=1; }
+  else if(k(r[0],'host')){ out.push('host'); if(r[1]!=null) out.push(r[1]); i=2; }
+  else { if(r[0]!=null) out.push(r[0]); i=1; if(r[1]!=null&&!k(r[1],'log')){ out.push(r[1]); i=2; } }
+  for(;i<r.length;i++) out.push(k(r[i],'log')?'log':r[i]);
+  return out;
+}
 function parseStdAcl(lines,want){
   let num=null, name=null; const aces=[];
+  const add=(act,rest,l,seq)=>{
+    const r=NR.acParseAce(act,stdAceArgs(rest));
+    if(r.err) return r.err.replace(/^%\s*/,'')+' ("'+l+'").'+(/Invalid input/.test(r.err)?' A standard entry names only the source.':'');
+    if(seq!=null&&aces.some(a=>a.seq===seq)) return 'Sequence number '+seq+' is already used ("'+l+'").';
+    r.ace.seq=seq!=null?seq:(aces.length?Math.max(...aces.map(a=>a.seq)):0)+10; aces.push(r.ace); return null;
+  };
   for(const l of lines){
     const t=l.split(/\s+/), w0=t[0].toLowerCase(), w1=(t[1]||'').toLowerCase();
     if(w0==='ip'&&w1.length>=8&&'access-list'.startsWith(w1)){
-      if(!((t[2]||'').length>=3&&'standard'.startsWith((t[2]||'').toLowerCase()))) return {err:'A named standard list starts ip access-list standard <name> ("'+l+'").'};
+      if(!((t[2]||'').length>=2&&'standard'.startsWith((t[2]||'').toLowerCase()))) return {err:'A named standard list starts ip access-list standard <name> ("'+l+'").'};
       if(!t[3]) return {err:'Name the list: ip access-list standard <name>.'};
-      if(num!=null) return {err:'Use either a numbered list or a named one, not both.'};
-      name=t[3]; continue;
+      if(t.length>4) return {err:'"'+l+'" has more after the name than IOS takes.'};
+      const isNum=/^\d+$/.test(t[3]);
+      if(isNum&&NR.aclNumKind(+t[3])!=='std') return {err:t[3]+' is not a standard list number (1–99, 1300–1999).'};
+      if(isNum){ if(num!=null&&+t[3]!==num||name!=null) return {err:'Every line must be for the same list.'}; num=+t[3]; }
+      else { if(num!=null||name!=null&&t[3]!==name) return {err:'Every line must be for the same list.'}; name=t[3]; }
+      continue;
     }
-    let act, rest;
     if(w0==='access-list'||(w0.length>=8&&'access-list'.startsWith(w0))){
-      if(name) return {err:'Inside a named list the entries start with permit or deny ("'+l+'").'};
       const n=+t[1];
       if(!/^\d+$/.test(t[1]||'')||NR.aclNumKind(n)!=='std') return {err:'A standard ACL is numbered 1–99 or 1300–1999 — '+(t[1]||'no number')+' isn\'t.'};
-      if(num!=null&&n!==num) return {err:'Every line must use the same ACL number.'};
-      num=n; act=(t[2]||'').toLowerCase(); rest=t.slice(3);
-    } else if(name){ const i=/^\d+$/.test(t[0])?1:0; act=(t[i]||'').toLowerCase(); rest=t.slice(i+1); }
-    else return {err:'Each line starts with access-list (or use ip access-list standard <name>) ("'+l+'").'};
+      if(name!=null||num!=null&&n!==num) return {err:'Every line must be for the same list.'};
+      num=n;
+      const act=stdAceAct(t[2],false);
+      if(act==='remark') continue;
+      if(act!=='permit'&&act!=='deny') return {err:'Expected permit or deny ("'+l+'").'};
+      const e=add(act,t.slice(3),l); if(e) return {err:e};
+      continue;
+    }
+    /* inside "ip access-list standard …" */
+    if(name==null&&num==null) return {err:'Each line starts with access-list (or use ip access-list standard <name>) ("'+l+'").'};
+    if(w0==='no'&&/^\d+$/.test(t[1]||'')&&t.length===2){
+      const i=aces.findIndex(a=>a.seq===+t[1]); if(i<0) return {err:'There is no entry '+t[1]+' to remove ("'+l+'").'};
+      aces.splice(i,1); continue;
+    }
+    const sq=/^\d+$/.test(t[0]), act=stdAceAct(t[sq?1:0],true);
     if(act==='remark') continue;
     if(act!=='permit'&&act!=='deny') return {err:'Expected permit or deny ("'+l+'").'};
-    const r=NR.acParseAce(act,rest.map(x=>x.toLowerCase()));
-    if(r.err) return {err:r.err.replace(/^%\s*/,'')+' ("'+l+'").'};
-    aces.push(r.ace);
+    const e=add(act,t.slice(sq?2:1),l,sq?+t[0]:null); if(e) return {err:e};
   }
   if(!aces.length) return {err:'There are no permit or deny lines.'};
   if(want&&want.num!=null&&num!==want.num) return {err:'The question asks for access list number '+want.num+(name?' — not a named list.':', not '+num+'.')};
   if(want&&want.name!=null&&name!==want.name) return {err:'The question asks for a named list called '+want.name+(name?' (names are case-sensitive), not '+name+'.':' — not a numbered one.')};
   const acl=NR.aclMake(String(num!=null?num:name),num!=null,4,false);
-  aces.forEach((a,i)=>{ a.seq=(i+1)*10; acl.aces.push(a); });
+  aces.sort((a,b)=>a.seq-b.seq).forEach(a=>acl.aces.push(a));
   return {acl};
 }
 
@@ -2245,7 +2299,8 @@ card({id:'g3-acl', area:'acl', tier:2, kind:'graded', src:'Q3 b', title:'Write a
       }
       const pl=aclPlaced(typed,sp,at), okAcl=!aclWhy, okDir=pl.dir==='out';
       let okIf=pl.at===tgt; const okPl=okIf&&okDir&&!pl.why;
-      const mk=typed||sp.applies.length?model.concat(aclApplyModel(at)):model;
+      const form=aclModelAs(model,sp.list,'std',id).model;
+      const mk=typed||sp.applies.length?form.concat(aclApplyModel(at)):form;
       const pw=pl.why||(okIf&&!okDir?'Inbound on that interface would filter traffic <i>leaving</i> LAN'+(t+1)+', not entering it.':
         pl.at&&!okIf?'On '+pl.at+' it would also filter traffic that isn\'t going to LAN'+(t+1)+'.':null);
       markCmds('acl',okAcl&&(!sp.applies.length&&!typed||okPl),mk.join('\n'),aclWhy||pw); markIfs(tgt); markChips(typed?+(tgt[1]==='2'):1);
