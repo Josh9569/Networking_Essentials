@@ -172,6 +172,11 @@ function kwResolve(id,points,vars){
 let QROOT=null;
 function qroot(){ return QROOT||$('qbody'); }
 function qel(id){ return qroot().querySelector('#'+id); }
+/* The difficulty the card is being built for: the flashcards' own, or the
+   exam's. A card reads it to make a round harder only on Hard — typed ACL
+   placement, and arithmetic that would need a calculator (owner: Easy and
+   Medium must be doable in your head or on paper). */
+function roundDiff(){ return S.mode==='exam'?S.ediff:S.diff; }
 
 /* Typed answer box. Values are kept on a wrong answer: the hint says what
    was typed and what was wanted (access_control's convention). */
@@ -1985,7 +1990,7 @@ function applyHtml(noDir){
 /* On Hard the ACL cards drop the interface and direction picks (owner): the
    box takes the lines that apply the list as well, and the only pick left is
    which router they are typed on, because both routers have a G0/0. */
-function aclTyped(){ return (S.mode==='exam'?S.ediff:S.diff)===3; }
+function aclTyped(){ return roundDiff()===3; }
 function routerPickHtml(){
   return '<div class="ex-apply"><span class="ex-apply-lbl">Typed on:</span>'+chipsHtml(['R1','R2'])+'</div>';
 }
@@ -2152,7 +2157,9 @@ card({id:'q3d-established', area:'acl', tier:1, kind:'flash', src:'Q3 d', title:
 
 function wcCard(id,tier,title,cross){
   card({id, area:'acl', tier, kind:'graded', src:'Q3 a', title, gen(){
-    const pfx=cross?pick([17,18,19,20,21,22,23,12,13,14]):pick([8,16,24,24,25,26,27,28,29,30]);
+    /* No calculator below Hard (owner): a block of 2^16 = 65,536 or fewer is
+       head-or-paper arithmetic; /12–/15 (up to 1,048,576) only on Hard. */
+    const pfx=cross?pick([16,17,18,19,20,21,22,23].concat(roundDiff()===3?[12,13,14,15]:[])):pick([8,16,24,24,25,26,27,28,29,30]);
     const wc=(~pfxMask(pfx))>>>0;
     let base=netOf(rNet24()+ri(0,255),pfx);
     if(cross&&chance(.75)) base=(base|(Math.floor(Math.random()*wc)&wc))>>>0;     // address bits under the wildcard: the practice exam's trap (not always, or it's a pattern)
